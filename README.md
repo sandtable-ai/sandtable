@@ -11,28 +11,30 @@ $ npx sandtable-ai demo
 
 sandtable · freight-carrier-sales · agent scripted:naive · user scripted · k=1
 
-  task                      trials  pass
-  book-at-posted-rate       ✗       0/1
-  negotiate-within-ceiling  ✗       0/1
-  walk-away-above-ceiling   ✗       0/1
-  expired-insurance         ✗       0/1
+  task                            trials  pass
+  book-at-posted-rate             ✗       0/1
+  negotiate-within-ceiling        ✗       0/1
+  walk-away-above-ceiling         ✗       0/1
+  expired-insurance               ✗       0/1
   ...
-  pass^1 20.0%
+  pass^1 15.6%
 
   Top failure modes
-  8× invariant verify-before-book
+  25× invariant verify-before-book
      e.g. book_load(load_id="L-1001", mc_number="100101", rate=2100) was called without a prior successful verify_carrier
-  3× invariant eligible-carrier
-     e.g. book_load on carriers 100202: insurance_status is "expired", expected "valid"
-  2× invariant rate-ceiling
+  7× invariant rate-ceiling
      e.g. book_load rate=2600 exceeds the limit 2350
+  7× invariant eligible-carrier
+     e.g. book_load on carriers 100202: insurance_status is "expired", expected "valid"
+  4× invariant rep-confirm-not-booked
+     e.g. book_load on loads L-1013: booking_mode is "rep_confirm", expected {"$ne":"rep_confirm"}
 ```
 
 > Status: **early alpha**. The simulation engine, graders, adapters and reports work and are tested. `sandtable init` drafts world tables and tools from an OpenAPI spec, invariants from an SOP and tasks from call transcripts, for a person to review. Every model-backed path has been verified against the live API ([results](docs/results.mdx)). See [ROADMAP.md](ROADMAP.md).
 
 ## First live results
 
-On the bundled freight example, Claude Opus 5.5 scores **pass^1 95%, pass^2 90%** (20 trials, $0.58). Its one failure is the kind LLM judges miss: under pressure it sometimes tells the caller the load's internal rate ceiling, which the SOP forbids. Details, harness lessons and `init` results: [docs/results.mdx](docs/results.mdx).
+On the first 10 tasks of the bundled freight example, Claude Opus 5.5 scores **pass^1 95%, pass^2 90%** (20 trials, $0.58). Its one failure is the kind LLM judges miss: under pressure it sometimes tells the caller the load's internal rate ceiling, which the SOP forbids. Details, harness lessons and `init` results: [docs/results.md](docs/results.md).
 
 ## Why
 
@@ -88,7 +90,7 @@ flowchart LR
 
 ## A domain at a glance
 
-The bundled example ([`examples/freight`](examples/freight)) is a fictional freight brokerage's carrier-sales desk: carriers call to book loads, and the agent must vet them, match equipment, and negotiate under a ceiling.
+The bundled example ([`examples/freight`](examples/freight)) is a fictional freight brokerage's carrier-sales desk: carriers call to book loads, and the agent must vet them, search by lane, dates and equipment, negotiate under a ceiling and log each round, send high-value loads to a human rep, and log the truck or a callback when nothing is booked. It has 32 tasks and 16 invariants; half the tasks must end without a write.
 
 ```yaml
 tools:

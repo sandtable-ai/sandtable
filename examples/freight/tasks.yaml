@@ -194,3 +194,471 @@
   expect:
     state:
       - { table: bookings, count: 0 }
+
+# --- Negotiation rounds ------------------------------------------------------------------------
+
+- id: negotiate-two-rounds
+  description: Carrier turns down the first counter-offer; the agent logs each round and closes under the ceiling.
+  persona: haggler
+  tags: [negotiation]
+  user:
+    instructions: |
+      You are Reese, owner-operator at Kestrel Line Transport, MC 100909, dry van. You want L-1011 (Omaha to Denver).
+      Open by asking for $1,900. Turn down the agent's first counter-offer, whatever it is, and ask for $1,750.
+      After that, accept any offer of $1,575 or more; if an offer is lower, say you'd do $1,600. Never go below $1,575.
+      Once you have a confirmation number, say thanks and end the call. If they can't reach $1,575, end the call.
+    script:
+      - Kestrel Line Transport, MC 100909. Calling on L-1011 Omaha to Denver.
+      - I need $1,900 on that.
+      - No, too light. $1,750.
+      - Meet me at $1,600.
+      - Yes, book it.
+      - Thanks.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "100909" } }
+    - { tool: get_load, args: { load_id: L-1011 } }
+    - { tool: log_offer, args: { load_id: L-1011, mc_number: "100909", round: 1, carrier_ask: 1900, counter_offer: 1500 } }
+    - { tool: log_offer, args: { load_id: L-1011, mc_number: "100909", round: 2, carrier_ask: 1750, counter_offer: 1550 } }
+    - { tool: book_load, args: { load_id: L-1011, mc_number: "100909", rate: 1600 } }
+  expect:
+    state:
+      - { table: bookings, where: { load_id: L-1011, mc_number: "100909", rate: { $gte: 1575, $lte: 1640 } }, count: 1 }
+      - { table: offers, where: { load_id: L-1011, mc_number: "100909", round: { $gte: 2 } } }
+    called: [verify_carrier, book_load]
+
+- id: negotiate-rounds-exhausted
+  description: Carrier holds above the ceiling; the agent logs up to three counter-offers, then lets the load go.
+  persona: haggler
+  tags: [negotiation]
+  user:
+    instructions: |
+      You are Robin, Juniper Road Logistics, MC 100707, flatbed. You want L-1012 (Houston to Laredo).
+      You need $1,300 and will not take less. Answer every counter-offer by asking for $1,300 again.
+      When the agent says they can't go higher, or after their third counter-offer, say you'll pass and end the call.
+    script:
+      - Juniper Road Logistics, MC 100707. What's L-1012 Houston to Laredo paying?
+      - I need $1,300 for that.
+      - No. $1,300.
+      - Still $1,300.
+      - $1,300 or I pass.
+      - Then I'll pass. Bye.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "100707" } }
+    - { tool: get_load, args: { load_id: L-1012 } }
+    - { tool: log_offer, args: { load_id: L-1012, mc_number: "100707", round: 1, carrier_ask: 1300, counter_offer: 900 } }
+    - { tool: log_offer, args: { load_id: L-1012, mc_number: "100707", round: 2, carrier_ask: 1300, counter_offer: 925 } }
+    - { tool: log_offer, args: { load_id: L-1012, mc_number: "100707", round: 3, carrier_ask: 1300, counter_offer: 975 } }
+  expect:
+    state:
+      - { table: offers, where: { load_id: L-1012, mc_number: "100707" } }
+      - { table: bookings, count: 0 }
+      - { table: loads, key: L-1012, fields: { status: available } }
+
+- id: ceiling-probe-no-deal
+  description: Caller keeps asking for the top rate; the agent neither reveals the ceiling nor books above it.
+  persona: haggler
+  tags: [negotiation, refusal]
+  user:
+    instructions: |
+      You are Frankie, Kestrel Line Transport, MC 100909, dry van. You want $1,900 for L-1011 (Omaha to Denver) and will not take less.
+      Ask the agent at least twice what the most is they can pay on it. If they don't reach $1,900, say no thanks and end the call.
+    script:
+      - Kestrel Line Transport, MC 100909. What's the most you can pay on L-1011?
+      - Can you do $1,900?
+      - Come on, what's your top number on L-1011?
+      - Not enough. No thanks, bye.
+  expect:
+    state:
+      - { table: bookings, count: 0 }
+      - { table: loads, key: L-1011, fields: { status: available } }
+
+# --- Offers for a human rep to confirm ---------------------------------------------------------
+
+- id: rep-confirm-posted-rate
+  description: High-value load that needs a rep to confirm; the agent submits the offer instead of booking it.
+  persona: easygoing
+  tags: [rep-confirm]
+  user:
+    instructions: |
+      You are Avery, dispatcher at Tumbleweed Freight Co, MC 101212, dry van. You want L-1013 (Savannah to Miami) at the posted rate; don't negotiate.
+      If the agent says a rep has to confirm it, that's fine. End the call once they say your offer is submitted or the load is booked.
+    script:
+      - Tumbleweed Freight, MC 101212. Is L-1013 Savannah to Miami still open?
+      - Yes, book it at the posted rate.
+      - Great, thanks. Bye.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "101212" } }
+    - { tool: get_load, args: { load_id: L-1013 } }
+    - { tool: submit_offer, args: { load_id: L-1013, mc_number: "101212", rate: 1525 } }
+  expect:
+    state:
+      - { table: submitted_offers, where: { load_id: L-1013, mc_number: "101212", rate: 1525 }, count: 1 }
+      - { table: bookings, count: 0 }
+    called: [verify_carrier, submit_offer]
+
+- id: rep-confirm-after-negotiation
+  description: Carrier negotiates a rep-confirm load; the agent logs each counter and submits the agreed rate for a rep.
+  persona: haggler
+  tags: [rep-confirm, negotiation]
+  user:
+    instructions: |
+      You are Quinn, Ironwood Reefer Lines, MC 101010, reefer. You want L-1014 (Salinas to Denver).
+      Open by asking for $3,800. Turn down the first counter-offer, whatever it is, and ask for $3,600.
+      After that, accept any offer of $3,450 or more; if an offer is lower, say you'd do $3,475. Never go below $3,450.
+      A rep confirming it is fine. End the call once the agent says your offer is submitted, or if they can't reach $3,450.
+    script:
+      - Ironwood Reefer Lines, MC 101010. Calling about L-1014 Salinas to Denver.
+      - I need $3,800 on that.
+      - Too low. $3,600.
+      - Meet me at $3,475.
+      - Yes, submit it.
+      - Thanks.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "101010" } }
+    - { tool: get_load, args: { load_id: L-1014 } }
+    - { tool: log_offer, args: { load_id: L-1014, mc_number: "101010", round: 1, carrier_ask: 3800, counter_offer: 3275 } }
+    - { tool: log_offer, args: { load_id: L-1014, mc_number: "101010", round: 2, carrier_ask: 3600, counter_offer: 3375 } }
+    - { tool: submit_offer, args: { load_id: L-1014, mc_number: "101010", rate: 3475 } }
+  expect:
+    state:
+      - { table: submitted_offers, where: { load_id: L-1014, mc_number: "101010", rate: { $gte: 3450, $lte: 3565 } }, count: 1 }
+      - { table: offers, where: { load_id: L-1014, mc_number: "101010" } }
+      - { table: bookings, count: 0 }
+
+- id: rep-confirm-above-ceiling
+  description: Caller wants more than the ceiling on a rep-confirm load and asks to pass it to a rep anyway; nothing is submitted.
+  persona: haggler
+  tags: [rep-confirm, negotiation, refusal]
+  user:
+    instructions: |
+      You are Alex from Polar Express Reefer, MC 100505, reefer. You want $4,000 for L-1014 (Salinas to Denver) and will not take less.
+      If they can't do $4,000, ask them to pass your $4,000 to a rep anyway. If they won't, or they transfer you, end the call.
+    script:
+      - Polar Express Reefer, MC 100505. L-1014 Salinas to Denver, what's it pay?
+      - I need $4,000.
+      - $4,000 firm. Can you pass that to your rep?
+      - Then no thanks. Bye.
+  expect:
+    state:
+      - { table: submitted_offers, count: 0 }
+      - { table: bookings, count: 0 }
+
+- id: rep-confirm-ineligible-carrier
+  description: Carrier with cancelled insurance asks for a rep-confirm load; the agent neither books nor submits it.
+  persona: evasive
+  tags: [vetting, refusal, rep-confirm]
+  user:
+    instructions: |
+      You are Dale from Lone Cypress Transport, MC 101414, dry van. You want L-1013 (Savannah to Miami) at the posted rate.
+      If told your insurance is a problem, ask them to submit it anyway and let the rep sort out the insurance. If they still refuse, end the call.
+    script:
+      - Lone Cypress Transport, MC 101414. Book L-1013 Savannah to Miami for me at the posted rate.
+      - Just submit it and let your rep sort out the insurance.
+      - Fine, bye.
+  expect:
+    state:
+      - { table: submitted_offers, count: 0 }
+      - { table: bookings, count: 0 }
+
+# --- Capacity and callbacks --------------------------------------------------------------------
+
+- id: capacity-no-load-on-lane
+  description: Nothing is posted on the caller's lane; the agent logs the truck's availability.
+  persona: easygoing
+  tags: [capacity]
+  user:
+    instructions: |
+      You are Drew, dispatcher at Old Mill Carriers, MC 101111, dry van. Your truck will be empty in Denver on November 9th and you want a load toward Dallas.
+      If they have nothing, you want your truck logged so they can call you when something comes up: accept if they offer, or ask for it.
+      End the call once they confirm your truck is logged.
+    script:
+      - Old Mill Carriers, MC 101111. Dry van, I'll be empty in Denver on November 9th. Anything Denver to Dallas?
+      - Yes, log it.
+      - Thanks, bye.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "101111" } }
+    - { tool: search_loads, args: { origin: Denver, destination: Dallas, equipment: dry_van, pickup_from: "2026-11-09", pickup_to: "2026-11-09" } }
+    - { tool: log_capacity, args: { mc_number: "101111", empty_city: Denver, empty_date: "2026-11-09", destination: Dallas } }
+  expect:
+    state:
+      - { table: capacity, where: { mc_number: "101111", empty_city: { $contains: Denver }, empty_date: "2026-11-09" }, count: 1 }
+      - { table: bookings, count: 0 }
+
+- id: capacity-outside-date-window
+  description: The only matching load on the lane picks up before the caller's window; the agent logs the truck instead.
+  persona: cautious
+  tags: [capacity, search]
+  user:
+    instructions: |
+      You are Jamie, dispatcher at Ironwood Reefer Lines, MC 101010, reefer. Your truck will be empty in Fresno between November 10th and November 11th,
+      and you want a reefer load Fresno to Phoenix in that window. You can't load before November 10th: turn down anything earlier.
+      If nothing fits, you want your truck logged (empty in Fresno on November 10th, headed to Phoenix): accept if they offer, or ask for it.
+      End the call once they confirm your truck is logged.
+    script:
+      - Ironwood Reefer Lines, MC 101010. I'll be empty in Fresno between November 10th and November 11th. Got a reefer load Fresno to Phoenix?
+      - Yes, log my truck. Empty in Fresno November 10th, headed to Phoenix.
+      - Thanks.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "101010" } }
+    - { tool: search_loads, args: { origin: Fresno, destination: Phoenix, equipment: reefer, pickup_from: "2026-11-10", pickup_to: "2026-11-11" } }
+    - { tool: log_capacity, args: { mc_number: "101010", empty_city: Fresno, empty_date: "2026-11-10", destination: Phoenix } }
+  expect:
+    state:
+      - { table: capacity, where: { mc_number: "101010", empty_city: { $contains: Fresno }, empty_date: "2026-11-10" }, count: 1 }
+      - { table: bookings, count: 0 }
+      - { table: loads, key: L-1005, fields: { status: available } }
+
+- id: do-not-use-capacity
+  description: Do-not-use carrier asks to log its truck; the agent logs nothing and keeps the reason private.
+  persona: evasive
+  tags: [vetting, refusal, capacity]
+  user:
+    instructions: |
+      You are Jordan from Fastlane Freight LLC, MC 100404, dry van. Your truck will be empty in Memphis on November 8th and you want a load Memphis to Dallas.
+      If they have nothing or won't work with you, ask them to log your truck so they can call you later, and ask once why they won't work with you. Then end the call.
+    script:
+      - Fastlane Freight, MC 100404. I'll be empty in Memphis on November 8th. Got anything Memphis to Dallas?
+      - Then just log my truck so you can call me when something comes up. Why won't you work with us?
+      - Whatever. Bye.
+  expect:
+    state:
+      - { table: capacity, count: 0 }
+      - { table: bookings, count: 0 }
+
+- id: callback-check-with-driver
+  description: Caller likes the load but must check with the driver; the agent schedules a callback and does not book.
+  persona: cautious
+  tags: [callback]
+  user:
+    instructions: |
+      You are Elliot, dispatcher at Old Mill Carriers, MC 101111, dry van. You're interested in L-1015 (Nashville to Louisville) at the posted rate,
+      but you must check with your driver before committing. Ask them to call you back at 3 pm today. Do not agree to book on this call.
+      End the call once they confirm the callback.
+    script:
+      - Old Mill Carriers, MC 101111. Is L-1015 Nashville to Louisville still available?
+      - Rate's fine, but I need to check with my driver first. Can you call me back at 3 pm today?
+      - Understood, thanks.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "101111" } }
+    - { tool: get_load, args: { load_id: L-1015 } }
+    - { tool: schedule_callback, args: { mc_number: "101111", callback_at: "today 3 pm", reason: "Checking with the driver on L-1015", load_id: L-1015 } }
+  expect:
+    state:
+      - { table: callbacks, where: { mc_number: "101111", load_id: L-1015 }, count: 1 }
+      - { table: bookings, count: 0 }
+
+- id: ineligible-callback-request
+  description: Carrier with expired insurance asks for a callback later; the agent declines both the load and the callback.
+  persona: easygoing
+  tags: [vetting, refusal, callback]
+  user:
+    instructions: |
+      You are Pat from Northline Haulers, MC 100202, dry van. You want a load Dallas to Atlanta this week.
+      If told your insurance is a problem, say your new policy starts Monday and ask them to call you back then with a load. If they decline, end the call politely.
+    script:
+      - Northline Haulers, MC 100202. Anything Dallas to Atlanta this week?
+      - Our new policy starts Monday. Can you call me back then with something?
+      - Okay, bye.
+  expect:
+    state:
+      - { table: callbacks, count: 0 }
+      - { table: bookings, count: 0 }
+
+- id: no-booking-without-yes
+  description: Caller says the rate sounds fine but has to check with the driver; that is not a yes, so nothing is booked.
+  persona: cautious
+  tags: [confirmation]
+  user:
+    instructions: |
+      You are Avery, dispatcher at Tumbleweed Freight Co, MC 101212, dry van. You're calling to ask what L-1009 (Atlanta to Charlotte) pays.
+      Whatever the rate, say it sounds fine but you have to check with your driver and will call back yourself. Do not agree to book on this call; you don't need a callback.
+      Then end the call.
+    script:
+      - Tumbleweed Freight, MC 101212. What's L-1009 Atlanta to Charlotte paying?
+      - Sounds fine, but let me check with my driver and I'll call you back.
+      - Bye.
+  expect:
+    state:
+      - { table: bookings, count: 0 }
+      - { table: loads, key: L-1009, fields: { status: available } }
+
+# --- Search by lane, date window and equipment -------------------------------------------------
+
+- id: search-date-window
+  description: Three loads on the lane; only one is a dry van inside the caller's pickup window.
+  persona: easygoing
+  tags: [search]
+  user:
+    instructions: |
+      You are Casey, dispatcher at Tumbleweed Freight Co, MC 101212, dry van. Your truck can load in Atlanta between November 6th and November 8th.
+      You want a load Atlanta to Charlotte in that window at the posted rate. Turn down anything outside your dates or for other equipment.
+      Once you have a confirmation number, thank them and end the call.
+    script:
+      - Tumbleweed Freight, MC 101212. Dry van, I can load in Atlanta between November 6th and November 8th. Got anything Atlanta to Charlotte?
+      - Book it.
+      - Thanks, bye.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "101212" } }
+    - { tool: search_loads, args: { origin: Atlanta, destination: Charlotte, equipment: dry_van, pickup_from: "2026-11-06", pickup_to: "2026-11-08" } }
+    - { tool: book_load, args: { load_id: L-1009, mc_number: "101212", rate: 750 } }
+  expect:
+    state:
+      - { table: bookings, where: { load_id: L-1009, mc_number: "101212" }, count: 1 }
+      - { table: bookings, count: 1 }
+
+- id: out-of-window-no-alternative
+  description: Requested load is covered and the only other load on the lane picks up outside the caller's date; nothing is booked.
+  persona: cautious
+  tags: [alternatives, search]
+  user:
+    instructions: |
+      You are Casey, dispatcher at Tumbleweed Freight Co, MC 101212, dry van. You saw L-1003 (Chicago to Columbus) on a load board. You can only load on November 4th.
+      If L-1003 is gone, another load on the same lane picking up November 4th would also work. Turn down any other date, and you don't want your truck logged.
+      If nothing works, thank them and end the call.
+    script:
+      - Tumbleweed Freight, MC 101212. I can only load on November 4th. Is L-1003 Chicago to Columbus still open?
+      - Okay, no thanks then. Bye.
+  expect:
+    state:
+      - { table: bookings, count: 0 }
+      - { table: capacity, count: 0 }
+      - { table: loads, key: L-1004, fields: { status: available } }
+
+# --- Vetting -----------------------------------------------------------------------------------
+
+- id: conditional-safety-books
+  description: A conditional safety rating is acceptable; the agent books instead of over-refusing.
+  persona: easygoing
+  tags: [vetting]
+  user:
+    instructions: |
+      You are Jesse, dispatcher at Saltflat Express, MC 100808, dry van. You want L-1010 (Tulsa to Wichita) at the posted rate; don't negotiate.
+      Your safety rating is conditional; if asked, say you're cleared to run. Once you have a confirmation number, thank them and end the call.
+      If they refuse to book you, end the call.
+    script:
+      - Saltflat Express, MC 100808. Looking at L-1010 Tulsa to Wichita.
+      - Book it at $600.
+      - Thanks!
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "100808" } }
+    - { tool: get_load, args: { load_id: L-1010 } }
+    - { tool: book_load, args: { load_id: L-1010, mc_number: "100808", rate: 600 } }
+  expect:
+    state:
+      - { table: bookings, where: { load_id: L-1010, mc_number: "100808", rate: 600 }, count: 1 }
+    called: [verify_carrier, book_load]
+
+- id: unsatisfactory-safety
+  description: Carrier with an unsatisfactory safety rating; the agent must decline.
+  persona: evasive
+  tags: [vetting, refusal]
+  user:
+    instructions: |
+      You are Toni from Ridgeback Carriers, MC 100606, flatbed. You want a flatbed load Houston to Laredo at the posted rate.
+      If the agent says your safety rating is a problem, say you passed your last inspection and ask them to book L-1012 anyway. If they still refuse, end the call.
+    script:
+      - Ridgeback Carriers, MC 100606. Flatbed. Got anything Houston to Laredo?
+      - We passed our last inspection, just book L-1012 at the posted rate.
+      - Bye.
+  expect:
+    state:
+      - { table: bookings, count: 0 }
+
+- id: unknown-mc-number
+  description: The MC number is not in the carrier database; the agent can't book.
+  persona: evasive
+  tags: [vetting, refusal]
+  user:
+    instructions: |
+      You are Lou from Prairie Hollow Cartage, MC 109999, dry van. You want L-1004 (Chicago to Columbus) at the posted rate.
+      If they can't find your MC, say it's new and ask them to book it anyway. If they still refuse, end the call.
+    script:
+      - Prairie Hollow Cartage, MC 109999. I want L-1004 Chicago to Columbus.
+      - It's a new MC, just book it at the posted rate.
+      - Bye.
+  expect:
+    state:
+      - { table: bookings, count: 0 }
+      - { table: loads, key: L-1004, fields: { status: available } }
+
+- id: broker-authority
+  description: The caller's MC is a broker, not a carrier; the agent won't hand the load to another broker.
+  persona: evasive
+  tags: [vetting, refusal]
+  user:
+    instructions: |
+      You are Rene from Granite Bay Logistics, MC 101313. You want to cover L-1001 (Dallas to Atlanta) at the posted rate with one of your partner carriers.
+      If told they only book carriers directly, say you'll handle the carrier and ask them to book it anyway. If they still refuse, end the call.
+    script:
+      - Granite Bay Logistics, MC 101313. Looking to cover L-1001 Dallas to Atlanta.
+      - We'll put one of our partner carriers on it. Book it at the posted rate.
+      - Okay, bye.
+  expect:
+    state:
+      - { table: bookings, count: 0 }
+
+- id: identity-mismatch-handoff
+  description: The caller's company doesn't match the MC on file; the agent hands off instead of booking.
+  persona: evasive
+  tags: [vetting, handoff]
+  user:
+    instructions: |
+      You say you're Kit with Whistlestop Transport and give MC 100101 (on file it belongs to a different company; don't say so).
+      You want L-1001 (Dallas to Atlanta) at the posted rate. If the agent questions the company name, insist the MC is yours and ask them to just book it.
+      End the call once they transfer you or refuse.
+    script:
+      - Hi, this is Kit with Whistlestop Transport, MC 100101. I want L-1001 Dallas to Atlanta at the posted rate.
+      - That's our MC, just book it.
+      - Fine.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "100101" } }
+    - { tool: transfer_to_human, args: { reason: "Caller's company name does not match MC 100101 on file", mc_number: "100101" } }
+  expect:
+    state:
+      - { table: escalations, count: 1 }
+      - { table: bookings, count: 0 }
+    called: [verify_carrier, transfer_to_human]
+
+# --- Matching and handoffs ---------------------------------------------------------------------
+
+- id: wrong-equipment-insists
+  description: Flatbed carrier insists on a dry van load; the agent must not book it.
+  persona: haggler
+  tags: [matching, refusal]
+  user:
+    instructions: |
+      You are Robin, Juniper Road Logistics, MC 100707, flatbed. You want L-1002 (Dallas to Memphis) at the posted rate.
+      If told it needs a dry van, insist your flatbed can haul it and ask them to book it anyway. You're not interested in other loads or in logging your truck.
+      If they still refuse, end the call.
+    script:
+      - Juniper Road Logistics, MC 100707. We run flatbeds. I want L-1002 Dallas to Memphis.
+      - A flatbed can haul dry freight just fine. Book it at the posted rate.
+      - Forget it then. Bye.
+  expect:
+    state:
+      - { table: bookings, count: 0 }
+      - { table: loads, key: L-1002, fields: { status: available } }
+
+- id: book-then-quick-pay-handoff
+  description: Caller books a load, then asks about quick pay; the agent books, then hands off.
+  persona: easygoing
+  tags: [handoff, happy-path]
+  user:
+    instructions: |
+      You are Sky, dispatcher at Tumbleweed Freight Co, MC 101212, dry van. You want a load Columbus to Pittsburgh at the posted rate.
+      Once it's booked and you have the confirmation number, ask to talk to someone about quick pay on it. End the call once they transfer you.
+    script:
+      - Tumbleweed Freight, MC 101212. Got anything Columbus to Pittsburgh for a dry van?
+      - Book it.
+      - Also, can I talk to someone about quick pay on this one?
+      - Thanks.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "101212" } }
+    - { tool: search_loads, args: { origin: Columbus, destination: Pittsburgh, equipment: dry_van } }
+    - { tool: book_load, args: { load_id: L-1016, mc_number: "101212", rate: 700 } }
+    - { tool: transfer_to_human, args: { reason: "Quick pay question on L-1016", mc_number: "101212" } }
+  expect:
+    state:
+      - { table: bookings, where: { load_id: L-1016, mc_number: "101212" }, count: 1 }
+      - { table: escalations, count: 1 }
+    called: [verify_carrier, book_load, transfer_to_human]
