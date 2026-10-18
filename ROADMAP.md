@@ -12,14 +12,15 @@ Issues and milestones on GitHub are the source of truth; this page is the overvi
 
 ## v0.2: `sandtable init` and trustworthy suites
 - [x] OpenAPI → world tables and tools, deterministic (#6)
-- [x] SOP → invariants, each quoting its source (#7, live verification pending)
-- [x] Transcripts → personas, tasks and fictional seed rows, PII scrubbed first (#8, live verification pending)
+- [x] SOP → invariants, each quoting its source (#7)
+- [x] Transcripts → personas, tasks and fictional seed rows, PII scrubbed first (#8)
 - [x] Review workflow: `review: pending`, `sandtable review`, `validate --strict`, provisional reports (#9)
 - [x] `sandtable lint`: ready, solvable, non-vacuous, graded (#10)
 - [x] `never_disclose`: protected values in agent messages (#24)
 - [x] OpenAI-compatible agent and simulated user, for comparing models: `--agent openai:<model>` (#19)
-- [ ] Verify the Claude adapters, caching and init steps against the live API (#1, #3)
-- [ ] Release workflow and first npm publish (#23)
+- [x] Live verification of the Claude adapters, caching and init steps (#1, #3); see docs/results.md
+- [x] Claude on Amazon Bedrock (#46) and the Bedrock Converse adapter for non-Claude models (#56)
+- [ ] First release to npm and PyPI through Trusted Publishing (#23)
 
 ## v0.3: closing the loop in CI
 - [ ] Baseline comparison and PR comments with pass^k deltas (#12, #13)
