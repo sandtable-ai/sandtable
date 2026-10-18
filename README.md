@@ -213,6 +213,25 @@ Every model plays the agent under the same simulated callers, next to a do-nothi
 
 `--fail-under` exits non-zero when pass^k drops below the threshold, so a prompt tweak that breaks a customer rule fails the build.
 
+## Use it from your coding agent
+
+This repository is also a Claude Code plugin marketplace. Its `sandtable` plugin teaches a coding agent to run the whole loop for you: draft a domain from a customer's OpenAPI spec, SOP and transcripts, resolve the review notes, write `reference` calls, `lint`, run against your agent, and read failing trajectories. In Claude Code:
+
+```text
+/plugin marketplace add sandtable-ai/sandtable
+/plugin install sandtable@sandtable
+```
+
+On Claude Code 2.1.275 or later, `/plugin install sandtable --marketplace sandtable-ai/sandtable` does both in one step.
+
+| Skill | What it covers |
+|---|---|
+| `drafting-a-domain` | `init`, `review`, resolving `TODO(review)` notes, seed rows, `reference` calls, accepting drafted items, `lint` |
+| `running-and-reading-results` | `run`, choosing k, pass^k, `results.json` and `report.html`, attributing failures to the agent, the simulated user, the task or the harness |
+| `writing-good-tasks` | hidden goals, policy-correct end states, avoiding vacuous tasks, `never_disclose`, balanced suites |
+
+Claude loads a skill when the conversation needs it, or you can call one by name, such as `/sandtable:drafting-a-domain`. A `failure-triager` subagent reads the failing trials of a large run outside the main conversation. The skills ask before any command that calls a model. They are plain `SKILL.md` files in [`plugin/skills`](plugin/skills), so other coding agents that read Agent Skills can use them too.
+
 ## Prior art
 
 `sandtable` stands on τ-bench's method (simulated user + stateful tools + end-state grading + pass^k). What it adds is making that method cheap to apply to *one customer's* workflow, as a file in their repo. Simulation frameworks such as LangWatch Scenario, IntellAgent and DeepEval's simulator, and closed platforms such as Sierra's and Decagon's simulations, cover nearby ground. See [docs/prior-art.md](docs/prior-art.md) for a fair comparison.

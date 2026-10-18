@@ -27,9 +27,13 @@ Development needs Node ≥ 22.18, which runs `src/*.ts` directly (type stripping
 3. Add a `user.script` to each task so the domain runs offline with `--user scripted`.
 4. `npm run sandtable -- validate examples/<name>`.
 
+## Changing the CLI or the spec
+
+The Claude Code plugin in `plugin/` teaches coding agents exact commands and YAML. When you change a command, a flag or the spec, update its skills too. `test/plugin.test.ts` checks every `npx sandtable-ai` command and flag in them against `--help`, and every YAML snippet against the schema. If you have Claude Code, also run `claude plugin validate . --strict`.
+
 ## Releasing
 
-1. `npm version <patch|minor|prerelease --preid alpha>`. The `version` script syncs the Python launcher's version.
+1. `npm version <patch|minor|prerelease --preid alpha>`. The `version` script syncs the Python launcher's and the plugin's versions.
 2. `git push --follow-tags`. The `release` workflow then:
    - checks everything
    - stages `sandtable-ai` on npm (pre-releases under the `next` tag)

@@ -20,6 +20,7 @@ Issues and milestones on GitHub are the source of truth; this page is the overvi
 - [x] OpenAI-compatible agent and simulated user, for comparing models: `--agent openai:<model>` (#19)
 - [x] Live verification of the Claude adapters, caching and init steps (#1, #3); see docs/results.md
 - [x] Claude on Amazon Bedrock (#46) and the Bedrock Converse adapter for non-Claude models (#56)
+- [x] Agent skills and a Claude Code plugin, so coding agents can draft, run and debug suites (#51)
 - [ ] First release to npm and PyPI through Trusted Publishing (#23)
 
 ## v0.3: closing the loop in CI
