@@ -47,7 +47,9 @@ export async function appendToDomainList(
     const node = doc.createNode(item) as YAML.YAMLMap;
     for (const pair of node.items) {
       // Keep the rule body and its source on one line each.
-      if (YAML.isMap(pair.value) && ["source", "before", "limit", "match", "never"].includes(String((pair.key as YAML.Scalar).value))) {
+      const key = String((pair.key as YAML.Scalar).value);
+      const multiline = YAML.isNode(pair.value) && JSON.stringify(pair.value.toJSON()).includes("\\n");
+      if (YAML.isMap(pair.value) && ["source", "before", "limit", "match", "never"].includes(key) && !multiline) {
         pair.value.flow = true;
       }
     }
