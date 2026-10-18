@@ -1,0 +1,16 @@
+export * from "./spec/schema.ts";
+export { loadDomain, validateDomain, DomainError, DOMAIN_FILE } from "./spec/load.ts";
+export { World, diffSnapshots, type Change, type Snapshot } from "./world/store.ts";
+export { executeTool, coerceArgs, toolSchema, type ToolOutcome, type ToolSchema } from "./world/tools.ts";
+export { checkCall, type CallRecord, type Violation } from "./grade/invariants.ts";
+export { gradeTrial, type CheckResult, type CheckKind } from "./grade/expectations.ts";
+export { passHatK, binom } from "./grade/passk.ts";
+export type * from "./sim/types.ts";
+export { claudeAgent, claudeUser, DEFAULT_MODEL, type ClaudeOptions, type ClaudeAgentOptions } from "./sim/claude.ts";
+export { httpAgent } from "./sim/http.ts";
+export { scriptedUser } from "./sim/scripted.ts";
+export { agentSystemPrompt, userSystemPrompt, STOP_TOKEN } from "./sim/prompts.ts";
+export { runEpisode, type TrialResult, type TrajectoryEvent, type EndReason } from "./run/episode.ts";
+export { runSuite, type SuiteOptions, type SuiteResult, type TaskSummary, type FailureMode } from "./run/suite.ts";
+export { renderTerminal } from "./report/terminal.ts";
+export { renderHtml } from "./report/html.ts";
