@@ -39,6 +39,17 @@ It also leaves out several things and lists them as warnings:
 
 Tables with no examples get a `TODO: add seed rows` comment that lists the fields seen in the spec.
 
+## Reviewing a draft
+
+Drafted invariants and tasks carry `review: pending` and a `source` (the file and the quote they came from). Tools with review notes are marked the same way.
+
+```bash
+rehearse review rehearsal              # list what is pending, with sources
+rehearse validate rehearsal --strict   # fails while anything is pending (use in CI)
+```
+
+While items are pending, runs still work, but their reports are marked **provisional**. To accept an item, change `review: pending` to `review: accepted` or delete the line.
+
 ## Next: SOP and transcripts
 
 Drafting invariants from an SOP and tasks from call transcripts is in progress: see the issues labelled `area:init`.

@@ -1,5 +1,5 @@
 export * from "./spec/schema.ts";
-export { loadDomain, validateDomain, DomainError, DOMAIN_FILE } from "./spec/load.ts";
+export { loadDomain, validateDomain, pendingReview, DomainError, DOMAIN_FILE, type PendingItem } from "./spec/load.ts";
 export { World, diffSnapshots, type Change, type Snapshot } from "./world/store.ts";
 export { executeTool, coerceArgs, toolSchema, type ToolOutcome, type ToolSchema } from "./world/tools.ts";
 export { checkCall, type CallRecord, type Violation } from "./grade/invariants.ts";

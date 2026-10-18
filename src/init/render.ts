@@ -29,6 +29,7 @@ export function renderDraft(d: OpenApiDraft, source: string): string {
     ...(t.checks.length ? { checks: t.checks } : {}),
     ops: t.ops,
     ...(t.returns !== undefined ? { returns: t.returns } : {}),
+    ...(t.notes.length ? { review: "pending" } : {}),
   }));
   const doc = new YAML.Document({
     name: d.name,

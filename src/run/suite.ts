@@ -1,5 +1,6 @@
 import type { CheckKind } from "../grade/expectations.ts";
 import { passHatK } from "../grade/passk.ts";
+import { pendingReview, type PendingItem } from "../spec/load.ts";
 import type { Domain } from "../spec/schema.ts";
 import type { AgentAdapter, UserSimulator } from "../sim/types.ts";
 import { runEpisode, type TrialResult } from "./episode.ts";
@@ -37,6 +38,8 @@ export interface SuiteResult {
   /** pass^1 and pass^k per task tag ("untagged" for tasks without tags). */
   byTag: TagScore[];
   usage: Usage;
+  /** Drafted items not yet accepted; while non-empty, results are provisional. */
+  pendingReview: PendingItem[];
   /** Time the agent took to answer each user turn, tool calls included. */
   latency: { agentTurnP50Ms: number | null; agentTurnP95Ms: number | null };
 }
@@ -99,6 +102,7 @@ export async function runSuite(opts: SuiteOptions): Promise<SuiteResult> {
     failureModes: failureModes(results),
     byTag: tagScores(summaries, k),
     usage: sumUsage(results.map((r) => r.usage)),
+    pendingReview: pendingReview(domain),
     latency: { agentTurnP50Ms: percentile(turnLatencies, 50), agentTurnP95Ms: percentile(turnLatencies, 95) },
   };
 }

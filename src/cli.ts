@@ -14,7 +14,7 @@ import { scriptedUser } from "./sim/scripted.ts";
 import type { AgentAdapter, UserSimulator } from "./sim/types.ts";
 import { draftFromOpenApi } from "./init/openapi.ts";
 import { DOMAIN_FILE, POLICY_PLACEHOLDER, renderDraft, TASKS_PLACEHOLDER, writeDraft } from "./init/render.ts";
-import { DomainError, loadDomain } from "./spec/load.ts";
+import { DomainError, loadDomain, pendingReview } from "./spec/load.ts";
 import YAML from "yaml";
 
 const EXAMPLE = fileURLToPath(new URL("../examples/freight", import.meta.url));
@@ -93,9 +93,30 @@ program
   .command("validate")
   .argument("<domain>", "domain directory (with rehearsal.yaml) or file")
   .description("check a domain spec for schema and cross-reference errors")
-  .action(async (domainPath: string) => {
+  .option("--strict", "also fail while drafted items are pending review")
+  .action(async (domainPath: string, o: { strict?: boolean }) => {
     const d = await loadDomain(domainPath);
     console.log(`✓ ${d.name}: ${Object.keys(d.world.tables).length} tables, ${d.tools.length} tools, ${d.invariants.length} invariants, ${d.tasks.length} tasks`);
+    const pending = pendingReview(d);
+    if (pending.length) {
+      console.log(`⚠ ${pending.length} drafted item(s) pending review (rehearse review ${domainPath})`);
+      if (o.strict) process.exitCode = 1;
+    }
+  });
+
+program
+  .command("review")
+  .argument("<domain>", "domain directory (with rehearsal.yaml) or file")
+  .description("list drafted items that still need a person to accept them")
+  .action(async (domainPath: string) => {
+    const pending = pendingReview(await loadDomain(domainPath));
+    if (!pending.length) return console.log("Nothing pending review.");
+    for (const p of pending) {
+      console.log(`- ${p.kind} ${p.id}${p.source ? `  (${p.source.file})` : ""}`);
+      if (p.source?.quote) console.log(`    "${p.source.quote}"`);
+      if (p.kind === "tool") console.log("    see the TODO(review) comments above it in rehearsal.yaml");
+    }
+    console.log(`\nAccept an item by changing its \`review: pending\` to \`review: accepted\` (or deleting the line).`);
   });
 
 program

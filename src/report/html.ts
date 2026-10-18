@@ -36,12 +36,14 @@ tr:last-child td{border-bottom:0}
 .viol{color:var(--bad);font-weight:600}
 code{font:12px ui-monospace,Menlo,monospace}
 .wrap{overflow-x:auto}
+.warn{background:var(--tool);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-top:16px}
 </style>
 </head>
 <body>
 <main>
 <h1>Rehearsal report: <span id="domain"></span></h1>
 <div class="meta" id="meta"></div>
+<div id="pending"></div>
 <div class="kpis" id="kpis"></div>
 <h2>Tasks</h2>
 <div class="wrap"><table><thead><tr><th>Task</th><th>Trials</th><th>Pass</th><th>Failed checks</th></tr></thead><tbody id="tasks"></tbody></table></div>
@@ -60,6 +62,10 @@ const usd = (v) => v === null || v === undefined ? "n/a" : v > 0 && v < 0.01 ? "
 const calls = (u) => u ? [u.agent, u.user].flatMap((g) => Object.values(g || {})).reduce((n, x) => n + x.calls, 0) : 0;
 $("domain").textContent = R.domain;
 $("meta").textContent = "agent " + R.agent + " · user " + R.user + " · k=" + R.k + " · " + R.startedAt + " · " + (R.durationMs / 1000).toFixed(1) + "s";
+if (R.pendingReview && R.pendingReview.length) {
+  $("pending").innerHTML = '<div class="warn"><b>Provisional:</b> ' + R.pendingReview.length + " drafted item(s) are pending review: " +
+    R.pendingReview.map((p) => '<span class="chip">' + esc(p.kind + " " + p.id) + "</span>").join("") + "</div>";
+}
 const hats = Object.entries(R.passHat).filter(([j]) => j === "1" || j === String(R.k));
 $("kpis").innerHTML = hats.map(([j, v]) => '<div class="kpi"><b>' + pct(v) + '</b><span>pass^' + j + '</span></div>').join("") +
   '<div class="kpi"><b>' + ms(R.latency && R.latency.agentTurnP95Ms) + '</b><span>agent turn p95</span></div>' +

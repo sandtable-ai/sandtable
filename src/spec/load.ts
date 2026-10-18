@@ -121,6 +121,21 @@ export function validateDomain(d: Domain): string[] {
   return problems;
 }
 
+export interface PendingItem {
+  kind: "tool" | "invariant" | "task";
+  id: string;
+  source?: { file: string; quote?: string };
+}
+
+/** Drafted items nobody has accepted yet. Results that depend on them are provisional. */
+export function pendingReview(d: Domain): PendingItem[] {
+  return [
+    ...d.tools.filter((t) => t.review === "pending").map((t) => ({ kind: "tool" as const, id: t.name })),
+    ...d.invariants.filter((i) => i.review === "pending").map((i) => ({ kind: "invariant" as const, id: i.id, source: i.source })),
+    ...d.tasks.filter((t) => t.review === "pending").map((t) => ({ kind: "task" as const, id: t.id, source: t.source })),
+  ];
+}
+
 async function isDir(p: string): Promise<boolean> {
   return (await stat(p).catch(() => undefined))?.isDirectory() ?? false;
 }

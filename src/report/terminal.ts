@@ -7,6 +7,7 @@ const green = paint(32);
 const red = paint(31);
 const dim = paint(2);
 const bold = paint(1);
+const yellow = paint(33);
 
 export function formatPercent(x: number): string {
   return Number.isNaN(x) ? "n/a" : `${(x * 100).toFixed(1)}%`;
@@ -34,6 +35,9 @@ function tokens(label: string, group: UsageByModel): string | undefined {
 export function renderTerminal(r: SuiteResult): string {
   const lines: string[] = [];
   lines.push(bold(`rehearse · ${r.domain}`) + dim(` · agent ${r.agent} · user ${r.user} · k=${r.k}`));
+  if (r.pendingReview?.length) {
+    lines.push(yellow(`  ⚠ ${r.pendingReview.length} drafted item(s) pending review: results are provisional (rehearse review <domain>)`));
+  }
   lines.push("");
   const width = Math.max(4, ...r.tasks.map((t) => t.id.length));
   lines.push(dim(`  ${"task".padEnd(width)}  trials${" ".repeat(Math.max(0, r.k - 6))}  pass`));

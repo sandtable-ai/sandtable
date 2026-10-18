@@ -5,7 +5,8 @@ import { runSuite } from "../src/run/suite.ts";
 import { noopAgent } from "../src/sim/noop.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
 import type { AgentAdapter } from "../src/sim/types.ts";
-import { DomainError, loadDomain, validateDomain } from "../src/spec/load.ts";
+import { DomainError, loadDomain, pendingReview, validateDomain } from "../src/spec/load.ts";
+import { DomainSpec } from "../src/spec/schema.ts";
 
 const example = path.resolve("examples/freight");
 
@@ -82,6 +83,30 @@ describe("freight example, offline", () => {
       { ok: false, error: 'unknown tool "delete_everything"', result: undefined },
       { ok: false, error: 'unknown argument "id"', result: undefined },
     ]);
+  });
+});
+
+describe("review workflow", () => {
+  it("lists pending drafted items and marks runs provisional", async () => {
+    const d = await loadDomain(example);
+    const drafted = DomainSpec.parse({
+      ...d,
+      invariants: [
+        ...d.invariants,
+        { id: "readback", description: "Read back before booking", review: "pending", source: { file: "policy.md", quote: "read back the load ID" }, never: { tool: "book_load", when: { rate: { $lt: 0 } } } },
+      ],
+      tasks: d.tasks.map((t, i) => (i === 0 ? { ...t, review: "pending" } : { ...t, review: "accepted" })),
+    });
+    expect(pendingReview(drafted)).toEqual([
+      { kind: "invariant", id: "readback", source: { file: "policy.md", quote: "read back the load ID" } },
+      { kind: "task", id: "book-at-posted-rate", source: undefined },
+    ]);
+    const r = await runSuite({ domain: drafted, agent: freightScriptedAgent("careful"), user: scriptedUser(), taskIds: ["no-mc-number"] });
+    expect(r.pendingReview).toHaveLength(2);
+  });
+
+  it("treats a hand-written domain as fully reviewed", async () => {
+    expect(pendingReview(await loadDomain(example))).toEqual([]);
   });
 });
 

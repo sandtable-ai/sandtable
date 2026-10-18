@@ -10,6 +10,13 @@ import { z } from "zod";
  */
 
 const Value = z.unknown();
+
+/**
+ * Drafted items (from `rehearse init`) start as `pending` and only count as acceptance
+ * criteria once a person accepts them. `source` points back to the evidence.
+ */
+const Review = z.enum(["pending", "accepted"]).optional();
+const Source = z.object({ file: z.string(), quote: z.string().optional() }).strict().optional();
 const Where = z.record(z.string(), Value);
 
 export const ParamSpec = z
@@ -58,13 +65,14 @@ export const ToolSpec = z
     ops: z.array(OpSpec).min(1),
     /** Index of the op whose result is returned to the agent. */
     returns: z.number().int().nonnegative().default(0),
+    review: Review,
   })
   .strict();
 
 /** Points at a field of the record keyed by one of the call's arguments, e.g. loads[load_id].max_rate. */
 export const FieldRef = z.object({ table: z.string(), key_arg: z.string(), field: z.string() }).strict();
 
-const invariantBase = { id: z.string(), description: z.string() };
+const invariantBase = { id: z.string(), description: z.string(), review: Review, source: Source };
 
 /** `then` may only be called after a successful `first` call with the same values for `same` args. */
 const BeforeInvariant = z
@@ -154,6 +162,8 @@ export const TaskSpec = z
     description: z.string().optional(),
     persona: z.string().optional(),
     tags: z.array(z.string()).default([]),
+    review: Review,
+    source: Source,
     user: z
       .object({
         /** Hidden goal and private facts for the simulated user. The agent never sees this. */
