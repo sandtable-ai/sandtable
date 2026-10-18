@@ -30,6 +30,10 @@ sandtable · freight-carrier-sales · agent scripted:naive · user scripted · k
 
 > Status: **early alpha**. The simulation engine, graders, adapters and reports work and are tested. `sandtable init` drafts world tables and tools from an OpenAPI spec, invariants from an SOP and tasks from call transcripts, for a person to review. Model-backed steps have not yet been verified against the live API. See [ROADMAP.md](ROADMAP.md).
 
+## First live results
+
+On the bundled freight example, Claude Opus 5.5 scores **pass^1 95%, pass^2 90%** (20 trials, $0.58). Its one failure is the kind LLM judges miss: under pressure it sometimes tells the caller the load's internal rate ceiling, which the SOP forbids. Details, harness lessons and `init` results: [docs/results.md](docs/results.md).
+
 ## Why
 
 Agents that pass a demo fail on the seventh customer, because each customer has its own rules, systems and edge cases. The usual test setups miss this:

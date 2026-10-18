@@ -33,7 +33,6 @@ jobs:
   npm:
     needs: check
     runs-on: ubuntu-latest
-    environment: npm
     permissions:
       contents: read
       id-token: write   # npm trusted publishing + provenance
@@ -52,7 +51,6 @@ jobs:
   pypi:
     needs: check
     runs-on: ubuntu-latest
-    environment: pypi
     permissions:
       contents: read
       id-token: write   # PyPI trusted publishing
