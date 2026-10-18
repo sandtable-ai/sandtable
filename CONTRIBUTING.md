@@ -1,0 +1,28 @@
+# Contributing
+
+Thanks for helping. Issues, example domains and adapters are all welcome.
+
+## Setup
+
+```bash
+npm install
+npm test            # vitest, no network
+npm run typecheck
+npm run demo        # offline demo from the TypeScript sources
+```
+
+Node ≥ 22.18 runs `src/*.ts` directly (type stripping), so there is no build step in development. `npm run build` compiles to `dist/` for publishing.
+
+## Ground rules
+
+- **Grading stays deterministic.** Hard pass/fail comes from state, invariants and the tool log. LLM-judged checks, when they land, will be a separate soft score.
+- **No network in tests.** Use the fake client pattern in `test/adapters.test.ts` for model adapters.
+- **Example domains are fictional.** No real company names, customer data or proprietary procedures.
+- Keep the spec small. Prefer a new invariant kind with a clear name over a general expression language.
+
+## Adding an example domain
+
+1. Create `examples/<name>/rehearsal.yaml`, `policy.md` and `tasks.yaml`.
+2. Include tasks that should end with a write and tasks that must end without one. A suite of only refusal tasks lets a do-nothing agent score well.
+3. Add a `user.script` to each task so the domain runs offline with `--user scripted`.
+4. `npm run rehearse -- validate examples/<name>`.
