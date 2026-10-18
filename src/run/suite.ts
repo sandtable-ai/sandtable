@@ -25,6 +25,8 @@ export interface FailureMode {
 
 export interface SuiteResult {
   version: 1;
+  /** Unique per run; prefixes agent session ids (`<runId>/<task-id>#<trial>`). */
+  runId: string;
   domain: string;
   agent: string;
   user: string;
@@ -66,6 +68,8 @@ export async function runSuite(opts: SuiteOptions): Promise<SuiteResult> {
   const { domain, agent, user } = opts;
   const k = opts.k ?? 1;
   const startedAt = new Date().toISOString();
+  // e.g. 20261018T210512-k3f9: sortable and unique per run, used to namespace agent session ids.
+  const runId = `${startedAt.replace(/[-:]/g, "").replace(/\.\d+Z$/, "")}-${Math.random().toString(36).slice(2, 6)}`;
   const started = performance.now();
 
   const tasks = opts.taskIds?.length ? domain.tasks.filter((t) => opts.taskIds!.includes(t.id)) : domain.tasks;
@@ -74,7 +78,7 @@ export async function runSuite(opts: SuiteOptions): Promise<SuiteResult> {
 
   const jobs = tasks.flatMap((task) => Array.from({ length: k }, (_, trial) => ({ task, trial })));
   const results = await pool(jobs, opts.concurrency ?? 4, async ({ task, trial }) => {
-    const r = await runEpisode({ domain, task, agent, user, trial });
+    const r = await runEpisode({ domain, task, agent, user, trial, runId });
     opts.onTrial?.(r);
     return r;
   });
@@ -91,6 +95,7 @@ export async function runSuite(opts: SuiteOptions): Promise<SuiteResult> {
 
   return {
     version: 1,
+    runId,
     domain: domain.name,
     agent: agent.name,
     user: user.name,

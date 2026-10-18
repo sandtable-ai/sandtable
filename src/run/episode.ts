@@ -37,6 +37,8 @@ export async function runEpisode(input: {
   agent: AgentAdapter;
   user: UserSimulator;
   trial: number;
+  /** Unique per suite run, so session ids never collide across runs. */
+  runId?: string;
 }): Promise<TrialResult> {
   const { domain, task, agent, user, trial } = input;
   const started = performance.now();
@@ -61,7 +63,7 @@ export async function runEpisode(input: {
       domain,
       system: agentSystemPrompt(domain),
       tools: domain.tools.map(toolSchema),
-      sessionId: `${task.id}#${trial}`,
+      sessionId: `${input.runId ? `${input.runId}/` : ""}${task.id}#${trial}`,
       recordUsage: (model, u) => recordInto(usage.agent, model, u),
     });
     const sim = await user.createSession({ domain, task, persona, recordUsage: (model, u) => recordInto(usage.user, model, u) });

@@ -15,7 +15,7 @@ sandtable run ./my-domain --agent http://localhost:8787/step
 
 ```jsonc
 {
-  "session_id": "walk-away-above-ceiling#0",   // stable per trial: key your conversation state on it
+  "session_id": "20261018T210512-k3f9/walk-away-above-ceiling#0",   // unique per trial and run: key your conversation state on it
   "system": "...",                             // sandtable's default prompt; ignore it if your agent has its own
   "tools": [{ "name": "...", "description": "...", "input_schema": { } }],
   "message": "I need $1,600 on that one.",     // a new user turn, or:
@@ -25,7 +25,7 @@ sandtable run ./my-domain --agent http://localhost:8787/step
 
 | Field | Type | Description |
 |---|---|---|
-| `session_id` | string | `<task-id>#<trial>`, with trials numbered from 0. The same for every step of one trial |
+| `session_id` | string | `<run-id>/<task-id>#<trial>`, with trials numbered from 0. The same for every step of one trial, and never reused by another run |
 | `system` | string | the default system prompt: the domain description and the policy |
 | `tools` | array | the domain's tools: `name`, `description` and a JSON-schema `input_schema` (`type: "object"`, `properties`, `required`, `additionalProperties: false`) |
 | `message` | string | present when the user has spoken: the start of a new turn |
@@ -79,7 +79,7 @@ Tool calls in one response run in order. sandtable then POSTs all their results 
 - **No token usage.** sandtable cannot see your agent's model calls, so reported tokens and cost cover only the simulated user.
 
 <Warning>
-`session_id` repeats across runs: the first trial of a task is always `<task-id>#0`. If your service keeps conversation state between runs, clear it when a run starts, or the trial will continue an old conversation.
+`session_id` starts with the run's id (also in `results.json` as `runId`), so it never repeats across runs, and a service that keeps state between runs won't resume an old conversation.
 </Warning>
 
 ## Authentication and custom headers

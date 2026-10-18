@@ -192,7 +192,7 @@ sandtable run ./my-domain --agent http://localhost:8787/step -k 4
 The [quickstart](/quickstart#run-it) has a runnable toy agent in Node and Python, and the [HTTP agent protocol](/reference/http-protocol) reference has every field, the error behaviour and the limits.
 
 <Warning>
-`session_id` is `<task-id>#<trial>`, so it repeats across runs. If your service keeps conversation state between runs, clear it when a run starts, or a trial may continue an old conversation.
+`session_id` is `<run-id>/<task-id>#<trial>`: unique per trial and never reused by another run.
 </Warning>
 
 ## Your agent as a JS or TS module
