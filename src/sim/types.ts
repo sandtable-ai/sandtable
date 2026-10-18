@@ -1,4 +1,5 @@
 import type { Domain, Persona, Task } from "../spec/schema.ts";
+import type { UsageRecorder } from "../run/usage.ts";
 import type { ToolOutcome, ToolSchema } from "../world/tools.ts";
 
 /** Executes a tool against the simulated world and records it in the trajectory. */
@@ -10,6 +11,8 @@ export interface AgentContext {
   system: string;
   tools: ToolSchema[];
   sessionId: string;
+  /** Report model usage so runs can show tokens and cost. Optional for custom adapters. */
+  recordUsage?: UsageRecorder;
 }
 
 /**
@@ -36,6 +39,7 @@ export interface UserContext {
   domain: Domain;
   task: Task;
   persona?: Persona;
+  recordUsage?: UsageRecorder;
 }
 
 export interface UserSession {

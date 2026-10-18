@@ -3,6 +3,7 @@ import { passHatK } from "../grade/passk.ts";
 import type { Domain } from "../spec/schema.ts";
 import type { AgentAdapter, UserSimulator } from "../sim/types.ts";
 import { runEpisode, type TrialResult } from "./episode.ts";
+import { percentile, sumUsage, type Usage } from "./usage.ts";
 
 export interface TaskSummary {
   id: string;
@@ -33,6 +34,9 @@ export interface SuiteResult {
   /** pass^1 .. pass^k */
   passHat: Record<string, number>;
   failureModes: FailureMode[];
+  usage: Usage;
+  /** Time the agent took to answer each user turn, tool calls included. */
+  latency: { agentTurnP50Ms: number | null; agentTurnP95Ms: number | null };
 }
 
 export interface SuiteOptions {
@@ -68,6 +72,7 @@ export async function runSuite(opts: SuiteOptions): Promise<SuiteResult> {
     return { id: task.id, description: task.description, tags: task.tags, trials, passes: trials.filter((t) => t.passed).length };
   });
 
+  const turnLatencies = results.flatMap((r) => r.events.flatMap((e) => (e.type === "agent" ? [e.latencyMs] : [])));
   const outcomes = summaries.map((s) => s.trials.map((t) => t.passed));
   const passHat: Record<string, number> = {};
   for (let j = 1; j <= k; j++) passHat[String(j)] = passHatK(outcomes, j);
@@ -83,6 +88,8 @@ export async function runSuite(opts: SuiteOptions): Promise<SuiteResult> {
     tasks: summaries,
     passHat,
     failureModes: failureModes(results),
+    usage: sumUsage(results.map((r) => r.usage)),
+    latency: { agentTurnP50Ms: percentile(turnLatencies, 50), agentTurnP95Ms: percentile(turnLatencies, 95) },
   };
 }
 

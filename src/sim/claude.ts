@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import type { UsageRecorder } from "../run/usage.ts";
 import { STOP_TOKEN, USER_KICKOFF, userSystemPrompt } from "./prompts.ts";
 import type { AgentAdapter, UserSimulator } from "./types.ts";
 
@@ -35,6 +36,17 @@ function requestBase(opts: ClaudeOptions, defaultEffort: Effort) {
   };
 }
 
+function report(ctx: { recordUsage?: UsageRecorder }, fallbackModel: string, response: Anthropic.Beta.BetaMessage) {
+  const u = response.usage;
+  if (!u) return;
+  ctx.recordUsage?.(response.model ?? fallbackModel, {
+    input: u.input_tokens,
+    output: u.output_tokens,
+    cacheRead: u.cache_read_input_tokens ?? 0,
+    cacheWrite: u.cache_creation_input_tokens ?? 0,
+  });
+}
+
 function textOf(content: Anthropic.Beta.BetaContentBlock[]): string {
   return content
     .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")
@@ -64,6 +76,7 @@ export function claudeAgent(opts: ClaudeAgentOptions = {}): AgentAdapter {
           messages.push({ role: "user", content: userMessage });
           for (let round = 0; round < maxRounds; round++) {
             const response = await client.beta.messages.create({ ...base, system: ctx.system, tools, messages });
+            report(ctx, base.model, response);
             messages.push({ role: "assistant", content: response.content });
 
             if (response.stop_reason === "refusal") return "[agent refused]";
@@ -115,6 +128,7 @@ export function claudeUser(opts: ClaudeOptions = {}): UserSimulator {
           opened = true;
           if (agentMessage !== null) messages.push({ role: "user", content: agentMessage || "(silence)" });
           const response = await client.beta.messages.create({ ...base, system, messages });
+          report(ctx, base.model, response);
           messages.push({ role: "assistant", content: response.content });
           if (response.stop_reason === "refusal") return { text: "", stop: true };
           const raw = textOf(response.content);

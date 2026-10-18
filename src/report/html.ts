@@ -54,10 +54,15 @@ const R = ${data};
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const pct = (x) => Number.isNaN(x) || x === null ? "n/a" : (x * 100).toFixed(1) + "%";
+const ms = (v) => v === null || v === undefined ? "n/a" : v < 1000 ? v + "ms" : (v / 1000).toFixed(1) + "s";
+const usd = (v) => v === null || v === undefined ? "n/a" : v > 0 && v < 0.01 ? "<$0.01" : "$" + v.toFixed(2);
+const calls = (u) => u ? [u.agent, u.user].flatMap((g) => Object.values(g || {})).reduce((n, x) => n + x.calls, 0) : 0;
 $("domain").textContent = R.domain;
 $("meta").textContent = "agent " + R.agent + " · user " + R.user + " · k=" + R.k + " · " + R.startedAt + " · " + (R.durationMs / 1000).toFixed(1) + "s";
 const hats = Object.entries(R.passHat).filter(([j]) => j === "1" || j === String(R.k));
 $("kpis").innerHTML = hats.map(([j, v]) => '<div class="kpi"><b>' + pct(v) + '</b><span>pass^' + j + '</span></div>').join("") +
+  '<div class="kpi"><b>' + ms(R.latency && R.latency.agentTurnP95Ms) + '</b><span>agent turn p95</span></div>' +
+  (calls(R.usage) ? '<div class="kpi"><b>' + usd(R.usage.costUsd) + '</b><span>estimated cost</span></div>' : "") +
   '<div class="kpi"><b>' + R.tasks.length + '</b><span>tasks</span></div>' +
   '<div class="kpi"><b>' + R.tasks.reduce((n, t) => n + t.trials.length, 0) + '</b><span>trials</span></div>';
 $("tasks").innerHTML = R.tasks.map((t, ti) => {
@@ -79,12 +84,13 @@ function show(ti, i) {
       const out = e.ok ? JSON.stringify(e.result) : "ERROR " + e.error;
       return '<div class="ev tool"><small>tool #' + e.index + v + "</small>" + esc(e.name) + "(" + esc(JSON.stringify(e.args)) + ")\\n→ " + esc(out) + "</div>";
     }
-    return '<div class="ev ' + e.type + '"><small>' + e.type + "</small>" + esc(e.text) + "</div>";
+    const lat = e.type === "agent" && e.latencyMs !== undefined ? " · " + ms(e.latencyMs) : "";
+    return '<div class="ev ' + e.type + '"><small>' + e.type + lat + "</small>" + esc(e.text) + "</div>";
   }).join("");
   const checks = tr.checks.map((c) => '<div><span class="' + (c.passed ? "okt" : "badt") + '">' + (c.passed ? "✓" : "✗") + "</span> <code>" + esc(c.id) + "</code> " + esc(c.detail) + "</div>").join("");
   const changes = tr.changes.length ? tr.changes.map((c) => "<div><code>" + c.kind + " " + esc(c.table) + " " + esc(c.key) + "</code> " + esc(JSON.stringify(c.after ?? c.before)) + "</div>").join("") : "<div class='meta'>No writes.</div>";
   $("detail").innerHTML = '<div class="trial"><h2 style="margin-top:0">' + esc(t.id) + " · trial " + (i + 1) + " · " +
-    (tr.passed ? '<span class="okt">passed</span>' : '<span class="badt">failed</span>') + '</h2><div class="meta">ended: ' + tr.endReason + " · " + tr.turns + " turns · " + tr.durationMs + "ms" + (tr.error ? " · " + esc(tr.error) : "") +
+    (tr.passed ? '<span class="okt">passed</span>' : '<span class="badt">failed</span>') + '</h2><div class="meta">ended: ' + tr.endReason + " · " + tr.turns + " turns · " + tr.durationMs + "ms" + (calls(tr.usage) ? " · " + usd(tr.usage.costUsd) : "") + (tr.error ? " · " + esc(tr.error) : "") +
     "</div><h2>Checks</h2>" + checks + "<h2>World changes</h2>" + changes + "<h2>Transcript</h2>" + evs + "</div>";
   $("detail").scrollIntoView({ behavior: "smooth" });
 }

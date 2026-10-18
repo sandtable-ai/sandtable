@@ -5,10 +5,11 @@ import { agentSystemPrompt } from "../sim/prompts.ts";
 import type { AgentAdapter, CallTool, UserSimulator } from "../sim/types.ts";
 import { diffSnapshots, World, type Change } from "../world/store.ts";
 import { coerceArgs, executeTool, toolSchema } from "../world/tools.ts";
+import { costOf, recordInto, type Usage } from "./usage.ts";
 
 export type TrajectoryEvent =
   | { type: "user"; text: string }
-  | { type: "agent"; text: string }
+  | { type: "agent"; text: string; latencyMs: number }
   | { type: "tool"; index: number; name: string; args: unknown; ok: boolean; result?: unknown; error?: string; violations: string[] };
 
 export type EndReason = "user_stop" | "max_turns" | "error";
@@ -24,6 +25,7 @@ export interface TrialResult {
   endReason: EndReason;
   turns: number;
   durationMs: number;
+  usage: Usage;
   error?: string;
 }
 
@@ -44,6 +46,7 @@ export async function runEpisode(input: {
   const violations: Violation[] = [];
   const agentMessages: string[] = [];
   const toolsByName = new Map(domain.tools.map((t) => [t.name, t]));
+  const usage: Usage = { agent: {}, user: {}, costUsd: 0 };
 
   const callTool: CallTool = async (name, rawArgs) => {
     const index = calls.length;
@@ -74,8 +77,9 @@ export async function runEpisode(input: {
       system: agentSystemPrompt(domain),
       tools: domain.tools.map(toolSchema),
       sessionId: `${task.id}#${trial}`,
+      recordUsage: (model, u) => recordInto(usage.agent, model, u),
     });
-    const sim = await user.createSession({ domain, task, persona });
+    const sim = await user.createSession({ domain, task, persona, recordUsage: (model, u) => recordInto(usage.user, model, u) });
     let turn = await sim.next(null);
     try {
       while (turns < maxTurns) {
@@ -84,8 +88,9 @@ export async function runEpisode(input: {
           endReason = "user_stop";
           break;
         }
+        const turnStarted = performance.now();
         const reply = await session.reply(turn.text, callTool);
-        events.push({ type: "agent", text: reply });
+        events.push({ type: "agent", text: reply, latencyMs: Math.round(performance.now() - turnStarted) });
         agentMessages.push(reply);
         turns++;
         turn = await sim.next(reply);
@@ -100,6 +105,7 @@ export async function runEpisode(input: {
 
   const keys = Object.fromEntries(Object.keys(domain.world.tables).map((t) => [t, world.keyOf(t)]));
   const { passed, checks } = gradeTrial({ task, world, calls, agentMessages, violations, error });
+  usage.costUsd = costOf(usage.agent, usage.user);
   return {
     taskId: task.id,
     trial,
@@ -111,6 +117,7 @@ export async function runEpisode(input: {
     endReason,
     turns,
     durationMs: Math.round(performance.now() - started),
+    usage,
     ...(error ? { error } : {}),
   };
 }

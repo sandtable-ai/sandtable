@@ -151,6 +151,8 @@ The simulated user ends the conversation by emitting `###STOP###` when its goal 
 
 `run` writes `results.json` (a `SuiteResult`, with every trial's transcript, tool calls, checks and world diff) and `report.html` (self-contained, no external assets). `rehearse report results.json` re-renders the HTML.
 
+Each trial also records how long the agent took to answer every user turn (tool calls included), and the tokens its model calls used. Adapters report tokens through `recordUsage`; the Claude adapters do this automatically. Runs show p50/p95 agent turn latency and an estimated cost at list prices (`PRICES` in `src/run/usage.ts`). Cost shows as `n/a` for models without a known price.
+
 ## HTTP agent protocol
 
 `--agent https://your-agent/step` sends one POST per step:

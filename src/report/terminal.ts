@@ -1,4 +1,5 @@
 import type { SuiteResult } from "../run/suite.ts";
+import { totalTokens, type UsageByModel } from "../run/usage.ts";
 
 const useColor = process.stdout.isTTY && !process.env.NO_COLOR;
 const paint = (code: number) => (s: string) => (useColor ? `\x1b[${code}m${s}\x1b[0m` : s);
@@ -9,6 +10,25 @@ const bold = paint(1);
 
 export function formatPercent(x: number): string {
   return Number.isNaN(x) ? "n/a" : `${(x * 100).toFixed(1)}%`;
+}
+
+export function formatCost(usd: number | null): string {
+  if (usd === null) return "n/a";
+  return usd < 0.01 && usd > 0 ? "<$0.01" : `$${usd.toFixed(2)}`;
+}
+
+export function formatMs(ms: number | null): string {
+  if (ms === null) return "n/a";
+  return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
+}
+
+const k = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+
+function tokens(label: string, group: UsageByModel): string | undefined {
+  const t = totalTokens(group);
+  if (t.calls === 0) return undefined;
+  const models = Object.keys(group).join(", ");
+  return `${label} ${models}: ${t.calls} calls, ${k(t.input)} in, ${k(t.output)} out, ${k(t.cacheRead)} cache read, ${k(t.cacheWrite)} cache write`;
 }
 
 export function renderTerminal(r: SuiteResult): string {
@@ -28,6 +48,12 @@ export function renderTerminal(r: SuiteResult): string {
     .filter(([j]) => j === "1" || j === String(r.k))
     .map(([j, v]) => `${bold(`pass^${j}`)} ${formatPercent(v)}`);
   lines.push(`  ${hats.join("   ")}`);
+  lines.push(dim(`  agent turn latency p50 ${formatMs(r.latency.agentTurnP50Ms)} · p95 ${formatMs(r.latency.agentTurnP95Ms)}`));
+  const usageLines = [tokens("agent", r.usage.agent), tokens("user", r.usage.user)].filter(Boolean);
+  if (usageLines.length) {
+    lines.push(dim(`  estimated cost ${formatCost(r.usage.costUsd)}`));
+    for (const l of usageLines) lines.push(dim(`    ${l}`));
+  }
 
   if (r.failureModes.length) {
     lines.push("");
