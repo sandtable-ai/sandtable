@@ -136,6 +136,8 @@ tasks:
         You need at least $1,600 and will not go lower...
       opening: "MC 100101, calling about L-1002."   # optional fixed first line
       script: [ ... ]                  # optional fixed turns for --user scripted
+    reference:                         # optional: what a correct agent would do; `sandtable lint` replays it
+      - { tool: verify_carrier, args: { mc_number: "100101" } }
     expect:
       state:
         - { table: bookings, count: 0 }                                # exactly N rows (with optional where)
@@ -148,6 +150,17 @@ tasks:
 ```
 
 The simulated user ends the conversation by emitting `###STOP###` when its goal is met, impossible, or it has been handed off. Trials that hit `max_turns` are still graded on the end state.
+
+## Linting tasks
+
+`sandtable lint <domain>` proves, without any model call, that each task is worth grading:
+
+- **ready**: rows the expectations need are seeded, or some tool can create or change them.
+- **solvable**: the task's `reference` calls, replayed against a fresh world, pass every expectation and break no invariant.
+- **non-vacuous**: a do-nothing agent fails every task that expects a write. If it passes, the seed already satisfies the expectation.
+- **graded**: the task has state or `called` expectations.
+
+It exits non-zero on errors, so it belongs in CI next to `validate --strict`.
 
 ## Reading scores
 

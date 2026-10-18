@@ -48,7 +48,7 @@ sandtable review sandtable              # list what is pending, with sources
 sandtable validate sandtable --strict   # fails while anything is pending (use in CI)
 ```
 
-While items are pending, runs still work, but their reports are marked **provisional**. To accept an item, change `review: pending` to `review: accepted` or delete the line.
+While items are pending, runs still work, but their reports are marked **provisional**. Run `sandtable lint` too: it catches drafted tasks that are vacuous, unreachable or unsolvable before anyone spends money running them. To accept an item, change `review: pending` to `review: accepted` or delete the line.
 
 ## From an SOP (Claude, grounded)
 

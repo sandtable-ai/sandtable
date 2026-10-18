@@ -5,6 +5,7 @@ export { executeTool, coerceArgs, toolSchema, type ToolOutcome, type ToolSchema 
 export { checkCall, type CallRecord, type Violation } from "./grade/invariants.ts";
 export { gradeTrial, type CheckResult, type CheckKind } from "./grade/expectations.ts";
 export { passHatK, binom } from "./grade/passk.ts";
+export { lintDomain, type LintReport, type TaskLint } from "./grade/lint.ts";
 export type * from "./sim/types.ts";
 export { claudeAgent, claudeUser, DEFAULT_MODEL, type ClaudeOptions, type ClaudeAgentOptions } from "./sim/claude.ts";
 export { httpAgent } from "./sim/http.ts";

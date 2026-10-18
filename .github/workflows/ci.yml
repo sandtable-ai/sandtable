@@ -20,5 +20,6 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: node dist/cli.js lint examples/freight
       # Offline smoke test: the careful scripted agent must pass every task.
       - run: node dist/cli.js run examples/freight --agent scripted:careful --user scripted --fail-under 100 --no-html

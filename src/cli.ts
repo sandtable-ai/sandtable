@@ -18,6 +18,7 @@ import { draftInvariantsFromSop, knownFields } from "./init/sop.ts";
 import { draftTasksFromTranscripts } from "./init/transcripts.ts";
 import { DOMAIN_FILE, POLICY_PLACEHOLDER, renderDraft, TASKS_PLACEHOLDER, writeDraft } from "./init/render.ts";
 import { DomainError, loadDomain, pendingReview } from "./spec/load.ts";
+import { lintDomain } from "./grade/lint.ts";
 import YAML from "yaml";
 
 const EXAMPLE = fileURLToPath(new URL("../examples/freight", import.meta.url));
@@ -146,6 +147,26 @@ program
       console.log(`⚠ ${pending.length} drafted item(s) pending review (sandtable review ${domainPath})`);
       if (o.strict) process.exitCode = 1;
     }
+  });
+
+program
+  .command("lint")
+  .argument("<domain>", "domain directory (with sandtable.yaml) or file")
+  .description("prove every task is ready, solvable, non-vacuous and graded, without any model call")
+  .action(async (domainPath: string) => {
+    const report = lintDomain(await loadDomain(domainPath));
+    for (const t of report.tasks) {
+      const solvable = t.solvable === null ? "solvable ?" : t.solvable ? "solvable" : "NOT solvable";
+      const kind = t.expectsWrite ? "write" : "no-write";
+      const mark = t.errors.length ? "✗" : t.warnings.length ? "!" : "✓";
+      console.log(`${mark} ${t.id}  (${kind} · ${t.ready ? "ready" : "NOT ready"} · ${solvable} · noop ${t.noopPasses ? "passes" : "fails"})`);
+      for (const e of t.errors) console.log(`    ✗ ${e}`);
+      for (const w of t.warnings) console.log(`    ! ${w}`);
+    }
+    const noWrite = report.tasks.filter((t) => !t.expectsWrite).length;
+    console.log(`\n${report.tasks.length} tasks: ${report.tasks.length - noWrite} expect a write, ${noWrite} do not (the noop baseline passes those by design).`);
+    console.log(`${report.errors} error(s), ${report.warnings} warning(s)`);
+    if (report.errors) process.exitCode = 1;
   });
 
 program

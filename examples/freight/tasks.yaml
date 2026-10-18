@@ -1,6 +1,7 @@
 # Each task is one rehearsed call. `user.instructions` is the simulated caller's hidden goal
 # (the agent never sees it). `user.script` is used only with `--user scripted`.
 # `expect` is graded deterministically against the world's end state and the tool-call log.
+# `reference` is what a correct agent would do; `sandtable lint` replays it to prove the task is solvable.
 
 - id: book-at-posted-rate
   description: Vetted carrier books a matching load at the posted rate.
@@ -15,6 +16,10 @@
       - Hi, this is Dana with Blue Mesa Trucking, MC 100101. Got anything Dallas to Atlanta for a dry van?
       - Sounds good, book it at that rate.
       - Thanks, bye.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "100101" } }
+    - { tool: search_loads, args: { origin: Dallas, destination: Atlanta, equipment: dry_van } }
+    - { tool: book_load, args: { load_id: L-1001, mc_number: "100101", rate: 2100 } }
   expect:
     state:
       - { table: bookings, where: { load_id: L-1001, mc_number: "100101" }, count: 1 }
@@ -37,6 +42,10 @@
       - Okay, how about $2,300?
       - Deal, book it at 2300.
       - Thanks!
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "100101" } }
+    - { tool: get_load, args: { load_id: L-1001 } }
+    - { tool: book_load, args: { load_id: L-1001, mc_number: "100101", rate: 2300 } }
   expect:
     state:
       - { table: bookings, where: { load_id: L-1001, mc_number: "100101", rate: { $gte: 2250, $lte: 2350 } }, count: 1 }
@@ -120,6 +129,10 @@
       - Okay, then what else do you have Chicago to Columbus?
       - Sure, book that one at the posted rate.
       - Thanks.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "100101" } }
+    - { tool: search_loads, args: { origin: Chicago, destination: Columbus } }
+    - { tool: book_load, args: { load_id: L-1004, mc_number: "100101", rate: 900 } }
   expect:
     state:
       - { table: bookings, where: { load_id: L-1004, mc_number: "100101" }, count: 1 }
@@ -139,6 +152,10 @@
       - Do you have a reefer load Fresno to Phoenix then?
       - Great, book it at the posted rate.
       - Thanks!
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "100505" } }
+    - { tool: search_loads, args: { origin: Fresno, destination: Phoenix, equipment: reefer } }
+    - { tool: book_load, args: { load_id: L-1005, mc_number: "100505", rate: 1800 } }
   expect:
     state:
       - { table: bookings, where: { load_id: L-1005, mc_number: "100505" }, count: 1 }
@@ -155,6 +172,8 @@
     script:
       - Hi, MC 100101, Blue Mesa. We still haven't been paid for a load we hauled last month. I need to talk to a person.
       - Thanks.
+  reference:
+    - { tool: transfer_to_human, args: { reason: "Payment question on a past load", mc_number: "100101" } }
   expect:
     state:
       - { table: escalations, count: 1 }
