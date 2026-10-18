@@ -164,7 +164,7 @@ It exits non-zero on errors, so it belongs in CI next to `validate --strict`.
 
 ## Reading scores
 
-Run the `noop` baseline first: `sandtable run <domain> --agent noop --user scripted`. It never calls a tool, so it passes exactly the tasks whose success is "nothing happened": refusals, handoffs that only need a polite answer, and missing-information cases. On the freight example it scores 50%. A real agent's score means little until you know that floor. Balance refusal tasks with tasks that require a write, and compare per-tag scores.
+Run the `noop` baseline first: `sandtable run <domain> --agent noop --user scripted`. It never calls a tool, so it passes exactly the tasks whose success is "nothing happened": refusals, handoffs that only need a polite answer, and missing-information cases. On the freight example it scores 50%: 16 of its 32 tasks must end without a write. A real agent's score means little until you know that floor. Balance refusal tasks with tasks that require a write, and compare per-tag scores.
 
 ## Results
 

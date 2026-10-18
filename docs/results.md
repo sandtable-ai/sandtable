@@ -6,6 +6,8 @@ Real runs of the bundled freight example and of `sandtable init`, kept here so c
 
 Agent: Claude Opus 5.5 (reference agent, effort `medium`). Simulated caller: Claude Haiku 5.5.
 
+This run used the example's first 10 tasks. The example has since grown to 32 tasks and 16 invariants (#45), so scores on the current suite are not comparable until it is rerun.
+
 | | |
 |---|---|
 | pass^1 | **95.0%** |

@@ -8,7 +8,7 @@ Issues and milestones on GitHub are the source of truth; this page is the overvi
 - [x] Deterministic grading: end state, invariants on every tool call, required and forbidden tools; pass^k; failure-mode clustering
 - [x] Adapters: Claude reference agent, Claude simulated user, scripted user, `noop` baseline, HTTP step protocol, JS/TS module agents
 - [x] Reports: terminal, `results.json`, self-contained `report.html`, per-tag scores, token usage, estimated cost, turn latency; `--fail-under` CI gate
-- [x] Bundled example: freight carrier sales (10 tasks, 5 invariants), offline demo
+- [x] Bundled example: freight carrier sales (32 tasks, 16 invariants), offline demo
 
 ## v0.2: `sandtable init` and trustworthy suites
 - [x] OpenAPI → world tables and tools, deterministic (#6)
@@ -28,7 +28,8 @@ Issues and milestones on GitHub are the source of truth; this page is the overvi
 - [ ] Critical tasks (#28), failure attribution (#29), coverage matrix (#30)
 - [ ] Customer sign-off report: rule → evidence → reliability (#31)
 - [ ] Regrade stored trials (#32), argument matchers (#25), nested params (#26), per-task `given` overrides (#37)
-- [ ] A realistic freight example (#45) and a second domain (#22)
+- [x] A realistic freight example: negotiation rounds, rep-confirm offers, capacity and callbacks (#45)
+- [ ] A second domain (#22)
 
 ## v0.4: black-box and platform on-ramps
 - [ ] Serve the world as REST, MCP and webhook tools for hosted agent platforms (#14)
