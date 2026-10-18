@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.rehearse/
+coverage/
+.env
+.env.*
+.DS_Store
+# Private planning notes and raw research: never published
+notes/
