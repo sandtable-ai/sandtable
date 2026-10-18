@@ -87,6 +87,7 @@ program
   .option("--fail-under <pct>", "exit 1 if pass^k is below this percentage (CI gate)", percent)
   .action(async (domainPath: string, o: { agent: string; user: string; trials: number; tasks?: string; concurrency: number; out?: string; html: boolean; failUnder?: number }) => {
     const domain = await loadDomain(domainPath);
+    if (domain.tasks.length === 0) throw new Error(`${domain.name} has no tasks yet: add some to tasks.yaml`);
     const agent = await resolveAgent(o.agent);
     const user = resolveUser(o.user);
     let done = 0;

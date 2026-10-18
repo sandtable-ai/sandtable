@@ -28,6 +28,7 @@ export function toolSchema(tool: Tool): ToolSchema {
       type: p.type,
       ...(p.description ? { description: p.description } : {}),
       ...(p.enum ? { enum: p.enum } : {}),
+      ...(p.default !== undefined ? { default: p.default } : {}),
     };
     if (p.required) required.push(name);
   }
@@ -54,6 +55,7 @@ export function coerceArgs(tool: Tool, raw: unknown): { args: Args } | { error: 
     const value = raw[name];
     if (value === undefined || value === null || value === "") {
       if (p.required) return { error: `missing required argument "${name}"` };
+      if (p.default !== undefined) args[name] = p.default;
       continue;
     }
     const coerced = coerce(value, p.type);
@@ -86,7 +88,9 @@ function coerce(value: unknown, type: "string" | "number" | "integer" | "boolean
 /** Run a tool against the world. Checks run first; ops are atomic (all or nothing). */
 export function executeTool(tool: Tool, world: World, args: Args): ToolOutcome {
   for (const check of tool.checks) {
-    const row = world.get(check.table, String(resolve(check.key, args)));
+    const key = resolve(check.key, args);
+    if (key === undefined || key === "") continue;
+    const row = world.get(check.table, String(key));
     const where = check.where ? (resolve(check.where, args) as Row) : undefined;
     if (!row || (where && !matches(row, where))) {
       return { ok: false, error: String(resolve(check.error, args)) };

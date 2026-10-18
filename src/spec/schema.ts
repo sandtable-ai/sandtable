@@ -18,6 +18,8 @@ export const ParamSpec = z
     description: z.string().optional(),
     required: z.boolean().default(true),
     enum: z.array(z.union([z.string(), z.number()])).optional(),
+    /** Value used when the agent omits this (optional) param, as the real API would. */
+    default: z.union([z.string(), z.number(), z.boolean()]).optional(),
   })
   .strict();
 
@@ -39,7 +41,10 @@ const RespondOp = z
   .strict();
 export const OpSpec = z.union([GetOp, ListOp, CreateOp, UpdateOp, RespondOp]);
 
-/** A precondition the real API would enforce (404/409). Failing it returns a tool error and changes nothing. */
+/**
+ * A precondition the real API would enforce (404/409). Failing it returns a tool error and changes nothing.
+ * Skipped when `key` resolves to nothing (an optional argument the agent did not pass).
+ */
 export const CheckSpec = z
   .object({ table: z.string(), key: z.string(), where: Where.optional(), error: z.string() })
   .strict();
@@ -174,7 +179,7 @@ export const DomainSpec = z
     tools: z.array(ToolSpec).min(1),
     invariants: z.array(InvariantSpec).default([]),
     personas: z.array(PersonaSpec).default([]),
-    tasks: z.array(TaskSpec).min(1),
+    tasks: z.array(TaskSpec).default([]),
     max_turns: z.number().int().positive().default(20),
   })
   .strict();

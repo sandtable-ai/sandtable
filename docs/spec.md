@@ -61,7 +61,9 @@ A tool is what the agent sees (name, description, JSON-schema params) plus what 
     rate: { type: number, description: "All-in USD" }
     note: { type: string, required: false }
     equipment: { type: string, required: false, enum: [dry_van, reefer] }
+    status: { type: string, required: false, default: available }   # used when the agent omits it
   checks:                               # preconditions the real API enforces; failing one = tool error, no writes
+                                        # (skipped when the key comes from an optional arg that was not passed)
     - { table: loads, key: $load_id, where: { status: available }, error: "Load ${load_id} is not available" }
   ops:                                  # run in order, atomically (all or nothing)
     - create: bookings

@@ -77,6 +77,30 @@ describe("tools", () => {
     expect(coerceArgs(book, { load_id: "L-1", rate: 1, tip: 5 })).toEqual({ error: 'unknown argument "tip"' });
   });
 
+  it("applies param defaults when the agent omits an optional param", () => {
+    const search: Tool = ToolSpec.parse({
+      name: "search",
+      description: "Search loads",
+      params: { status: { type: "string", required: false, default: "available" } },
+      ops: [{ list: "loads", where: { status: "$status" } }],
+    });
+    const out = executeTool(search, world(), (coerceArgs(search, {}) as { args: Record<string, unknown> }).args);
+    expect((out.result as unknown[]).length).toBe(1);
+    expect(toolSchema(search).input_schema.properties.status).toMatchObject({ default: "available" });
+  });
+
+  it("skips checks keyed by an optional argument that was not passed", () => {
+    const note: Tool = ToolSpec.parse({
+      name: "note",
+      description: "Leave a note, optionally about a load",
+      params: { text: { type: "string" }, load_id: { type: "string", required: false } },
+      checks: [{ table: "loads", key: "$load_id", error: "no such load" }],
+      ops: [{ respond: "ok" }],
+    });
+    expect(executeTool(note, world(), { text: "hi" })).toEqual({ ok: true, result: "ok" });
+    expect(executeTool(note, world(), { text: "hi", load_id: "L-9" })).toEqual({ ok: false, error: "no such load" });
+  });
+
   it("runs ops and returns the first result", () => {
     const w = world();
     const out = executeTool(book, w, { load_id: "L-1", rate: 1900 });
