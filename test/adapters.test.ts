@@ -45,8 +45,12 @@ describe("claudeAgent", () => {
 
     // Second request carries the tool result back, after the untouched assistant turn.
     const second = requests[1] as { messages: Array<{ role: string; content: unknown }>; model: string; fallbacks?: string };
+    // Append-only history: the first request's messages are a prefix of the second's, so the cache can hit.
+    const first = requests[0] as { messages: unknown[] };
+    expect(second.messages.slice(0, first.messages.length)).toEqual(first.messages);
     expect(second.model).toBe("claude-opus-5-5");
     expect(second.fallbacks).toBe("default");
+    expect(second).toMatchObject({ cache_control: { type: "ephemeral" } });
     expect(second.messages.at(-1)).toMatchObject({ role: "user", content: [{ type: "tool_result", tool_use_id: "t1" }] });
   });
 

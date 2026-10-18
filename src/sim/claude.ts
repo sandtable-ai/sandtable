@@ -32,6 +32,8 @@ function requestBase(opts: ClaudeOptions, defaultEffort: Effort) {
     model,
     max_tokens: 16000,
     output_config: { effort: opts.effort ?? defaultEffort },
+    // System prompt, tools and history form a stable, append-only prefix: cache it automatically.
+    cache_control: { type: "ephemeral" as const },
     ...(fallbacks ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
   };
 }
