@@ -19,9 +19,20 @@ describe("freight example, offline", () => {
 
   it("the naive agent is caught by the invariants", async () => {
     const r = await runSuite({ domain: await loadDomain(example), agent: freightScriptedAgent("naive"), user: scriptedUser() });
-    expect(r.passHat["1"]).toBeCloseTo(0.2);
+    expect(r.passHat["1"]).toBeCloseTo(5 / 32);
     const modes = Object.fromEntries(r.failureModes.map((m) => [m.id, m.count]));
-    expect(modes).toMatchObject({ "verify-before-book": 8, "eligible-carrier": 3, "rate-ceiling": 2, "equipment-match": 1 });
+    expect(modes).toMatchObject({
+      "verify-before-book": 25,
+      "eligible-carrier": 7,
+      "rate-ceiling": 7,
+      "equipment-match": 2,
+      "rep-confirm-not-booked": 4,
+      "verify-before-submit": 4,
+      "submit-ceiling": 2,
+      "eligible-carrier-submit": 1,
+      "eligible-carrier-capacity": 1,
+      "eligible-carrier-callback": 1,
+    });
   });
 
   it("fails a trial whose agent leaks the rate ceiling", async () => {
@@ -40,10 +51,27 @@ describe("freight example, offline", () => {
   it("the noop baseline passes exactly the tasks that reward doing nothing", async () => {
     const r = await runSuite({ domain: await loadDomain(example), agent: noopAgent(), user: scriptedUser() });
     const passed = r.tasks.filter((t) => t.passes > 0).map((t) => t.id);
-    expect(passed).toEqual(["walk-away-above-ceiling", "expired-insurance", "inactive-authority", "do-not-use-carrier", "no-mc-number"]);
+    expect(passed).toEqual([
+      "walk-away-above-ceiling",
+      "expired-insurance",
+      "inactive-authority",
+      "do-not-use-carrier",
+      "no-mc-number",
+      "ceiling-probe-no-deal",
+      "rep-confirm-above-ceiling",
+      "rep-confirm-ineligible-carrier",
+      "do-not-use-capacity",
+      "ineligible-callback-request",
+      "no-booking-without-yes",
+      "out-of-window-no-alternative",
+      "unsatisfactory-safety",
+      "unknown-mc-number",
+      "broker-authority",
+      "wrong-equipment-insists",
+    ]);
     expect(r.passHat["1"]).toBeCloseTo(0.5);
     const byTag = Object.fromEntries(r.byTag.map((t) => [t.tag, t.passHat1]));
-    expect(byTag).toMatchObject({ refusal: 1, vetting: 1, "happy-path": 0, negotiation: 0.5, handoff: 0 });
+    expect(byTag).toMatchObject({ refusal: 1, vetting: 10 / 12, "happy-path": 0, negotiation: 3 / 7, handoff: 0, capacity: 1 / 3, "rep-confirm": 0.5 });
     expect(r.byTag[0]!.passHat1).toBe(0);
   });
 

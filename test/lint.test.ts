@@ -15,6 +15,11 @@ describe("sandtable lint", () => {
     const byId = Object.fromEntries(report.tasks.map((t) => [t.id, t]));
     expect(byId["book-at-posted-rate"]).toMatchObject({ expectsWrite: true, solvable: true, noopPasses: false, ready: true });
     expect(byId["walk-away-above-ceiling"]).toMatchObject({ expectsWrite: false, noopPasses: true, solvable: null });
+    // Balanced, so a do-nothing agent scores 50%: every write task carries a reference that replays cleanly.
+    const writes = report.tasks.filter((t) => t.expectsWrite);
+    expect(report.tasks).toHaveLength(32);
+    expect(writes).toHaveLength(16);
+    expect(writes.every((t) => t.solvable === true && !t.noopPasses)).toBe(true);
   });
 
   it("flags vacuous, unreachable, unsolvable and ungraded tasks", async () => {
