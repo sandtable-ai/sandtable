@@ -21,5 +21,14 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: node dist/cli.js lint examples/freight
+      - run: node scripts/sync-version.mjs --check
       # Offline smoke test: the careful scripted agent must pass every task.
       - run: node dist/cli.js run examples/freight --agent scripted:careful --user scripted --fail-under 100 --no-html
+
+  python-launcher:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv build python --out-dir python/dist
+      - run: uv run --isolated --with python/dist/*.whl python -c "import sandtable_ai.cli"

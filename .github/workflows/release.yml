@@ -1,15 +1,42 @@
 name: release
+# Push a tag vX.Y.Z (or vX.Y.Z-alpha.N) that matches package.json. Both registries use
+# Trusted Publishing (OIDC): no tokens are stored in this repository.
 on:
   push:
     tags: ["v*"]
 
 permissions:
-  contents: write   # create the GitHub release
-  id-token: write   # npm provenance
+  contents: read
 
 jobs:
-  publish:
+  check:
     runs-on: ubuntu-latest
+    outputs:
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: node dist/cli.js lint examples/freight
+      - run: node scripts/sync-version.mjs --check
+      - name: Tag matches package.json
+        run: test "v$(node -p 'require("./package.json").version')" = "${GITHUB_REF_NAME}"
+      - id: meta
+        run: echo "prerelease=$([[ "${GITHUB_REF_NAME}" == *-* ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+  npm:
+    needs: check
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write   # npm trusted publishing + provenance
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -17,18 +44,33 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
           cache: npm
+      - run: npm install -g npm@latest   # trusted publishing needs npm >= 11.5.1
       - run: npm ci
-      - run: npm run typecheck
-      - run: npm test
       - run: npm run build
-      - run: node dist/cli.js lint examples/freight
-      - name: Check the tag matches package.json
-        run: test "v$(node -p 'require("./package.json").version')" = "${GITHUB_REF_NAME}"
-      - name: Publish to npm (next tag for pre-releases)
-        run: npm publish --provenance --access public $([[ "${GITHUB_REF_NAME}" == *-* ]] && echo "--tag next")
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - name: GitHub release
-        run: gh release create "${GITHUB_REF_NAME}" --generate-notes $([[ "${GITHUB_REF_NAME}" == *-* ]] && echo "--prerelease")
+      - run: npm publish --access public ${{ needs.check.outputs.prerelease == 'true' && '--tag next' || '' }}
+
+  pypi:
+    needs: check
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write   # PyPI trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv build python --out-dir python/dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python/dist
+
+  github-release:
+    needs: [npm, pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: gh release create "${GITHUB_REF_NAME}" --generate-notes ${{ needs.check.outputs.prerelease == 'true' && '--prerelease' || '' }}
         env:
           GH_TOKEN: ${{ github.token }}

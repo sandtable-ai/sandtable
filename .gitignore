@@ -1,5 +1,6 @@
 node_modules/
 dist/
+python/dist/
 .sandtable/
 coverage/
 .env

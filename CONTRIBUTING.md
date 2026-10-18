@@ -26,3 +26,11 @@ Node ≥ 22.18 runs `src/*.ts` directly (type stripping), so there is no build s
 2. Include tasks that should end with a write and tasks that must end without one. A suite of only refusal tasks lets a do-nothing agent score well.
 3. Add a `user.script` to each task so the domain runs offline with `--user scripted`.
 4. `npm run sandtable -- validate examples/<name>`.
+
+## Releasing
+
+1. `npm version <patch|minor|prerelease --preid alpha>`. The `version` script syncs the Python launcher's version.
+2. `git push --follow-tags`. The `release` workflow then:
+   - checks everything
+   - publishes `sandtable-ai` to npm (pre-releases under the `next` tag) and to PyPI, both through Trusted Publishing
+   - creates the GitHub release.
