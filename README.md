@@ -71,7 +71,7 @@ flowchart LR
     I[invariants: rules never to break]
     K[tasks: hidden caller goals + expected end state]
   end
-  U[simulated user<br/>Claude or scripted] <-- conversation --> A[your agent<br/>Claude · HTTP · JS module]
+  U[simulated user<br/>Claude · OpenAI-compatible · scripted] <-- conversation --> A[your agent<br/>Claude · OpenAI-compatible · HTTP · JS module]
   A -- tool calls --> S[(stateful mock world)]
   I -. checked on every call .-> S
   S --> G[graders: end state, invariants,<br/>required / forbidden tools]
@@ -134,6 +134,7 @@ Full reference: [docs/spec.md](docs/spec.md).
 | Adapter | Use it when |
 |---|---|
 | `--agent claude` or `claude:<model>` | You want a baseline: Claude with the domain's tools and policy as its system prompt. |
+| `--agent openai:<model>` | You want to compare other models: GPT, Gemini, Llama, Qwen, DeepSeek and more, through any OpenAI-compatible endpoint, with the same prompt and tools ([run other models](#run-other-models)). |
 | `--agent http://…` | Your agent runs as a service. It receives the user message, returns either a reply or tool calls, and `sandtable` executes those against the simulated world ([protocol](docs/spec.md#http-agent-protocol)). |
 | `--agent ./my-agent.ts` | Your agent is a JS/TS function. Default-export an `AgentAdapter` ([example](examples/custom-agent.ts)). |
 | `--agent noop` | Baseline: never calls a tool, declines everything. Shows how much of your suite rewards doing nothing. |
@@ -167,7 +168,31 @@ npx sandtable-ai demo --live --provider bedrock --region eu-west-1 --aws-profile
 
 Plain model names map to the region's cross-region inference profile (`claude-opus-5-5` becomes `eu.anthropic.claude-opus-5-5` in eu-west-1). Full IDs and ARNs pass through unchanged. Set `SANDTABLE_BEDROCK_CLIENT=mantle` to use Bedrock's Messages-API endpoint instead, where your region serves the model. Cost estimates use Anthropic list prices; your Bedrock rates may differ.
 
-The simulated user is `--user claude` (default), `--user claude:<model>`, or `--user scripted` for deterministic replays of `user.script`, which is useful for CI smoke tests and for debugging graders.
+The simulated user is `--user claude` (default), `--user claude:<model>`, `--user openai:<model>`, or `--user scripted` for deterministic replays of `user.script`, which is useful for CI smoke tests and for debugging graders.
+
+### Run other models
+
+`--agent openai:<model>` runs any model behind an OpenAI-compatible Chat Completions endpoint: OpenAI, OpenRouter, LiteLLM, vLLM, Ollama, Groq, Together and others. It gets the same system prompt and tools as the Claude baseline, so scores compare across models.
+
+```bash
+# OpenAI
+OPENAI_API_KEY=sk-... npx sandtable-ai run ./my-domain --agent openai:gpt-4.1-mini -k 4
+
+# OpenRouter: one key for GPT, Gemini, Llama, Qwen, DeepSeek and more
+OPENAI_API_KEY=$OPENROUTER_API_KEY npx sandtable-ai run ./my-domain -k 4 \
+  --openai-base-url https://openrouter.ai/api/v1 --agent openai:google/gemini-2.5-flash
+
+# A local model on Ollama, as both agent and caller: no key needed
+npx sandtable-ai run ./my-domain --openai-base-url http://localhost:11434/v1 \
+  --agent openai:llama3.1:8b --user openai:llama3.1:8b
+```
+
+- The endpoint is `--openai-base-url`, else `OPENAI_BASE_URL`, else `https://api.openai.com/v1`. The key comes from `OPENAI_API_KEY`. Agent and user share the endpoint.
+- The caller stays Claude (`ANTHROPIC_API_KEY`) unless you pass `--user`. Keep the caller the same across agents, so that only the agent changes.
+- The model must support tool calling on that server. vLLM, for example, needs `--enable-auto-tool-choice` and a `--tool-call-parser`.
+- Cost is estimated for the OpenAI models in `PRICES` on OpenAI's API. Other hosts and open-weight models show `n/a`, since their prices vary by host.
+
+Details and library use: [docs/spec.md](docs/spec.md#openai-compatible-endpoints).
 
 ## Use it in CI
 

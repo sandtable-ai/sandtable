@@ -170,7 +170,7 @@ Run the `noop` baseline first: `sandtable run <domain> --agent noop --user scrip
 
 `run` writes `results.json` (a `SuiteResult`, with every trial's transcript, tool calls, checks and world diff) and `report.html` (self-contained, no external assets). `sandtable report results.json` re-renders the HTML.
 
-Each trial also records how long the agent took to answer every user turn (tool calls included), and the tokens its model calls used. Adapters report tokens through `recordUsage`; the Claude adapters do this automatically. Runs show p50/p95 agent turn latency and an estimated cost at list prices (`PRICES` in `src/run/usage.ts`). Cost shows as `n/a` for models without a known price.
+Each trial also records how long the agent took to answer every user turn (tool calls included), and the tokens its model calls used. Adapters report tokens through `recordUsage`; the Claude and OpenAI-compatible adapters do this automatically. Runs show p50/p95 agent turn latency and an estimated cost at list prices (`PRICES` in `src/run/usage.ts`). Cost shows as `n/a` for models without a known price.
 
 ## HTTP agent protocol
 
@@ -190,4 +190,59 @@ Each trial also records how long the agent took to answer every user turn (tool 
 { "reply": "Best I can do is $1,375." }
 // ...or ask sandtable to run tools against the simulated world
 { "tool_calls": [{ "id": "c1", "name": "get_load", "arguments": { "load_id": "L-1002" } }] }
+```
+
+## OpenAI-compatible endpoints
+
+`--agent openai:<model>` and `--user openai:<model>` talk to any server that implements OpenAI's Chat Completions API (`POST <base>/chat/completions`), using plain `fetch`. That covers OpenAI, OpenRouter, LiteLLM, vLLM, Ollama, Groq, Together and others. The base URL is `--openai-base-url`, else `OPENAI_BASE_URL`, else `https://api.openai.com/v1`. `OPENAI_API_KEY`, when set, is sent as a bearer token. The model name passes through unchanged (`openai:llama3.1:8b` asks for `llama3.1:8b`).
+
+The agent gets the same system prompt and tools as the Claude baseline. `temperature` is sent only when set:
+
+```jsonc
+{
+  "model": "gpt-4.1-mini",
+  "messages": [
+    { "role": "system", "content": "..." },
+    { "role": "user", "content": "MC 100101, anything Dallas to Atlanta?" }
+  ],
+  "tools": [{ "type": "function", "function": { "name": "verify_carrier", "description": "...", "parameters": { "type": "object", "properties": { } } } }]
+}
+```
+
+The agent runs its own tool loop:
+
+- Each entry in `tool_calls` runs against the simulated world. Its result goes back as a `role: "tool"` message with the same `tool_call_id`. A turn ends after `maxToolRounds` model calls (default 12).
+- Arguments that are not valid JSON go back to the model as a tool error it can correct. The attempt still shows in the trajectory as a failed call.
+- History is append-only. Assistant messages go back as the endpoint returned them, including provider fields such as reasoning and Gemini's thought signatures.
+- Inline `<think>…</think>` blocks are dropped from the reply, so neither the caller nor the graders see them.
+
+| `finish_reason` | What happens |
+|---|---|
+| `tool_calls` | the calls run and the model is asked again. Some servers send `stop` with tool calls; those run too |
+| `stop` | the message text is the reply |
+| `length` | the turn ends with the text so far. Cut-off tool calls are answered with an error, not run |
+| `content_filter` | the reply is `[agent reply blocked by the provider's content filter]`, and tool calls are not run |
+
+Usage is recorded under the requested model name:
+
+| sandtable | Chat Completions `usage` |
+|---|---|
+| `input` | `prompt_tokens` minus cached tokens |
+| `cacheRead` | `prompt_tokens_details.cached_tokens` (DeepSeek: `prompt_cache_hit_tokens`) |
+| `output` | `completion_tokens` |
+
+`PRICES` holds OpenAI's list prices for a few models on its own API. Other hosts' names (`openai/gpt-4.1` on OpenRouter), dated snapshots and open-weight models have no price, so their cost shows as `n/a`.
+
+In code, `openaiCompatAgent({ baseUrl, model, apiKey?, headers?, temperature?, maxToolRounds? })` and `openaiCompatUser` (the same options, without `maxToolRounds`) build the adapters. They do not read environment variables, so pass `apiKey` yourself. To compare models, loop over them and keep the caller fixed:
+
+```ts
+import { claudeUser, loadDomain, openaiCompatAgent, runSuite } from "sandtable-ai";
+
+const domain = await loadDomain("./my-domain");
+const user = claudeUser({ model: "claude-haiku-5-5" }); // the same caller for every agent
+for (const model of ["openai/gpt-4.1", "google/gemini-2.5-flash", "meta-llama/llama-3.3-70b-instruct"]) {
+  const agent = openaiCompatAgent({ baseUrl: "https://openrouter.ai/api/v1", apiKey: process.env.OPENROUTER_API_KEY, model });
+  const result = await runSuite({ domain, agent, user, k: 4 });
+  console.log(model, result.passHat["4"]);
+}
 ```

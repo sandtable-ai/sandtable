@@ -16,7 +16,7 @@ Development needs Node ≥ 22.18, which runs `src/*.ts` directly (type stripping
 ## Ground rules
 
 - **Grading stays deterministic.** Hard pass/fail comes from state, invariants and the tool log. LLM-judged checks, when they land, will be a separate soft score.
-- **No network in tests.** Use the fake client pattern in `test/adapters.test.ts` for model adapters.
+- **No network in tests.** Use the fake client pattern in `test/adapters.test.ts` for SDK-based model adapters, or a stubbed `fetch` as in `test/openai-compat.test.ts` for HTTP ones.
 - **Example domains are fictional.** No real company names, customer data or proprietary procedures.
 - Keep the spec small. Prefer a new invariant kind with a clear name over a general expression language.
 

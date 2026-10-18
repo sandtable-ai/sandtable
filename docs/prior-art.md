@@ -35,7 +35,7 @@
 | How a trial is graded | end state + invariants, no judge | end state + expected actions | LLM critique | judge agent + your asserts |
 | Policy rules checked on every tool call | yes | no | no | no |
 | pass^k across repeated trials | yes | yes | no | no |
-| Agent integration | HTTP, JS/TS module, Claude | Python agents / LLM APIs | adapter | adapter function |
+| Agent integration | HTTP, JS/TS module, Claude, OpenAI-compatible endpoints | Python agents / LLM APIs | adapter | adapter function |
 | Draft a domain from SOP + API + transcripts | yes (`init`, reviewed before use) | no | from the system prompt | no |
 
 Comparisons reflect the projects' public READMEs as of October 2026.

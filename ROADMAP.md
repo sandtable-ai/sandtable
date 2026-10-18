@@ -17,6 +17,7 @@ Issues and milestones on GitHub are the source of truth; this page is the overvi
 - [x] Review workflow: `review: pending`, `sandtable review`, `validate --strict`, provisional reports (#9)
 - [x] `sandtable lint`: ready, solvable, non-vacuous, graded (#10)
 - [x] `never_disclose`: protected values in agent messages (#24)
+- [x] OpenAI-compatible agent and simulated user, for comparing models: `--agent openai:<model>` (#19)
 - [ ] Verify the Claude adapters, caching and init steps against the live API (#1, #3)
 - [ ] Release workflow and first npm publish (#23)
 
@@ -34,7 +35,7 @@ Issues and milestones on GitHub are the source of truth; this page is the overvi
 - [ ] Fault profiles (#15)
 
 ## Later
-Soft checks (#16), voice transport and timing metrics (#17, #43), exports to other harness formats (#18), OpenAI-compatible adapter (#19), negotiation invariants (#36), simulation clock (#38), outcome grading (#39), business metrics (#40), persona × condition matrix (#41), multi-session tasks (#42), Python agents in-process (#44).
+Soft checks (#16), voice transport and timing metrics (#17, #43), exports to other harness formats (#18), negotiation invariants (#36), simulation clock (#38), outcome grading (#39), business metrics (#40), persona × condition matrix (#41), multi-session tasks (#42), Python agents in-process (#44).
 
 ## Good first issues
 `$regex` in where clauses (#20), `--tag` filter (#21).
