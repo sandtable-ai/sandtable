@@ -1,7 +1,7 @@
 /**
  * A minimal custom agent, to show the AgentAdapter contract.
  *
- *   npx rehearse-agents run examples/freight --agent examples/custom-agent.ts --user scripted
+ *   npx sandtable-ai run examples/freight --agent examples/custom-agent.ts --user scripted
  *
  * Replace the body of `reply` with a call into your real agent. Give it `tools` (JSON schemas)
  * and route every tool call through `callTool`, so it runs against the simulated world and gets graded.

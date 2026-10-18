@@ -1,10 +1,10 @@
-# `rehearse init`: drafting a domain
+# `sandtable init`: drafting a domain
 
-Writing a domain by hand is the main cost of adopting rehearse. `init` drafts one from what a customer hands over during discovery, then leaves a person to review it. Every inferred item stays visible as a `TODO` until someone accepts it.
+Writing a domain by hand is the main cost of adopting sandtable. `init` drafts one from what a customer hands over during discovery, then leaves a person to review it. Every inferred item stays visible as a `TODO` until someone accepts it.
 
 ```bash
-rehearse init --openapi path/to/openapi.yaml -o rehearsal
-rehearse validate rehearsal
+sandtable init --openapi path/to/openapi.yaml -o sandtable
+sandtable validate sandtable
 ```
 
 ## From an OpenAPI spec (deterministic)
@@ -44,8 +44,8 @@ Tables with no examples get a `TODO: add seed rows` comment that lists the field
 Drafted invariants and tasks carry `review: pending` and a `source` (the file and the quote they came from). Tools with review notes are marked the same way.
 
 ```bash
-rehearse review rehearsal              # list what is pending, with sources
-rehearse validate rehearsal --strict   # fails while anything is pending (use in CI)
+sandtable review sandtable              # list what is pending, with sources
+sandtable validate sandtable --strict   # fails while anything is pending (use in CI)
 ```
 
 While items are pending, runs still work, but their reports are marked **provisional**. To accept an item, change `review: pending` to `review: accepted` or delete the line.
@@ -53,8 +53,8 @@ While items are pending, runs still work, but their reports are marked **provisi
 ## From an SOP (Claude, grounded)
 
 ```bash
-rehearse init --openapi api.yaml --sop policy.md -o rehearsal   # draft, then add invariants
-rehearse init --sop policy.md -o rehearsal                       # add invariants to an existing domain
+sandtable init --openapi api.yaml --sop policy.md -o sandtable   # draft, then add invariants
+sandtable init --sop policy.md -o sandtable                       # add invariants to an existing domain
 ```
 
 Claude reads the SOP alongside the domain's tools, params, tables and known fields, and proposes invariants in the five existing kinds, using structured outputs. Nothing it proposes is trusted as-is:

@@ -1,6 +1,6 @@
 # The (fictional) brokerage's TMS API, as a customer would hand it over during discovery.
-# rehearsal.yaml was written by hand from this spec, policy.md and transcripts/.
-# Drafting that file automatically is the job of `rehearse init` (see ROADMAP.md).
+# sandtable.yaml was written by hand from this spec, policy.md and transcripts/.
+# Drafting that file automatically is the job of `sandtable init` (see ROADMAP.md).
 openapi: 3.1.0
 info:
   title: Acme Freight TMS API

@@ -22,7 +22,7 @@ Node ≥ 22.18 runs `src/*.ts` directly (type stripping), so there is no build s
 
 ## Adding an example domain
 
-1. Create `examples/<name>/rehearsal.yaml`, `policy.md` and `tasks.yaml`.
+1. Create `examples/<name>/sandtable.yaml`, `policy.md` and `tasks.yaml`.
 2. Include tasks that should end with a write and tasks that must end without one. A suite of only refusal tasks lets a do-nothing agent score well.
 3. Add a `user.script` to each task so the domain runs offline with `--user scripted`.
-4. `npm run rehearse -- validate examples/<name>`.
+4. `npm run sandtable -- validate examples/<name>`.

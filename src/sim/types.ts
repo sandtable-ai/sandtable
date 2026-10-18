@@ -7,7 +7,7 @@ export type CallTool = (name: string, args: unknown) => Promise<ToolOutcome>;
 
 export interface AgentContext {
   domain: Domain;
-  /** Rehearse's default system prompt (domain description + policy). Your agent may use its own. */
+  /** Sandtable's default system prompt (domain description + policy). Your agent may use its own. */
   system: string;
   tools: ToolSchema[];
   sessionId: string;

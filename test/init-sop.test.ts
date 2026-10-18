@@ -15,7 +15,7 @@ const SOP = await readFile("examples/freight/policy.md", "utf8");
 async function draftedDomainDir() {
   const spec = YAML.parse(await readFile("examples/freight/source/openapi.yaml", "utf8")) as Record<string, unknown>;
   const draft = draftFromOpenApi(spec);
-  const dir = await mkdtemp(path.join(os.tmpdir(), "rehearse-sop-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-sop-"));
   await writeDraft(dir, { [DOMAIN_FILE]: renderDraft(draft, "openapi.yaml"), "policy.md": POLICY_PLACEHOLDER, "tasks.yaml": TASKS_PLACEHOLDER });
   const fields = Object.fromEntries(Object.entries(draft.tables).map(([n, t]) => [n, t.fields]));
   return { dir, fields };

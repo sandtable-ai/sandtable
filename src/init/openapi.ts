@@ -1,5 +1,5 @@
 /**
- * Deterministic first pass of `rehearse init`: OpenAPI 3.x -> draft world tables and tools.
+ * Deterministic first pass of `sandtable init`: OpenAPI 3.x -> draft world tables and tools.
  * No model involved. Anything the spec cannot tell us (business side effects, conflict
  * conditions, seed data) becomes a review note instead of a guess.
  */

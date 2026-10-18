@@ -34,9 +34,9 @@ function tokens(label: string, group: UsageByModel): string | undefined {
 
 export function renderTerminal(r: SuiteResult): string {
   const lines: string[] = [];
-  lines.push(bold(`rehearse · ${r.domain}`) + dim(` · agent ${r.agent} · user ${r.user} · k=${r.k}`));
+  lines.push(bold(`sandtable · ${r.domain}`) + dim(` · agent ${r.agent} · user ${r.user} · k=${r.k}`));
   if (r.pendingReview?.length) {
-    lines.push(yellow(`  ⚠ ${r.pendingReview.length} drafted item(s) pending review: results are provisional (rehearse review <domain>)`));
+    lines.push(yellow(`  ⚠ ${r.pendingReview.length} drafted item(s) pending review: results are provisional (sandtable review <domain>)`));
   }
   lines.push("");
   const width = Math.max(4, ...r.tasks.map((t) => t.id.length));

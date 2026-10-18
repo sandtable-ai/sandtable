@@ -1,11 +1,11 @@
 {
-  "name": "rehearse-agents",
+  "name": "sandtable-ai",
   "version": "0.1.0-alpha.0",
   "description": "Rehearse your AI agent on a simulated copy of your customer's world before it goes live: tau-bench-style simulations with stateful tools, policy invariants and pass^k.",
   "license": "MIT",
   "type": "module",
   "bin": {
-    "rehearse": "dist/cli.js"
+    "sandtable": "dist/cli.js"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -28,10 +28,11 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "rehearse": "node src/cli.ts",
+    "sandtable": "node src/cli.ts",
     "demo": "node src/cli.ts demo --offline"
   },
   "keywords": [
+    "sandtable",
     "ai-agents",
     "evals",
     "simulation",

@@ -5,10 +5,10 @@ import type { AgentAdapter } from "./types.ts";
  *
  *   request:  { session_id, system, tools, message? , tool_results? }
  *   response: { reply: string }                       // done with this turn
- *          or { tool_calls: [{ id, name, arguments }] } // rehearse executes them and POSTs tool_results back
+ *          or { tool_calls: [{ id, name, arguments }] } // sandtable executes them and POSTs tool_results back
  *
  * The agent keeps its own conversation state keyed by session_id. Tool calls run against
- * rehearse's simulated world, so nothing touches the customer's real systems.
+ * sandtable's simulated world, so nothing touches the customer's real systems.
  */
 export function httpAgent(url: string, opts: { headers?: Record<string, string>; maxSteps?: number } = {}): AgentAdapter {
   const maxSteps = opts.maxSteps ?? 16;

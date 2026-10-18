@@ -61,11 +61,11 @@ async function save(result: SuiteResult, outDir: string, html: boolean): Promise
 }
 
 function defaultOut(label: string): string {
-  return path.join(".rehearse", "runs", `${new Date().toISOString().replace(/[:.]/g, "-")}-${label}`);
+  return path.join(".sandtable", "runs", `${new Date().toISOString().replace(/[:.]/g, "-")}-${label}`);
 }
 
 const program = new Command()
-  .name("rehearse")
+  .name("sandtable")
   .description("Rehearse an AI agent on a simulated copy of a customer's world before it goes live.")
   .version("0.1.0-alpha.0");
 
@@ -74,7 +74,7 @@ program
   .description("draft a domain from a customer's artifacts (review the output before trusting it)")
   .option("--openapi <file>", "OpenAPI 3.x spec (YAML or JSON): drafts tables and tools, no model needed")
   .option("--sop <file>", "SOP / policy document: drafts invariants with Claude, each quoting its source")
-  .option("-o, --out <dir>", "domain directory to create, or to add to when it already exists", "rehearsal")
+  .option("-o, --out <dir>", "domain directory to create, or to add to when it already exists", "sandtable")
   .option("-m, --model <id>", "Claude model for drafting steps")
   .option("--force", "overwrite existing files when drafting from --openapi")
   .action(async (o: { openapi?: string; sop?: string; out: string; model?: string; force?: boolean }) => {
@@ -114,12 +114,12 @@ program
       console.log(`  ${res.invariants.length} invariant(s) drafted (review: pending), ${res.softRules.length} soft rule(s) noted in ${file}`);
       for (const w of res.warnings) console.log(`  ! ${w}`);
     }
-    console.log(`\nNext: rehearse review ${o.out}, accept or fix each item, then rehearse validate ${o.out} --strict`);
+    console.log(`\nNext: sandtable review ${o.out}, accept or fix each item, then sandtable validate ${o.out} --strict`);
   });
 
 program
   .command("validate")
-  .argument("<domain>", "domain directory (with rehearsal.yaml) or file")
+  .argument("<domain>", "domain directory (with sandtable.yaml) or file")
   .description("check a domain spec for schema and cross-reference errors")
   .option("--strict", "also fail while drafted items are pending review")
   .action(async (domainPath: string, o: { strict?: boolean }) => {
@@ -127,14 +127,14 @@ program
     console.log(`✓ ${d.name}: ${Object.keys(d.world.tables).length} tables, ${d.tools.length} tools, ${d.invariants.length} invariants, ${d.tasks.length} tasks`);
     const pending = pendingReview(d);
     if (pending.length) {
-      console.log(`⚠ ${pending.length} drafted item(s) pending review (rehearse review ${domainPath})`);
+      console.log(`⚠ ${pending.length} drafted item(s) pending review (sandtable review ${domainPath})`);
       if (o.strict) process.exitCode = 1;
     }
   });
 
 program
   .command("review")
-  .argument("<domain>", "domain directory (with rehearsal.yaml) or file")
+  .argument("<domain>", "domain directory (with sandtable.yaml) or file")
   .description("list drafted items that still need a person to accept them")
   .action(async (domainPath: string) => {
     const pending = pendingReview(await loadDomain(domainPath));
@@ -142,14 +142,14 @@ program
     for (const p of pending) {
       console.log(`- ${p.kind} ${p.id}${p.source ? `  (${p.source.file})` : ""}`);
       if (p.source?.quote) console.log(`    "${p.source.quote}"`);
-      if (p.kind === "tool") console.log("    see the TODO(review) comments above it in rehearsal.yaml");
+      if (p.kind === "tool") console.log("    see the TODO(review) comments above it in sandtable.yaml");
     }
     console.log(`\nAccept an item by changing its \`review: pending\` to \`review: accepted\` (or deleting the line).`);
   });
 
 program
   .command("run")
-  .argument("<domain>", "domain directory (with rehearsal.yaml) or file")
+  .argument("<domain>", "domain directory (with sandtable.yaml) or file")
   .description("run every task k times against an agent and grade the results")
   .option("-a, --agent <spec>", "claude | claude:<model> | noop | http(s)://endpoint | ./my-agent.js", "claude")
   .option("-u, --user <spec>", "simulated user: claude | claude:<model> | scripted", "claude")
@@ -210,7 +210,7 @@ program
       const out = await save(result, defaultOut(`demo-${mode}`), true);
       console.log(`\n  report: ${path.join(out, "report.html")}\n`);
     }
-    console.log("Next: rehearse demo --live   (Claude plays the carrier and the agent, k=2)");
+    console.log("Next: sandtable demo --live   (Claude plays the carrier and the agent, k=2)");
   });
 
 program

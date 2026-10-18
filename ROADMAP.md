@@ -8,7 +8,7 @@
 - [x] Reports: terminal, `results.json`, self-contained `report.html`; `--fail-under` CI gate
 - [x] Bundled example: freight carrier sales (10 tasks, 4 invariants), offline demo
 
-## v0.2: `rehearse init` (the headline feature)
+## v0.2: `sandtable init` (the headline feature)
 Draft a domain from what a customer actually hands over: an SOP or policy doc, an OpenAPI spec, and call or chat transcripts.
 - [ ] OpenAPI → `world.tables` (resources, keys, field types) and `tools` (operations → ops), with fixtures from schema examples
 - [ ] SOP → candidate `invariants`, each quoting the sentence it came from, for human review
@@ -36,5 +36,5 @@ Draft a domain from what a customer actually hands over: an SOP or policy doc, a
 ## Good first issues
 - Add a `noop` built-in agent (useful baseline: the share of tasks a do-nothing agent passes)
 - Add `$regex` to where clauses
-- `rehearse run --tag refusal` to filter tasks by tag
+- `sandtable run --tag refusal` to filter tasks by tag
 - A second example domain

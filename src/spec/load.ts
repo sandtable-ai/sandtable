@@ -4,12 +4,12 @@ import YAML from "yaml";
 import { z } from "zod";
 import { DomainSpec, type Domain } from "./schema.ts";
 
-export const DOMAIN_FILE = "rehearsal.yaml";
+export const DOMAIN_FILE = "sandtable.yaml";
 
 export class DomainError extends Error {}
 
 /**
- * Load a domain from a directory containing rehearsal.yaml (or the file itself).
+ * Load a domain from a directory containing sandtable.yaml (or the file itself).
  * Any top-level value that is a relative path to an existing .md/.yaml/.yml file is inlined,
  * so policy, world and tasks can live in their own files.
  */

@@ -1,13 +1,15 @@
-# rehearse
+# sandtable
 
-**Rehearse your AI agent on a simulated copy of your customer's world before it goes live.**
+**Rehearse your AI agent on a sand table of your customer's world before it goes live.**
 
-`rehearse` turns a customer's operating procedure, API and records into a [τ-bench](https://arxiv.org/abs/2406.12045)-style simulation. Simulated customers call your agent. Its tool calls hit stateful mocks of the customer's systems. Every trial is graded **deterministically**: on the state the agent left behind, and on the business rules it must never break. You get **pass^k** (does it succeed *every* time?), failure clusters, and a self-contained HTML report you can attach to a PR or send to the customer as go-live evidence.
+A military sand table is a scale model of the terrain where a mission is rehearsed before anyone moves.
+
+`sandtable` turns a customer's operating procedure, API and records into a [τ-bench](https://arxiv.org/abs/2406.12045)-style simulation. Simulated customers call your agent. Its tool calls hit stateful mocks of the customer's systems. Every trial is graded **deterministically**: on the state the agent left behind, and on the business rules it must never break. You get **pass^k** (does it succeed *every* time?), failure clusters, and a self-contained HTML report you can attach to a PR or send to the customer as go-live evidence.
 
 ```text
-$ npx rehearse-agents demo
+$ npx sandtable-ai demo
 
-rehearse · freight-carrier-sales · agent scripted:naive · user scripted · k=1
+sandtable · freight-carrier-sales · agent scripted:naive · user scripted · k=1
 
   task                      trials  pass
   book-at-posted-rate       ✗       0/1
@@ -26,38 +28,38 @@ rehearse · freight-carrier-sales · agent scripted:naive · user scripted · k=
      e.g. book_load rate=2600 exceeds the limit 2350
 ```
 
-> Status: **early alpha**. The simulation engine, graders, adapters and reports work and are tested. `rehearse init` drafts world tables and tools from an OpenAPI spec and invariants from an SOP; drafting tasks from transcripts is next. See [ROADMAP.md](ROADMAP.md).
+> Status: **early alpha**. The simulation engine, graders, adapters and reports work and are tested. `sandtable init` drafts world tables and tools from an OpenAPI spec and invariants from an SOP; drafting tasks from transcripts is next. See [ROADMAP.md](ROADMAP.md).
 
 ## Why
 
 Agents that pass a demo fail on the seventh customer, because each customer has its own rules, systems and edge cases. The usual test setups miss this:
 
-- **LLM-as-judge scoring** reads the transcript, which sounds fine, and misses that the agent *booked a carrier whose insurance had expired*. The customer's rules are deterministic, so `rehearse` checks them deterministically, against the records and the tool-call log.
-- **Success rate hides unreliability.** An agent that is right 80% of the time fails one call in five in production. `rehearse` runs each task *k* times and reports pass^k, the probability that all *k* trials succeed ([Yao et al., 2024](https://arxiv.org/abs/2406.12045)).
+- **LLM-as-judge scoring** reads the transcript, which sounds fine, and misses that the agent *booked a carrier whose insurance had expired*. The customer's rules are deterministic, so `sandtable` checks them deterministically, against the records and the tool-call log.
+- **Success rate hides unreliability.** An agent that is right 80% of the time fails one call in five in production. `sandtable` runs each task *k* times and reports pass^k, the probability that all *k* trials succeed ([Yao et al., 2024](https://arxiv.org/abs/2406.12045)).
 - **Benchmarks don't know your customer.** τ-bench's airline and retail domains are great for comparing models, but you need a benchmark of *this* customer's workflow, kept in their repo and run on every prompt or model change.
 
 ## Quickstart
 
 ```bash
-npx rehearse-agents demo          # offline: two rule-based agents, no API key needed
-npx rehearse-agents demo --live   # Claude plays both the caller and the agent (needs ANTHROPIC_API_KEY)
+npx sandtable-ai demo          # offline: two rule-based agents, no API key needed
+npx sandtable-ai demo --live   # Claude plays both the caller and the agent (needs ANTHROPIC_API_KEY)
 ```
 
 Then draft a domain from your customer's API and point it at your agent:
 
 ```bash
-npx rehearse-agents init --openapi ./customer-api.yaml --sop ./sop.md -o ./my-domain   # draft, then review
-npx rehearse-agents validate ./my-domain
-npx rehearse-agents run ./my-domain --agent http://localhost:8787/step -k 4 --fail-under 90
+npx sandtable-ai init --openapi ./customer-api.yaml --sop ./sop.md -o ./my-domain   # draft, then review
+npx sandtable-ai validate ./my-domain
+npx sandtable-ai run ./my-domain --agent http://localhost:8787/step -k 4 --fail-under 90
 ```
 
-`run` writes `results.json` and `report.html` to `.rehearse/runs/<timestamp>/`.
+`run` writes `results.json` and `report.html` to `.sandtable/runs/<timestamp>/`.
 
 ## How it works
 
 ```mermaid
 flowchart LR
-  subgraph domain [rehearsal.yaml]
+  subgraph domain [sandtable.yaml]
     P[policy / SOP]
     W[world: tables + seed rows]
     T[tools: API ops on the world]
@@ -127,12 +129,12 @@ Full reference: [docs/spec.md](docs/spec.md).
 | Adapter | Use it when |
 |---|---|
 | `--agent claude` or `claude:<model>` | You want a baseline: Claude with the domain's tools and policy as its system prompt. |
-| `--agent http://…` | Your agent runs as a service. It receives the user message, returns either a reply or tool calls, and `rehearse` executes those against the simulated world ([protocol](docs/spec.md#http-agent-protocol)). |
+| `--agent http://…` | Your agent runs as a service. It receives the user message, returns either a reply or tool calls, and `sandtable` executes those against the simulated world ([protocol](docs/spec.md#http-agent-protocol)). |
 | `--agent ./my-agent.ts` | Your agent is a JS/TS function. Default-export an `AgentAdapter` ([example](examples/custom-agent.ts)). |
 | `--agent noop` | Baseline: never calls a tool, declines everything. Shows how much of your suite rewards doing nothing. |
 
 ```ts
-import type { AgentAdapter } from "rehearse-agents";
+import type { AgentAdapter } from "sandtable-ai";
 
 const agent: AgentAdapter = {
   name: "my-agent",
@@ -154,7 +156,7 @@ The simulated user is `--user claude` (default), `--user claude:<model>`, or `--
 ## Use it in CI
 
 ```yaml
-- run: npx rehearse-agents run ./rehearsal --agent ./agent.ts -k 3 --fail-under 85
+- run: npx sandtable-ai run ./sandtable --agent ./agent.ts -k 3 --fail-under 85
   env:
     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
@@ -163,12 +165,12 @@ The simulated user is `--user claude` (default), `--user claude:<model>`, or `--
 
 ## Prior art
 
-`rehearse` stands on τ-bench's method (simulated user + stateful tools + end-state grading + pass^k). What it adds is making that method cheap to apply to *one customer's* workflow, as a file in their repo. Simulation frameworks such as LangWatch Scenario, IntellAgent and DeepEval's simulator, and closed platforms such as Sierra's and Decagon's simulations, cover nearby ground. See [docs/prior-art.md](docs/prior-art.md) for a fair comparison.
+`sandtable` stands on τ-bench's method (simulated user + stateful tools + end-state grading + pass^k). What it adds is making that method cheap to apply to *one customer's* workflow, as a file in their repo. Simulation frameworks such as LangWatch Scenario, IntellAgent and DeepEval's simulator, and closed platforms such as Sierra's and Decagon's simulations, cover nearby ground. See [docs/prior-art.md](docs/prior-art.md) for a fair comparison.
 
 ## Roadmap
 
-- **`rehearse init`**: draft a reviewable domain from an SOP, an OpenAPI spec and call transcripts ([examples/freight/source](examples/freight/source) shows the inputs). The OpenAPI and SOP steps work today ([docs/init.md](docs/init.md)); transcripts are next.
-- **Black-box mode**: serve the simulated world as REST and MCP, so an unmodified agent can be rehearsed by pointing its base URL at `rehearse`.
+- **`sandtable init`**: draft a reviewable domain from an SOP, an OpenAPI spec and call transcripts ([examples/freight/source](examples/freight/source) shows the inputs). The OpenAPI and SOP steps work today ([docs/init.md](docs/init.md)); transcripts are next.
+- **Black-box mode**: serve the simulated world as REST and MCP, so an unmodified agent can be rehearsed by pointing its base URL at `sandtable`.
 - **PR comments** with pass^k deltas against the last run.
 - **Soft checks**: LLM-judged criteria (tone, never disclosing the ceiling) as a separate, calibrated score that never overrides the hard gates.
 - **Voice**: rehearse phone agents over WebSocket/WebRTC audio.
@@ -181,7 +183,7 @@ Details and good first issues are in [ROADMAP.md](ROADMAP.md).
 npm install
 npm test             # vitest
 npm run typecheck
-npm run rehearse -- run examples/freight --agent scripted:careful --user scripted
+npm run sandtable -- run examples/freight --agent scripted:careful --user scripted
 ```
 
 Node ≥ 22.18 runs the TypeScript sources directly. See [CONTRIBUTING.md](CONTRIBUTING.md).

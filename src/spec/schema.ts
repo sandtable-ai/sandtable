@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * A rehearsal domain is a simulated copy of one customer's world:
+ * A sandtable domain is a simulated copy of one customer's world:
  * the records the agent can read and change (world), the API it calls (tools),
  * the rules it must never break (invariants), and the conversations to rehearse (tasks).
  *
@@ -12,7 +12,7 @@ import { z } from "zod";
 const Value = z.unknown();
 
 /**
- * Drafted items (from `rehearse init`) start as `pending` and only count as acceptance
+ * Drafted items (from `sandtable init`) start as `pending` and only count as acceptance
  * criteria once a person accepts them. `source` points back to the evidence.
  */
 const Review = z.enum(["pending", "accepted"]).optional();

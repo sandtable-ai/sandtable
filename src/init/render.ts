@@ -6,16 +6,16 @@ import type { OpenApiDraft } from "./openapi.ts";
 
 export const POLICY_PLACEHOLDER = `# Policy
 
-TODO: paste the customer's operating procedure (SOP) here, or draft from one with \`rehearse init --sop <file>\`.
+TODO: paste the customer's operating procedure (SOP) here, or draft from one with \`sandtable init --sop <file>\`.
 The reference agent uses this text as its system prompt.
 `;
 
 export const TASKS_PLACEHOLDER = `# TODO: add tasks (see docs/spec.md, "personas and tasks"),
-# or draft them from call transcripts with \`rehearse init --transcripts <dir>\`.
+# or draft them from call transcripts with \`sandtable init --transcripts <dir>\`.
 []
 `;
 
-/** Render a draft as rehearsal.yaml, with review notes as YAML comments next to what they concern. */
+/** Render a draft as sandtable.yaml, with review notes as YAML comments next to what they concern. */
 export function renderDraft(d: OpenApiDraft, source: string): string {
   const tables = Object.fromEntries(
     Object.entries(d.tables).map(([name, t]) => [name, t.rows.length ? { key: t.key, rows: t.rows } : { key: t.key }]),
@@ -41,8 +41,8 @@ export function renderDraft(d: OpenApiDraft, source: string): string {
     tasks: "./tasks.yaml",
   });
   doc.commentBefore = [
-    ` Drafted by \`rehearse init\` from ${source}.`,
-    " Review every TODO, add seed rows and invariants, then run `rehearse validate`.",
+    ` Drafted by \`sandtable init\` from ${source}.`,
+    " Review every TODO, add seed rows and invariants, then run `sandtable validate`.",
   ].join("\n");
   for (const [name, t] of Object.entries(d.tables)) {
     if (t.rows.length) continue;

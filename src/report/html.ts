@@ -11,7 +11,7 @@ export function renderHtml(r: SuiteResult): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Rehearsal report · ${escape(r.domain)}</title>
+<title>Sandtable report · ${escape(r.domain)}</title>
 <style>
 :root{--bg:#fbfaf8;--fg:#1d1d1b;--muted:#6b6a66;--card:#fff;--line:#e6e3dd;--ok:#1f7a4d;--bad:#b42318;--chip:#f2efe9;--agent:#eef4ff;--user:#f7f5f0;--tool:#fdf7e7}
 @media (prefers-color-scheme:dark){:root{--bg:#141413;--fg:#ecebe7;--muted:#9c9a94;--card:#1d1d1b;--line:#33322f;--ok:#4cc38a;--bad:#ff6b5e;--chip:#2a2926;--agent:#1c2433;--user:#22211f;--tool:#2b2615}}
@@ -41,7 +41,7 @@ code{font:12px ui-monospace,Menlo,monospace}
 </head>
 <body>
 <main>
-<h1>Rehearsal report: <span id="domain"></span></h1>
+<h1>Sandtable report: <span id="domain"></span></h1>
 <div class="meta" id="meta"></div>
 <div id="pending"></div>
 <div class="kpis" id="kpis"></div>

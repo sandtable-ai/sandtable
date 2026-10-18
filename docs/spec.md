@@ -1,8 +1,8 @@
 # Domain spec reference
 
-A domain lives in a directory with a `rehearsal.yaml`. Any top-level value that is a relative path to an existing `.md`, `.yaml` or `.yml` file is inlined, so you can keep `policy: ./policy.md` and `tasks: ./tasks.yaml` in separate files.
+A domain lives in a directory with a `sandtable.yaml`. Any top-level value that is a relative path to an existing `.md`, `.yaml` or `.yml` file is inlined, so you can keep `policy: ./policy.md` and `tasks: ./tasks.yaml` in separate files.
 
-Run `rehearse validate <dir>` after every edit. It checks the schema and every cross-reference (tables, tools, params, personas).
+Run `sandtable validate <dir>` after every edit. It checks the schema and every cross-reference (tables, tools, params, personas).
 
 ```yaml
 name: string                # required
@@ -151,11 +151,11 @@ The simulated user ends the conversation by emitting `###STOP###` when its goal 
 
 ## Reading scores
 
-Run the `noop` baseline first: `rehearse run <domain> --agent noop --user scripted`. It never calls a tool, so it passes exactly the tasks whose success is "nothing happened": refusals, handoffs that only need a polite answer, and missing-information cases. On the freight example it scores 50%. A real agent's score means little until you know that floor. Balance refusal tasks with tasks that require a write, and compare per-tag scores.
+Run the `noop` baseline first: `sandtable run <domain> --agent noop --user scripted`. It never calls a tool, so it passes exactly the tasks whose success is "nothing happened": refusals, handoffs that only need a polite answer, and missing-information cases. On the freight example it scores 50%. A real agent's score means little until you know that floor. Balance refusal tasks with tasks that require a write, and compare per-tag scores.
 
 ## Results
 
-`run` writes `results.json` (a `SuiteResult`, with every trial's transcript, tool calls, checks and world diff) and `report.html` (self-contained, no external assets). `rehearse report results.json` re-renders the HTML.
+`run` writes `results.json` (a `SuiteResult`, with every trial's transcript, tool calls, checks and world diff) and `report.html` (self-contained, no external assets). `sandtable report results.json` re-renders the HTML.
 
 Each trial also records how long the agent took to answer every user turn (tool calls included), and the tokens its model calls used. Adapters report tokens through `recordUsage`; the Claude adapters do this automatically. Runs show p50/p95 agent turn latency and an estimated cost at list prices (`PRICES` in `src/run/usage.ts`). Cost shows as `n/a` for models without a known price.
 
@@ -167,7 +167,7 @@ Each trial also records how long the agent took to answer every user turn (tool 
 // request
 {
   "session_id": "walk-away-above-ceiling#0",   // stable per trial: key your conversation state on it
-  "system": "...",                             // rehearse's default prompt; ignore it if your agent has its own
+  "system": "...",                             // sandtable's default prompt; ignore it if your agent has its own
   "tools": [{ "name": "...", "description": "...", "input_schema": { } }],
   "message": "I need $1,600 on that one.",     // a new user turn, or:
   "tool_results": [{ "id": "c1", "ok": true, "result": { } }]  // results of your previous tool_calls
@@ -175,6 +175,6 @@ Each trial also records how long the agent took to answer every user turn (tool 
 
 // response: either finish the turn...
 { "reply": "Best I can do is $1,375." }
-// ...or ask rehearse to run tools against the simulated world
+// ...or ask sandtable to run tools against the simulated world
 { "tool_calls": [{ "id": "c1", "name": "get_load", "arguments": { "load_id": "L-1002" } }] }
 ```

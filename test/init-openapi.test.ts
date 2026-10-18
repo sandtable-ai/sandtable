@@ -44,7 +44,7 @@ describe("init from OpenAPI: freight spec", () => {
 
   it("writes a draft that validates", async () => {
     const d = draftFromOpenApi(await freightSpec());
-    const dir = await mkdtemp(path.join(os.tmpdir(), "rehearse-init-"));
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-init-"));
     await writeDraft(dir, { [DOMAIN_FILE]: renderDraft(d, "openapi.yaml"), "policy.md": POLICY_PLACEHOLDER, "tasks.yaml": TASKS_PLACEHOLDER });
     const domain = await loadDomain(dir);
     expect(domain.tools).toHaveLength(5);

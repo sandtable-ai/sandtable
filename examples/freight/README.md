@@ -5,14 +5,14 @@ A fictional freight brokerage, "Acme Freight", takes inbound calls from trucking
 | File | What it is |
 |---|---|
 | `policy.md` | The SOP the agent must follow |
-| `rehearsal.yaml` | World (carriers, loads, bookings, escalations), tools, invariants, personas |
+| `sandtable.yaml` | World (carriers, loads, bookings, escalations), tools, invariants, personas |
 | `tasks.yaml` | 10 rehearsed calls: happy path, negotiation, vetting refusals, alternatives, equipment mismatch, handoff |
-| `source/` | The raw material a customer would hand over: TMS OpenAPI spec and call transcripts. `rehearsal.yaml` was written by hand from these; `rehearse init` will draft it automatically. |
+| `source/` | The raw material a customer would hand over: TMS OpenAPI spec and call transcripts. `sandtable.yaml` was written by hand from these; `sandtable init` will draft it automatically. |
 
 ```bash
-npx rehearse-agents demo                                  # offline: naive vs careful rule-based agents
-npx rehearse-agents run examples/freight -k 4             # Claude as agent and caller
-npx rehearse-agents run examples/freight --agent http://localhost:8787/step
+npx sandtable-ai demo                                  # offline: naive vs careful rule-based agents
+npx sandtable-ai run examples/freight -k 4             # Claude as agent and caller
+npx sandtable-ai run examples/freight --agent http://localhost:8787/step
 ```
 
 What the invariants catch:
