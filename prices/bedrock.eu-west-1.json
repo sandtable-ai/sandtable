@@ -1,0 +1,56 @@
+{
+  "region": "eu-west-1",
+  "source": "AWS Pricing API (AmazonBedrock, on-demand)",
+  "generatedAt": "2026-10-18T21:04:08.692Z",
+  "prices": {
+    "openai.gpt-oss-120b-1:0": {
+      "input": 0.18,
+      "output": 0.7,
+      "cacheRead": 0.18,
+      "cacheWrite": 0.18,
+      "usageTypes": {
+        "input": "EU-openai.gpt-oss-120b-mantle-input-tokens-standard",
+        "output": "EU-openai.gpt-oss-120b-mantle-output-tokens-standard"
+      }
+    },
+    "global.xai.grok-4.7": {
+      "input": 2,
+      "output": 6,
+      "cacheRead": 0.5,
+      "cacheWrite": 2,
+      "usageTypes": {
+        "input": "EU-xai.grok-4.7-mantle-input-tokens-global-standard",
+        "output": "EU-xai.grok-4.7-mantle-output-tokens-global-standard",
+        "cacheRead": "EU-xai.grok-4.7-mantle-cache-read-tokens-global-standard"
+      }
+    },
+    "global.moonshotai.kimi-k3": {
+      "input": 3,
+      "output": 15,
+      "cacheRead": 0.3,
+      "cacheWrite": 3.75,
+      "usageTypes": {
+        "input": "EU-moonshotai.kimi-k3-mantle-input-tokens-global-standard",
+        "output": "EU-moonshotai.kimi-k3-mantle-output-tokens-global-standard",
+        "cacheRead": "EU-moonshotai.kimi-k3-mantle-cache-read-tokens-global-standard",
+        "cacheWrite": "EU-moonshotai.kimi-k3-mantle-cache-write-tokens-30m-global-standard"
+      }
+    },
+    "qwen.qwen3-next-80b-a3b": {
+      "input": 0.168,
+      "output": 1.44,
+      "cacheRead": 0.168,
+      "cacheWrite": 0.168,
+      "usageTypes": {
+        "input": "EU-qwen.qwen3-next-80b-a3b-instruct-mantle-input-tokens-standard",
+        "output": "EU-qwen.qwen3-next-80b-a3b-instruct-mantle-output-tokens-standard"
+      }
+    }
+  },
+  "unresolved": [
+    "global.openai.gpt-6.1-sol",
+    "global.openai.gpt-5.5",
+    "global.zai.glm-5.3",
+    "global.amazon.nova-2-lite-v1:0"
+  ]
+}

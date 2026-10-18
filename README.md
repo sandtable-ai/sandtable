@@ -30,7 +30,7 @@ sandtable · freight-carrier-sales · agent scripted:naive · user scripted · k
      e.g. book_load on loads L-1013: booking_mode is "rep_confirm", expected {"$ne":"rep_confirm"}
 ```
 
-> Status: **early alpha**. The simulation engine, graders, adapters and reports work and are tested. `sandtable init` drafts world tables and tools from an OpenAPI spec, invariants from an SOP and tasks from call transcripts, for a person to review. Model-backed steps have not yet been verified against the live API. See [ROADMAP.md](ROADMAP.md).
+> Status: **early alpha**. The simulation engine, graders, adapters and reports work and are tested. `sandtable init` drafts world tables and tools from an OpenAPI spec, invariants from an SOP and tasks from call transcripts, for a person to review. Every model-backed path has been verified against the live API ([results](docs/results.mdx)). See [ROADMAP.md](ROADMAP.md).
 
 ## First live results
 
@@ -129,15 +129,16 @@ tasks:
         - { table: bookings, count: 0 }
 ```
 
-Full reference: [docs/spec.md](docs/spec.md).
+Full reference: [docs/reference/spec.mdx](docs/reference/spec.mdx).
 
 ## Bring your own agent
 
 | Adapter | Use it when |
 |---|---|
 | `--agent claude` or `claude:<model>` | You want a baseline: Claude with the domain's tools and policy as its system prompt. |
+| `--agent bedrock:<model-id>` | Any tool-capable model on Amazon Bedrock through the Converse API (GPT, gpt-oss, Grok, Kimi, GLM, Qwen, Mistral, Nova), with `--region` and `--aws-profile`. |
 | `--agent openai:<model>` | You want to compare other models: GPT, Gemini, Llama, Qwen, DeepSeek and more, through any OpenAI-compatible endpoint, with the same prompt and tools ([run other models](#run-other-models)). |
-| `--agent http://…` | Your agent runs as a service. It receives the user message, returns either a reply or tool calls, and `sandtable` executes those against the simulated world ([protocol](docs/spec.md#http-agent-protocol)). |
+| `--agent http://…` | Your agent runs as a service. It receives the user message, returns either a reply or tool calls, and `sandtable` executes those against the simulated world ([protocol](docs/reference/http-protocol.mdx)). |
 | `--agent ./my-agent.ts` | Your agent is a JS/TS function. Default-export an `AgentAdapter` ([example](examples/custom-agent.ts)). |
 | `--agent noop` | Baseline: never calls a tool, declines everything. Shows how much of your suite rewards doing nothing. |
 
@@ -194,7 +195,15 @@ npx sandtable-ai run ./my-domain --openai-base-url http://localhost:11434/v1 \
 - The model must support tool calling on that server. vLLM, for example, needs `--enable-auto-tool-choice` and a `--tool-call-parser`.
 - Cost is estimated only for models in `PRICES` (Claude today). Other models show `n/a` until verified list prices are added, since prices vary by host.
 
-Details and library use: [docs/spec.md](docs/spec.md#openai-compatible-endpoints).
+Details and library use: [docs/guides/bring-your-agent.mdx](docs/guides/bring-your-agent.mdx#openai-compatible-endpoints).
+
+## Compare models
+
+```bash
+npx sandtable-ai leaderboard examples/freight -m leaderboard/models.example.yaml -k 4
+```
+
+Every model plays the agent under the same simulated callers, next to a do-nothing baseline row. Add `--prices prices/bedrock.eu-west-1.json` for verified Bedrock prices, generated from the AWS Pricing API by `scripts/bedrock-prices.mjs`; models whose price isn't published there show `n/a`. The result is ranked by pass^k, with rule violations, cost per trial and turn latency, and each row links to its full report. Interrupted or paid runs resume: models whose results exist are not rerun.
 
 ## Use it in CI
 
@@ -207,9 +216,28 @@ Details and library use: [docs/spec.md](docs/spec.md#openai-compatible-endpoints
 
 `--fail-under` exits non-zero when pass^k drops below the threshold, so a prompt tweak that breaks a customer rule fails the build.
 
+## Use it from your coding agent
+
+This repository is also a Claude Code plugin marketplace. Its `sandtable` plugin teaches a coding agent to run the whole loop for you: draft a domain from a customer's OpenAPI spec, SOP and transcripts, resolve the review notes, write `reference` calls, `lint`, run against your agent, and read failing trajectories. In Claude Code:
+
+```text
+/plugin marketplace add sandtable-ai/sandtable
+/plugin install sandtable@sandtable
+```
+
+On Claude Code 2.1.275 or later, `/plugin install sandtable --marketplace sandtable-ai/sandtable` does both in one step.
+
+| Skill | What it covers |
+|---|---|
+| `drafting-a-domain` | `init`, `review`, resolving `TODO(review)` notes, seed rows, `reference` calls, accepting drafted items, `lint` |
+| `running-and-reading-results` | `run`, choosing k, pass^k, `results.json` and `report.html`, attributing failures to the agent, the simulated user, the task or the harness |
+| `writing-good-tasks` | hidden goals, policy-correct end states, avoiding vacuous tasks, `never_disclose`, balanced suites |
+
+Claude loads a skill when the conversation needs it, or you can call one by name, such as `/sandtable:drafting-a-domain`. A `failure-triager` subagent reads the failing trials of a large run outside the main conversation. The skills ask before any command that calls a model. They are plain `SKILL.md` files in [`plugin/skills`](plugin/skills), so other coding agents that read Agent Skills can use them too.
+
 ## Prior art
 
-`sandtable` stands on τ-bench's method (simulated user + stateful tools + end-state grading + pass^k). What it adds is making that method cheap to apply to *one customer's* workflow, as a file in their repo. Simulation frameworks such as LangWatch Scenario, IntellAgent and DeepEval's simulator, and closed platforms such as Sierra's and Decagon's simulations, cover nearby ground. See [docs/prior-art.md](docs/prior-art.md) for a fair comparison.
+`sandtable` stands on τ-bench's method (simulated user + stateful tools + end-state grading + pass^k). What it adds is making that method cheap to apply to *one customer's* workflow, as a file in their repo. Simulation frameworks such as LangWatch Scenario, IntellAgent and DeepEval's simulator, and closed platforms such as Sierra's and Decagon's simulations, cover nearby ground. See [docs/compare/overview.mdx](docs/compare/overview.mdx) for a fair comparison.
 
 ## Roadmap
 

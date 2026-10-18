@@ -1,0 +1,17 @@
+{
+  "name": "sandtable",
+  "description": "Skills that let a coding agent drive sandtable: draft a customer's world, review and lint it, rehearse an agent with pass^k and triage failures.",
+  "owner": {
+    "name": "The sandtable authors",
+    "url": "https://github.com/sandtable-ai"
+  },
+  "plugins": [
+    {
+      "name": "sandtable",
+      "source": "./plugin",
+      "description": "Draft a sandtable domain from a customer's OpenAPI spec, SOP and transcripts, resolve review notes, write reference calls, lint, run against an agent, and read failing trajectories.",
+      "category": "testing",
+      "tags": ["agent-testing", "evals", "simulation", "tau-bench", "pass-k"]
+    }
+  ]
+}

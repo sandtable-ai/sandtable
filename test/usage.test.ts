@@ -2,7 +2,7 @@ import path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
 import { runSuite } from "../src/run/suite.ts";
-import { costOf, percentile, recordInto, sumUsage, type UsageByModel } from "../src/run/usage.ts";
+import { costOf, percentile, recordInto, registerPrices, sumUsage, type UsageByModel } from "../src/run/usage.ts";
 import { claudeAgent } from "../src/sim/claude.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
 import { loadDomain } from "../src/spec/load.ts";
@@ -57,5 +57,18 @@ describe("usage in runs", () => {
     expect(r.usage.costUsd).toBeCloseTo(trial.usage.costUsd!);
     expect(r.latency.agentTurnP50Ms).not.toBeNull();
     expect(trial.events.filter((e) => e.type === "agent").every((e) => typeof e.latencyMs === "number")).toBe(true);
+  });
+});
+
+describe("registerPrices", () => {
+  it("adds prices from the bedrock-prices script output, keyed by exact model ID", () => {
+    registerPrices({ prices: { "global.xai.grok-4.7": { input: 2, output: 6, cacheRead: 0.5, cacheWrite: 2, usageTypes: {} } } });
+    const g: UsageByModel = {};
+    recordInto(g, "global.xai.grok-4.7", { input: 1_000_000, output: 1_000_000 });
+    expect(costOf(g)).toBeCloseTo(8);
+  });
+
+  it("rejects incomplete prices", () => {
+    expect(() => registerPrices({ "m": { input: 1 } })).toThrow(/needs numeric input, output, cacheRead and cacheWrite/);
   });
 });

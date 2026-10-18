@@ -1,0 +1,38 @@
+---
+title: "sandtable vs hosted platforms"
+sidebarTitle: "Hosted platforms"
+description: "Simulation built into agent platforms, voice testing services and LLM eval platforms, compared with an open-source harness in your repo."
+---
+
+Several hosted products cover nearby ground. They fall into three groups, and sandtable relates to each differently.
+
+## Agent platforms with built-in simulation
+
+**Sierra** (simulations, Ghostwriter) and **Decagon** (Simulations, AOP versioning) generate tests from customer SOPs and transcripts and run them on every agent change, inside their own platforms.
+
+- **Choose the platform's own simulation** when your agent is built on that platform. It knows the platform's runtime and you get it without extra setup.
+- **Choose sandtable** when you build the agent yourself, or deploy across stacks, and want the same method as open source: a domain in the customer's repo, deterministic grading, and no vendor account.
+
+## Voice agent testing services
+
+**Coval, Hamming, Cekura, Bluejay, Roark** and **Vapi Simulations** do simulation and regression testing for voice agents.
+
+sandtable is text-only today. It rehearses the agent's reasoning and tool use (what it says and what it does to the records), not audio, latency to first word or interruptions.
+
+- **Choose a voice testing service** when the risk is in the audio path: speech recognition, turn-taking, barge-in, latency.
+- **Choose sandtable** to gate the agent's decisions against the customer's rules before you spend on audio-level tests, or alongside them.
+- Planned: voice transport and timing metrics ([#17](https://github.com/sandtable-ai/sandtable/issues/17), [#43](https://github.com/sandtable-ai/sandtable/issues/43)), serving the world as REST, MCP and webhook tools for hosted voice platforms ([#14](https://github.com/sandtable-ai/sandtable/issues/14)), and importing voice-agent platform configs as draft domains ([#34](https://github.com/sandtable-ai/sandtable/issues/34), [#35](https://github.com/sandtable-ai/sandtable/issues/35)).
+
+## LLM eval and observability platforms
+
+**LangSmith, Braintrust** and similar platforms offer datasets, judges and CI gating for LLM apps generally.
+
+- **Choose an eval platform** for tracing, production monitoring, dataset management and judged scores across many kinds of LLM features.
+- **Choose sandtable** for the specific job of rehearsing a tool-using agent against a stateful copy of a customer's world, with rules checked on every call and pass^k over repeated trials.
+- They combine: `results.json` is plain JSON with every trial's transcript, tool calls and checks, so you can load it into another system yourself. There is no built-in integration.
+
+## What you give up with sandtable
+
+It is early alpha, local and file-based. There is no hosted dashboard, no team workspace, no production monitoring and no support contract. Reports are a terminal summary, `results.json` and a self-contained `report.html`.
+
+Last reviewed October 2026. Something out of date or unfair? [Open an issue](https://github.com/sandtable-ai/sandtable/issues).

@@ -1,0 +1,41 @@
+---
+title: "sandtable vs IntellAgent"
+sidebarTitle: "IntellAgent"
+description: "Scenarios generated from the agent's own prompt, or a reviewed suite drafted from the customer's artifacts. When to use each."
+---
+
+**IntellAgent** (Plurai, Apache-2.0) builds a policy graph from the agent's *system prompt*, generates scenarios with database state, simulates users and critiques each conversation with a model.
+
+**sandtable** starts from the customer's artifacts (API spec, SOP, call transcripts), keeps a reviewed suite in the repo, and grades deterministically on the world's end state and on invariants checked at every tool call.
+
+## The key difference: where the rules come from
+
+IntellAgent derives what to test from the agent's prompt. That makes generating many scenarios fast, but a rule the prompt forgot is a rule nobody tests. sandtable derives rules from the customer's SOP, independently of the agent, so a rule missing from the prompt still gets tested, and its failure points at the gap.
+
+## Side by side
+
+| | sandtable | IntellAgent |
+|---|---|---|
+| Source of test cases | customer's API, SOP and transcripts (drafted by `init`, reviewed by a person) | the agent's system prompt |
+| Stateful world | declarative tables in the repo | generated database |
+| Pass/fail | end state, invariants, required and forbidden tools; no judge | LLM critique of the conversation |
+| pass^k across repeated trials | yes | no |
+| Agent integration | HTTP, JS/TS module, Claude, OpenAI-compatible endpoints | adapter |
+
+## Choose IntellAgent when
+
+- You want broad, automatically generated coverage quickly, to explore how an agent behaves.
+- The agent's prompt is the best available statement of its policy.
+- A model's critique is an acceptable verdict for your use.
+
+## Choose sandtable when
+
+- The customer's documents, not the agent's prompt, define what is allowed.
+- Pass/fail has to be reproducible and explainable to the customer: "it booked carrier 100202, whose insurance was expired".
+- The suite must be stable across runs so that a score change means the agent changed.
+
+## Use both
+
+Use generated scenarios to explore, then turn the failures that matter into sandtable tasks, so they are graded deterministically and run on every change.
+
+Last reviewed October 2026. Something out of date or unfair? [Open an issue](https://github.com/sandtable-ai/sandtable/issues).

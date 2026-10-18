@@ -1,4 +1,5 @@
-// Keep the Python launcher's versions in sync with package.json.
+// Keep the Python launcher's and the Claude Code plugin's versions in sync with package.json,
+// so the plugin's skills update when the CLI they document is released.
 // npm semver -> PEP 440: 0.1.0-alpha.0 -> 0.1.0a0, -beta.N -> bN, -rc.N -> rcN.
 // Usage: node scripts/sync-version.mjs [--check]
 import { readFileSync, writeFileSync } from "node:fs";
@@ -11,6 +12,7 @@ const files = {
   "../python/pyproject.toml": (s) => s.replace(/^version = ".*"$/m, `version = "${pep440}"`),
   "../python/src/sandtable_ai/__init__.py": (s) =>
     s.replace(/^__version__ = ".*"$/m, `__version__ = "${pep440}"`).replace(/^NPM_VERSION = ".*"$/m, `NPM_VERSION = "${npm}"`),
+  "../plugin/.claude-plugin/plugin.json": (s) => s.replace(/^  "version": ".*",$/m, `  "version": "${npm}",`),
 };
 let stale = false;
 for (const [rel, update] of Object.entries(files)) {
@@ -23,7 +25,7 @@ for (const [rel, update] of Object.entries(files)) {
   }
 }
 if (process.argv.includes("--check") && stale) {
-  console.error(`python/ is not in sync with package.json ${npm}: run node scripts/sync-version.mjs`);
+  console.error(`python/ or plugin/ is not in sync with package.json ${npm}: run node scripts/sync-version.mjs`);
   process.exit(1);
 }
 console.log(`npm ${npm} <-> PyPI ${pep440}`);

@@ -20,6 +20,8 @@ export interface OpenAICompatOptions {
   headers?: Record<string, string>;
   /** Left out unless set: some models accept only their default. */
   temperature?: number;
+  /** Retries on 429, 5xx and network errors, with backoff (default 4). */
+  maxRetries?: number;
 }
 
 export interface OpenAICompatAgentOptions extends OpenAICompatOptions {
@@ -84,18 +86,32 @@ function chatCompletions(opts: OpenAICompatOptions, recordUsage?: UsageRecorder)
     ...opts.headers,
   };
 
+  const maxRetries = opts.maxRetries ?? 4;
   return async (messages: ChatMessage[], tools: FunctionTool[] = []) => {
-    const res = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        model: opts.model,
-        messages,
-        // Servers reject an empty tools array.
-        ...(tools.length ? { tools } : {}),
-        ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
-      }),
+    const body = JSON.stringify({
+      model: opts.model,
+      messages,
+      // Servers reject an empty tools array.
+      ...(tools.length ? { tools } : {}),
+      ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
     });
+    let res: Response | undefined;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        res = await fetch(url, { method: "POST", headers, body });
+      } catch (err) {
+        // Network failure: retry like a 5xx.
+        if (attempt >= maxRetries) throw err;
+        await sleep(backoffMs(attempt));
+        continue;
+      }
+      // Rate limits and server errors are the host's problem, not the agent's: retry with backoff.
+      if ((res.status === 429 || res.status >= 500) && attempt < maxRetries) {
+        await sleep(backoffMs(attempt, res.headers.get("retry-after")));
+        continue;
+      }
+      break;
+    }
     if (!res.ok) throw new Error(`${url} returned ${res.status}: ${(await res.text()).slice(0, 500)}`);
     const data = (await res.json()) as ChatCompletion;
     // Keyed by the requested name, not the served snapshot, so the price lookup is stable.
@@ -105,6 +121,15 @@ function chatCompletions(opts: OpenAICompatOptions, recordUsage?: UsageRecorder)
     if (!choice?.message) throw new Error(`${url} returned no choices`);
     return { message: choice.message, finishReason: choice.finish_reason ?? null };
   };
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Exponential backoff with jitter, honouring Retry-After (seconds) when the host sends one. */
+export function backoffMs(attempt: number, retryAfter?: string | null): number {
+  const hinted = retryAfter ? Number(retryAfter) * 1000 : Number.NaN;
+  if (Number.isFinite(hinted) && hinted >= 0) return Math.min(hinted, 60_000);
+  return Math.min(500 * 2 ** attempt, 20_000) * (0.75 + Math.random() * 0.5);
 }
 
 function textOf(content: AssistantMessage["content"]): string {

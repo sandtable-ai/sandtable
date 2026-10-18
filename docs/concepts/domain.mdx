@@ -1,0 +1,81 @@
+---
+title: "Domains"
+description: "A domain is a simulated copy of one customer's world: records, API, rules and the conversations to rehearse."
+---
+
+A **domain** is everything sandtable needs to rehearse an agent for one customer workflow: the records the agent can read and change, the API it calls, the rules it must never break, and the conversations to rehearse. It is a directory of plain files, meant to live in the customer's repo (or yours) and change with it.
+
+```text
+examples/freight/
+├── sandtable.yaml     # world, tools, invariants, personas; points at the files below
+├── policy.md          # the SOP the agent must follow
+├── tasks.yaml         # the rehearsed conversations
+└── source/            # what the customer handed over (OpenAPI spec, transcripts)
+```
+
+Any top-level value in `sandtable.yaml` that is a relative path to an existing `.md`, `.yaml` or `.yml` file is inlined, so `policy: ./policy.md` and `tasks: ./tasks.yaml` keep long sections in their own files.
+
+## The parts
+
+<AccordionGroup>
+  <Accordion title="description and policy" icon="file-lines">
+    `description` says who the agent works for. Both the agent and the simulated user see it. `policy` is the customer's operating procedure. The Claude reference agent uses it as its system prompt, and every agent receives it as part of the default `system` prompt (your own agent may ignore that and use its own prompt). The simulated user never sees the policy.
+  </Accordion>
+  <Accordion title="world" icon="table-cells">
+    Tables of records, each with a key field and seed rows. Every trial starts from a fresh copy, so trials are independent and can run in parallel. Keep seed rows fictional, even when they are modelled on real cases.
+
+    ```yaml
+    world:
+      tables:
+        carriers:
+          key: mc_number
+          rows:
+            - { mc_number: "100202", name: Northline Haulers, insurance_status: expired, equipment: dry_van }
+        bookings:
+          key: booking_id
+    ```
+  </Accordion>
+  <Accordion title="tools" icon="wrench">
+    A tool is what the agent sees (a name, a description written for a model, and typed params) plus what it does to the world: `checks` the real API would enforce, then `ops` that run atomically.
+
+    ```yaml
+    - name: book_load
+      description: Book a load for a vetted carrier at the agreed all-in rate in USD.
+      params:
+        load_id: { type: string }
+        mc_number: { type: string }
+        rate: { type: number }
+      checks:
+        - { table: loads, key: $load_id, where: { status: available }, error: "Load ${load_id} is not available" }
+      ops:
+        - create: bookings
+          values: { load_id: $load_id, mc_number: $mc_number, rate: $rate, status: confirmed }
+        - update: loads
+          key: $load_id
+          set: { status: booked }
+    ```
+
+    Model the API's behaviour, not its implementation. A tool needs to change the world the way the real call would, closely enough that the end state can be graded.
+  </Accordion>
+  <Accordion title="invariants" icon="shield-halved">
+    Rules that hold in every conversation, checked before every tool call and on every agent message. One violation fails the trial. See [Invariants vs expectations](/concepts/invariants).
+  </Accordion>
+  <Accordion title="personas and tasks" icon="users">
+    A persona describes how a caller behaves (impatient, evasive, friendly). A task is one rehearsed conversation: a hidden goal for the simulated user, an optional persona and script, and the expected outcome. See [Write tasks that discriminate](/guides/write-tasks).
+  </Accordion>
+</AccordionGroup>
+
+## One domain per workflow
+
+A domain models one workflow for one customer: "carrier sales at this brokerage", not "logistics". Two customers with different rules get two domains, even if their APIs look alike. That is the point: the rules that differ between customers are the ones an agent gets wrong.
+
+## How a domain gets written
+
+You can write one by hand from the [spec](/reference/spec), or draft one with [`sandtable init`](/guides/init) from an OpenAPI spec, an SOP and call transcripts, then review it. Either way, run these after every edit:
+
+```bash
+sandtable validate ./my-domain   # schema and cross-references
+sandtable lint ./my-domain       # every task ready, solvable, non-vacuous and graded
+```
+
+The bundled example, [`examples/freight`](https://github.com/sandtable-ai/sandtable/tree/main/examples/freight), is a fictional freight brokerage's carrier-sales desk with 8 tables, 9 tools, 16 invariants and 32 tasks. Reading it is the fastest way to learn the format.

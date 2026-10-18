@@ -9,6 +9,7 @@ import { formatPercent, renderTerminal } from "./report/terminal.ts";
 import { renderHtml } from "./report/html.ts";
 import { runSuite, type SuiteResult } from "./run/suite.ts";
 import { claudeAgent, claudeUser, type ClaudeOptions, type Provider } from "./sim/claude.ts";
+import { registerPrices } from "./run/usage.ts";
 import { bedrockConverseAgent } from "./sim/bedrock-converse.ts";
 import { httpAgent } from "./sim/http.ts";
 import { noopAgent } from "./sim/noop.ts";
@@ -22,6 +23,8 @@ import { draftTasksFromTranscripts } from "./init/transcripts.ts";
 import { DOMAIN_FILE, POLICY_PLACEHOLDER, renderDraft, TASKS_PLACEHOLDER, writeDraft } from "./init/render.ts";
 import { DomainError, loadDomain, pendingReview } from "./spec/load.ts";
 import { lintDomain } from "./grade/lint.ts";
+import { renderLeaderboardMarkdown, runLeaderboard } from "./run/leaderboard.ts";
+import { z } from "zod";
 import YAML from "yaml";
 
 const EXAMPLE = fileURLToPath(new URL("../examples/freight", import.meta.url));
@@ -117,6 +120,12 @@ function openInBrowser(file: string): void {
   } catch {
     // no browser available (CI, containers): the path is printed anyway
   }
+}
+
+async function loadPrices(file?: string): Promise<void> {
+  if (!file) return;
+  const added = registerPrices(JSON.parse(await readFile(file, "utf8")));
+  console.log(`  prices: ${added.length} model(s) from ${file}`);
 }
 
 function defaultOut(label: string): string {
@@ -259,7 +268,9 @@ withProviderFlags(program
   .option("--no-html", "skip the HTML report")
   .option("--fail-under <pct>", "exit 1 if pass^k is below this percentage (CI gate)", percent)
   .option("--open", "open the HTML report in the browser when the run finishes")
-  .action(async (domainPath: string, o: { agent: string; user: string; openaiBaseUrl?: string; trials: number; tasks?: string; concurrency: number; out?: string; html: boolean; failUnder?: number; open?: boolean } & ProviderFlags) => {
+  .option("--prices <file>", "extra model prices (JSON from scripts/bedrock-prices.mjs, or { model: {input, output, cacheRead, cacheWrite} })")
+  .action(async (domainPath: string, o: { agent: string; user: string; openaiBaseUrl?: string; trials: number; tasks?: string; concurrency: number; out?: string; html: boolean; failUnder?: number; open?: boolean; prices?: string } & ProviderFlags) => {
+    await loadPrices(o.prices);
     const domain = await loadDomain(domainPath);
     if (domain.tasks.length === 0) throw new Error(`${domain.name} has no tasks yet: add some to tasks.yaml`);
     const agent = await resolveAgent(o.agent, providerOpts(o), o.openaiBaseUrl);
@@ -288,6 +299,52 @@ withProviderFlags(program
       console.error(`\n✗ pass^${o.trials} ${formatPercent(score)} is below --fail-under ${formatPercent(o.failUnder)}`);
       process.exitCode = 1;
     }
+  });
+
+const ModelsFile = z
+  .object({
+    user: z.string().optional(),
+    k: z.number().int().positive().optional(),
+    models: z.array(z.object({ label: z.string(), agent: z.string() }).strict()).min(1),
+  })
+  .strict();
+
+withProviderFlags(program
+  .command("leaderboard"))
+  .argument("<domain>", "domain directory (with sandtable.yaml) or file")
+  .description("rank several agents on one domain under the same simulated users, plus a do-nothing baseline")
+  .requiredOption("-m, --models <file>", "YAML file: { user?, k?, models: [{ label, agent }] } (agent specs as in `run --agent`)")
+  .option("-u, --user <spec>", "simulated user for every model (overrides the models file; default claude)")
+  .option("-k, --trials <n>", "trials per task (overrides the models file; default 4)", int)
+  .option("-c, --concurrency <n>", "episodes in parallel per model", int, 4)
+  .option("--openai-base-url <url>", "OpenAI-compatible endpoint for openai:<model> entries")
+  .option("-o, --out <dir>", "output directory (default: leaderboard/<domain name>)")
+  .option("--no-resume", "rerun models even when their results already exist")
+  .option("--prices <file>", "extra model prices (JSON from scripts/bedrock-prices.mjs)")
+  .action(async (domainPath: string, o: { models: string; user?: string; trials?: number; concurrency: number; openaiBaseUrl?: string; out?: string; resume: boolean; prices?: string } & ProviderFlags) => {
+    await loadPrices(o.prices);
+    const domain = await loadDomain(domainPath);
+    const parsed = ModelsFile.safeParse(YAML.parse(await readFile(o.models, "utf8")));
+    if (!parsed.success) throw new Error(`${o.models}:\n${z.prettifyError(parsed.error)}`);
+    const cfg = parsed.data;
+    const p = providerOpts(o);
+    const user = resolveUser(o.user ?? cfg.user ?? "claude", p, o.openaiBaseUrl);
+    const k = o.trials ?? cfg.k ?? 4;
+    const out = o.out ?? path.join("leaderboard", domain.name);
+    console.log(`Leaderboard: ${cfg.models.length} model(s) on ${domain.name} (${domain.tasks.length} tasks, k=${k}, caller ${user.name})\n`);
+    const result = await runLeaderboard({
+      domain,
+      entries: cfg.models,
+      user,
+      k,
+      outDir: out,
+      concurrency: o.concurrency,
+      resume: o.resume,
+      resolveAgent: (spec) => resolveAgent(spec, p, o.openaiBaseUrl),
+      onEntry: (label, status) => console.log(`  ${status === "cached" ? "↺ cached" : status === "ran" ? "✓ ran   " : "✗ failed"}  ${label}`),
+    });
+    console.log(`\n${renderLeaderboardMarkdown(result)}`);
+    console.log(`  ${path.join(out, "leaderboard.html")}`);
   });
 
 withProviderFlags(program

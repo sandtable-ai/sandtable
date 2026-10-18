@@ -1,0 +1,45 @@
+---
+title: "sandtable vs τ-bench"
+sidebarTitle: "τ-bench"
+description: "sandtable applies τ-bench's method to one customer's workflow. When to use each, and how they differ."
+---
+
+[τ-bench](https://arxiv.org/abs/2406.12045) (Sierra Research, MIT) introduced the setup sandtable is built on: a policy, tools over a database, an LLM-simulated user with a hidden goal, grading on the final database state, and **pass^k**. sandtable does not replace it. It takes the same method and makes it cheap to apply to *one customer's* workflow, as a file in their repo.
+
+## Different jobs
+
+**τ-bench** (with τ²-bench and τ³-bench) is a benchmark. Its airline, retail, telecom and banking domains are hand-built so that models can be compared on the same tasks. It is a common reference point when comparing models.
+
+**sandtable** is a harness for your own deployment. The domain is the customer's API, SOP and records, and the question is not "which model is best" but "is *this* agent ready for *this* customer, and did the last prompt change break a rule?"
+
+## Side by side
+
+| | sandtable | τ-bench |
+|---|---|---|
+| Domains | yours, one per customer or workflow | public, hand-built benchmark domains |
+| Adding a domain | YAML in the repo; `init` drafts it from an OpenAPI spec, an SOP and transcripts | Python code (data, tools, policy, tasks) |
+| Grading | declared end-state assertions, invariants checked on every tool call, protected values in messages; no judge | final database state compared with the state the annotated correct actions produce, plus required outputs |
+| Policy rules on every tool call | yes: attempting a forbidden action fails the trial | no: rules matter through the end state |
+| pass^k | yes | yes (it introduced the metric) |
+| Agent under test | anything behind HTTP, a JS/TS module, Claude, models on Amazon Bedrock, or any OpenAI-compatible endpoint | Python agents and LLM APIs |
+| CI | `--fail-under` gate, `validate --strict`, `lint`, HTML report per run | not its focus |
+
+## Choose τ-bench when
+
+- You are comparing models or agent architectures on shared, public tasks.
+- You want results others can reproduce and compare with published numbers.
+- You are doing research on tool-agent-user interaction.
+
+## Choose sandtable when
+
+- The domain is a specific customer's systems and rules, and it changes with them.
+- You need hard rules (verify before booking, never exceed a ceiling, never reveal a field) checked on every call, not only through the final state.
+- You want the suite in the customer's repo, gated in CI, with a report you can hand over.
+
+## Use both
+
+Run τ-bench to choose a model family, then run sandtable on the customer's domain to decide whether a specific agent and prompt are ready to go live. Exporting sandtable domains to τ-bench's format is on the roadmap ([#18](https://github.com/sandtable-ai/sandtable/issues/18)).
+
+If you publish results produced with sandtable, please cite τ-bench too ([CITATION.cff](https://github.com/sandtable-ai/sandtable/blob/main/CITATION.cff)).
+
+Last reviewed October 2026. Something out of date or unfair? [Open an issue](https://github.com/sandtable-ai/sandtable/issues).

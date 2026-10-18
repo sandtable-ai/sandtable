@@ -1,0 +1,16 @@
+# Models for `sandtable leaderboard`. Agent specs are the same as `sandtable run --agent`.
+# The simulated caller is shared by every model so they all face the same customers.
+user: claude:claude-sonnet-5-5
+k: 4
+models:
+  - { label: Claude Opus 5.5, agent: claude:claude-opus-5-5 }
+  - { label: Claude Sonnet 5.5, agent: claude:claude-sonnet-5-5 }
+  - { label: Claude Haiku 5.5, agent: claude:claude-haiku-5-5 }
+  - { label: GPT-6.1 Sol, agent: bedrock:global.openai.gpt-6.1-sol }
+  - { label: GPT-5.5, agent: bedrock:global.openai.gpt-5.5 }
+  - { label: gpt-oss-120b, agent: bedrock:openai.gpt-oss-120b-1:0 }
+  - { label: Grok 4.7, agent: bedrock:global.xai.grok-4.7 }
+  - { label: Kimi K3, agent: bedrock:global.moonshotai.kimi-k3 }
+  - { label: GLM 5.3, agent: bedrock:global.zai.glm-5.3 }
+  - { label: Qwen3 Next 80B, agent: bedrock:qwen.qwen3-next-80b-a3b }
+  - { label: Nova 2 Lite, agent: bedrock:global.amazon.nova-2-lite-v1:0 }

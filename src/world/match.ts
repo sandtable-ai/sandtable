@@ -96,6 +96,10 @@ function compare(a: unknown, b: unknown): number {
 
 export function equal(a: unknown, b: unknown): boolean {
   if (a === b) return true;
+  // YAML reads an unquoted 100101 as a number while seed rows often hold "100101": treat a number
+  // and a string with exactly the same digits as equal. "00123" still differs from 123.
+  if (typeof a === "number" && typeof b === "string") return String(a) === b;
+  if (typeof a === "string" && typeof b === "number") return a === String(b);
   if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
   return JSON.stringify(a) === JSON.stringify(b);
 }

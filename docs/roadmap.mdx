@@ -1,0 +1,59 @@
+---
+title: "Roadmap"
+description: "What works today, what is next, and what comes later. Issues and milestones on GitHub are the source of truth."
+---
+
+sandtable is **early alpha**. [Issues](https://github.com/sandtable-ai/sandtable/issues) and [milestones](https://github.com/sandtable-ai/sandtable/milestones) on GitHub are the source of truth; this page mirrors [`ROADMAP.md`](https://github.com/sandtable-ai/sandtable/blob/main/ROADMAP.md).
+
+## v0.1: engine
+
+Done.
+
+- Domain spec: world, tools (get/list/create/update/respond, checks, atomic ops, param defaults), invariants, personas, tasks
+- Episode runner: simulated user ↔ agent, tool calls against a fresh world per trial
+- Deterministic grading: end state, invariants on every tool call, required and forbidden tools; pass^k; failure-mode clustering
+- Adapters: Claude reference agent, Claude simulated user, scripted user, `noop` baseline, HTTP step protocol, JS/TS module agents
+- Reports: terminal, `results.json`, self-contained `report.html`, per-tag scores, token usage, estimated cost, turn latency; `--fail-under` CI gate
+- Bundled example: freight carrier sales (32 tasks, 16 invariants), offline demo
+
+## v0.2: `sandtable init` and trustworthy suites
+
+Done:
+
+- OpenAPI → world tables and tools, deterministic ([#6](https://github.com/sandtable-ai/sandtable/issues/6))
+- SOP → invariants, each quoting its source ([#7](https://github.com/sandtable-ai/sandtable/issues/7))
+- Transcripts → personas, tasks and fictional seed rows, PII scrubbed first ([#8](https://github.com/sandtable-ai/sandtable/issues/8))
+- Review workflow: `review: pending`, `sandtable review`, `validate --strict`, provisional reports ([#9](https://github.com/sandtable-ai/sandtable/issues/9))
+- `sandtable lint`: ready, solvable, non-vacuous, graded ([#10](https://github.com/sandtable-ai/sandtable/issues/10))
+- `never_disclose`: protected values in agent messages ([#24](https://github.com/sandtable-ai/sandtable/issues/24))
+- OpenAI-compatible agent and simulated user, for comparing models: `--agent openai:<model>` ([#19](https://github.com/sandtable-ai/sandtable/issues/19))
+- Live verification of the Claude adapters, caching and init steps ([#1](https://github.com/sandtable-ai/sandtable/issues/1), [#3](https://github.com/sandtable-ai/sandtable/issues/3)); see [results](/results)
+- Claude on Amazon Bedrock ([#46](https://github.com/sandtable-ai/sandtable/issues/46)) and the Bedrock Converse adapter for non-Claude models ([#56](https://github.com/sandtable-ai/sandtable/issues/56))
+
+Open:
+
+- First release to npm and PyPI through Trusted Publishing ([#23](https://github.com/sandtable-ai/sandtable/issues/23))
+- This docs site ([#50](https://github.com/sandtable-ai/sandtable/issues/50))
+
+## v0.3: closing the loop in CI
+
+- Baseline comparison and PR comments with pass^k deltas ([#12](https://github.com/sandtable-ai/sandtable/issues/12), [#13](https://github.com/sandtable-ai/sandtable/issues/13))
+- Reliability verdicts: pass@k, flaky tasks, flip rate, intervals, infra errors as SKIPPED ([#27](https://github.com/sandtable-ai/sandtable/issues/27))
+- Critical tasks ([#28](https://github.com/sandtable-ai/sandtable/issues/28)), failure attribution ([#29](https://github.com/sandtable-ai/sandtable/issues/29)), coverage matrix ([#30](https://github.com/sandtable-ai/sandtable/issues/30))
+- Customer sign-off report: rule → evidence → reliability ([#31](https://github.com/sandtable-ai/sandtable/issues/31))
+- Regrade stored trials ([#32](https://github.com/sandtable-ai/sandtable/issues/32)), argument matchers ([#25](https://github.com/sandtable-ai/sandtable/issues/25)), nested params ([#26](https://github.com/sandtable-ai/sandtable/issues/26)), per-task `given` overrides ([#37](https://github.com/sandtable-ai/sandtable/issues/37))
+- A realistic freight example ([#45](https://github.com/sandtable-ai/sandtable/issues/45)) and a second domain ([#22](https://github.com/sandtable-ai/sandtable/issues/22))
+
+## v0.4: black-box and platform on-ramps
+
+- Serve the world as REST, MCP and webhook tools for hosted agent platforms ([#14](https://github.com/sandtable-ai/sandtable/issues/14))
+- Import voice-agent platform configs as draft domains ([#34](https://github.com/sandtable-ai/sandtable/issues/34), [#35](https://github.com/sandtable-ai/sandtable/issues/35))
+- Fault profiles ([#15](https://github.com/sandtable-ai/sandtable/issues/15))
+
+## Later
+
+Soft checks ([#16](https://github.com/sandtable-ai/sandtable/issues/16)), voice transport and timing metrics ([#17](https://github.com/sandtable-ai/sandtable/issues/17), [#43](https://github.com/sandtable-ai/sandtable/issues/43)), exports to other harness formats ([#18](https://github.com/sandtable-ai/sandtable/issues/18)), negotiation invariants ([#36](https://github.com/sandtable-ai/sandtable/issues/36)), simulation clock ([#38](https://github.com/sandtable-ai/sandtable/issues/38)), outcome grading ([#39](https://github.com/sandtable-ai/sandtable/issues/39)), business metrics ([#40](https://github.com/sandtable-ai/sandtable/issues/40)), persona × condition matrix ([#41](https://github.com/sandtable-ai/sandtable/issues/41)), multi-session tasks ([#42](https://github.com/sandtable-ai/sandtable/issues/42)), Python agents in-process ([#44](https://github.com/sandtable-ai/sandtable/issues/44)).
+
+## Contribute
+
+Good first issues: `$regex` in where clauses ([#20](https://github.com/sandtable-ai/sandtable/issues/20)) and a `--tag` filter ([#21](https://github.com/sandtable-ai/sandtable/issues/21)). Example domains and adapters are welcome too; see [`CONTRIBUTING.md`](https://github.com/sandtable-ai/sandtable/blob/main/CONTRIBUTING.md). Example domains must be fictional: no real company names, customer data or proprietary procedures.

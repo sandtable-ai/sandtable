@@ -1,0 +1,77 @@
+---
+title: "Invariants vs expectations"
+description: "Two kinds of deterministic checks: rules that hold in every conversation, and the outcome one task should reach."
+---
+
+Every trial is graded by two kinds of checks. Both are deterministic: they read the world and the tool-call log, never a judge model's opinion.
+
+| | Invariants | Expectations |
+|---|---|---|
+| Declared | once, at the domain level | per task, under `expect` |
+| Apply to | every task | the task that declares them |
+| Express | rules the agent must never break | what success looks like for this conversation |
+| Checked | before every tool call, against the world at that moment; `never_disclose` on every agent message | at the end of the trial, against the final world and the call log |
+| Fail when | the agent *attempts* a forbidden action, even if the API would reject it | the end state or the call log does not match |
+
+## Invariants: rules checked at decision time
+
+An invariant is evaluated before each tool call runs, against the world as it was when the agent decided. That timing matters:
+
+- **Attempting is the bug.** If the agent tries to book a carrier whose insurance has expired, the trial fails, even if a `check` then rejects the booking. An agent that relies on the API to stop it will eventually meet an API that doesn't.
+- **Order is visible.** `before` invariants see the call history, so "verify the carrier before booking it" fails when the verification comes after the booking, or was for a different carrier.
+- **The domain states the rule once.** It then holds in every task, including tasks written later, and tasks a drafting step adds.
+
+The six kinds:
+
+| Kind | Rule it expresses | Example |
+|---|---|---|
+| `before` | call A successfully before B, for the same arguments | verify a carrier before booking it |
+| `require` | the record an argument points at must match conditions | only book carriers with valid insurance |
+| `limit` | an argument stays within a bound, constant or from a record | never book above the load's `max_rate` |
+| `match` | two records referenced by the call agree on a field | carrier equipment matches load equipment |
+| `never` | never call a tool, or never with certain arguments | no refunds over $500 |
+| `never_disclose` | never say a protected value in any message | never reveal the internal rate ceiling |
+
+The [spec](/reference/spec#invariants) has the exact syntax.
+
+## Expectations: what success looks like
+
+Expectations belong to one task and describe the outcome its conversation should reach:
+
+```yaml
+expect:
+  state:
+    - { table: bookings, where: { load_id: L-1001, mc_number: "100101" }, count: 1 }
+    - { table: loads, key: L-1001, fields: { status: booked } }
+  called: [verify_carrier, book_load]   # each succeeded at least once
+  not_called: [transfer_to_human]       # never attempted
+  reply_includes: ["confirmation"]      # use sparingly
+```
+
+- `state` is the main signal: the records the conversation should have created or changed, or left alone (`count: 0`, or `key` with the original `fields`).
+- `called` and `not_called` cover actions that leave no record, such as a lookup that must happen.
+- `reply_includes` matches text in what the agent said. Wording varies between runs and models, so prefer state.
+
+## Which one to use
+
+- If it should hold in **every** conversation, it is an invariant: "never book above the ceiling", "verify before booking".
+- If it is the **outcome** of one scenario, it is an expectation: "this caller ends up with L-1004 booked", "nothing is booked when the caller insists on $1,600".
+- If you find yourself adding the same `not_called` to many tasks, it is probably an invariant (`never`, or `never` with `when`).
+- Keep invariants as strict as the SOP and no stricter. A rule like "never transfer to a human" written as an invariant fails correct handoffs everywhere.
+
+## How failures show up
+
+Each failed check is recorded with a kind, an id and a readable detail, and the run clusters them into failure modes:
+
+| Kind | Id | Example detail |
+|---|---|---|
+| `invariant` | the invariant's id | `book_load rate=2600 exceeds the limit 2350` |
+| `state` | `state:<table>[<key>]#<n>` | `loads L-1001: status is "available", expected "booked"` |
+| `called` | `called:<tool>` | `verify_carrier was never called successfully` |
+| `not_called` | `not_called:<tool>` | `transfer_to_human was called 1x` |
+| `reply` | `reply:<phrase>` | `agent never said "confirmation"` |
+| `runtime` | `runtime` | the agent endpoint returned an error |
+
+## Why no judge
+
+The customer's rules are deterministic, so sandtable checks them deterministically. That makes a failure reproducible ("it booked carrier 100202, whose insurance was expired"), explainable to someone who did not write the test, and free to evaluate. It also means sandtable does not grade tone, empathy or wording today. Judged soft scores are planned as a separate score that never changes pass/fail ([#16](https://github.com/sandtable-ai/sandtable/issues/16)).

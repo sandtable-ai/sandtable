@@ -36,7 +36,7 @@
     "test": "vitest run",
     "sandtable": "node src/cli.ts",
     "demo": "node src/cli.ts demo",
-    "version": "node scripts/sync-version.mjs && git add python"
+    "version": "node scripts/sync-version.mjs && git add python plugin"
   },
   "keywords": [
     "sandtable",

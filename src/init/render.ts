@@ -10,7 +10,7 @@ TODO: paste the customer's operating procedure (SOP) here, or draft from one wit
 The reference agent uses this text as its system prompt.
 `;
 
-export const TASKS_PLACEHOLDER = `# TODO: add tasks (see docs/spec.md, "personas and tasks"),
+export const TASKS_PLACEHOLDER = `# TODO: add tasks (see "personas and tasks" in docs/reference/spec.mdx of the sandtable repo),
 # or draft them from call transcripts with \`sandtable init --transcripts <dir>\`.
 []
 `;
