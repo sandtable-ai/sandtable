@@ -32,5 +32,8 @@ Development needs Node ≥ 22.18, which runs `src/*.ts` directly (type stripping
 1. `npm version <patch|minor|prerelease --preid alpha>`. The `version` script syncs the Python launcher's version.
 2. `git push --follow-tags`. The `release` workflow then:
    - checks everything
-   - publishes `sandtable-ai` to npm (pre-releases under the `next` tag) and to PyPI, both through Trusted Publishing
+   - stages `sandtable-ai` on npm (pre-releases under the `next` tag)
+   - publishes it to PyPI
+   Both go through Trusted Publishing.
    - creates the GitHub release.
+3. Approve the staged npm release on npmjs.com (or with `npm stage approve <id>`). It goes live after that 2FA-protected click.

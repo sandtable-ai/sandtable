@@ -1,6 +1,7 @@
 name: release
 # Push a tag vX.Y.Z (or vX.Y.Z-alpha.N) that matches package.json. Both registries use
-# Trusted Publishing (OIDC): no tokens are stored in this repository.
+# Trusted Publishing (OIDC): no tokens are stored in this repository. npm releases are
+# staged and go live after a maintainer approves them on npmjs.com.
 on:
   push:
     tags: ["v*"]
@@ -43,10 +44,12 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
           cache: npm
-      - run: npm install -g npm@latest   # trusted publishing needs npm >= 11.5.1
+      - run: npm install -g npm@12   # `npm stage` needs npm 12
       - run: npm ci
       - run: npm run build
-      - run: npm publish --access public ${{ needs.check.outputs.prerelease == 'true' && '--tag next' || '' }}
+      # Staged publishing: the release waits on npmjs.com until a maintainer approves it
+      # (one click with 2FA), so a compromised workflow alone can never ship a version.
+      - run: npm stage publish . --access public ${{ needs.check.outputs.prerelease == 'true' && '--tag next' || '' }}
 
   pypi:
     needs: check
