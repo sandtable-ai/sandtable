@@ -5,7 +5,7 @@ import type { AgentAdapter, UserSimulator } from "./types.ts";
 
 export const DEFAULT_MODEL = "claude-opus-5-5";
 
-type Effort = "low" | "medium" | "high" | "xhigh" | "max";
+export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 
 export interface ClaudeOptions {
   model?: string;
@@ -25,7 +25,7 @@ export interface ClaudeAgentOptions extends ClaudeOptions {
 
 const FALLBACK_MODELS = /^claude-(opus-5|fable-5|sonnet-5-5)/;
 
-function requestBase(opts: ClaudeOptions, defaultEffort: Effort) {
+export function requestBase(opts: ClaudeOptions, defaultEffort: Effort) {
   const model = opts.model ?? DEFAULT_MODEL;
   const fallbacks = (opts.fallbacks ?? true) && FALLBACK_MODELS.test(model);
   return {

@@ -12,7 +12,9 @@ import { httpAgent } from "./sim/http.ts";
 import { noopAgent } from "./sim/noop.ts";
 import { scriptedUser } from "./sim/scripted.ts";
 import type { AgentAdapter, UserSimulator } from "./sim/types.ts";
+import { appendToDomainList } from "./init/merge.ts";
 import { draftFromOpenApi } from "./init/openapi.ts";
+import { draftInvariantsFromSop, knownFields } from "./init/sop.ts";
 import { DOMAIN_FILE, POLICY_PLACEHOLDER, renderDraft, TASKS_PLACEHOLDER, writeDraft } from "./init/render.ts";
 import { DomainError, loadDomain, pendingReview } from "./spec/load.ts";
 import YAML from "yaml";
@@ -70,23 +72,49 @@ const program = new Command()
 program
   .command("init")
   .description("draft a domain from a customer's artifacts (review the output before trusting it)")
-  .requiredOption("--openapi <file>", "OpenAPI 3.x spec (YAML or JSON) of the customer's API")
-  .option("-o, --out <dir>", "directory to write the draft into", "rehearsal")
-  .option("--force", "overwrite existing files")
-  .action(async (o: { openapi: string; out: string; force?: boolean }) => {
-    const spec = YAML.parse(await readFile(o.openapi, "utf8")) as Record<string, unknown>;
-    const draft = draftFromOpenApi(spec);
-    const files = {
-      [DOMAIN_FILE]: renderDraft(draft, path.basename(o.openapi)),
-      "policy.md": POLICY_PLACEHOLDER,
-      "tasks.yaml": TASKS_PLACEHOLDER,
-    };
-    const written = await writeDraft(o.out, files, o.force);
-    const notes = draft.tools.reduce((n, t) => n + t.notes.length, 0);
-    console.log(`Drafted ${draft.name}: ${Object.keys(draft.tables).length} tables, ${draft.tools.length} tools, ${notes} review notes.`);
-    for (const w of draft.warnings) console.log(`  ! ${w}`);
-    for (const f of written) console.log(`  wrote ${f}`);
-    console.log(`\nNext: review the TODOs, add seed rows, then \`rehearse validate ${o.out}\`.`);
+  .option("--openapi <file>", "OpenAPI 3.x spec (YAML or JSON): drafts tables and tools, no model needed")
+  .option("--sop <file>", "SOP / policy document: drafts invariants with Claude, each quoting its source")
+  .option("-o, --out <dir>", "domain directory to create, or to add to when it already exists", "rehearsal")
+  .option("-m, --model <id>", "Claude model for drafting steps")
+  .option("--force", "overwrite existing files when drafting from --openapi")
+  .action(async (o: { openapi?: string; sop?: string; out: string; model?: string; force?: boolean }) => {
+    if (!o.openapi && !o.sop) throw new Error("pass at least one of --openapi, --sop");
+    const sopText = o.sop ? await readFile(o.sop, "utf8") : undefined;
+    let fields: Record<string, string[]> = {};
+    if (o.openapi) {
+      const spec = YAML.parse(await readFile(o.openapi, "utf8")) as Record<string, unknown>;
+      const draft = draftFromOpenApi(spec);
+      fields = Object.fromEntries(Object.entries(draft.tables).map(([n, t]) => [n, t.fields]));
+      const files = {
+        [DOMAIN_FILE]: renderDraft(draft, path.basename(o.openapi)),
+        "policy.md": sopText ?? POLICY_PLACEHOLDER,
+        "tasks.yaml": TASKS_PLACEHOLDER,
+      };
+      const written = await writeDraft(o.out, files, o.force);
+      const notes = draft.tools.reduce((n, t) => n + t.notes.length, 0);
+      console.log(`Drafted ${draft.name}: ${Object.keys(draft.tables).length} tables, ${draft.tools.length} tools, ${notes} review notes.`);
+      for (const w of draft.warnings) console.log(`  ! ${w}`);
+      for (const f of written) console.log(`  wrote ${f}`);
+    }
+    if (o.sop && sopText !== undefined) {
+      const domain = await loadDomain(o.out);
+      const policyFile = path.join(o.out, "policy.md");
+      const currentPolicy = await readFile(policyFile, "utf8").catch(() => undefined);
+      if (currentPolicy === POLICY_PLACEHOLDER) await writeFile(policyFile, sopText);
+      console.log(`Drafting invariants from ${o.sop}...`);
+      const res = await draftInvariantsFromSop({
+        domain,
+        sop: sopText,
+        sopFile: path.basename(o.sop),
+        fields: knownFields(domain, fields),
+        claude: o.model ? { model: o.model } : {},
+      });
+      const soft = res.softRules.map((r) => ` Soft rule (not checkable from tool calls yet): ${r.rule}\n   "${r.quote}"`).join("\n");
+      const file = await appendToDomainList(o.out, "invariants", res.invariants, soft || undefined);
+      console.log(`  ${res.invariants.length} invariant(s) drafted (review: pending), ${res.softRules.length} soft rule(s) noted in ${file}`);
+      for (const w of res.warnings) console.log(`  ! ${w}`);
+    }
+    console.log(`\nNext: rehearse review ${o.out}, accept or fix each item, then rehearse validate ${o.out} --strict`);
   });
 
 program

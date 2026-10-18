@@ -50,6 +50,22 @@ rehearse validate rehearsal --strict   # fails while anything is pending (use in
 
 While items are pending, runs still work, but their reports are marked **provisional**. To accept an item, change `review: pending` to `review: accepted` or delete the line.
 
-## Next: SOP and transcripts
+## From an SOP (Claude, grounded)
 
-Drafting invariants from an SOP and tasks from call transcripts is in progress: see the issues labelled `area:init`.
+```bash
+rehearse init --openapi api.yaml --sop policy.md -o rehearsal   # draft, then add invariants
+rehearse init --sop policy.md -o rehearsal                       # add invariants to an existing domain
+```
+
+Claude reads the SOP alongside the domain's tools, params, tables and known fields, and proposes invariants in the five existing kinds, using structured outputs. Nothing it proposes is trusted as-is:
+
+- every invariant must **quote** the SOP. A quote that does not appear verbatim gets a warning.
+- proposals that reference an unknown tool, param, table or field, or that are incomplete, are **dropped**, and the reason is printed.
+- survivors are appended to the domain (existing comments are kept) with `review: pending` and `source: { file, quote }`.
+- rules that cannot be checked from tool calls (wording, disclosure, read-backs) are written as **soft rule** comments, for the soft-checks feature.
+
+The SOP also becomes `policy.md` when the domain still has the placeholder. Pass `--model` to choose the drafting model (default `claude-opus-5-5`).
+
+## Next: transcripts
+
+Drafting personas and tasks from call transcripts is in progress: see the issues labelled `area:init`.
