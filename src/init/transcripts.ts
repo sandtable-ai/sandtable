@@ -1,9 +1,8 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import { validateDomain } from "../spec/load.ts";
 import { PersonaSpec, TaskSpec, type Domain, type Persona, type Task } from "../spec/schema.ts";
-import { requestBase, type ClaudeOptions } from "../sim/claude.ts";
+import { createClient, requestBase, type ClaudeOptions } from "../sim/claude.ts";
 
 export interface TranscriptDraft {
   tasks: Task[];
@@ -122,7 +121,7 @@ export async function draftTasksFromTranscripts(input: {
   transcripts: { file: string; text: string }[];
   claude?: ClaudeOptions;
 }): Promise<TranscriptDraft> {
-  const client = input.claude?.client ?? new Anthropic();
+  const client = await createClient(input.claude ?? {});
   const base = requestBase(input.claude ?? {}, "high");
   const out: TranscriptDraft = { tasks: [], personas: [], rows: {}, warnings: [], redactions: 0 };
   let domain = input.domain;

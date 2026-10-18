@@ -7,7 +7,7 @@ import { freightScriptedAgent } from "./demo/freight-agents.ts";
 import { formatPercent, renderTerminal } from "./report/terminal.ts";
 import { renderHtml } from "./report/html.ts";
 import { runSuite, type SuiteResult } from "./run/suite.ts";
-import { claudeAgent, claudeUser } from "./sim/claude.ts";
+import { claudeAgent, claudeUser, type ClaudeOptions, type Provider } from "./sim/claude.ts";
 import { httpAgent } from "./sim/http.ts";
 import { noopAgent } from "./sim/noop.ts";
 import { scriptedUser } from "./sim/scripted.ts";
@@ -34,10 +34,29 @@ const percent = (v: string) => {
   return n / 100;
 };
 
-async function resolveAgent(spec: string): Promise<AgentAdapter> {
+interface ProviderFlags {
+  provider?: Provider;
+  region?: string;
+  awsProfile?: string;
+}
+
+const providerOpts = (o: ProviderFlags): ClaudeOptions => ({
+  ...(o.provider ? { provider: o.provider } : {}),
+  ...(o.region ? { region: o.region } : {}),
+  ...(o.awsProfile ? { awsProfile: o.awsProfile } : {}),
+});
+
+function withProviderFlags(cmd: Command): Command {
+  return cmd
+    .option("--provider <name>", "where Claude runs: anthropic | bedrock (default: SANDTABLE_PROVIDER or anthropic)")
+    .option("--region <region>", "AWS region for --provider bedrock (default: AWS_REGION)")
+    .option("--aws-profile <name>", "AWS profile for --provider bedrock (default: AWS_PROFILE)");
+}
+
+async function resolveAgent(spec: string, p: ClaudeOptions = {}): Promise<AgentAdapter> {
   if (spec === "noop") return noopAgent();
-  if (spec === "claude") return claudeAgent();
-  if (spec.startsWith("claude:")) return claudeAgent({ model: spec.slice("claude:".length) });
+  if (spec === "claude") return claudeAgent(p);
+  if (spec.startsWith("claude:")) return claudeAgent({ ...p, model: spec.slice("claude:".length) });
   if (/^https?:\/\//.test(spec)) return httpAgent(spec);
   if (spec === "scripted:naive" || spec === "scripted:careful") return freightScriptedAgent(spec.endsWith("naive") ? "naive" : "careful");
   const mod = (await import(pathToFileURL(path.resolve(spec)).href)) as { default?: unknown };
@@ -48,10 +67,10 @@ async function resolveAgent(spec: string): Promise<AgentAdapter> {
   return exported as AgentAdapter;
 }
 
-function resolveUser(spec: string): UserSimulator {
+function resolveUser(spec: string, p: ClaudeOptions = {}): UserSimulator {
   if (spec === "scripted") return scriptedUser();
-  if (spec === "claude") return claudeUser();
-  if (spec.startsWith("claude:")) return claudeUser({ model: spec.slice("claude:".length) });
+  if (spec === "claude") return claudeUser(p);
+  if (spec.startsWith("claude:")) return claudeUser({ ...p, model: spec.slice("claude:".length) });
   throw new Error(`unknown user simulator "${spec}" (use claude, claude:<model> or scripted)`);
 }
 
@@ -71,8 +90,8 @@ const program = new Command()
   .description("Rehearse an AI agent on a simulated copy of a customer's world before it goes live.")
   .version("0.1.0-alpha.0");
 
-program
-  .command("init")
+withProviderFlags(program
+  .command("init"))
   .description("draft a domain from a customer's artifacts (review the output before trusting it)")
   .option("--openapi <file>", "OpenAPI 3.x spec (YAML or JSON): drafts tables and tools, no model needed")
   .option("--sop <file>", "SOP / policy document: drafts invariants with Claude, each quoting its source")
@@ -80,7 +99,7 @@ program
   .option("-o, --out <dir>", "domain directory to create, or to add to when it already exists", "sandtable")
   .option("-m, --model <id>", "Claude model for drafting steps")
   .option("--force", "overwrite existing files when drafting from --openapi")
-  .action(async (o: { openapi?: string; sop?: string; transcripts?: string; out: string; model?: string; force?: boolean }) => {
+  .action(async (o: { openapi?: string; sop?: string; transcripts?: string; out: string; model?: string; force?: boolean } & ProviderFlags) => {
     if (!o.openapi && !o.sop && !o.transcripts) throw new Error("pass at least one of --openapi, --sop, --transcripts");
     const sopText = o.sop ? await readFile(o.sop, "utf8") : undefined;
     let fields: Record<string, string[]> = {};
@@ -110,7 +129,7 @@ program
         sop: sopText,
         sopFile: path.basename(o.sop),
         fields: knownFields(domain, fields),
-        claude: o.model ? { model: o.model } : {},
+        claude: { ...providerOpts(o), ...(o.model ? { model: o.model } : {}) },
       });
       const soft = res.softRules.map((r) => ` Soft rule (not checkable from tool calls yet): ${r.rule}\n   "${r.quote}"`).join("\n");
       const file = await appendToDomainList(o.out, "invariants", res.invariants, soft || undefined);
@@ -123,7 +142,11 @@ program
         : [o.transcripts];
       const transcripts = await Promise.all(files.map(async (f) => ({ file: path.basename(f), text: await readFile(f, "utf8") })));
       console.log(`Drafting tasks from ${transcripts.length} transcript(s) (PII scrubbed locally first)...`);
-      const res = await draftTasksFromTranscripts({ domain: await loadDomain(o.out), transcripts, claude: o.model ? { model: o.model } : {} });
+      const res = await draftTasksFromTranscripts({
+        domain: await loadDomain(o.out),
+        transcripts,
+        claude: { ...providerOpts(o), ...(o.model ? { model: o.model } : {}) },
+      });
       if (Object.keys(res.rows).length) await appendRows(o.out, res.rows);
       if (res.personas.length) await appendToDomainList(o.out, "personas", res.personas);
       if (res.tasks.length) await appendToDomainList(o.out, "tasks", res.tasks);
@@ -184,8 +207,8 @@ program
     console.log(`\nAccept an item by changing its \`review: pending\` to \`review: accepted\` (or deleting the line).`);
   });
 
-program
-  .command("run")
+withProviderFlags(program
+  .command("run"))
   .argument("<domain>", "domain directory (with sandtable.yaml) or file")
   .description("run every task k times against an agent and grade the results")
   .option("-a, --agent <spec>", "claude | claude:<model> | noop | http(s)://endpoint | ./my-agent.js", "claude")
@@ -196,11 +219,11 @@ program
   .option("-o, --out <dir>", "output directory for results.json and report.html")
   .option("--no-html", "skip the HTML report")
   .option("--fail-under <pct>", "exit 1 if pass^k is below this percentage (CI gate)", percent)
-  .action(async (domainPath: string, o: { agent: string; user: string; trials: number; tasks?: string; concurrency: number; out?: string; html: boolean; failUnder?: number }) => {
+  .action(async (domainPath: string, o: { agent: string; user: string; trials: number; tasks?: string; concurrency: number; out?: string; html: boolean; failUnder?: number } & ProviderFlags) => {
     const domain = await loadDomain(domainPath);
     if (domain.tasks.length === 0) throw new Error(`${domain.name} has no tasks yet: add some to tasks.yaml`);
-    const agent = await resolveAgent(o.agent);
-    const user = resolveUser(o.user);
+    const agent = await resolveAgent(o.agent, providerOpts(o));
+    const user = resolveUser(o.user, providerOpts(o));
     let done = 0;
     const total = (o.tasks ? o.tasks.split(",").length : domain.tasks.length) * o.trials;
     const result = await runSuite({
@@ -226,15 +249,23 @@ program
     }
   });
 
-program
-  .command("demo")
+withProviderFlags(program
+  .command("demo"))
   .description("rehearse the bundled freight carrier-sales example")
   .option("--live", "use Claude as both the agent and the simulated user (needs ANTHROPIC_API_KEY or `ant auth login`)")
   .option("-k, --trials <n>", "trials per task in --live mode", int, 2)
-  .action(async (o: { live?: boolean; trials: number }) => {
+  .option("--agent-model <id>", "model for the agent in --live mode")
+  .option("--user-model <id>", "model for the simulated caller in --live mode (a cheaper model keeps runs cheap)")
+  .action(async (o: { live?: boolean; trials: number; agentModel?: string; userModel?: string } & ProviderFlags) => {
     const domain = await loadDomain(EXAMPLE);
     if (o.live) {
-      const result = await runSuite({ domain, agent: claudeAgent(), user: claudeUser(), k: o.trials });
+      const p = providerOpts(o);
+      const result = await runSuite({
+        domain,
+        agent: claudeAgent({ ...p, ...(o.agentModel ? { model: o.agentModel } : {}) }),
+        user: claudeUser({ ...p, ...(o.userModel ? { model: o.userModel } : {}) }),
+        k: o.trials,
+      });
       console.log(renderTerminal(result));
       const out = await save(result, defaultOut("demo-live"), true);
       console.log(`\n  report: ${path.join(out, "report.html")}`);

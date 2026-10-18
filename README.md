@@ -152,6 +152,17 @@ const agent: AgentAdapter = {
 export default agent;
 ```
 
+### Claude on the Anthropic API or Amazon Bedrock
+
+Model-backed commands (`run`, `demo --live`, `init --sop`, `init --transcripts`) use the Anthropic API by default (`ANTHROPIC_API_KEY`). To run on Amazon Bedrock with your AWS credentials:
+
+```bash
+npm install @anthropic-ai/bedrock-sdk
+npx sandtable-ai demo --live --provider bedrock --region us-east-1 --aws-profile my-profile
+```
+
+Model names map to Bedrock IDs automatically (`claude-opus-5-5` becomes `anthropic.claude-opus-5-5`), and inference profile IDs or ARNs pass through unchanged. Cost estimates use Anthropic list prices; your Bedrock rates may differ.
+
 The simulated user is `--user claude` (default), `--user claude:<model>`, or `--user scripted` for deterministic replays of `user.script`, which is useful for CI smoke tests and for debugging graders.
 
 ## Use it in CI

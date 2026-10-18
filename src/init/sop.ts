@@ -1,9 +1,8 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import { validateDomain } from "../spec/load.ts";
 import { InvariantSpec, type Domain, type Invariant } from "../spec/schema.ts";
-import { requestBase, type ClaudeOptions } from "../sim/claude.ts";
+import { createClient, requestBase, type ClaudeOptions } from "../sim/claude.ts";
 
 export interface SoftRule {
   rule: string;
@@ -164,7 +163,7 @@ export async function draftInvariantsFromSop(input: {
 }): Promise<SopDraft> {
   const { domain, sop, sopFile } = input;
   const fields = input.fields ?? knownFields(domain);
-  const client = input.claude?.client ?? new Anthropic();
+  const client = await createClient(input.claude ?? {});
   const schema = outputSchema(domain.tools.map((t) => t.name), Object.keys(domain.world.tables));
   const base = requestBase(input.claude ?? {}, "high");
 

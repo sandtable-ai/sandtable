@@ -43,11 +43,16 @@ export function recordInto(target: UsageByModel, model: string, u: Partial<Omit<
   t.cacheWrite += u.cacheWrite ?? 0;
 }
 
+/** Map provider-specific IDs (anthropic.claude-…, us.anthropic.claude-…-v1:0) to the price-table key. */
+export function priceKey(model: string): string {
+  return model.replace(/^(?:[a-z]{2,6}\.)?anthropic\./, "").replace(/-v\d+(?::\d+)?$/, "");
+}
+
 export function costOf(...groups: UsageByModel[]): number | null {
   let total = 0;
   for (const group of groups) {
     for (const [model, u] of Object.entries(group)) {
-      const p = PRICES[model];
+      const p = PRICES[priceKey(model)];
       if (!p) return null;
       total += (u.input * p.input + u.output * p.output + u.cacheRead * p.cacheRead + u.cacheWrite * p.cacheWrite) / 1e6;
     }
