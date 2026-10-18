@@ -1,0 +1,18 @@
+[Fictional transcript: a human front-desk receptionist, provided as discovery material]
+
+DESK: Cedarwell Family Clinic, this is Robin. How can I help?
+CALLER: Hi, I'd like to make an appointment with Dr. Beckwith, maybe Thursday?
+DESK: Sure. Can I have your full name and date of birth?
+CALLER: Alma Petrosyan, April ninth, eighty-seven.
+DESK: Thank you, Alma, I've got you. I see Trescott Care on file, is that still your insurance?
+CALLER: Yes.
+DESK: Okay, so Dr. Beckwith isn't in network with Trescott. Dr. Lindqvist is, and she has Thursday at two. Or you could still see Dr. Beckwith, but it'd be self-pay, a hundred and forty.
+CALLER: Oh. No, Dr. Lindqvist is fine.
+DESK: Great. That's Dr. Lindqvist, Thursday the fifth at 2 p.m., twenty dollar copay. Shall I book it?
+CALLER: Yes please.
+DESK: You're all set. Your confirmation is A-7120.
+CALLER: Oh, and can you tell me what number you have for me? I might have changed it.
+DESK: I can't read it out, but tell me the number you'd like us to use and I'll pass it to the front desk to update.
+CALLER: 555-0193.
+DESK: Got it, I'll leave them a note. Anything else?
+CALLER: No, thanks. Bye.

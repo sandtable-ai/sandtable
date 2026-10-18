@@ -116,7 +116,8 @@ sandtable run ./my-domain --agent http://localhost:8787/step -k 4 --fail-under 8
 | `http://…`, `https://…` | your agent, over the [HTTP step protocol](/reference/http-protocol) |
 | a file path | a JS/TS module that default-exports an `AgentAdapter`, or a function returning one |
 | `noop` | the do-nothing baseline |
-| `scripted:naive`, `scripted:careful` | the rule-based demo agents; they only make sense on the bundled freight example |
+| `scripted:naive`, `scripted:careful` | rule-based demo agents for the bundled freight example |
+| `scripted:clinic-naive`, `scripted:clinic-careful` | rule-based demo agents for the bundled clinic example |
 
 [Run against your agent](/guides/bring-your-agent) explains each adapter and the packages and credentials it needs.
 

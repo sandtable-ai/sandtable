@@ -4,6 +4,7 @@ import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Command, InvalidArgumentError } from "commander";
+import { clinicScriptedAgent } from "./demo/clinic-agents.ts";
 import { freightScriptedAgent } from "./demo/freight-agents.ts";
 import { formatPercent, renderTerminal } from "./report/terminal.ts";
 import { renderHtml } from "./report/html.ts";
@@ -88,6 +89,7 @@ async function resolveAgent(spec: string, p: ClaudeOptions = {}, openaiBaseUrl?:
   if (spec.startsWith("openai:")) return openaiCompatAgent(openaiEndpoint(spec, openaiBaseUrl));
   if (/^https?:\/\//.test(spec)) return httpAgent(spec);
   if (spec === "scripted:naive" || spec === "scripted:careful") return freightScriptedAgent(spec.endsWith("naive") ? "naive" : "careful");
+  if (spec === "scripted:clinic-naive" || spec === "scripted:clinic-careful") return clinicScriptedAgent(spec.endsWith("naive") ? "naive" : "careful");
   const mod = (await import(pathToFileURL(path.resolve(spec)).href)) as { default?: unknown };
   const exported = typeof mod.default === "function" ? await (mod.default as () => unknown)() : mod.default;
   if (!exported || typeof (exported as AgentAdapter).createSession !== "function") {

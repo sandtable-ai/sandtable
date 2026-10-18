@@ -25,7 +25,8 @@ Development needs Node ≥ 22.18, which runs `src/*.ts` directly (type stripping
 1. Create `examples/<name>/sandtable.yaml`, `policy.md` and `tasks.yaml`.
 2. Include tasks that should end with a write and tasks that must end without one. A suite of only refusal tasks lets a do-nothing agent score well.
 3. Add a `user.script` to each task so the domain runs offline with `--user scripted`.
-4. `npm run sandtable -- validate examples/<name>`.
+4. `npm run sandtable -- validate examples/<name>` and `npm run sandtable -- lint examples/<name>`.
+5. Optional: rule-based careful and naive agents in `src/demo/` (see `clinic-agents.ts`), so CI can run the domain offline with `--fail-under 100`.
 
 ## Changing the CLI or the spec
 

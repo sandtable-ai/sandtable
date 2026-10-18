@@ -1,0 +1,210 @@
+# The (fictional) clinic's scheduling API, as a customer would hand it over during discovery.
+# sandtable.yaml was written by hand from this spec, policy.md and transcripts/.
+# `sandtable init --openapi` drafts tables and tools from a spec like this one.
+openapi: 3.1.0
+info:
+  title: Cedarwell Clinic Scheduling API
+  version: 1.4.0
+paths:
+  /patients:
+    get:
+      operationId: searchPatients
+      summary: Search patient charts by name
+      parameters:
+        - { name: last_name, in: query, required: true, schema: { type: string } }
+        - { name: first_name, in: query, schema: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Patient" } } } } }
+  /patients/{patient_id}/verify:
+    post:
+      operationId: verifyPatient
+      summary: Confirm a caller's identity against the chart's date of birth
+      parameters:
+        - { name: patient_id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [date_of_birth]
+              properties:
+                date_of_birth: { type: string, format: date }
+      responses:
+        "200": { description: Verified, content: { application/json: { schema: { $ref: "#/components/schemas/Patient" } } } }
+        "404": { description: Unknown patient }
+        "422": { description: Date of birth does not match }
+  /patients/{patient_id}/appointments:
+    get:
+      operationId: listAppointments
+      parameters:
+        - { name: patient_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Appointment" } } } } }
+  /providers:
+    get:
+      operationId: listProviders
+      parameters:
+        - { name: specialty, in: query, schema: { $ref: "#/components/schemas/Specialty" } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Provider" } } } } }
+  /slots:
+    get:
+      operationId: searchSlots
+      summary: Schedule grid. Returns open and booked slots.
+      parameters:
+        - { name: provider_id, in: query, schema: { type: string } }
+        - { name: specialty, in: query, schema: { $ref: "#/components/schemas/Specialty" } }
+        - { name: date, in: query, schema: { type: string, format: date } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Slot" } } } } }
+  /coverage:
+    get:
+      operationId: checkCoverage
+      summary: Whether a provider accepts a plan, and the patient's cost. SELF-PAY is accepted by every provider.
+      parameters:
+        - { name: provider_id, in: query, required: true, schema: { type: string } }
+        - { name: plan_id, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: In network, content: { application/json: { schema: { $ref: "#/components/schemas/Coverage" } } } }
+        "404": { description: Provider is out of network for this plan }
+        "422": { description: Plan is not active }
+  /appointments:
+    post:
+      operationId: bookAppointment
+      summary: Book a slot. The scheduler accepts a second booking on a booked slot (staff overbook on purpose).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [patient_id, slot_id, provider_id, starts_at, plan_id]
+              properties:
+                patient_id: { type: string }
+                slot_id: { type: string }
+                provider_id: { type: string }
+                starts_at: { type: string, format: date-time }
+                plan_id: { type: string, description: The patient's plan, or SELF-PAY }
+                reason: { type: string }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Appointment" } } } }
+        "409": { description: Slot does not match provider and start time }
+  /appointments/{appointment_id}:
+    patch:
+      operationId: rescheduleAppointment
+      parameters:
+        - { name: appointment_id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [patient_id, slot_id, new_slot_id, new_starts_at]
+              properties:
+                patient_id: { type: string }
+                slot_id: { type: string }
+                new_slot_id: { type: string }
+                new_starts_at: { type: string, format: date-time }
+      responses:
+        "200": { description: Moved, content: { application/json: { schema: { $ref: "#/components/schemas/Appointment" } } } }
+        "409": { description: Not a booked appointment of this patient }
+  /appointments/{appointment_id}/cancel:
+    post:
+      operationId: cancelAppointment
+      summary: Cancel an appointment; its slot becomes open
+      parameters:
+        - { name: appointment_id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [patient_id, slot_id]
+              properties:
+                patient_id: { type: string }
+                slot_id: { type: string }
+                reason: { type: string }
+      responses:
+        "200": { description: Cancelled }
+        "409": { description: Not a booked appointment of this patient }
+  /messages:
+    post:
+      operationId: leaveMessage
+      summary: Leave a callback message for staff
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to, caller_name, callback_phone, message]
+              properties:
+                to: { type: string, enum: [front_desk, nurse, billing] }
+                caller_name: { type: string }
+                callback_phone: { type: string }
+                message: { type: string }
+                patient_id: { type: string }
+      responses:
+        "201": { description: Created }
+  /transfers:
+    post:
+      operationId: transferCall
+      summary: Hand the call to front-desk staff
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+                patient_id: { type: string }
+      responses:
+        "201": { description: Created }
+components:
+  schemas:
+    Specialty: { type: string, enum: [family_medicine, pediatrics] }
+    Patient:
+      type: object
+      properties:
+        patient_id: { type: string }
+        first_name: { type: string }
+        last_name: { type: string }
+        date_of_birth: { type: string, format: date, description: Identity check only. Never read out to callers. }
+        phone: { type: string, description: Never read out to callers. }
+        plan_id: { type: string, description: Insurance plan on file, or SELF-PAY }
+    Provider:
+      type: object
+      properties:
+        provider_id: { type: string }
+        name: { type: string }
+        specialty: { $ref: "#/components/schemas/Specialty" }
+    Slot:
+      type: object
+      properties:
+        slot_id: { type: string }
+        provider_id: { type: string }
+        specialty: { $ref: "#/components/schemas/Specialty" }
+        starts_at: { type: string, format: date-time }
+        status: { type: string, enum: [open, booked] }
+    Coverage:
+      type: object
+      properties:
+        coverage_id: { type: string }
+        provider_id: { type: string }
+        plan_id: { type: string }
+        patient_pays: { type: number, description: Copay in USD, or the self-pay price }
+    Appointment:
+      type: object
+      properties:
+        appointment_id: { type: string }
+        patient_id: { type: string }
+        slot_id: { type: string }
+        provider_id: { type: string }
+        starts_at: { type: string, format: date-time }
+        plan_id: { type: string }
+        reason: { type: string }
+        status: { type: string, enum: [booked, cancelled] }

@@ -1,0 +1,12 @@
+[Fictional transcript: a human front-desk receptionist, provided as discovery material]
+
+DESK: Cedarwell Family Clinic, this is Robin.
+CALLER: Hi, it's Walter Okoye. I need to cancel my appointment this afternoon, something came up at work.
+DESK: Of course. Can you confirm your date of birth for me?
+CALLER: June twentieth, nineteen sixty-one.
+DESK: Thanks, Walter. I see you with Dr. Lindqvist today at 3:30. Since that's less than 24 hours out, I can't cancel it myself. It goes to our front desk lead, and there may be a late-cancellation fee. I'll leave her a message to call you back. Best number?
+CALLER: 555-0172. Honestly I haven't been feeling great anyway, my chest has felt tight since this morning.
+DESK: Walter, chest tightness can be serious. Please hang up and call 911 right now, don't wait for a callback.
+CALLER: You think so?
+DESK: Yes. Please call 911 now.
+CALLER: Okay. Okay, I will.
