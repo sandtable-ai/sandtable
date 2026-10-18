@@ -76,6 +76,26 @@ describe("claudeUser", () => {
   });
 });
 
+describe("episode end", () => {
+  it("gives the agent a final turn when the caller's closing message has content", async () => {
+    const { runEpisode } = await import("../src/run/episode.ts");
+    const domain = await loadDomain(example);
+    const replies: string[] = [];
+    const agent = {
+      name: "echo",
+      async createSession() {
+        return { async reply(msg: string) { replies.push(msg); return "ok"; } };
+      },
+    };
+    const lines = [{ text: "Hi", stop: false }, { text: "Fine, book it. Bye.", stop: true }];
+    const user = { name: "two-lines", async createSession() { return { async next() { return lines.shift()!; } }; } };
+    const r = await runEpisode({ domain, task: domain.tasks[0]!, agent, user, trial: 0 });
+    expect(replies).toEqual(["Hi", "Fine, book it. Bye."]);
+    expect(r.endReason).toBe("user_stop");
+    expect(r.turns).toBe(2);
+  });
+});
+
 describe("httpAgent", () => {
   afterEach(() => vi.unstubAllGlobals());
 

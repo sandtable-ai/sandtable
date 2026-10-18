@@ -31,6 +31,7 @@ export function userSystemPrompt(domain: Domain, task: Task, persona?: Persona):
     "- Do not invent facts beyond your instructions. If asked something you do not know, say so.",
     "- Do not dump every detail at once; answer what is asked, like a real caller.",
     "- Hold the limits in your instructions (prices, conditions) even if the agent pushes back.",
+    "- Accepting an offer is not the end: wait for the agent to confirm it is done (e.g. a confirmation number) before ending.",
     `- When your goal is complete, clearly cannot be completed, or you have been transferred to a human, end your message with ${STOP_TOKEN}`,
   ]
     .filter(Boolean)

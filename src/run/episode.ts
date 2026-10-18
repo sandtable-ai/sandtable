@@ -69,7 +69,9 @@ export async function runEpisode(input: {
     try {
       while (turns < maxTurns) {
         if (turn.text) events.push({ type: "user", text: turn.text });
-        if (turn.stop) {
+        // A closing message with content ("Fine, book it. Bye.") still gets one final agent turn:
+        // the caller may have just accepted something the agent must act on.
+        if (turn.stop && !turn.text) {
           endReason = "user_stop";
           break;
         }
@@ -78,6 +80,10 @@ export async function runEpisode(input: {
         events.push({ type: "agent", text: reply, latencyMs: Math.round(performance.now() - turnStarted) });
         agentMessages.push(reply);
         turns++;
+        if (turn.stop) {
+          endReason = "user_stop";
+          break;
+        }
         turn = await sim.next(reply);
       }
     } finally {
