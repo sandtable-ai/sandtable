@@ -1,0 +1,222 @@
+---
+title: "CLI"
+description: "Every sandtable command and flag: init, validate, lint, review, run, demo and report, with exit codes and environment variables."
+---
+
+```text
+sandtable <command> [options]
+```
+
+| Command | What it does |
+|---|---|
+| [`init`](#init) | draft a domain from a customer's artifacts |
+| [`validate`](#validate) | check a domain for schema and cross-reference errors |
+| [`lint`](#lint) | prove every task is ready, solvable, non-vacuous and graded, without model calls |
+| [`review`](#review) | list drafted items that still need a person to accept them |
+| [`run`](#run) | run every task k times against an agent and grade the results |
+| [`demo`](#demo) | rehearse the bundled freight example |
+| [`report`](#report) | re-render the HTML report for a past run |
+
+`sandtable --version` prints the version and `sandtable <command> --help` lists a command's options. From a clone of the repo, run `npm run sandtable -- <command>`.
+
+## init
+
+Draft a domain from a customer's artifacts. Review the output before trusting it. See [Draft a domain with init](/guides/init).
+
+```bash
+sandtable init --openapi api.yaml --sop policy.md --transcripts calls/ -o sandtable
+```
+
+| Option | Description |
+|---|---|
+| `--openapi <file>` | OpenAPI 3.x spec (YAML or JSON): drafts tables and tools, no model needed |
+| `--sop <file>` | SOP or policy document: drafts invariants with Claude, each quoting its source |
+| `--transcripts <path>` | call or chat transcripts (a file, or a directory of `.txt`/`.md` files): drafts personas and tasks with Claude |
+| `-o, --out <dir>` | domain directory to create, or to add to when it already exists. Default: `sandtable` |
+| `-m, --model <id>` | Claude model for the drafting steps. Default: `claude-opus-5-5` |
+| `--force` | overwrite existing files when drafting from `--openapi` |
+| `--provider`, `--region`, `--aws-profile` | where Claude runs; see [provider options](#provider-options) |
+
+At least one of `--openapi`, `--sop` and `--transcripts` is required. They run in that order. Without `--force`, `--openapi` refuses to overwrite existing files.
+
+## validate
+
+Check a domain for schema and cross-reference errors.
+
+```bash
+sandtable validate ./my-domain [--strict]
+```
+
+| Argument / option | Description |
+|---|---|
+| `<domain>` | domain directory (with `sandtable.yaml`) or the file itself |
+| `--strict` | also fail while drafted items are pending review |
+
+```text
+✓ freight-carrier-sales: 8 tables, 9 tools, 16 invariants, 32 tasks
+```
+
+## lint
+
+Prove every task is ready, solvable, non-vacuous and graded, without any model call. See [The noop baseline and lint](/concepts/baselines).
+
+```bash
+sandtable lint ./my-domain
+```
+
+| Argument | Description |
+|---|---|
+| `<domain>` | domain directory (with `sandtable.yaml`) or the file itself |
+
+Each task prints as `✓` (clean), `!` (warnings) or `✗` (errors), followed by whether it expects a write, is ready, is solvable (`solvable ?` when it has no `reference`), and whether the noop baseline passes it.
+
+## review
+
+List drafted items that still need a person to accept them. See [Review workflow](/concepts/review-workflow).
+
+```bash
+sandtable review ./my-domain
+```
+
+| Argument | Description |
+|---|---|
+| `<domain>` | domain directory (with `sandtable.yaml`) or the file itself |
+
+## run
+
+Run every task k times against an agent and grade the results.
+
+```bash
+sandtable run ./my-domain --agent http://localhost:8787/step -k 4 --fail-under 85
+```
+
+| Argument / option | Description |
+|---|---|
+| `<domain>` | domain directory (with `sandtable.yaml`) or the file itself |
+| `-a, --agent <spec>` | the agent under test; see below. Default: `claude` |
+| `-u, --user <spec>` | the simulated user: `claude`, `claude:<model>`, `openai:<model>` or `scripted`. Default: `claude` |
+| `--openai-base-url <url>` | OpenAI-compatible endpoint for `openai:<model>`. Default: `OPENAI_BASE_URL`, else `https://api.openai.com/v1`; the key comes from `OPENAI_API_KEY` |
+| `-k, --trials <n>` | trials per task; pass^k is reported for every k up to n. Default: `1` |
+| `-t, --tasks <ids>` | comma-separated task ids to run (all by default) |
+| `-c, --concurrency <n>` | episodes run in parallel. Default: `4` |
+| `-o, --out <dir>` | output directory for `results.json` and `report.html`. Default: `.sandtable/runs/<timestamp>-<domain>` |
+| `--no-html` | skip the HTML report |
+| `--fail-under <pct>` | exit 1 if pass^k (k = `--trials`) is below this percentage, `0` to `100`. A trailing `%` is accepted |
+| `--open` | open the HTML report in the browser when the run finishes |
+| `--prices <file>` | extra model prices for the cost estimate: the JSON from `scripts/bedrock-prices.mjs`, or `{ "<model-id>": { "input", "output", "cacheRead", "cacheWrite" } }` in USD per million tokens |
+| `--provider`, `--region`, `--aws-profile` | where Claude runs, and the AWS settings for `bedrock:<model-id>`; see [provider options](#provider-options) |
+
+`--agent` accepts:
+
+| Spec | Agent |
+|---|---|
+| `claude`, `claude:<model>` | the Claude reference agent |
+| `bedrock:<model-id>` | any tool-capable model on Amazon Bedrock, through the Converse API |
+| `openai:<model>` | any model behind an OpenAI-compatible Chat Completions endpoint |
+| `http://…`, `https://…` | your agent, over the [HTTP step protocol](/reference/http-protocol) |
+| a file path | a JS/TS module that default-exports an `AgentAdapter`, or a function returning one |
+| `noop` | the do-nothing baseline |
+| `scripted:naive`, `scripted:careful` | rule-based demo agents for the bundled freight example |
+| `scripted:clinic-naive`, `scripted:clinic-careful` | rule-based demo agents for the bundled clinic example |
+
+[Run against your agent](/guides/bring-your-agent) explains each adapter and the packages and credentials it needs.
+
+The run prints a summary (per-task results, pass^k, latency, cost, per-tag scores and the top failure modes) and the paths of the files it wrote. See [results.json](/reference/results-schema).
+
+## leaderboard
+
+Rank several agents on one domain under the same simulated users, next to a do-nothing baseline.
+
+```bash
+sandtable leaderboard examples/freight -m leaderboard/models.example.yaml -k 4 \
+  --provider bedrock --region eu-west-1 --prices prices/bedrock.eu-west-1.json
+```
+
+The models file lists the agents, with an optional shared caller and k:
+
+```yaml
+user: claude:claude-sonnet-5-5   # every model faces the same simulated callers
+k: 4
+models:
+  - { label: Claude Opus 5.5, agent: claude:claude-opus-5-5 }
+  - { label: GPT-5.5, agent: bedrock:global.openai.gpt-5.5 }
+```
+
+| Argument / option | Description |
+|---|---|
+| `<domain>` | domain directory (with `sandtable.yaml`) or the file itself |
+| `-m, --models <file>` | YAML file: `{ user?, k?, models: [{ label, agent }] }`; `agent` takes the same specs as `run --agent` |
+| `-u, --user <spec>` | simulated user for every model; overrides the models file. Default: `claude` |
+| `-k, --trials <n>` | trials per task; overrides the models file. Default: `4` |
+| `-c, --concurrency <n>` | episodes in parallel per model. Default: `4` |
+| `--openai-base-url <url>` | OpenAI-compatible endpoint for `openai:<model>` entries |
+| `-o, --out <dir>` | output directory. Default: `leaderboard/<domain name>` |
+| `--no-resume` | rerun models even when their results already exist |
+| `--prices <file>` | extra model prices for the cost column |
+| `--provider`, `--region`, `--aws-profile` | see [provider options](#provider-options) |
+
+Each model's full `results.json` and `report.html` go in their own folder. `leaderboard.json`, `LEADERBOARD.md` and `leaderboard.html` rank them by pass^k, with pass^1, rule violations, the top failure, cost per trial and p95 turn latency. Models whose results already exist are reused, so an interrupted or paid run resumes rather than repeating work. Keep the caller fixed and disclose which model plays it, since it may favour its own family.
+
+## demo
+
+Rehearse the bundled freight carrier-sales example.
+
+```bash
+sandtable demo                                       # offline: two rule-based agents, no API key
+sandtable demo --live --user-model claude-haiku-5-5  # Claude plays the caller and the agent
+```
+
+| Option | Description |
+|---|---|
+| `--live` | use Claude as both the agent and the simulated user (needs `ANTHROPIC_API_KEY` or `ant auth login`, or `--provider bedrock`) |
+| `-k, --trials <n>` | trials per task in `--live` mode. Default: `2` |
+| `--agent-model <id>` | model for the agent in `--live` mode |
+| `--user-model <id>` | model for the simulated caller in `--live` mode; a cheaper model keeps runs cheap |
+| `--no-open` | do not open the HTML report in the browser |
+| `--provider`, `--region`, `--aws-profile` | where Claude runs; see [provider options](#provider-options) |
+
+The offline demo runs the `scripted:naive` and `scripted:careful` agents against scripted callers and writes a report for each. Reports open in the browser only when the output is a terminal.
+
+## report
+
+Re-render the HTML report for a past run, for example after upgrading sandtable.
+
+```bash
+sandtable report .sandtable/runs/<run>/results.json [-o report.html]
+```
+
+| Argument / option | Description |
+|---|---|
+| `<results>` | path to a `results.json` |
+| `-o, --out <file>` | output HTML path. Default: `report.html` next to `results.json` |
+
+It prints the path it wrote.
+
+## Provider options
+
+`init`, `run` and `demo` accept:
+
+| Option | Description |
+|---|---|
+| `--provider <name>` | where Claude runs: `anthropic` or `bedrock`. Default: `SANDTABLE_PROVIDER`, else `anthropic` |
+| `--region <region>` | AWS region for Bedrock. Default: `AWS_REGION` |
+| `--aws-profile <name>` | AWS profile for Bedrock. Default: `AWS_PROFILE` |
+
+## Environment variables
+
+| Variable | Used for |
+|---|---|
+| `ANTHROPIC_API_KEY` | Claude on the Anthropic API (agent, simulated user, `init`) |
+| `SANDTABLE_PROVIDER` | default for `--provider` |
+| `SANDTABLE_BEDROCK_CLIENT` | `classic` (default: cross-region inference profiles) or `mantle` (Bedrock's Messages-API endpoint) |
+| `AWS_REGION`, `AWS_DEFAULT_REGION` | Bedrock region when `--region` is not given |
+| `AWS_PROFILE` | AWS profile when `--aws-profile` is not given; other standard AWS credential variables also work |
+| `OPENAI_API_KEY` | bearer token for `openai:<model>`; required only for the default OpenAI endpoint |
+| `OPENAI_BASE_URL` | default for `--openai-base-url` |
+
+## Exit codes
+
+| Code | When |
+|---|---|
+| `0` | success |
+| `1` | an error (invalid domain, unknown agent or user spec, missing credentials or package), `validate --strict` with pending items, `lint` errors, or `run` below `--fail-under` |

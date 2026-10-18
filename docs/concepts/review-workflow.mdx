@@ -1,0 +1,79 @@
+---
+title: "Review workflow"
+description: "Drafted items stay pending until a person accepts them. How review, validate --strict and provisional reports keep drafts from becoming acceptance criteria by accident."
+---
+
+`sandtable init` drafts tools, invariants and tasks, but a draft is a proposal. A test suite is a set of acceptance criteria, and only someone who knows the customer's rules should decide what they are. The review workflow makes that decision explicit and visible.
+
+## Pending items
+
+Everything `init` infers carries `review: pending`, and invariants and tasks also carry a `source` pointing at the evidence:
+
+```yaml
+invariants:
+  - id: rate-ceiling
+    description: Never book above the load's max_rate.
+    review: pending
+    source:
+      file: policy.md
+      quote: Never book a load above its max rate.
+    limit:
+      tool: book_load
+      arg: rate
+      lte: { table: loads, key_arg: load_id, field: max_rate }
+```
+
+Tools drafted from an OpenAPI spec are marked `review: pending` when they have `# TODO(review):` notes next to them, such as a 409 condition to encode as a `check` or a side effect to model.
+
+## List what is pending
+
+```text
+$ sandtable review ./my-domain
+- invariant rate-ceiling  (policy.md)
+    "Never book a load above its max rate."
+
+Accept an item by changing its `review: pending` to `review: accepted` (or deleting the line).
+```
+
+## What to check
+
+<AccordionGroup>
+  <Accordion title="Invariants">
+    - Does the quote actually say this? Read the sentence around it in the SOP.
+    - Is it as strict as the SOP, and no stricter? An over-strict rule fails correct agents in every task.
+    - Does it point at the right table, field and tool argument?
+    - Does it need an exception, such as `unless` on a `never_disclose` for the value the agent legitimately agreed to?
+  </Accordion>
+  <Accordion title="Tasks">
+    - Does the expected end state follow the **policy**, even where the human rep in the transcript did something else?
+    - Is the hidden goal firm enough to test something ("will not go below $1,600"), and does it avoid needs the agent cannot meet?
+    - Are seed rows and names fictional?
+    - Does `sandtable lint` say it is ready, solvable and non-vacuous?
+  </Accordion>
+  <Accordion title="Tools">
+    - Resolve every `# TODO(review):` note: encode error conditions as `checks`, add `update` ops for side effects, and replace placeholder ops on action endpoints.
+    - Make sure the tool changes the world the way the real API would, closely enough for the end state to be graded.
+  </Accordion>
+</AccordionGroup>
+
+To accept an item, change `review: pending` to `review: accepted`, or delete the line. Keep `source`: it records why the rule exists.
+
+## Provisional runs
+
+Runs still work while items are pending, so you can try a draft early. Their results are marked **provisional**:
+
+- the terminal summary prints `⚠ 1 drafted item(s) pending review: results are provisional`;
+- the HTML report shows a "Provisional" banner listing the pending items;
+- `results.json` lists them under `pendingReview`.
+
+## Enforce it in CI
+
+`validate --strict` exits 1 while anything is pending:
+
+```text
+$ sandtable validate ./my-domain --strict
+✓ freight-carrier-sales: 8 tables, 9 tools, 16 invariants, 32 tasks
+⚠ 1 drafted item(s) pending review (sandtable review ./my-domain)
+```
+
+Run it before `lint` and `run` in CI, so nothing drafted becomes a release gate without a person having accepted it. See [Use it in CI](/guides/ci).

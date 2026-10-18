@@ -18,7 +18,7 @@ const good = {
   persona_id: "veteran-dispatcher",
   new_persona: { id: "veteran-dispatcher", description: "A long-time dispatcher who counters every offer once." },
   instructions: "You are Dana at Blue Mesa Trucking, MC 100101. You want L-2001. Ask for $2,600; accept $2,250 or more.",
-  script: ["Hi, MC 100101, Blue Mesa. Looking at L-2001 Dallas to Atlanta.", "I need $2,600.", "How about $2,300?", "Thanks."],
+  script: ["Hi, MC 100101, Blue Mesa. Looking at L-2001 Dallas to Atlanta.", "I need $2,600.", "How about $2,300?", "Deal, book it.", "Thanks."],
   new_rows: [
     {
       table: "loads",

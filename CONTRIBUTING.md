@@ -28,9 +28,25 @@ Development needs Node ≥ 22.18, which runs `src/*.ts` directly (type stripping
 4. `npm run sandtable -- validate examples/<name>` and `npm run sandtable -- lint examples/<name>`.
 5. Optional: rule-based careful and naive agents in `src/demo/` (see `clinic-agents.ts`), so CI can run the domain offline with `--fail-under 100`.
 
+## Changing the CLI or the spec
+
+The Claude Code plugin in `plugin/` teaches coding agents exact commands and YAML. When you change a command, a flag or the spec, update its skills and the docs pages too. `test/plugin.test.ts` checks every `npx sandtable-ai` command and flag in them against `--help`, and every YAML snippet against the schema. If you have Claude Code, also run `claude plugin validate . --strict`.
+
+## Docs
+
+The docs site is built with [Mintlify](https://mintlify.com) from `docs/`: `docs/docs.json` holds the navigation, and each page is an `.mdx` file with `title` and `description` frontmatter. The [domain spec](docs/reference/spec.mdx) and the [CLI reference](docs/reference/cli.mdx) must match the code, so update them in the same change as the code.
+
+```bash
+cd docs
+npx mint dev            # preview at http://localhost:3000
+npx mint broken-links   # check internal links
+```
+
+Keep examples fictional, and check every flag against `npm run sandtable -- <command> --help`.
+
 ## Releasing
 
-1. `npm version <patch|minor|prerelease --preid alpha>`. The `version` script syncs the Python launcher's version.
+1. `npm version <patch|minor|prerelease --preid alpha>`. The `version` script syncs the Python launcher's and the plugin's versions.
 2. `git push --follow-tags`. The `release` workflow then:
    - checks everything
    - stages `sandtable-ai` on npm (pre-releases under the `next` tag)

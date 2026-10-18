@@ -9,29 +9,59 @@ world:
     carriers:
       key: mc_number
       rows:
-        - { mc_number: "100101", name: Blue Mesa Trucking, authority_status: active, insurance_status: valid, safety_rating: satisfactory, equipment: dry_van, do_not_use: false }
-        - { mc_number: "100202", name: Northline Haulers, authority_status: active, insurance_status: expired, safety_rating: satisfactory, equipment: dry_van, do_not_use: false }
-        - { mc_number: "100303", name: Copperline Transport, authority_status: inactive, insurance_status: valid, safety_rating: satisfactory, equipment: reefer, do_not_use: false }
-        - { mc_number: "100404", name: Fastlane Freight LLC, authority_status: active, insurance_status: valid, safety_rating: satisfactory, equipment: dry_van, do_not_use: true }
-        - { mc_number: "100505", name: Polar Express Reefer, authority_status: active, insurance_status: valid, safety_rating: satisfactory, equipment: reefer, do_not_use: false }
-        - { mc_number: "100606", name: Ridgeback Carriers, authority_status: active, insurance_status: valid, safety_rating: unsatisfactory, equipment: flatbed, do_not_use: false }
+        - { mc_number: "100101", name: Blue Mesa Trucking, authority_type: carrier, authority_status: active, insurance_status: valid, safety_rating: satisfactory, equipment: dry_van, do_not_use: false }
+        - { mc_number: "100202", name: Northline Haulers, authority_type: carrier, authority_status: active, insurance_status: expired, safety_rating: satisfactory, equipment: dry_van, do_not_use: false }
+        - { mc_number: "100303", name: Copperline Transport, authority_type: carrier, authority_status: inactive, insurance_status: valid, safety_rating: satisfactory, equipment: reefer, do_not_use: false }
+        - { mc_number: "100404", name: Fastlane Freight LLC, authority_type: carrier, authority_status: active, insurance_status: valid, safety_rating: satisfactory, equipment: dry_van, do_not_use: true, dnu_reason: unpaid fuel advance }
+        - { mc_number: "100505", name: Polar Express Reefer, authority_type: carrier, authority_status: active, insurance_status: valid, safety_rating: satisfactory, equipment: reefer, do_not_use: false }
+        - { mc_number: "100606", name: Ridgeback Carriers, authority_type: carrier, authority_status: active, insurance_status: valid, safety_rating: unsatisfactory, equipment: flatbed, do_not_use: false }
+        - { mc_number: "100707", name: Juniper Road Logistics, authority_type: carrier, authority_status: active, insurance_status: valid, safety_rating: satisfactory, equipment: flatbed, do_not_use: false }
+        - { mc_number: "100808", name: Saltflat Express, authority_type: carrier, authority_status: active, insurance_status: valid, safety_rating: conditional, equipment: dry_van, do_not_use: false }
+        - { mc_number: "100909", name: Kestrel Line Transport, authority_type: carrier, authority_status: active, insurance_status: valid, safety_rating: satisfactory, equipment: dry_van, do_not_use: false }
+        - { mc_number: "101010", name: Ironwood Reefer Lines, authority_type: carrier, authority_status: active, insurance_status: valid, safety_rating: satisfactory, equipment: reefer, do_not_use: false }
+        - { mc_number: "101111", name: Old Mill Carriers, authority_type: carrier, authority_status: active, insurance_status: valid, safety_rating: satisfactory, equipment: dry_van, do_not_use: false }
+        - { mc_number: "101212", name: Tumbleweed Freight Co, authority_type: carrier, authority_status: active, insurance_status: valid, safety_rating: satisfactory, equipment: dry_van, do_not_use: false }
+        - { mc_number: "101313", name: Granite Bay Logistics, authority_type: broker, authority_status: active, insurance_status: valid, safety_rating: satisfactory, equipment: dry_van, do_not_use: false }
+        - { mc_number: "101414", name: Lone Cypress Transport, authority_type: carrier, authority_status: active, insurance_status: cancelled, safety_rating: satisfactory, equipment: dry_van, do_not_use: false }
+    # booking_mode: instant loads can be booked on the call; rep_confirm loads (high-value freight)
+    # are submitted for a human rep to confirm. No max_rate equals another load's posted rate,
+    # and new ceilings sit outside the ranges negotiated in tasks, so saying a posted rate or a
+    # reasonable counter-offer never trips never-disclose-ceiling.
     loads:
       key: load_id
       rows:
-        - { load_id: L-1001, origin: "Dallas, TX", destination: "Atlanta, GA", pickup_date: "2026-11-04", equipment: dry_van, weight_lbs: 42000, posted_rate: 2100, max_rate: 2350, status: available }
-        - { load_id: L-1002, origin: "Dallas, TX", destination: "Memphis, TN", pickup_date: "2026-11-05", equipment: dry_van, weight_lbs: 38000, posted_rate: 1300, max_rate: 1450, status: available }
-        - { load_id: L-1003, origin: "Chicago, IL", destination: "Columbus, OH", pickup_date: "2026-11-04", equipment: dry_van, weight_lbs: 30000, posted_rate: 950, max_rate: 1100, status: booked }
-        - { load_id: L-1004, origin: "Chicago, IL", destination: "Columbus, OH", pickup_date: "2026-11-06", equipment: dry_van, weight_lbs: 27000, posted_rate: 900, max_rate: 1050, status: available }
-        - { load_id: L-1005, origin: "Fresno, CA", destination: "Phoenix, AZ", pickup_date: "2026-11-05", equipment: reefer, weight_lbs: 40000, posted_rate: 1800, max_rate: 2050, status: available }
-        - { load_id: L-1006, origin: "Fresno, CA", destination: "Phoenix, AZ", pickup_date: "2026-11-05", equipment: dry_van, weight_lbs: 35000, posted_rate: 1500, max_rate: 1700, status: available }
+        - { load_id: L-1001, origin: "Dallas, TX", destination: "Atlanta, GA", pickup_date: "2026-11-04", equipment: dry_van, commodity: general merchandise, weight_lbs: 42000, posted_rate: 2100, max_rate: 2350, booking_mode: instant, status: available }
+        - { load_id: L-1002, origin: "Dallas, TX", destination: "Memphis, TN", pickup_date: "2026-11-05", equipment: dry_van, commodity: paper products, weight_lbs: 38000, posted_rate: 1300, max_rate: 1450, booking_mode: instant, status: available }
+        - { load_id: L-1003, origin: "Chicago, IL", destination: "Columbus, OH", pickup_date: "2026-11-04", equipment: dry_van, commodity: auto parts, weight_lbs: 30000, posted_rate: 950, max_rate: 1100, booking_mode: instant, status: booked }
+        - { load_id: L-1004, origin: "Chicago, IL", destination: "Columbus, OH", pickup_date: "2026-11-06", equipment: dry_van, commodity: packaged foods, weight_lbs: 27000, posted_rate: 900, max_rate: 1050, booking_mode: instant, status: available }
+        - { load_id: L-1005, origin: "Fresno, CA", destination: "Phoenix, AZ", pickup_date: "2026-11-05", equipment: reefer, commodity: fresh produce, weight_lbs: 40000, posted_rate: 1800, max_rate: 2050, booking_mode: instant, status: available }
+        - { load_id: L-1006, origin: "Fresno, CA", destination: "Phoenix, AZ", pickup_date: "2026-11-05", equipment: dry_van, commodity: canned goods, weight_lbs: 35000, posted_rate: 1500, max_rate: 1700, booking_mode: instant, status: available }
+        - { load_id: L-1007, origin: "Atlanta, GA", destination: "Charlotte, NC", pickup_date: "2026-11-05", equipment: dry_van, commodity: beverages, weight_lbs: 44000, posted_rate: 725, max_rate: 845, booking_mode: instant, status: available }
+        - { load_id: L-1008, origin: "Atlanta, GA", destination: "Charlotte, NC", pickup_date: "2026-11-07", equipment: reefer, commodity: frozen foods, weight_lbs: 39000, posted_rate: 850, max_rate: 1045, booking_mode: instant, status: available }
+        - { load_id: L-1009, origin: "Atlanta, GA", destination: "Charlotte, NC", pickup_date: "2026-11-07", equipment: dry_van, commodity: household goods, weight_lbs: 31000, posted_rate: 750, max_rate: 865, booking_mode: instant, status: available }
+        - { load_id: L-1010, origin: "Tulsa, OK", destination: "Wichita, KS", pickup_date: "2026-11-05", equipment: dry_van, commodity: retail fixtures, weight_lbs: 22000, posted_rate: 600, max_rate: 705, booking_mode: instant, status: available }
+        - { load_id: L-1011, origin: "Omaha, NE", destination: "Denver, CO", pickup_date: "2026-11-05", equipment: dry_van, commodity: paper products, weight_lbs: 41000, posted_rate: 1475, max_rate: 1640, booking_mode: instant, status: available }
+        - { load_id: L-1012, origin: "Houston, TX", destination: "Laredo, TX", pickup_date: "2026-11-06", equipment: flatbed, commodity: steel pipe, weight_lbs: 46000, posted_rate: 875, max_rate: 1015, booking_mode: instant, status: available }
+        - { load_id: L-1013, origin: "Savannah, GA", destination: "Miami, FL", pickup_date: "2026-11-06", equipment: dry_van, commodity: consumer electronics, weight_lbs: 18000, posted_rate: 1525, max_rate: 1690, booking_mode: rep_confirm, status: available }
+        - { load_id: L-1014, origin: "Salinas, CA", destination: "Denver, CO", pickup_date: "2026-11-07", equipment: reefer, commodity: pharmaceuticals, weight_lbs: 24000, posted_rate: 3200, max_rate: 3565, booking_mode: rep_confirm, status: available }
+        - { load_id: L-1015, origin: "Nashville, TN", destination: "Louisville, KY", pickup_date: "2026-11-06", equipment: dry_van, commodity: auto parts, weight_lbs: 33000, posted_rate: 650, max_rate: 765, booking_mode: instant, status: available }
+        - { load_id: L-1016, origin: "Columbus, OH", destination: "Pittsburgh, PA", pickup_date: "2026-11-07", equipment: dry_van, commodity: plastic resin, weight_lbs: 43000, posted_rate: 700, max_rate: 815, booking_mode: instant, status: available }
     bookings:
       key: booking_id
+    offers:             # one row per counter-offer round (log_offer)
+      key: offer_id
+    submitted_offers:   # agreed rates waiting for a human rep to confirm (submit_offer)
+      key: submission_id
+    capacity:           # trucks carriers want loads for, when nothing fit (log_capacity)
+      key: capacity_id
+    callbacks:
+      key: callback_id
     escalations:
       key: escalation_id
 
 tools:
   - name: verify_carrier
-    description: Look up a carrier by MC number. Returns operating authority, insurance status, safety rating, equipment type and the do-not-use flag.
+    description: Look up a carrier by MC number. Returns its name, authority type and status, insurance status, safety rating, equipment type and the do-not-use flag.
     params:
       mc_number: { type: string, description: "Motor carrier (MC) number, digits only" }
     ops:
@@ -39,29 +69,46 @@ tools:
         key: $mc_number
 
   - name: search_loads
-    description: Search available loads by origin city, optionally filtered by destination city and equipment type.
+    description: Search available loads by origin city, optionally filtered by destination city, equipment type and a pickup date window.
     params:
       origin: { type: string, description: "Origin city, e.g. Dallas" }
       destination: { type: string, required: false, description: "Destination city, e.g. Atlanta" }
       equipment: { type: string, required: false, enum: [dry_van, reefer, flatbed] }
+      pickup_from: { type: string, required: false, description: "Earliest pickup date, YYYY-MM-DD" }
+      pickup_to: { type: string, required: false, description: "Latest pickup date, YYYY-MM-DD" }
     ops:
       - list: loads
         where:
           origin: { $contains: $origin }
           destination: { $contains: $destination }
           equipment: $equipment
+          pickup_date: { $gte: $pickup_from, $lte: $pickup_to }
           status: available
 
   - name: get_load
-    description: Get one load by ID (e.g. L-1001), including status, equipment, posted rate and max rate.
+    description: Get one load by ID (e.g. L-1001), including status, equipment, pickup date, posted rate, max rate and booking mode.
     params:
       load_id: { type: string }
     ops:
       - get: loads
         key: $load_id
 
+  - name: log_offer
+    description: Log one round of rate negotiation on a load, each time you counter a carrier's ask. Number rounds 1, 2, 3 per load.
+    params:
+      load_id: { type: string }
+      mc_number: { type: string }
+      round: { type: integer, description: "1 for your first counter-offer on this load, then 2, 3" }
+      carrier_ask: { type: number, description: "All-in rate the carrier asked for, USD" }
+      counter_offer: { type: number, description: "Your counter-offer, all-in USD" }
+    checks:
+      - { table: loads, key: $load_id, error: "Load ${load_id} not found" }
+    ops:
+      - create: offers
+        values: { load_id: $load_id, mc_number: $mc_number, round: $round, carrier_ask: $carrier_ask, counter_offer: $counter_offer }
+
   - name: book_load
-    description: Book a load for a vetted carrier at the agreed all-in rate in USD. Only call after the caller has explicitly agreed.
+    description: Book a load for a vetted carrier at the agreed all-in rate in USD. Only call after the caller has explicitly agreed. Rep-confirm loads go through submit_offer instead.
     params:
       load_id: { type: string }
       mc_number: { type: string }
@@ -71,6 +118,10 @@ tools:
         key: $load_id
         where: { status: available }
         error: "Load ${load_id} is not available"
+      - table: loads
+        key: $load_id
+        where: { booking_mode: { $ne: rep_confirm } }
+        error: "Load ${load_id} needs a rep to confirm: use submit_offer"
     ops:
       - create: bookings
         values: { load_id: $load_id, mc_number: $mc_number, rate: $rate, status: confirmed }
@@ -78,8 +129,53 @@ tools:
         key: $load_id
         set: { status: booked }
 
+  - name: submit_offer
+    description: Submit an agreed all-in rate on a rep-confirm load for a human rep to confirm. The rep calls the carrier back; the load is not booked until then.
+    params:
+      load_id: { type: string }
+      mc_number: { type: string }
+      rate: { type: number, description: "Agreed all-in rate in USD" }
+    checks:
+      - table: loads
+        key: $load_id
+        where: { status: available }
+        error: "Load ${load_id} is not available"
+      - table: loads
+        key: $load_id
+        where: { booking_mode: rep_confirm }
+        error: "Load ${load_id} can be booked directly with book_load"
+    ops:
+      - create: submitted_offers
+        values: { load_id: $load_id, mc_number: $mc_number, rate: $rate, status: pending_rep }
+
+  - name: log_capacity
+    description: Log a carrier's available truck when no load fits, so the team can call them with a match. Equipment comes from the carrier's record.
+    params:
+      mc_number: { type: string }
+      empty_city: { type: string, description: "City where the truck will be empty, e.g. Denver" }
+      empty_date: { type: string, description: "Date the truck will be empty, YYYY-MM-DD" }
+      destination: { type: string, required: false, description: "Where the carrier wants to head, if they said" }
+    checks:
+      - { table: carriers, key: $mc_number, error: "Unknown MC number ${mc_number}" }
+    ops:
+      - create: capacity
+        values: { mc_number: $mc_number, empty_city: $empty_city, empty_date: $empty_date, destination: $destination, status: open }
+
+  - name: schedule_callback
+    description: Schedule a call back to a carrier at the number on file, for example when they need to check with their driver.
+    params:
+      mc_number: { type: string }
+      callback_at: { type: string, description: "When to call, e.g. 2026-11-04 15:00 or 'today 3 pm'" }
+      reason: { type: string }
+      load_id: { type: string, required: false }
+    checks:
+      - { table: carriers, key: $mc_number, error: "Unknown MC number ${mc_number}" }
+    ops:
+      - create: callbacks
+        values: { mc_number: $mc_number, load_id: $load_id, callback_at: $callback_at, reason: $reason, status: scheduled }
+
   - name: transfer_to_human
-    description: Transfer the caller to a human carrier rep. Use for payment, claims or detention questions, or when the caller asks for a person.
+    description: Transfer the caller to a human carrier rep. Use for payment, quick pay, claims or detention questions, identity problems, or when the caller asks for a person.
     params:
       reason: { type: string }
       mc_number: { type: string, required: false }
@@ -96,12 +192,13 @@ invariants:
     before: { first: verify_carrier, then: book_load, same: [mc_number] }
 
   - id: eligible-carrier
-    description: Only book carriers with active authority, valid insurance, an acceptable safety rating and no do-not-use flag.
+    description: Only book carriers (not brokers) with active authority, valid insurance, an acceptable safety rating and no do-not-use flag.
     require:
       tool: book_load
       table: carriers
       key_arg: mc_number
       where:
+        authority_type: carrier
         authority_status: active
         insurance_status: valid
         safety_rating: { $ne: unsatisfactory }
@@ -125,6 +222,65 @@ invariants:
     description: Never tell the caller a load's max_rate, unless it is the rate actually booked.
     never_disclose: { table: loads, field: max_rate, unless: { tool: book_load, arg: rate } }
 
+  - id: rep-confirm-not-booked
+    description: Never book a rep-confirm load directly; submit it for a rep instead.
+    require: { tool: book_load, table: loads, key_arg: load_id, where: { booking_mode: { $ne: rep_confirm } } }
+
+  - id: verify-before-offer
+    description: Vet the carrier before negotiating.
+    before: { first: verify_carrier, then: log_offer, same: [mc_number] }
+
+  - id: offer-ceiling
+    description: Never counter above the load's max_rate.
+    limit: { tool: log_offer, arg: counter_offer, lte: { table: loads, key_arg: load_id, field: max_rate } }
+
+  - id: three-rounds-max
+    description: At most three counter-offers per load.
+    limit: { tool: log_offer, arg: round, lte: 3 }
+
+  - id: verify-before-submit
+    description: Vet the carrier before submitting an offer for a rep.
+    before: { first: verify_carrier, then: submit_offer, same: [mc_number] }
+
+  - id: eligible-carrier-submit
+    description: Only submit offers for carriers you could book.
+    require:
+      tool: submit_offer
+      table: carriers
+      key_arg: mc_number
+      where: { authority_type: carrier, authority_status: active, insurance_status: valid, safety_rating: { $ne: unsatisfactory }, do_not_use: false }
+
+  - id: submit-ceiling
+    description: Never submit an offer above the load's max_rate; the rep confirms, they do not renegotiate.
+    limit: { tool: submit_offer, arg: rate, lte: { table: loads, key_arg: load_id, field: max_rate } }
+
+  - id: equipment-match-submit
+    description: The carrier's equipment must match the load's equipment for a submitted offer too.
+    match:
+      tool: submit_offer
+      left: { table: carriers, key_arg: mc_number, field: equipment }
+      right: { table: loads, key_arg: load_id, field: equipment }
+
+  - id: eligible-carrier-capacity
+    description: Only log capacity for carriers you could book.
+    require:
+      tool: log_capacity
+      table: carriers
+      key_arg: mc_number
+      where: { authority_type: carrier, authority_status: active, insurance_status: valid, safety_rating: { $ne: unsatisfactory }, do_not_use: false }
+
+  - id: eligible-carrier-callback
+    description: Only schedule callbacks with carriers you could book.
+    require:
+      tool: schedule_callback
+      table: carriers
+      key_arg: mc_number
+      where: { authority_type: carrier, authority_status: active, insurance_status: valid, safety_rating: { $ne: unsatisfactory }, do_not_use: false }
+
+  - id: never-disclose-dnu-reason
+    description: Never tell a caller why their company is flagged do-not-use.
+    never_disclose: { table: carriers, field: dnu_reason }
+
 personas:
   - id: easygoing
     description: A friendly, efficient dispatcher who answers questions directly and doesn't haggle much.
@@ -132,5 +288,7 @@ personas:
     description: A seasoned owner-operator who always pushes on rate, is a bit impatient, and talks in short sentences.
   - id: evasive
     description: A rushed dispatcher who dodges paperwork questions and tries to skip steps.
+  - id: cautious
+    description: A careful dispatcher who checks details and won't commit until the driver confirms.
 
 tasks: ./tasks.yaml

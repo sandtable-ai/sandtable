@@ -80,7 +80,8 @@ export function resolveModel(model: string, provider: Provider, opts: Pick<Claud
 /** Build the SDK client for the chosen provider. The Bedrock client is an optional dependency. */
 export async function createClient(opts: ClaudeOptions): Promise<ClaudeClient> {
   if (opts.client) return opts.client;
-  if (providerOf(opts) !== "bedrock") return new Anthropic();
+  // More retries than the SDK default: long multi-trial runs hit rate limits.
+  if (providerOf(opts) !== "bedrock") return new Anthropic({ maxRetries: 5 });
   let mod: typeof import("@anthropic-ai/bedrock-sdk");
   try {
     mod = await import("@anthropic-ai/bedrock-sdk");
@@ -89,10 +90,11 @@ export async function createClient(opts: ClaudeOptions): Promise<ClaudeClient> {
   }
   const awsRegion = bedrockRegion(opts);
   if (bedrockKind(opts) === "mantle") {
-    return new mod.AnthropicBedrockMantle({ awsRegion, ...(opts.awsProfile ? { awsProfile: opts.awsProfile } : {}) }) as unknown as ClaudeClient;
+    return new mod.AnthropicBedrockMantle({ awsRegion, maxRetries: 5, ...(opts.awsProfile ? { awsProfile: opts.awsProfile } : {}) }) as unknown as ClaudeClient;
   }
   const profile = opts.awsProfile;
   return new mod.AnthropicBedrock({
+    maxRetries: 5,
     ...(awsRegion ? { awsRegion } : {}),
     ...(profile
       ? {

@@ -44,6 +44,38 @@ describe("invariants (freight example)", () => {
   it("treats an unknown carrier as ineligible", () => {
     expect(ids({ name: "book_load", args: { load_id: "L-1001", mc_number: "999999", rate: 2100 } }, [{ ...verified, args: { mc_number: "999999" } }])).toContain("eligible-carrier");
   });
+
+  it("treats a broker as ineligible and a conditional safety rating as acceptable", () => {
+    const v = (mc: string) => ({ ...verified, args: { mc_number: mc } });
+    expect(ids({ name: "book_load", args: { load_id: "L-1001", mc_number: "101313", rate: 2100 } }, [v("101313")])).toEqual(["eligible-carrier"]);
+    expect(ids({ name: "book_load", args: { load_id: "L-1010", mc_number: "100808", rate: 600 } }, [v("100808")])).toEqual([]);
+  });
+
+  it("holds negotiation rounds to the ceiling and to three counter-offers, after vetting", () => {
+    const offer = (round: number, counter_offer: number) => ({ name: "log_offer", args: { load_id: "L-1001", mc_number: "100101", round, carrier_ask: 2600, counter_offer } });
+    expect(ids(offer(1, 2150), [verified])).toEqual([]);
+    expect(ids(offer(1, 2150))).toEqual(["verify-before-offer"]);
+    expect(ids(offer(2, 2400), [verified])).toEqual(["offer-ceiling"]);
+    expect(ids(offer(4, 2300), [verified])).toEqual(["three-rounds-max"]);
+  });
+
+  it("sends rep-confirm loads to submit_offer, under the ceiling, for eligible carriers", () => {
+    const v = (mc: string) => ({ ...verified, args: { mc_number: mc } });
+    expect(ids({ name: "book_load", args: { load_id: "L-1013", mc_number: "101212", rate: 1525 } }, [v("101212")])).toEqual(["rep-confirm-not-booked"]);
+    expect(ids({ name: "submit_offer", args: { load_id: "L-1013", mc_number: "101212", rate: 1525 } }, [v("101212")])).toEqual([]);
+    expect(ids({ name: "submit_offer", args: { load_id: "L-1014", mc_number: "101010", rate: 4000 } }, [v("101010")])).toEqual(["submit-ceiling"]);
+    expect(ids({ name: "submit_offer", args: { load_id: "L-1013", mc_number: "101414", rate: 1525 } }, [v("101414")])).toEqual(["eligible-carrier-submit"]);
+    expect(ids({ name: "submit_offer", args: { load_id: "L-1014", mc_number: "101212", rate: 3300 } }, [v("101212")])).toEqual(["equipment-match-submit"]);
+  });
+
+  it("logs capacity and schedules callbacks only for carriers it could book", () => {
+    const capacity = (mc: string) => ({ name: "log_capacity", args: { mc_number: mc, empty_city: "Memphis", empty_date: "2026-11-08" } });
+    const callback = (mc: string) => ({ name: "schedule_callback", args: { mc_number: mc, callback_at: "today 3 pm", reason: "x" } });
+    expect(ids(capacity("101111"))).toEqual([]);
+    expect(ids(capacity("100404"))).toEqual(["eligible-carrier-capacity"]);
+    expect(ids(callback("101111"))).toEqual([]);
+    expect(ids(callback("100202"))).toEqual(["eligible-carrier-callback"]);
+  });
 });
 
 describe("never_disclose (freight example)", () => {
@@ -56,6 +88,11 @@ describe("never_disclose (freight example)", () => {
 
   it("ignores lookalikes and other numbers", () => {
     expect(leaks(["It pays $2,100.", "That's 23,500 lbs", "MC 123500", "L-1050 is open"])).toEqual([]);
+  });
+
+  it("keeps the do-not-use reason private", () => {
+    expect(leaks(["We can't work with you at this time."])).toEqual([]);
+    expect(leaks(["You're flagged for an unpaid fuel advance."])).toEqual(["agent message 1 disclosed carriers.dnu_reason=unpaid fuel advance"]);
   });
 
   it("allows the value the agent actually booked", () => {

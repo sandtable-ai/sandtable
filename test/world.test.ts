@@ -43,6 +43,13 @@ describe("match", () => {
     expect(matches(row, { rate: { $ne: 2100 } })).toBe(false);
   });
 
+  it("matches a number to a string with the same digits, but not to zero-padded IDs", () => {
+    expect(matches({ mc: "100101" }, { mc: 100101 })).toBe(true);
+    expect(matches({ mc: 100101 }, { mc: "100101" })).toBe(true);
+    expect(matches({ id: "00123" }, { id: 123 })).toBe(false);
+    expect(matches({ rate: 2100 }, { rate: { $in: ["2100"] } })).toBe(true);
+  });
+
   it("prunes conditions on unset optional params", () => {
     expect(pruneUndefined({ a: undefined, b: { $contains: undefined }, c: 1 })).toEqual({ c: 1 });
   });

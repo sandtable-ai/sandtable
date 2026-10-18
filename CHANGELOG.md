@@ -17,6 +17,7 @@ First public release.
   - any model behind an OpenAI-compatible Chat Completions endpoint (OpenAI, OpenRouter, LiteLLM, vLLM, Ollama, Groq, Together), as agent or simulated user: `--agent openai:<model>`, `--user openai:<model>`
   - HTTP step protocol, JS/TS module agents, `noop` baseline, scripted user
 - **Reports**: terminal summary, `results.json`, a self-contained HTML report with transcripts, tokens, estimated cost and turn latency; `--fail-under` CI gate.
+- **Claude Code plugin**: this repository is a plugin marketplace (`/plugin marketplace add sandtable-ai/sandtable`). Its skills teach a coding agent to draft and review a domain, write tasks, run it and attribute failures; a `failure-triager` subagent reads failing trials. Not part of the npm package.
 - **Examples**:
-  - a fictional freight carrier-sales desk with 10 tasks and 5 invariants, and an offline demo
+  - a fictional freight carrier-sales desk with 32 tasks (16 that must write, 16 that must not) and 16 invariants, and an offline demo. It covers vetting, search by lane, pickup window and equipment, multi-round negotiation with every counter-offer logged, offers a human rep confirms, capacity logging, callbacks and handoffs.
   - a fictional clinic front desk with 25 tasks and 12 invariants, and offline careful and naive agents (`--agent scripted:clinic-careful`)

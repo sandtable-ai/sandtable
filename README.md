@@ -11,28 +11,30 @@ $ npx sandtable-ai demo
 
 sandtable · freight-carrier-sales · agent scripted:naive · user scripted · k=1
 
-  task                      trials  pass
-  book-at-posted-rate       ✗       0/1
-  negotiate-within-ceiling  ✗       0/1
-  walk-away-above-ceiling   ✗       0/1
-  expired-insurance         ✗       0/1
+  task                            trials  pass
+  book-at-posted-rate             ✗       0/1
+  negotiate-within-ceiling        ✗       0/1
+  walk-away-above-ceiling         ✗       0/1
+  expired-insurance               ✗       0/1
   ...
-  pass^1 20.0%
+  pass^1 15.6%
 
   Top failure modes
-  8× invariant verify-before-book
+  25× invariant verify-before-book
      e.g. book_load(load_id="L-1001", mc_number="100101", rate=2100) was called without a prior successful verify_carrier
-  3× invariant eligible-carrier
-     e.g. book_load on carriers 100202: insurance_status is "expired", expected "valid"
-  2× invariant rate-ceiling
+  7× invariant rate-ceiling
      e.g. book_load rate=2600 exceeds the limit 2350
+  7× invariant eligible-carrier
+     e.g. book_load on carriers 100202: insurance_status is "expired", expected "valid"
+  4× invariant rep-confirm-not-booked
+     e.g. book_load on loads L-1013: booking_mode is "rep_confirm", expected {"$ne":"rep_confirm"}
 ```
 
-> Status: **early alpha**. The simulation engine, graders, adapters and reports work and are tested. `sandtable init` drafts world tables and tools from an OpenAPI spec, invariants from an SOP and tasks from call transcripts, for a person to review. Model-backed steps have not yet been verified against the live API. See [ROADMAP.md](ROADMAP.md).
+> Status: **early alpha**. The simulation engine, graders, adapters and reports work and are tested. `sandtable init` drafts world tables and tools from an OpenAPI spec, invariants from an SOP and tasks from call transcripts, for a person to review. Every model-backed path has been verified against the live API ([results](docs/results.mdx)). See [ROADMAP.md](ROADMAP.md).
 
 ## First live results
 
-On the bundled freight example, Claude Opus 5.5 scores **pass^1 95%, pass^2 90%** (20 trials, $0.58). Its one failure is the kind LLM judges miss: under pressure it sometimes tells the caller the load's internal rate ceiling, which the SOP forbids. Details, harness lessons and `init` results: [docs/results.md](docs/results.md).
+On the first 10 tasks of the bundled freight example, Claude Opus 5.5 scores **pass^1 95%, pass^2 90%** (20 trials, $0.58). Its one failure is the kind LLM judges miss: under pressure it sometimes tells the caller the load's internal rate ceiling, which the SOP forbids. Details, harness lessons and `init` results: [docs/results.md](docs/results.md).
 
 ## Why
 
@@ -88,7 +90,7 @@ flowchart LR
 
 ## A domain at a glance
 
-The bundled example ([`examples/freight`](examples/freight)) is a fictional freight brokerage's carrier-sales desk: carriers call to book loads, and the agent must vet them, match equipment, and negotiate under a ceiling.
+The bundled example ([`examples/freight`](examples/freight)) is a fictional freight brokerage's carrier-sales desk: carriers call to book loads, and the agent must vet them, search by lane, dates and equipment, negotiate under a ceiling and log each round, send high-value loads to a human rep, and log the truck or a callback when nothing is booked. It has 32 tasks and 16 invariants; half the tasks must end without a write.
 
 ```yaml
 tools:
@@ -127,7 +129,7 @@ tasks:
         - { table: bookings, count: 0 }
 ```
 
-Full reference: [docs/spec.md](docs/spec.md).
+Full reference: [docs/reference/spec.mdx](docs/reference/spec.mdx).
 
 A second example, [`examples/clinic`](examples/clinic), is a fictional clinic's phone receptionist. Its 25 calls test identity checks, double booking, insurance coverage and self-pay, a 24-hour cancellation policy, patient privacy and an emergency script. It ships with rule-based careful and naive agents, so it also runs offline.
 
@@ -136,8 +138,9 @@ A second example, [`examples/clinic`](examples/clinic), is a fictional clinic's 
 | Adapter | Use it when |
 |---|---|
 | `--agent claude` or `claude:<model>` | You want a baseline: Claude with the domain's tools and policy as its system prompt. |
+| `--agent bedrock:<model-id>` | Any tool-capable model on Amazon Bedrock through the Converse API (GPT, gpt-oss, Grok, Kimi, GLM, Qwen, Mistral, Nova), with `--region` and `--aws-profile`. |
 | `--agent openai:<model>` | You want to compare other models: GPT, Gemini, Llama, Qwen, DeepSeek and more, through any OpenAI-compatible endpoint, with the same prompt and tools ([run other models](#run-other-models)). |
-| `--agent http://…` | Your agent runs as a service. It receives the user message, returns either a reply or tool calls, and `sandtable` executes those against the simulated world ([protocol](docs/spec.md#http-agent-protocol)). |
+| `--agent http://…` | Your agent runs as a service. It receives the user message, returns either a reply or tool calls, and `sandtable` executes those against the simulated world ([protocol](docs/reference/http-protocol.mdx)). |
 | `--agent ./my-agent.ts` | Your agent is a JS/TS function. Default-export an `AgentAdapter` ([example](examples/custom-agent.ts)). |
 | `--agent noop` | Baseline: never calls a tool, declines everything. Shows how much of your suite rewards doing nothing. |
 
@@ -194,7 +197,15 @@ npx sandtable-ai run ./my-domain --openai-base-url http://localhost:11434/v1 \
 - The model must support tool calling on that server. vLLM, for example, needs `--enable-auto-tool-choice` and a `--tool-call-parser`.
 - Cost is estimated only for models in `PRICES` (Claude today). Other models show `n/a` until verified list prices are added, since prices vary by host.
 
-Details and library use: [docs/spec.md](docs/spec.md#openai-compatible-endpoints).
+Details and library use: [docs/guides/bring-your-agent.mdx](docs/guides/bring-your-agent.mdx#openai-compatible-endpoints).
+
+## Compare models
+
+```bash
+npx sandtable-ai leaderboard examples/freight -m leaderboard/models.example.yaml -k 4
+```
+
+Every model plays the agent under the same simulated callers, next to a do-nothing baseline row. Add `--prices prices/bedrock.eu-west-1.json` for verified Bedrock prices, generated from the AWS Pricing API by `scripts/bedrock-prices.mjs`; models whose price isn't published there show `n/a`. The result is ranked by pass^k, with rule violations, cost per trial and turn latency, and each row links to its full report. Interrupted or paid runs resume: models whose results exist are not rerun.
 
 ## Use it in CI
 
@@ -207,9 +218,28 @@ Details and library use: [docs/spec.md](docs/spec.md#openai-compatible-endpoints
 
 `--fail-under` exits non-zero when pass^k drops below the threshold, so a prompt tweak that breaks a customer rule fails the build.
 
+## Use it from your coding agent
+
+This repository is also a Claude Code plugin marketplace. Its `sandtable` plugin teaches a coding agent to run the whole loop for you: draft a domain from a customer's OpenAPI spec, SOP and transcripts, resolve the review notes, write `reference` calls, `lint`, run against your agent, and read failing trajectories. In Claude Code:
+
+```text
+/plugin marketplace add sandtable-ai/sandtable
+/plugin install sandtable@sandtable
+```
+
+On Claude Code 2.1.275 or later, `/plugin install sandtable --marketplace sandtable-ai/sandtable` does both in one step.
+
+| Skill | What it covers |
+|---|---|
+| `drafting-a-domain` | `init`, `review`, resolving `TODO(review)` notes, seed rows, `reference` calls, accepting drafted items, `lint` |
+| `running-and-reading-results` | `run`, choosing k, pass^k, `results.json` and `report.html`, attributing failures to the agent, the simulated user, the task or the harness |
+| `writing-good-tasks` | hidden goals, policy-correct end states, avoiding vacuous tasks, `never_disclose`, balanced suites |
+
+Claude loads a skill when the conversation needs it, or you can call one by name, such as `/sandtable:drafting-a-domain`. A `failure-triager` subagent reads the failing trials of a large run outside the main conversation. The skills ask before any command that calls a model. They are plain `SKILL.md` files in [`plugin/skills`](plugin/skills), so other coding agents that read Agent Skills can use them too.
+
 ## Prior art
 
-`sandtable` stands on τ-bench's method (simulated user + stateful tools + end-state grading + pass^k). What it adds is making that method cheap to apply to *one customer's* workflow, as a file in their repo. Simulation frameworks such as LangWatch Scenario, IntellAgent and DeepEval's simulator, and closed platforms such as Sierra's and Decagon's simulations, cover nearby ground. See [docs/prior-art.md](docs/prior-art.md) for a fair comparison.
+`sandtable` stands on τ-bench's method (simulated user + stateful tools + end-state grading + pass^k). What it adds is making that method cheap to apply to *one customer's* workflow, as a file in their repo. Simulation frameworks such as LangWatch Scenario, IntellAgent and DeepEval's simulator, and closed platforms such as Sierra's and Decagon's simulations, cover nearby ground. See [docs/compare/overview.mdx](docs/compare/overview.mdx) for a fair comparison.
 
 ## Roadmap
 

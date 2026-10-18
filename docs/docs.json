@@ -1,0 +1,93 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "maple",
+  "name": "sandtable",
+  "description": "Open-source CLI that rehearses AI agents on a simulated copy of a customer's world: simulated callers, stateful mock tools, business rules checked on every tool call, deterministic grading and pass^k.",
+  "colors": {
+    "primary": "#B4532A",
+    "light": "#F0A374",
+    "dark": "#9C3F20"
+  },
+  "favicon": "/favicon.svg",
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "banner": {
+    "content": "sandtable is in **early alpha**: the spec and outputs may still change. See the [roadmap](/roadmap)."
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Issues",
+        "href": "https://github.com/sandtable-ai/sandtable/issues"
+      }
+    ],
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/sandtable-ai/sandtable"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/sandtable-ai/sandtable"
+    }
+  },
+  "search": {
+    "prompt": "Search the sandtable docs"
+  },
+  "contextual": {
+    "options": ["copy", "view", "chatgpt", "claude", "mcp", "cursor", "vscode"]
+  },
+  "markdown": {
+    "instructions": [
+      "sandtable is an early-alpha, open-source CLI (TypeScript, MIT): https://github.com/sandtable-ai/sandtable. If a flag here disagrees with `sandtable <command> --help`, trust the help output.",
+      "Grading is deterministic: pass/fail comes from the world's end state, invariants and the tool-call log, never from an LLM judge.",
+      "To draft a domain for a user, read /guides/init and /reference/spec, then run `sandtable validate`, `sandtable lint` and `sandtable review` before any model-backed run. Keep all example data fictional.",
+      "Every page is available as Markdown by appending .md to its URL; /llms-full.txt contains the whole site."
+    ]
+  },
+  "navigation": {
+    "groups": [
+      {
+        "group": "Get started",
+        "pages": ["index", "quickstart", "how-it-works"]
+      },
+      {
+        "group": "Concepts",
+        "pages": [
+          "concepts/domain",
+          "concepts/invariants",
+          "concepts/pass-k",
+          "concepts/baselines",
+          "concepts/review-workflow"
+        ]
+      },
+      {
+        "group": "Guides",
+        "pages": ["guides/init", "guides/bring-your-agent", "guides/ci", "guides/write-tasks"]
+      },
+      {
+        "group": "Reference",
+        "pages": ["reference/spec", "reference/cli", "reference/http-protocol", "reference/results-schema"]
+      },
+      {
+        "group": "Resources",
+        "pages": [
+          "results",
+          {
+            "group": "Compare",
+            "pages": [
+              "compare/overview",
+              "compare/tau-bench",
+              "compare/langwatch-scenario",
+              "compare/intellagent",
+              "compare/hosted-platforms"
+            ]
+          },
+          "roadmap"
+        ]
+      }
+    ]
+  }
+}

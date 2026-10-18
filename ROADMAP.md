@@ -8,7 +8,7 @@ Issues and milestones on GitHub are the source of truth; this page is the overvi
 - [x] Deterministic grading: end state, invariants on every tool call, required and forbidden tools; pass^k; failure-mode clustering
 - [x] Adapters: Claude reference agent, Claude simulated user, scripted user, `noop` baseline, HTTP step protocol, JS/TS module agents
 - [x] Reports: terminal, `results.json`, self-contained `report.html`, per-tag scores, token usage, estimated cost, turn latency; `--fail-under` CI gate
-- [x] Bundled example: freight carrier sales (10 tasks, 5 invariants), offline demo
+- [x] Bundled example: freight carrier sales (32 tasks, 16 invariants), offline demo
 
 ## v0.2: `sandtable init` and trustworthy suites
 - [x] OpenAPI → world tables and tools, deterministic (#6)
@@ -18,8 +18,9 @@ Issues and milestones on GitHub are the source of truth; this page is the overvi
 - [x] `sandtable lint`: ready, solvable, non-vacuous, graded (#10)
 - [x] `never_disclose`: protected values in agent messages (#24)
 - [x] OpenAI-compatible agent and simulated user, for comparing models: `--agent openai:<model>` (#19)
-- [x] Live verification of the Claude adapters, caching and init steps (#1, #3); see docs/results.md
+- [x] Live verification of the Claude adapters, caching and init steps (#1, #3); see [docs/results.mdx](docs/results.mdx)
 - [x] Claude on Amazon Bedrock (#46) and the Bedrock Converse adapter for non-Claude models (#56)
+- [x] Agent skills and a Claude Code plugin, so coding agents can draft, run and debug suites (#51)
 - [ ] First release to npm and PyPI through Trusted Publishing (#23)
 
 ## v0.3: closing the loop in CI
@@ -28,8 +29,8 @@ Issues and milestones on GitHub are the source of truth; this page is the overvi
 - [ ] Critical tasks (#28), failure attribution (#29), coverage matrix (#30)
 - [ ] Customer sign-off report: rule → evidence → reliability (#31)
 - [ ] Regrade stored trials (#32), argument matchers (#25), nested params (#26), per-task `given` overrides (#37)
+- [x] A realistic freight example: negotiation rounds, rep-confirm offers, capacity and callbacks (#45)
 - [x] A second example domain: clinic front desk, 25 tasks and 12 invariants (#22)
-- [ ] A realistic freight example (#45)
 
 ## v0.4: black-box and platform on-ramps
 - [ ] Serve the world as REST, MCP and webhook tools for hosted agent platforms (#14)
