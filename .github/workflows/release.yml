@@ -1,0 +1,34 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write   # create the GitHub release
+  id-token: write   # npm provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: node dist/cli.js lint examples/freight
+      - name: Check the tag matches package.json
+        run: test "v$(node -p 'require("./package.json").version')" = "${GITHUB_REF_NAME}"
+      - name: Publish to npm (next tag for pre-releases)
+        run: npm publish --provenance --access public $([[ "${GITHUB_REF_NAME}" == *-* ]] && echo "--tag next")
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: GitHub release
+        run: gh release create "${GITHUB_REF_NAME}" --generate-notes $([[ "${GITHUB_REF_NAME}" == *-* ]] && echo "--prerelease")
+        env:
+          GH_TOKEN: ${{ github.token }}
