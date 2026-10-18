@@ -8,6 +8,13 @@ export { passHatK, binom } from "./grade/passk.ts";
 export { lintDomain, type LintReport, type TaskLint } from "./grade/lint.ts";
 export type * from "./sim/types.ts";
 export { claudeAgent, claudeUser, DEFAULT_MODEL, type ClaudeOptions, type ClaudeAgentOptions } from "./sim/claude.ts";
+export {
+  openaiCompatAgent,
+  openaiCompatUser,
+  DEFAULT_OPENAI_BASE_URL,
+  type OpenAICompatOptions,
+  type OpenAICompatAgentOptions,
+} from "./sim/openai-compat.ts";
 export { httpAgent } from "./sim/http.ts";
 export { bedrockConverseAgent, type BedrockConverseOptions } from "./sim/bedrock-converse.ts";
 export { noopAgent } from "./sim/noop.ts";
