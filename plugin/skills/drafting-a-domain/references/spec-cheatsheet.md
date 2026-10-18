@@ -152,7 +152,7 @@ The SOP lets the agent offer a human rep here, so this task does not put `transf
 
 ## Gotchas
 
-- **Types are compared strictly.** `mc_number: 100101` (a YAML number) never equals `"100101"` (what a string param stores). Quote numeric-looking strings everywhere.
+- **Numbers and numeric strings match.** `mc_number: 100101` (a YAML number) equals `"100101"` (what a string param stores). Zero-padded IDs do not: quote `"00123"`.
 - **Created keys.** A created row without its key field gets `<table>-<n>`, counting on from the seeded rows: `bookings-1` in an empty table, `orders-4` after three seeded orders.
 - **`where` without `count` means at least one.** If the seed already has a matching row, the task is vacuous: `lint` catches this for writes.
 - **Optional args vanish.** `set: { cancel_reason: $reason }` sets nothing when `reason` was not passed.

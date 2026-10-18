@@ -58,7 +58,7 @@ Derive the expected end state from the SOP. When a transcript shows the human re
 - **Refusals check nothing changed, precisely**: `{ table: bookings, count: 0 }`, plus the row that must stay untouched, `{ table: loads, key: L-1002, fields: { status: available } }`.
 - **`called`** when the call is itself the outcome (a handoff) or the SOP requires the step in every case. **`not_called`** only for what the SOP forbids in that situation. Forbidding a handoff the SOP allows makes a correct agent fail.
 - **Rules that hold in every conversation belong in invariants**, not in each task's `expect`. Invariants already run on every call of every task.
-- **Types are compared strictly**: write `mc_number: "100101"`, not `100101`, when the param is a string.
+- **Numbers and numeric strings match**: `mc_number: 100101` equals a stored `"100101"`. Zero-padded IDs still need quotes (`"00123"` is not `123`).
 
 ## 3. No vacuous tasks
 

@@ -86,7 +86,7 @@ world:
         - { mc_number: "100202", name: Northline Haulers, insurance_status: expired, equipment: dry_van }
 ```
 
-Grading compares values strictly. Quote numeric-looking strings (`"100101"`) when the param is a string, everywhere: seed rows, task expectations and `reference` args. Rows a tool creates without a key get `<table>-<n>`, where `n` starts after the seeded rows (`bookings-1` for an empty table).
+A YAML number matches a string with the same digits (`100101` equals `"100101"`), but quote zero-padded IDs (`"00123"`) everywhere: seed rows, task expectations and `reference` args. Rows a tool creates without a key get `<table>-<n>`, where `n` starts after the seeded rows (`bookings-1` for an empty table).
 
 ### 5. Write `reference` calls
 
