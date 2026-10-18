@@ -9,6 +9,7 @@ import { formatPercent, renderTerminal } from "./report/terminal.ts";
 import { renderHtml } from "./report/html.ts";
 import { runSuite, type SuiteResult } from "./run/suite.ts";
 import { claudeAgent, claudeUser, type ClaudeOptions, type Provider } from "./sim/claude.ts";
+import { registerPrices } from "./run/usage.ts";
 import { bedrockConverseAgent } from "./sim/bedrock-converse.ts";
 import { httpAgent } from "./sim/http.ts";
 import { noopAgent } from "./sim/noop.ts";
@@ -119,6 +120,12 @@ function openInBrowser(file: string): void {
   } catch {
     // no browser available (CI, containers): the path is printed anyway
   }
+}
+
+async function loadPrices(file?: string): Promise<void> {
+  if (!file) return;
+  const added = registerPrices(JSON.parse(await readFile(file, "utf8")));
+  console.log(`  prices: ${added.length} model(s) from ${file}`);
 }
 
 function defaultOut(label: string): string {
@@ -261,7 +268,9 @@ withProviderFlags(program
   .option("--no-html", "skip the HTML report")
   .option("--fail-under <pct>", "exit 1 if pass^k is below this percentage (CI gate)", percent)
   .option("--open", "open the HTML report in the browser when the run finishes")
-  .action(async (domainPath: string, o: { agent: string; user: string; openaiBaseUrl?: string; trials: number; tasks?: string; concurrency: number; out?: string; html: boolean; failUnder?: number; open?: boolean } & ProviderFlags) => {
+  .option("--prices <file>", "extra model prices (JSON from scripts/bedrock-prices.mjs, or { model: {input, output, cacheRead, cacheWrite} })")
+  .action(async (domainPath: string, o: { agent: string; user: string; openaiBaseUrl?: string; trials: number; tasks?: string; concurrency: number; out?: string; html: boolean; failUnder?: number; open?: boolean; prices?: string } & ProviderFlags) => {
+    await loadPrices(o.prices);
     const domain = await loadDomain(domainPath);
     if (domain.tasks.length === 0) throw new Error(`${domain.name} has no tasks yet: add some to tasks.yaml`);
     const agent = await resolveAgent(o.agent, providerOpts(o), o.openaiBaseUrl);
@@ -311,7 +320,9 @@ withProviderFlags(program
   .option("--openai-base-url <url>", "OpenAI-compatible endpoint for openai:<model> entries")
   .option("-o, --out <dir>", "output directory (default: leaderboard/<domain name>)")
   .option("--no-resume", "rerun models even when their results already exist")
-  .action(async (domainPath: string, o: { models: string; user?: string; trials?: number; concurrency: number; openaiBaseUrl?: string; out?: string; resume: boolean } & ProviderFlags) => {
+  .option("--prices <file>", "extra model prices (JSON from scripts/bedrock-prices.mjs)")
+  .action(async (domainPath: string, o: { models: string; user?: string; trials?: number; concurrency: number; openaiBaseUrl?: string; out?: string; resume: boolean; prices?: string } & ProviderFlags) => {
+    await loadPrices(o.prices);
     const domain = await loadDomain(domainPath);
     const parsed = ModelsFile.safeParse(YAML.parse(await readFile(o.models, "utf8")));
     if (!parsed.success) throw new Error(`${o.models}:\n${z.prettifyError(parsed.error)}`);

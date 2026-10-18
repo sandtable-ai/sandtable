@@ -200,7 +200,7 @@ Details and library use: [docs/spec.md](docs/spec.md#openai-compatible-endpoints
 npx sandtable-ai leaderboard examples/freight -m leaderboard/models.example.yaml -k 4
 ```
 
-Every model plays the agent under the same simulated callers, next to a do-nothing baseline row. The result is ranked by pass^k, with rule violations, cost per trial and turn latency, and each row links to its full report. Interrupted or paid runs resume: models whose results exist are not rerun.
+Every model plays the agent under the same simulated callers, next to a do-nothing baseline row. Add `--prices prices/bedrock.eu-west-1.json` for verified Bedrock prices, generated from the AWS Pricing API by `scripts/bedrock-prices.mjs`; models whose price isn't published there show `n/a`. The result is ranked by pass^k, with rule violations, cost per trial and turn latency, and each row links to its full report. Interrupted or paid runs resume: models whose results exist are not rerun.
 
 ## Use it in CI
 

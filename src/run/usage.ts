@@ -43,6 +43,23 @@ export function recordInto(target: UsageByModel, model: string, u: Partial<Omit<
   t.cacheWrite += u.cacheWrite ?? 0;
 }
 
+/**
+ * Add or override prices, keyed by the model ID the adapter records (e.g. global.xai.grok-4.7).
+ * Accepts the output of scripts/bedrock-prices.mjs ({ prices: {...} }) or a plain map.
+ */
+export function registerPrices(file: unknown): string[] {
+  const map = (file && typeof file === "object" && "prices" in file ? (file as { prices: unknown }).prices : file) as Record<string, Record<string, unknown>>;
+  const added: string[] = [];
+  for (const [model, p] of Object.entries(map ?? {})) {
+    const nums = ["input", "output", "cacheRead", "cacheWrite"].map((k) => Number(p?.[k]));
+    if (nums.some((n) => !Number.isFinite(n) || n < 0)) throw new Error(`price for ${model} needs numeric input, output, cacheRead and cacheWrite (USD per million tokens)`);
+    const [input, output, cacheRead, cacheWrite] = nums as [number, number, number, number];
+    PRICES[model] = { input, output, cacheRead, cacheWrite };
+    added.push(model);
+  }
+  return added;
+}
+
 /** Map provider-specific IDs (anthropic.claude-…, us.anthropic.claude-…-v1:0) to the price-table key. */
 export function priceKey(model: string): string {
   return model.replace(/^(?:[a-z]{2,6}\.)?anthropic\./, "").replace(/-v\d+(?::\d+)?$/, "");
@@ -52,7 +69,7 @@ export function costOf(...groups: UsageByModel[]): number | null {
   let total = 0;
   for (const group of groups) {
     for (const [model, u] of Object.entries(group)) {
-      const p = PRICES[priceKey(model)];
+      const p = PRICES[model] ?? PRICES[priceKey(model)];
       if (!p) return null;
       total += (u.input * p.input + u.output * p.output + u.cacheRead * p.cacheRead + u.cacheWrite * p.cacheWrite) / 1e6;
     }
