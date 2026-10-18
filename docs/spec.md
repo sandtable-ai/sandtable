@@ -231,7 +231,7 @@ Usage is recorded under the requested model name:
 | `cacheRead` | `prompt_tokens_details.cached_tokens` (DeepSeek: `prompt_cache_hit_tokens`) |
 | `output` | `completion_tokens` |
 
-`PRICES` holds OpenAI's list prices for a few models on its own API. Other hosts' names (`openai/gpt-4.1` on OpenRouter), dated snapshots and open-weight models have no price, so their cost shows as `n/a`.
+`PRICES` holds verified list prices for Claude models. Other models have no price yet, so their cost shows as `n/a`.
 
 In code, `openaiCompatAgent({ baseUrl, model, apiKey?, headers?, temperature?, maxToolRounds? })` and `openaiCompatUser` (the same options, without `maxToolRounds`) build the adapters. They do not read environment variables, so pass `apiKey` yourself. To compare models, loop over them and keep the caller fixed:
 

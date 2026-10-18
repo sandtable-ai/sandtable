@@ -190,7 +190,7 @@ npx sandtable-ai run ./my-domain --openai-base-url http://localhost:11434/v1 \
 - The endpoint is `--openai-base-url`, else `OPENAI_BASE_URL`, else `https://api.openai.com/v1`. The key comes from `OPENAI_API_KEY`. Agent and user share the endpoint.
 - The caller stays Claude (`ANTHROPIC_API_KEY`) unless you pass `--user`. Keep the caller the same across agents, so that only the agent changes.
 - The model must support tool calling on that server. vLLM, for example, needs `--enable-auto-tool-choice` and a `--tool-call-parser`.
-- Cost is estimated for the OpenAI models in `PRICES` on OpenAI's API. Other hosts and open-weight models show `n/a`, since their prices vary by host.
+- Cost is estimated only for models in `PRICES` (Claude today). Other models show `n/a` until verified list prices are added, since prices vary by host.
 
 Details and library use: [docs/spec.md](docs/spec.md#openai-compatible-endpoints).
 
