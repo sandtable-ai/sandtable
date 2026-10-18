@@ -12,6 +12,7 @@ import { claudeAgent, claudeUser, type ClaudeOptions, type Provider } from "./si
 import { bedrockConverseAgent } from "./sim/bedrock-converse.ts";
 import { httpAgent } from "./sim/http.ts";
 import { noopAgent } from "./sim/noop.ts";
+import { DEFAULT_OPENAI_BASE_URL, openaiCompatAgent, openaiCompatUser, type OpenAICompatOptions } from "./sim/openai-compat.ts";
 import { scriptedUser } from "./sim/scripted.ts";
 import type { AgentAdapter, UserSimulator } from "./sim/types.ts";
 import { appendRows, appendToDomainList } from "./init/merge.ts";
@@ -55,7 +56,22 @@ function withProviderFlags(cmd: Command): Command {
     .option("--aws-profile <name>", "AWS profile for --provider bedrock (default: AWS_PROFILE)");
 }
 
-async function resolveAgent(spec: string, p: ClaudeOptions = {}): Promise<AgentAdapter> {
+/**
+ * Endpoint for an `openai:<model>` spec. The key comes from OPENAI_API_KEY, the usual convention
+ * for OpenAI-compatible servers; local servers such as Ollama and vLLM need none.
+ */
+function openaiEndpoint(spec: string, baseUrlFlag?: string): OpenAICompatOptions {
+  const model = spec.slice("openai:".length);
+  if (!model) throw new Error(`"${spec}" names no model: use openai:<model>, e.g. openai:gpt-4.1-mini`);
+  const baseUrl = baseUrlFlag || process.env.OPENAI_BASE_URL || DEFAULT_OPENAI_BASE_URL;
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey && baseUrl.startsWith(DEFAULT_OPENAI_BASE_URL)) {
+    throw new Error(`${spec} on ${baseUrl} needs OPENAI_API_KEY (or point --openai-base-url at another endpoint)`);
+  }
+  return { baseUrl, model, ...(apiKey ? { apiKey } : {}) };
+}
+
+async function resolveAgent(spec: string, p: ClaudeOptions = {}, openaiBaseUrl?: string): Promise<AgentAdapter> {
   if (spec === "noop") return noopAgent();
   if (spec === "claude") return claudeAgent(p);
   if (spec.startsWith("claude:")) return claudeAgent({ ...p, model: spec.slice("claude:".length) });
@@ -66,6 +82,7 @@ async function resolveAgent(spec: string, p: ClaudeOptions = {}): Promise<AgentA
       ...(p.awsProfile ? { awsProfile: p.awsProfile } : {}),
     });
   }
+  if (spec.startsWith("openai:")) return openaiCompatAgent(openaiEndpoint(spec, openaiBaseUrl));
   if (/^https?:\/\//.test(spec)) return httpAgent(spec);
   if (spec === "scripted:naive" || spec === "scripted:careful") return freightScriptedAgent(spec.endsWith("naive") ? "naive" : "careful");
   const mod = (await import(pathToFileURL(path.resolve(spec)).href)) as { default?: unknown };
@@ -76,11 +93,12 @@ async function resolveAgent(spec: string, p: ClaudeOptions = {}): Promise<AgentA
   return exported as AgentAdapter;
 }
 
-function resolveUser(spec: string, p: ClaudeOptions = {}): UserSimulator {
+function resolveUser(spec: string, p: ClaudeOptions = {}, openaiBaseUrl?: string): UserSimulator {
   if (spec === "scripted") return scriptedUser();
   if (spec === "claude") return claudeUser(p);
   if (spec.startsWith("claude:")) return claudeUser({ ...p, model: spec.slice("claude:".length) });
-  throw new Error(`unknown user simulator "${spec}" (use claude, claude:<model> or scripted)`);
+  if (spec.startsWith("openai:")) return openaiCompatUser(openaiEndpoint(spec, openaiBaseUrl));
+  throw new Error(`unknown user simulator "${spec}" (use claude, claude:<model>, openai:<model> or scripted)`);
 }
 
 async function save(result: SuiteResult, outDir: string, html: boolean): Promise<string> {
@@ -231,8 +249,9 @@ withProviderFlags(program
   .command("run"))
   .argument("<domain>", "domain directory (with sandtable.yaml) or file")
   .description("run every task k times against an agent and grade the results")
-  .option("-a, --agent <spec>", "claude | claude:<model> | bedrock:<model-id> | noop | http(s)://endpoint | ./my-agent.js", "claude")
-  .option("-u, --user <spec>", "simulated user: claude | claude:<model> | scripted", "claude")
+  .option("-a, --agent <spec>", "claude | claude:<model> | bedrock:<model-id> | openai:<model> | noop | http(s)://endpoint | ./my-agent.js", "claude")
+  .option("-u, --user <spec>", "simulated user: claude | claude:<model> | openai:<model> | scripted", "claude")
+  .option("--openai-base-url <url>", `OpenAI-compatible endpoint for openai:<model> (default: OPENAI_BASE_URL or ${DEFAULT_OPENAI_BASE_URL}); key from OPENAI_API_KEY`)
   .option("-k, --trials <n>", "trials per task (pass^k is reported up to k)", int, 1)
   .option("-t, --tasks <ids>", "comma-separated task ids to run")
   .option("-c, --concurrency <n>", "episodes in parallel", int, 4)
@@ -240,11 +259,11 @@ withProviderFlags(program
   .option("--no-html", "skip the HTML report")
   .option("--fail-under <pct>", "exit 1 if pass^k is below this percentage (CI gate)", percent)
   .option("--open", "open the HTML report in the browser when the run finishes")
-  .action(async (domainPath: string, o: { agent: string; user: string; trials: number; tasks?: string; concurrency: number; out?: string; html: boolean; failUnder?: number; open?: boolean } & ProviderFlags) => {
+  .action(async (domainPath: string, o: { agent: string; user: string; openaiBaseUrl?: string; trials: number; tasks?: string; concurrency: number; out?: string; html: boolean; failUnder?: number; open?: boolean } & ProviderFlags) => {
     const domain = await loadDomain(domainPath);
     if (domain.tasks.length === 0) throw new Error(`${domain.name} has no tasks yet: add some to tasks.yaml`);
-    const agent = await resolveAgent(o.agent, providerOpts(o));
-    const user = resolveUser(o.user, providerOpts(o));
+    const agent = await resolveAgent(o.agent, providerOpts(o), o.openaiBaseUrl);
+    const user = resolveUser(o.user, providerOpts(o), o.openaiBaseUrl);
     let done = 0;
     const total = (o.tasks ? o.tasks.split(",").length : domain.tasks.length) * o.trials;
     const result = await runSuite({
