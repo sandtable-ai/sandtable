@@ -194,6 +194,14 @@ npx sandtable-ai run ./my-domain --openai-base-url http://localhost:11434/v1 \
 
 Details and library use: [docs/spec.md](docs/spec.md#openai-compatible-endpoints).
 
+## Compare models
+
+```bash
+npx sandtable-ai leaderboard examples/freight -m leaderboard/models.example.yaml -k 4
+```
+
+Every model plays the agent under the same simulated callers, next to a do-nothing baseline row. The result is ranked by pass^k, with rule violations, cost per trial and turn latency, and each row links to its full report. Interrupted or paid runs resume: models whose results exist are not rerun.
+
 ## Use it in CI
 
 ```yaml
