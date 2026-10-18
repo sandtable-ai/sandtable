@@ -129,6 +129,8 @@ tasks:
 
 Full reference: [docs/spec.md](docs/spec.md).
 
+A second example, [`examples/clinic`](examples/clinic), is a fictional clinic's phone receptionist. Its 25 calls test identity checks, double booking, insurance coverage and self-pay, a 24-hour cancellation policy, patient privacy and an emergency script. It ships with rule-based careful and naive agents, so it also runs offline.
+
 ## Bring your own agent
 
 | Adapter | Use it when |
@@ -220,6 +222,7 @@ npm install
 npm test             # vitest
 npm run typecheck
 npm run sandtable -- run examples/freight --agent scripted:careful --user scripted
+npm run sandtable -- run examples/clinic --agent scripted:clinic-careful --user scripted
 ```
 
 Node ≥ 22.18 runs the TypeScript sources directly. See [CONTRIBUTING.md](CONTRIBUTING.md).

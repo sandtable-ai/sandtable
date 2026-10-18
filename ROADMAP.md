@@ -28,7 +28,8 @@ Issues and milestones on GitHub are the source of truth; this page is the overvi
 - [ ] Critical tasks (#28), failure attribution (#29), coverage matrix (#30)
 - [ ] Customer sign-off report: rule → evidence → reliability (#31)
 - [ ] Regrade stored trials (#32), argument matchers (#25), nested params (#26), per-task `given` overrides (#37)
-- [ ] A realistic freight example (#45) and a second domain (#22)
+- [x] A second example domain: clinic front desk, 25 tasks and 12 invariants (#22)
+- [ ] A realistic freight example (#45)
 
 ## v0.4: black-box and platform on-ramps
 - [ ] Serve the world as REST, MCP and webhook tools for hosted agent platforms (#14)

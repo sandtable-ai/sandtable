@@ -17,4 +17,6 @@ First public release.
   - any model behind an OpenAI-compatible Chat Completions endpoint (OpenAI, OpenRouter, LiteLLM, vLLM, Ollama, Groq, Together), as agent or simulated user: `--agent openai:<model>`, `--user openai:<model>`
   - HTTP step protocol, JS/TS module agents, `noop` baseline, scripted user
 - **Reports**: terminal summary, `results.json`, a self-contained HTML report with transcripts, tokens, estimated cost and turn latency; `--fail-under` CI gate.
-- **Example**: a fictional freight carrier-sales desk with 10 tasks and 5 invariants, and an offline demo.
+- **Examples**:
+  - a fictional freight carrier-sales desk with 10 tasks and 5 invariants, and an offline demo
+  - a fictional clinic front desk with 25 tasks and 12 invariants, and offline careful and naive agents (`--agent scripted:clinic-careful`)
