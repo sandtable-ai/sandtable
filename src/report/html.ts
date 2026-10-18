@@ -36,6 +36,9 @@ tr:last-child td{border-bottom:0}
 .viol{color:var(--bad);font-weight:600}
 code{font:12px ui-monospace,Menlo,monospace}
 .wrap{overflow-x:auto}
+.explain{color:var(--muted);font-size:13px;max-width:760px;margin:10px 0 0}
+footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--line)}
+a{color:inherit}
 .warn{background:var(--tool);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-top:16px}
 </style>
 </head>
@@ -43,6 +46,7 @@ code{font:12px ui-monospace,Menlo,monospace}
 <main>
 <h1>Sandtable report: <span id="domain"></span></h1>
 <div class="meta" id="meta"></div>
+<p class="explain">Each task is a simulated conversation, run k times on a fresh copy of the world. A trial passes only if the records end in the expected state and no rule was broken on any tool call or message. No AI judge decides pass or fail. <b>pass^k</b> is the share of tasks where every one of k trials passed.</p>
 <div id="pending"></div>
 <div class="kpis" id="kpis"></div>
 <h2>Tasks</h2>
@@ -51,6 +55,7 @@ code{font:12px ui-monospace,Menlo,monospace}
 <h2>Failure modes</h2>
 <div class="wrap"><table><thead><tr><th>Count</th><th>Check</th><th>Tasks</th><th>Example</th></tr></thead><tbody id="modes"></tbody></table></div>
 <div id="detail"></div>
+<footer class="meta">Generated with <a href="https://github.com/sandtable-ai/sandtable">sandtable</a>: rehearse AI agents on a sand table of your customer's world.</footer>
 </main>
 <script>
 const R = ${data};

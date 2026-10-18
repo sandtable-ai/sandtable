@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawn } from "node:child_process";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -79,6 +80,17 @@ async function save(result: SuiteResult, outDir: string, html: boolean): Promise
   await writeFile(path.join(outDir, "results.json"), JSON.stringify(result, null, 2));
   if (html) await writeFile(path.join(outDir, "report.html"), renderHtml(result));
   return outDir;
+}
+
+/** Open a file in the default browser; best effort, never fails the run. */
+function openInBrowser(file: string): void {
+  const [cmd, args] =
+    process.platform === "darwin" ? ["open", [file]] : process.platform === "win32" ? ["cmd", ["/c", "start", "", file]] : ["xdg-open", [file]];
+  try {
+    spawn(cmd, args as string[], { detached: true, stdio: "ignore" }).on("error", () => {}).unref();
+  } catch {
+    // no browser available (CI, containers): the path is printed anyway
+  }
 }
 
 function defaultOut(label: string): string {
@@ -219,7 +231,8 @@ withProviderFlags(program
   .option("-o, --out <dir>", "output directory for results.json and report.html")
   .option("--no-html", "skip the HTML report")
   .option("--fail-under <pct>", "exit 1 if pass^k is below this percentage (CI gate)", percent)
-  .action(async (domainPath: string, o: { agent: string; user: string; trials: number; tasks?: string; concurrency: number; out?: string; html: boolean; failUnder?: number } & ProviderFlags) => {
+  .option("--open", "open the HTML report in the browser when the run finishes")
+  .action(async (domainPath: string, o: { agent: string; user: string; trials: number; tasks?: string; concurrency: number; out?: string; html: boolean; failUnder?: number; open?: boolean } & ProviderFlags) => {
     const domain = await loadDomain(domainPath);
     if (domain.tasks.length === 0) throw new Error(`${domain.name} has no tasks yet: add some to tasks.yaml`);
     const agent = await resolveAgent(o.agent, providerOpts(o));
@@ -242,6 +255,7 @@ withProviderFlags(program
     console.log(renderTerminal(result));
     const out = await save(result, o.out ?? defaultOut(domain.name), o.html);
     console.log(`\n  results: ${path.join(out, "results.json")}${o.html ? `\n  report:  ${path.join(out, "report.html")}` : ""}`);
+    if (o.open && o.html) openInBrowser(path.join(out, "report.html"));
     const score = result.passHat[String(o.trials)] ?? 0;
     if (o.failUnder !== undefined && !(score >= o.failUnder)) {
       console.error(`\n✗ pass^${o.trials} ${formatPercent(score)} is below --fail-under ${formatPercent(o.failUnder)}`);
@@ -256,7 +270,9 @@ withProviderFlags(program
   .option("-k, --trials <n>", "trials per task in --live mode", int, 2)
   .option("--agent-model <id>", "model for the agent in --live mode")
   .option("--user-model <id>", "model for the simulated caller in --live mode (a cheaper model keeps runs cheap)")
-  .action(async (o: { live?: boolean; trials: number; agentModel?: string; userModel?: string } & ProviderFlags) => {
+  .option("--no-open", "do not open the HTML report in the browser")
+  .action(async (o: { live?: boolean; trials: number; agentModel?: string; userModel?: string; open: boolean } & ProviderFlags) => {
+    const shouldOpen = o.open && process.stdout.isTTY;
     const domain = await loadDomain(EXAMPLE);
     if (o.live) {
       const p = providerOpts(o);
@@ -269,16 +285,22 @@ withProviderFlags(program
       console.log(renderTerminal(result));
       const out = await save(result, defaultOut("demo-live"), true);
       console.log(`\n  report: ${path.join(out, "report.html")}`);
+      if (shouldOpen) openInBrowser(path.join(out, "report.html"));
       return;
     }
     console.log("Offline demo: two rule-based agents replay scripted carrier calls. No API key needed.\n");
+    let firstReport: string | undefined;
     for (const mode of ["naive", "careful"] as const) {
       const result = await runSuite({ domain, agent: freightScriptedAgent(mode), user: scriptedUser() });
       console.log(renderTerminal(result));
       const out = await save(result, defaultOut(`demo-${mode}`), true);
+      firstReport ??= path.join(out, "report.html");
       console.log(`\n  report: ${path.join(out, "report.html")}\n`);
     }
-    console.log("Next: sandtable demo --live   (Claude plays the carrier and the agent, k=2)");
+    if (shouldOpen && firstReport) openInBrowser(firstReport);
+    console.log("Next:");
+    console.log("  sandtable demo --live                                  Claude plays the carrier and the agent (k=2)");
+    console.log("  sandtable init --openapi api.yaml --sop sop.md -o mine  draft a domain from your customer's docs");
   });
 
 program
