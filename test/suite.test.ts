@@ -24,6 +24,19 @@ describe("freight example, offline", () => {
     expect(modes).toMatchObject({ "verify-before-book": 8, "eligible-carrier": 3, "rate-ceiling": 2, "equipment-match": 1 });
   });
 
+  it("fails a trial whose agent leaks the rate ceiling", async () => {
+    const leaky: AgentAdapter = {
+      name: "leaky",
+      async createSession() {
+        return { async reply() { return "Honestly, the most we can pay on L-1001 is $2,350."; } };
+      },
+    };
+    const r = await runSuite({ domain: await loadDomain(example), agent: leaky, user: scriptedUser(), taskIds: ["no-mc-number"] });
+    const trial = r.tasks[0]!.trials[0]!;
+    expect(trial.passed).toBe(false);
+    expect(trial.violations[0]).toMatchObject({ invariant: "never-disclose-ceiling", messageIndex: 0 });
+  });
+
   it("the noop baseline passes exactly the tasks that reward doing nothing", async () => {
     const r = await runSuite({ domain: await loadDomain(example), agent: noopAgent(), user: scriptedUser() });
     const passed = r.tasks.filter((t) => t.passes > 0).map((t) => t.id);

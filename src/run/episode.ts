@@ -1,10 +1,11 @@
 import { gradeTrial, type CheckResult } from "../grade/expectations.ts";
-import { checkCall, type CallRecord, type Violation } from "../grade/invariants.ts";
+import { checkTranscript, type Violation } from "../grade/invariants.ts";
 import type { Domain, Task } from "../spec/schema.ts";
 import { agentSystemPrompt } from "../sim/prompts.ts";
 import type { AgentAdapter, CallTool, UserSimulator } from "../sim/types.ts";
 import { diffSnapshots, World, type Change } from "../world/store.ts";
-import { coerceArgs, executeTool, toolSchema } from "../world/tools.ts";
+import { toolSchema } from "../world/tools.ts";
+import { createToolRunner } from "./tool-runner.ts";
 import { costOf, recordInto, type Usage } from "./usage.ts";
 
 export type TrajectoryEvent =
@@ -42,28 +43,12 @@ export async function runEpisode(input: {
   const world = new World(domain.world);
   const initial = world.snapshot();
   const events: TrajectoryEvent[] = [];
-  const calls: CallRecord[] = [];
-  const violations: Violation[] = [];
   const agentMessages: string[] = [];
-  const toolsByName = new Map(domain.tools.map((t) => [t.name, t]));
   const usage: Usage = { agent: {}, user: {}, costUsd: 0 };
-
-  const callTool: CallTool = async (name, rawArgs) => {
-    const index = calls.length;
-    const tool = toolsByName.get(name);
-    const record = (rec: CallRecord, found: Violation[] = []) => {
-      calls.push(rec);
-      violations.push(...found);
-      events.push({ type: "tool", index, name, args: rawArgs, ok: rec.ok, result: rec.result, error: rec.error, violations: found.map((v) => v.invariant) });
-      return { ok: rec.ok, result: rec.result, error: rec.error };
-    };
-    if (!tool) return record({ index, name, args: {}, ok: false, error: `unknown tool "${name}"` });
-    const coerced = coerceArgs(tool, rawArgs);
-    if ("error" in coerced) return record({ index, name, args: {}, ok: false, error: coerced.error });
-    const found = checkCall(domain, world, calls, { index, name, args: coerced.args });
-    const outcome = executeTool(tool, world, coerced.args);
-    return record({ index, name, args: coerced.args, ...outcome }, found);
-  };
+  const runner = createToolRunner(domain, world, (e) =>
+    events.push({ type: "tool", index: e.index, name: e.name, args: e.args, ...e.outcome, violations: e.violations.map((v) => v.invariant) }),
+  );
+  const callTool: CallTool = async (name, rawArgs) => runner.call(name, rawArgs);
 
   const persona = domain.personas.find((p) => p.id === task.persona);
   const maxTurns = task.max_turns ?? domain.max_turns;
@@ -104,7 +89,8 @@ export async function runEpisode(input: {
   }
 
   const keys = Object.fromEntries(Object.keys(domain.world.tables).map((t) => [t, world.keyOf(t)]));
-  const { passed, checks } = gradeTrial({ task, world, calls, agentMessages, violations, error });
+  const violations: Violation[] = [...runner.violations, ...checkTranscript(domain, world, runner.calls, agentMessages)];
+  const { passed, checks } = gradeTrial({ task, world, calls: runner.calls, agentMessages, violations, error });
   usage.costUsd = costOf(usage.agent, usage.user);
   return {
     taskId: task.id,

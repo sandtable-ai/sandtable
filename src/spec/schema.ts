@@ -123,12 +123,27 @@ const NeverInvariant = z
   })
   .strict();
 
+/**
+ * The agent must never say any value of `table.field` (e.g. an internal price ceiling).
+ * `unless` allows a value that equals an argument the agent successfully passed to a tool,
+ * e.g. the rate it actually booked.
+ */
+const NeverDiscloseInvariant = z
+  .object({
+    ...invariantBase,
+    never_disclose: z
+      .object({ table: z.string(), field: z.string(), unless: z.object({ tool: z.string(), arg: z.string() }).strict().optional() })
+      .strict(),
+  })
+  .strict();
+
 export const InvariantSpec = z.union([
   BeforeInvariant,
   RequireInvariant,
   LimitInvariant,
   MatchInvariant,
   NeverInvariant,
+  NeverDiscloseInvariant,
 ]);
 
 /**
@@ -174,6 +189,8 @@ export const TaskSpec = z
         script: z.array(z.string()).optional(),
       })
       .strict(),
+    /** Tool calls a correct agent would make; `sandtable lint` replays them to prove the task is solvable. */
+    reference: z.array(z.object({ tool: z.string(), args: z.record(z.string(), Value).default({}) }).strict()).optional(),
     expect: ExpectSpec,
     max_turns: z.number().int().positive().optional(),
   })

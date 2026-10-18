@@ -28,7 +28,7 @@ function outputSchema(tools: string[], tables: string[]) {
     id: z.string().describe("kebab-case identifier, e.g. verify-before-book"),
     description: z.string().describe("one sentence stating the rule"),
     quote: z.string().describe("the exact sentence(s) from the SOP this rule comes from, copied verbatim"),
-    kind: z.enum(["before", "require", "limit", "match", "never"]),
+    kind: z.enum(["before", "require", "limit", "match", "never", "never_disclose"]),
     tool: Tool.describe("the guarded tool (for `before`: the tool that must come second)"),
     first_tool: Tool.nullable().describe("before: the tool that must succeed first; otherwise null"),
     same_args: z.array(z.string()).describe("before: argument names that must be equal in both calls; otherwise []"),
@@ -43,6 +43,12 @@ function outputSchema(tools: string[], tables: string[]) {
     bound_ref: FieldRef.nullable().describe("limit: record field holding the bound; otherwise null"),
     left: FieldRef.nullable().describe("match: first record field; otherwise null"),
     right: FieldRef.nullable().describe("match: second record field that must equal the first; otherwise null"),
+    protected_field: z
+      .object({ table: Table, field: z.string() })
+      .nullable()
+      .describe("never_disclose: the record field the agent must never say; otherwise null"),
+    unless_tool: Tool.nullable().describe("never_disclose: a value may be said when it equals this tool's argument (e.g. the agreed rate); otherwise null"),
+    unless_arg: z.string().nullable().describe("never_disclose: the argument of unless_tool; otherwise null"),
   });
   return z.object({
     invariants: z.array(Proposal),
@@ -62,12 +68,13 @@ The agent acts only through the tools listed below. Each tool call is checked ag
 - limit: the numeric argument \`arg\` must be at most (lte) or at least (gte) a constant or a record field (e.g. never book above the load's max_rate).
 - match: two record fields referenced by the call must be equal (e.g. carrier equipment must match load equipment).
 - never: \`tool\` must never be called, or never with arguments satisfying \`conditions\`.
+- never_disclose: the agent must never say any value of \`protected_field\` (an internal number or text), except a value equal to \`unless_arg\` of a successful \`unless_tool\` call. \`tool\` is ignored for this kind (repeat any tool).
 
 Rules:
 - Propose an invariant only when the SOP clearly states the rule and it can be checked from tool arguments and record fields. Use only the tools, arguments, tables and fields listed. Never invent fields.
 - Copy the supporting SOP text into \`quote\` verbatim.
 - One rule per invariant. Prefer a few precise invariants over many vague ones.
-- Rules about what the agent says (tone, disclosure, read-backs, confirmations) go into soft_rules with their quote.`;
+- Rules about not revealing a specific internal field are never_disclose invariants. Other rules about what the agent says (tone, read-backs, confirmations) go into soft_rules with their quote.`;
 
 function describeDomain(domain: Domain, fields: Record<string, string[]>): string {
   const tools = domain.tools
@@ -123,6 +130,16 @@ export function proposalToInvariant(p: Proposal, sopFile: string): Invariant | s
       break;
     case "never":
       raw = { ...base, never: { tool: p.tool, ...(p.conditions.length ? { when: where(p.conditions) } : {}) } };
+      break;
+    case "never_disclose":
+      if (!p.protected_field) return "never_disclose needs protected_field";
+      raw = {
+        ...base,
+        never_disclose: {
+          ...p.protected_field,
+          ...(p.unless_tool && p.unless_arg ? { unless: { tool: p.unless_tool, arg: p.unless_arg } } : {}),
+        },
+      };
       break;
   }
   const parsed = InvariantSpec.safeParse(raw);
@@ -198,5 +215,6 @@ function referencedFields(inv: Invariant): [string, string][] {
     return [inv.limit.lte, inv.limit.gte].flatMap((b) => (b && typeof b === "object" ? [[b.table, b.field] as [string, string]] : []));
   }
   if ("match" in inv) return [inv.match.left, inv.match.right].map((r) => [r.table, r.field]);
+  if ("never_disclose" in inv) return [[inv.never_disclose.table, inv.never_disclose.field]];
   return [];
 }

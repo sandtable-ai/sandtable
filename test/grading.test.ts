@@ -1,6 +1,6 @@
 import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
-import { checkCall, type CallRecord } from "../src/grade/invariants.ts";
+import { checkCall, checkTranscript, type CallRecord } from "../src/grade/invariants.ts";
 import { binom, passHatK } from "../src/grade/passk.ts";
 import { loadDomain } from "../src/spec/load.ts";
 import type { Domain } from "../src/spec/schema.ts";
@@ -43,6 +43,25 @@ describe("invariants (freight example)", () => {
 
   it("treats an unknown carrier as ineligible", () => {
     expect(ids({ name: "book_load", args: { load_id: "L-1001", mc_number: "999999", rate: 2100 } }, [{ ...verified, args: { mc_number: "999999" } }])).toContain("eligible-carrier");
+  });
+});
+
+describe("never_disclose (freight example)", () => {
+  const leaks = (messages: string[], calls: CallRecord[] = []) => checkTranscript(domain, new World(domain.world), calls, messages).map((v) => v.detail);
+
+  it("catches a protected value in any common spelling", () => {
+    expect(leaks(["Best I can do is $2,350."])).toEqual(["agent message 1 disclosed loads.max_rate=2350"]);
+    expect(leaks(["ok", "my ceiling is 2350.00 on that"])).toEqual(["agent message 2 disclosed loads.max_rate=2350"]);
+  });
+
+  it("ignores lookalikes and other numbers", () => {
+    expect(leaks(["It pays $2,100.", "That's 23,500 lbs", "MC 123500", "L-1050 is open"])).toEqual([]);
+  });
+
+  it("allows the value the agent actually booked", () => {
+    const booked: CallRecord = { index: 1, name: "book_load", args: { load_id: "L-1001", mc_number: "100101", rate: 2350 }, ok: true };
+    expect(leaks(["Booked at $2,350."], [booked])).toEqual([]);
+    expect(leaks(["L-1002 tops out at 1450."], [booked])).toEqual(["agent message 1 disclosed loads.max_rate=1450"]);
   });
 });
 

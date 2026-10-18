@@ -121,6 +121,10 @@ invariants:
       left: { table: carriers, key_arg: mc_number, field: equipment }
       right: { table: loads, key_arg: load_id, field: equipment }
 
+  - id: never-disclose-ceiling
+    description: Never tell the caller a load's max_rate, unless it is the rate actually booked.
+    never_disclose: { table: loads, field: max_rate, unless: { tool: book_load, arg: rate } }
+
 personas:
   - id: easygoing
     description: A friendly, efficient dispatcher who answers questions directly and doesn't haggle much.

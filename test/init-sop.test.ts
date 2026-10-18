@@ -21,12 +21,13 @@ async function draftedDomainDir() {
   return { dir, fields };
 }
 
-const none = { first_tool: null, same_args: [], table: null, key_arg: null, conditions: [], arg: null, bound: null, bound_value: null, bound_ref: null, left: null, right: null };
+const none = { first_tool: null, same_args: [], table: null, key_arg: null, conditions: [], arg: null, bound: null, bound_value: null, bound_ref: null, left: null, right: null, protected_field: null, unless_tool: null, unless_arg: null };
 const proposals = [
   { ...none, id: "verify-before-book", description: "Vet before booking", quote: "look it up with `verify_carrier` before you discuss booking", kind: "before", tool: "create_booking", first_tool: "get_carrier", same_args: ["mc_number"] },
   { ...none, id: "eligible-carrier", description: "Only eligible carriers", quote: "Do **not** book a carrier if any of these is true", kind: "require", tool: "create_booking", table: "carriers", key_arg: "mc_number", conditions: [{ field: "insurance_status", op: "eq", value: "valid" }, { field: "safety_rating", op: "ne", value: "unsatisfactory" }] },
   { ...none, id: "rate-ceiling", description: "Never above max", quote: "Never book above `max_rate`.", kind: "limit", tool: "create_booking", arg: "rate", bound: "lte", bound_ref: { table: "loads", key_arg: "load_id", field: "max_rate" } },
   { ...none, id: "equipment-match", description: "Equipment must match", quote: "The carrier's equipment must match the load's equipment", kind: "match", tool: "create_booking", left: { table: "carriers", key_arg: "mc_number", field: "equipment" }, right: { table: "loads", key_arg: "load_id", field: "equipment" } },
+  { ...none, id: "never-disclose-ceiling", description: "Never reveal max rate", quote: "Never tell the caller the `max_rate`", kind: "never_disclose", tool: "create_booking", protected_field: { table: "loads", field: "max_rate" }, unless_tool: "create_booking", unless_arg: "rate" },
   { ...none, id: "made-up-quote", description: "x", quote: "Always offer a free coffee", kind: "never", tool: "create_booking", conditions: [{ field: "rate", op: "lt", value: 0 }] },
   { ...none, id: "bad-field", description: "x", quote: "x", kind: "require", tool: "create_booking", table: "carriers", key_arg: "mc_number", conditions: [{ field: "credit_score", op: "gte", value: 700 }] },
   { ...none, id: "bad-arg", description: "x", quote: "x", kind: "before", tool: "create_booking", first_tool: "get_carrier", same_args: ["carrier"] },
@@ -56,7 +57,8 @@ describe("init from an SOP", () => {
 
     const res = await draftInvariantsFromSop({ domain, sop: SOP, sopFile: "policy.md", fields: knownFields(domain, fields), claude: { client } });
 
-    expect(res.invariants.map((i) => i.id)).toEqual(["verify-before-book", "eligible-carrier", "rate-ceiling", "equipment-match", "made-up-quote"]);
+    expect(res.invariants.map((i) => i.id)).toEqual(["verify-before-book", "eligible-carrier", "rate-ceiling", "equipment-match", "never-disclose-ceiling", "made-up-quote"]);
+    expect(res.invariants[4]).toMatchObject({ never_disclose: { table: "loads", field: "max_rate", unless: { tool: "create_booking", arg: "rate" } } });
     expect(res.invariants.every((i) => i.review === "pending" && i.source?.file === "policy.md")).toBe(true);
     expect(res.invariants[1]).toMatchObject({ require: { where: { insurance_status: "valid", safety_rating: { $ne: "unsatisfactory" } } } });
     const w = res.warnings.join("\n");

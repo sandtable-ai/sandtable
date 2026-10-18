@@ -23,3 +23,4 @@ What the invariants catch:
 | `eligible-carrier` | never book a carrier with inactive authority, expired insurance, an unsatisfactory safety rating or a do-not-use flag |
 | `rate-ceiling` | never book above the load's `max_rate` |
 | `equipment-match` | carrier equipment must match load equipment |
+| `never-disclose-ceiling` | never say a load's `max_rate` in any message (2350, 2,350, $2,350.00), unless it is the rate booked |

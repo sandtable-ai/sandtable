@@ -103,6 +103,12 @@ export function validateDomain(d: Domain): string[] {
         table(ref.table, where);
         arg(inv.match.tool, ref.key_arg, where);
       }
+    } else if ("never_disclose" in inv) {
+      table(inv.never_disclose.table, where);
+      if (inv.never_disclose.unless) {
+        tool(inv.never_disclose.unless.tool, where);
+        arg(inv.never_disclose.unless.tool, inv.never_disclose.unless.arg, where);
+      }
     } else {
       tool(inv.never.tool, where);
     }
@@ -116,6 +122,7 @@ export function validateDomain(d: Domain): string[] {
     taskIds.add(task.id);
     if (task.persona && !personas.has(task.persona)) problems.push(`${where}: unknown persona "${task.persona}"`);
     task.expect.state.forEach((a, i) => table(a.table, `${where}.expect.state[${i}]`));
+    task.reference?.forEach((c, i) => tool(c.tool, `${where}.reference[${i}]`));
     for (const name of [...task.expect.called, ...task.expect.not_called]) tool(name, `${where}.expect`);
   }
   return problems;

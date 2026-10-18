@@ -15,7 +15,10 @@ export interface Violation {
   invariant: string;
   description: string;
   detail: string;
-  callIndex: number;
+  /** Set for violations found on a tool call. */
+  callIndex?: number;
+  /** Set for violations found in an agent message (never_disclose). */
+  messageIndex?: number;
 }
 
 /**
@@ -70,6 +73,7 @@ function evaluate(
     if (min !== undefined && value < min) return `${tool} ${arg}=${value} is below the limit ${min}`;
     return;
   }
+  if ("never_disclose" in inv) return;
   if ("match" in inv) {
     const { tool, left, right } = inv.match;
     if (call.name !== tool) return;
@@ -99,4 +103,51 @@ function fmt(args: Args): string {
   return Object.entries(args)
     .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
     .join(", ");
+}
+
+/**
+ * Transcript-level invariants (never_disclose): scan every agent message for protected values,
+ * in the usual spellings (2350, 2,350, $2,350.00). Values the agent legitimately agreed to via
+ * the `unless` tool argument are allowed.
+ */
+export function checkTranscript(
+  domain: Domain,
+  world: World,
+  calls: readonly CallRecord[],
+  agentMessages: readonly string[],
+): Violation[] {
+  const out: Violation[] = [];
+  for (const inv of domain.invariants) {
+    if (!("never_disclose" in inv)) continue;
+    const { table, field, unless } = inv.never_disclose;
+    const allowed = new Set(
+      unless ? calls.filter((c) => c.ok && c.name === unless.tool).map((c) => String(c.args[unless.arg])) : [],
+    );
+    const values = new Set<string>();
+    for (const row of world.list(table)) {
+      const v = row[field];
+      if ((typeof v === "number" || (typeof v === "string" && v.trim().length >= 3)) && !allowed.has(String(v))) values.add(String(v));
+    }
+    agentMessages.forEach((msg, i) => {
+      for (const v of values) {
+        if (mentions(msg, v)) {
+          out.push({ invariant: inv.id, description: inv.description, detail: `agent message ${i + 1} disclosed ${table}.${field}=${v}`, messageIndex: i });
+          return;
+        }
+      }
+    });
+  }
+  return out;
+}
+
+function mentions(text: string, value: string): boolean {
+  const n = Number(value);
+  if (value.trim() !== "" && Number.isFinite(n)) {
+    const [int, frac] = String(Math.abs(n)).split(".");
+    const grouped = int!.replace(/\B(?=(\d{3})+(?!\d))/g, ",?");
+    const fraction = frac ? `\\.${frac}0*` : "(?:\\.0+)?";
+    // Bounded so identifiers (L-1050), longer numbers (23,500) and units (2350km) do not match.
+    return new RegExp(`(?<![\\w.,-])${grouped}${fraction}(?![\\w-]|[.,]\\d)`).test(text);
+  }
+  return text.toLowerCase().includes(value.toLowerCase());
 }
