@@ -12,7 +12,10 @@ import { httpAgent } from "./sim/http.ts";
 import { noopAgent } from "./sim/noop.ts";
 import { scriptedUser } from "./sim/scripted.ts";
 import type { AgentAdapter, UserSimulator } from "./sim/types.ts";
+import { draftFromOpenApi } from "./init/openapi.ts";
+import { DOMAIN_FILE, POLICY_PLACEHOLDER, renderDraft, TASKS_PLACEHOLDER, writeDraft } from "./init/render.ts";
 import { DomainError, loadDomain } from "./spec/load.ts";
+import YAML from "yaml";
 
 const EXAMPLE = fileURLToPath(new URL("../examples/freight", import.meta.url));
 
@@ -63,6 +66,28 @@ const program = new Command()
   .name("rehearse")
   .description("Rehearse an AI agent on a simulated copy of a customer's world before it goes live.")
   .version("0.1.0-alpha.0");
+
+program
+  .command("init")
+  .description("draft a domain from a customer's artifacts (review the output before trusting it)")
+  .requiredOption("--openapi <file>", "OpenAPI 3.x spec (YAML or JSON) of the customer's API")
+  .option("-o, --out <dir>", "directory to write the draft into", "rehearsal")
+  .option("--force", "overwrite existing files")
+  .action(async (o: { openapi: string; out: string; force?: boolean }) => {
+    const spec = YAML.parse(await readFile(o.openapi, "utf8")) as Record<string, unknown>;
+    const draft = draftFromOpenApi(spec);
+    const files = {
+      [DOMAIN_FILE]: renderDraft(draft, path.basename(o.openapi)),
+      "policy.md": POLICY_PLACEHOLDER,
+      "tasks.yaml": TASKS_PLACEHOLDER,
+    };
+    const written = await writeDraft(o.out, files, o.force);
+    const notes = draft.tools.reduce((n, t) => n + t.notes.length, 0);
+    console.log(`Drafted ${draft.name}: ${Object.keys(draft.tables).length} tables, ${draft.tools.length} tools, ${notes} review notes.`);
+    for (const w of draft.warnings) console.log(`  ! ${w}`);
+    for (const f of written) console.log(`  wrote ${f}`);
+    console.log(`\nNext: review the TODOs, add seed rows, then \`rehearse validate ${o.out}\`.`);
+  });
 
 program
   .command("validate")

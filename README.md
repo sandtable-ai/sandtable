@@ -26,7 +26,7 @@ rehearse · freight-carrier-sales · agent scripted:naive · user scripted · k=
      e.g. book_load rate=2600 exceeds the limit 2350
 ```
 
-> Status: **early alpha**. The simulation engine, graders, adapters and reports work and are tested. Generating a domain automatically from a customer's SOP, OpenAPI spec and transcripts (`rehearse init`) is the next milestone. See [ROADMAP.md](ROADMAP.md).
+> Status: **early alpha**. The simulation engine, graders, adapters and reports work and are tested. `rehearse init` drafts world tables and tools from an OpenAPI spec; drafting invariants from an SOP and tasks from transcripts is next. See [ROADMAP.md](ROADMAP.md).
 
 ## Why
 
@@ -43,9 +43,10 @@ npx rehearse-agents demo          # offline: two rule-based agents, no API key n
 npx rehearse-agents demo --live   # Claude plays both the caller and the agent (needs ANTHROPIC_API_KEY)
 ```
 
-Then point it at your own domain and agent:
+Then draft a domain from your customer's API and point it at your agent:
 
 ```bash
+npx rehearse-agents init --openapi ./customer-api.yaml -o ./my-domain   # deterministic draft, review the TODOs
 npx rehearse-agents validate ./my-domain
 npx rehearse-agents run ./my-domain --agent http://localhost:8787/step -k 4 --fail-under 90
 ```
@@ -166,7 +167,7 @@ The simulated user is `--user claude` (default), `--user claude:<model>`, or `--
 
 ## Roadmap
 
-- **`rehearse init`**: draft a reviewable domain from an SOP, an OpenAPI spec and call transcripts ([examples/freight/source](examples/freight/source) shows the inputs).
+- **`rehearse init`**: draft a reviewable domain from an SOP, an OpenAPI spec and call transcripts ([examples/freight/source](examples/freight/source) shows the inputs). The OpenAPI step works today ([docs/init.md](docs/init.md)); SOP and transcript steps are next.
 - **Black-box mode**: serve the simulated world as REST and MCP, so an unmodified agent can be rehearsed by pointing its base URL at `rehearse`.
 - **PR comments** with pass^k deltas against the last run.
 - **Soft checks**: LLM-judged criteria (tone, never disclosing the ceiling) as a separate, calibrated score that never overrides the hard gates.
