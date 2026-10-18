@@ -1,40 +1,40 @@
 # Roadmap
 
-## v0.1: engine (this release)
-- [x] Domain spec: world, tools (get/list/create/update/respond, checks, atomic ops), invariants (before, require, limit, match, never), personas, tasks
-- [x] Episode runner: simulated user ↔ agent, tool calls against a fresh world per trial
-- [x] Deterministic grading: end state, invariants, required and forbidden tools; pass^k; failure-mode clustering
-- [x] Adapters: Claude reference agent, Claude simulated user, scripted user, HTTP agent protocol, JS/TS module agents
-- [x] Reports: terminal, `results.json`, self-contained `report.html`; `--fail-under` CI gate
-- [x] Bundled example: freight carrier sales (10 tasks, 4 invariants), offline demo
+Issues and milestones on GitHub are the source of truth; this page is the overview.
 
-## v0.2: `sandtable init` (the headline feature)
-Draft a domain from what a customer actually hands over: an SOP or policy doc, an OpenAPI spec, and call or chat transcripts.
-- [ ] OpenAPI → `world.tables` (resources, keys, field types) and `tools` (operations → ops), with fixtures from schema examples
-- [ ] SOP → candidate `invariants`, each quoting the sentence it came from, for human review
-- [ ] Transcripts → personas and tasks with hidden goals and expected end states (PII scrubbed first)
-- [ ] Output is a *draft*: every generated item is marked `review: pending` until a person accepts it
-- [ ] Task-quality lint: a do-nothing agent and a scripted "perfect" agent bound every task (catches trivial or impossible tasks)
+## v0.1: engine
+- [x] Domain spec: world, tools (get/list/create/update/respond, checks, atomic ops, param defaults), invariants, personas, tasks
+- [x] Episode runner: simulated user ↔ agent, tool calls against a fresh world per trial
+- [x] Deterministic grading: end state, invariants on every tool call, required and forbidden tools; pass^k; failure-mode clustering
+- [x] Adapters: Claude reference agent, Claude simulated user, scripted user, `noop` baseline, HTTP step protocol, JS/TS module agents
+- [x] Reports: terminal, `results.json`, self-contained `report.html`, per-tag scores, token usage, estimated cost, turn latency; `--fail-under` CI gate
+- [x] Bundled example: freight carrier sales (10 tasks, 5 invariants), offline demo
+
+## v0.2: `sandtable init` and trustworthy suites
+- [x] OpenAPI → world tables and tools, deterministic (#6)
+- [x] SOP → invariants, each quoting its source (#7, live verification pending)
+- [x] Transcripts → personas, tasks and fictional seed rows, PII scrubbed first (#8, live verification pending)
+- [x] Review workflow: `review: pending`, `sandtable review`, `validate --strict`, provisional reports (#9)
+- [x] `sandtable lint`: ready, solvable, non-vacuous, graded (#10)
+- [x] `never_disclose`: protected values in agent messages (#24)
+- [ ] Verify the Claude adapters, caching and init steps against the live API (#1, #3)
+- [ ] Release workflow and first npm publish (#23)
 
 ## v0.3: closing the loop in CI
-- [ ] `--baseline <results.json>`: per-task deltas, new failures first
-- [ ] GitHub Action that comments pass^k deltas on pull requests
-- [ ] Per-tag scores in reports (`refusal`, `negotiation`, …), so refusal-heavy suites can't hide a broken happy path
-- [ ] Cost and latency per trial; response caching for the simulated user
+- [ ] Baseline comparison and PR comments with pass^k deltas (#12, #13)
+- [ ] Reliability verdicts: pass@k, flaky tasks, flip rate, intervals, infra errors as SKIPPED (#27)
+- [ ] Critical tasks (#28), failure attribution (#29), coverage matrix (#30)
+- [ ] Customer sign-off report: rule → evidence → reliability (#31)
+- [ ] Regrade stored trials (#32), argument matchers (#25), nested params (#26), per-task `given` overrides (#37)
+- [ ] A realistic freight example (#45) and a second domain (#22)
 
-## v0.4: black-box mode
-- [ ] Serve the simulated world as REST (from the OpenAPI spec) and as an MCP server, so an unmodified agent can be rehearsed by changing its base URL
-- [ ] Fault profiles: timeouts after commit, 429 with Retry-After, duplicate webhooks
+## v0.4: black-box and platform on-ramps
+- [ ] Serve the world as REST, MCP and webhook tools for hosted agent platforms (#14)
+- [ ] Import voice-agent platform configs as draft domains (#34, #35)
+- [ ] Fault profiles (#15)
 
 ## Later
-- [ ] Soft checks: LLM-judged criteria (tone, never disclosing the ceiling), reported separately and calibrated against human labels
-- [ ] Voice: rehearse phone agents over WebSocket/WebRTC audio with a TTS/STT caller, plus turn latency and barge-in metrics
-- [ ] More adapters: OpenAI Responses, Claude Agent SDK, MCP-client agents
-- [ ] Export to τ-bench's domain format
-- [ ] More example domains: clinic front desk, e-commerce returns, IT helpdesk
+Soft checks (#16), voice transport and timing metrics (#17, #43), exports to other harness formats (#18), OpenAI-compatible adapter (#19), negotiation invariants (#36), simulation clock (#38), outcome grading (#39), business metrics (#40), persona × condition matrix (#41), multi-session tasks (#42), Python agents in-process (#44).
 
 ## Good first issues
-- Add a `noop` built-in agent (useful baseline: the share of tasks a do-nothing agent passes)
-- Add `$regex` to where clauses
-- `sandtable run --tag refusal` to filter tasks by tag
-- A second example domain
+`$regex` in where clauses (#20), `--tag` filter (#21).

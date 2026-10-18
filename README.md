@@ -49,7 +49,8 @@ Then draft a domain from your customer's API and point it at your agent:
 
 ```bash
 npx sandtable-ai init --openapi ./api.yaml --sop ./sop.md --transcripts ./calls -o ./my-domain   # draft, then review
-npx sandtable-ai validate ./my-domain
+npx sandtable-ai review ./my-domain        # what still needs a human decision
+npx sandtable-ai lint ./my-domain          # every task ready, solvable, non-vacuous (no model calls)
 npx sandtable-ai run ./my-domain --agent http://localhost:8787/step -k 4 --fail-under 90
 ```
 
@@ -79,7 +80,7 @@ flowchart LR
 2. **Tools.** The customer's API, declared as operations on the world: `get`, `list`, `create`, `update`, plus `checks` the real API would enforce (404, 409). Writes are atomic.
 3. **Invariants.** Policy rules checked *before* every tool call, using the world as it was when the agent decided. Attempting a forbidden action is a violation even if the API would have rejected it.
 4. **Tasks.** A simulated user with a persona and a hidden goal ("you need at least $1,600 and won't go lower"), plus the end state that counts as success.
-5. **Grading.** A trial passes only if the end state matches, required tools ran, forbidden ones didn't, and no invariant was violated. No judge model in the loop.
+5. **Grading.** A trial passes only if the end state matches, required tools ran, forbidden ones didn't, no invariant was violated, and no protected value (`never_disclose`) appeared in what the agent said. No judge model in the loop.
 
 ## A domain at a glance
 
@@ -156,6 +157,7 @@ The simulated user is `--user claude` (default), `--user claude:<model>`, or `--
 ## Use it in CI
 
 ```yaml
+- run: npx sandtable-ai validate ./sandtable --strict && npx sandtable-ai lint ./sandtable
 - run: npx sandtable-ai run ./sandtable --agent ./agent.ts -k 3 --fail-under 85
   env:
     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -169,13 +171,7 @@ The simulated user is `--user claude` (default), `--user claude:<model>`, or `--
 
 ## Roadmap
 
-- **`sandtable init`**: draft a reviewable domain from an SOP, an OpenAPI spec and call transcripts ([examples/freight/source](examples/freight/source) shows the inputs). All three steps work today ([docs/init.md](docs/init.md)); every drafted item stays `review: pending` until a person accepts it.
-- **Black-box mode**: serve the simulated world as REST and MCP, so an unmodified agent can be rehearsed by pointing its base URL at `sandtable`.
-- **PR comments** with pass^k deltas against the last run.
-- **Soft checks**: LLM-judged criteria (tone, never disclosing the ceiling) as a separate, calibrated score that never overrides the hard gates.
-- **Voice**: rehearse phone agents over WebSocket/WebRTC audio.
-
-Details and good first issues are in [ROADMAP.md](ROADMAP.md).
+Next up: live verification of the model-backed steps, baselines and PR comments, reliability verdicts (flaky tasks, intervals), a customer-facing sign-off report, black-box mode (REST, MCP and webhook tools for hosted voice platforms), and importers for voice-agent platform configs. See [ROADMAP.md](ROADMAP.md) and the issues.
 
 ## Contributing
 
