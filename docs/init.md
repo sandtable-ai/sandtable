@@ -66,6 +66,21 @@ Claude reads the SOP alongside the domain's tools, params, tables and known fiel
 
 The SOP also becomes `policy.md` when the domain still has the placeholder. Pass `--model` to choose the drafting model (default `claude-opus-5-5`).
 
-## Next: transcripts
+## From call or chat transcripts (Claude, grounded)
 
-Drafting personas and tasks from call transcripts is in progress: see the issues labelled `area:init`.
+```bash
+sandtable init --transcripts calls/ -o sandtable          # a directory of .txt/.md files, or one file
+sandtable init --openapi api.yaml --sop policy.md --transcripts calls/ -o sandtable   # all three steps
+```
+
+Each transcript becomes one task:
+- a hidden-goal instruction for a simulated caller who behaves like the real one
+- a scripted version of the caller's turns, so the task also runs offline
+- tags, and a new or reused persona
+- the end state the world must reach **if the agent follows the policy**. When the human rep broke the policy, the expectation follows the policy, not the rep.
+
+Guardrails:
+- **PII is scrubbed locally before anything is sent**: emails, phone numbers and card-like numbers. Short identifiers such as order or MC numbers are kept. The model is told to replace names and companies with fictional ones.
+- When the world lacks rows for the scenario, the draft adds **fictional seed rows**. A row whose key collides with an existing one drops the task.
+- Tasks that would grade nothing (no state and no `called` expectations), or that fail validation, are dropped with the reason.
+- Survivors are `review: pending`, with the transcript and a verbatim excerpt as `source`.

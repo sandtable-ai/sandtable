@@ -28,7 +28,7 @@ sandtable · freight-carrier-sales · agent scripted:naive · user scripted · k
      e.g. book_load rate=2600 exceeds the limit 2350
 ```
 
-> Status: **early alpha**. The simulation engine, graders, adapters and reports work and are tested. `sandtable init` drafts world tables and tools from an OpenAPI spec and invariants from an SOP; drafting tasks from transcripts is next. See [ROADMAP.md](ROADMAP.md).
+> Status: **early alpha**. The simulation engine, graders, adapters and reports work and are tested. `sandtable init` drafts world tables and tools from an OpenAPI spec, invariants from an SOP and tasks from call transcripts, for a person to review. Model-backed steps have not yet been verified against the live API. See [ROADMAP.md](ROADMAP.md).
 
 ## Why
 
@@ -48,7 +48,7 @@ npx sandtable-ai demo --live   # Claude plays both the caller and the agent (nee
 Then draft a domain from your customer's API and point it at your agent:
 
 ```bash
-npx sandtable-ai init --openapi ./customer-api.yaml --sop ./sop.md -o ./my-domain   # draft, then review
+npx sandtable-ai init --openapi ./api.yaml --sop ./sop.md --transcripts ./calls -o ./my-domain   # draft, then review
 npx sandtable-ai validate ./my-domain
 npx sandtable-ai run ./my-domain --agent http://localhost:8787/step -k 4 --fail-under 90
 ```
@@ -169,7 +169,7 @@ The simulated user is `--user claude` (default), `--user claude:<model>`, or `--
 
 ## Roadmap
 
-- **`sandtable init`**: draft a reviewable domain from an SOP, an OpenAPI spec and call transcripts ([examples/freight/source](examples/freight/source) shows the inputs). The OpenAPI and SOP steps work today ([docs/init.md](docs/init.md)); transcripts are next.
+- **`sandtable init`**: draft a reviewable domain from an SOP, an OpenAPI spec and call transcripts ([examples/freight/source](examples/freight/source) shows the inputs). All three steps work today ([docs/init.md](docs/init.md)); every drafted item stays `review: pending` until a person accepts it.
 - **Black-box mode**: serve the simulated world as REST and MCP, so an unmodified agent can be rehearsed by pointing its base URL at `sandtable`.
 - **PR comments** with pass^k deltas against the last run.
 - **Soft checks**: LLM-judged criteria (tone, never disclosing the ceiling) as a separate, calibrated score that never overrides the hard gates.

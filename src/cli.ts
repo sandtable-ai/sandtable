@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Command, InvalidArgumentError } from "commander";
@@ -12,9 +12,10 @@ import { httpAgent } from "./sim/http.ts";
 import { noopAgent } from "./sim/noop.ts";
 import { scriptedUser } from "./sim/scripted.ts";
 import type { AgentAdapter, UserSimulator } from "./sim/types.ts";
-import { appendToDomainList } from "./init/merge.ts";
+import { appendRows, appendToDomainList } from "./init/merge.ts";
 import { draftFromOpenApi } from "./init/openapi.ts";
 import { draftInvariantsFromSop, knownFields } from "./init/sop.ts";
+import { draftTasksFromTranscripts } from "./init/transcripts.ts";
 import { DOMAIN_FILE, POLICY_PLACEHOLDER, renderDraft, TASKS_PLACEHOLDER, writeDraft } from "./init/render.ts";
 import { DomainError, loadDomain, pendingReview } from "./spec/load.ts";
 import YAML from "yaml";
@@ -74,11 +75,12 @@ program
   .description("draft a domain from a customer's artifacts (review the output before trusting it)")
   .option("--openapi <file>", "OpenAPI 3.x spec (YAML or JSON): drafts tables and tools, no model needed")
   .option("--sop <file>", "SOP / policy document: drafts invariants with Claude, each quoting its source")
+  .option("--transcripts <path>", "call/chat transcripts (a file or a directory of .txt/.md): drafts personas and tasks with Claude")
   .option("-o, --out <dir>", "domain directory to create, or to add to when it already exists", "sandtable")
   .option("-m, --model <id>", "Claude model for drafting steps")
   .option("--force", "overwrite existing files when drafting from --openapi")
-  .action(async (o: { openapi?: string; sop?: string; out: string; model?: string; force?: boolean }) => {
-    if (!o.openapi && !o.sop) throw new Error("pass at least one of --openapi, --sop");
+  .action(async (o: { openapi?: string; sop?: string; transcripts?: string; out: string; model?: string; force?: boolean }) => {
+    if (!o.openapi && !o.sop && !o.transcripts) throw new Error("pass at least one of --openapi, --sop, --transcripts");
     const sopText = o.sop ? await readFile(o.sop, "utf8") : undefined;
     let fields: Record<string, string[]> = {};
     if (o.openapi) {
@@ -112,6 +114,20 @@ program
       const soft = res.softRules.map((r) => ` Soft rule (not checkable from tool calls yet): ${r.rule}\n   "${r.quote}"`).join("\n");
       const file = await appendToDomainList(o.out, "invariants", res.invariants, soft || undefined);
       console.log(`  ${res.invariants.length} invariant(s) drafted (review: pending), ${res.softRules.length} soft rule(s) noted in ${file}`);
+      for (const w of res.warnings) console.log(`  ! ${w}`);
+    }
+    if (o.transcripts) {
+      const files = (await stat(o.transcripts)).isDirectory()
+        ? (await readdir(o.transcripts)).filter((f) => /\.(txt|md)$/i.test(f)).sort().map((f) => path.join(o.transcripts!, f))
+        : [o.transcripts];
+      const transcripts = await Promise.all(files.map(async (f) => ({ file: path.basename(f), text: await readFile(f, "utf8") })));
+      console.log(`Drafting tasks from ${transcripts.length} transcript(s) (PII scrubbed locally first)...`);
+      const res = await draftTasksFromTranscripts({ domain: await loadDomain(o.out), transcripts, claude: o.model ? { model: o.model } : {} });
+      if (Object.keys(res.rows).length) await appendRows(o.out, res.rows);
+      if (res.personas.length) await appendToDomainList(o.out, "personas", res.personas);
+      if (res.tasks.length) await appendToDomainList(o.out, "tasks", res.tasks);
+      const rows = Object.values(res.rows).reduce((n, r) => n + r.length, 0);
+      console.log(`  ${res.tasks.length} task(s), ${res.personas.length} persona(s), ${rows} seed row(s) drafted; ${res.redactions} PII redaction(s)`);
       for (const w of res.warnings) console.log(`  ! ${w}`);
     }
     console.log(`\nNext: sandtable review ${o.out}, accept or fix each item, then sandtable validate ${o.out} --strict`);
