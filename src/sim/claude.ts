@@ -23,6 +23,8 @@ export interface ClaudeOptions {
   region?: string;
   /** AWS profile for Bedrock. Default: AWS_PROFILE / the default credential chain. */
   awsProfile?: string;
+  /** Bedrock client: "classic" (inference profiles, default) or "mantle". Default: SANDTABLE_BEDROCK_CLIENT. */
+  bedrockClient?: "classic" | "mantle";
   /**
    * Opt into server-side refusal fallbacks (on by default where the model supports them).
    * Turn off to measure one model strictly: a fallback means another model served that turn.
@@ -43,10 +45,36 @@ export function providerOf(opts: ClaudeOptions): Provider {
   return p;
 }
 
-/** Bedrock's Messages API takes `anthropic.`-prefixed IDs; inference profile IDs and ARNs pass through. */
-export function resolveModel(model: string, provider: Provider): string {
+export type BedrockClientKind = "classic" | "mantle";
+
+function bedrockKind(opts: ClaudeOptions): BedrockClientKind {
+  const k = opts.bedrockClient ?? process.env.SANDTABLE_BEDROCK_CLIENT ?? "classic";
+  if (k !== "classic" && k !== "mantle") throw new Error(`unknown Bedrock client "${k}" (use classic or mantle)`);
+  return k;
+}
+
+function bedrockRegion(opts: ClaudeOptions): string | undefined {
+  return opts.region ?? process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION;
+}
+
+/** Cross-region inference profile prefix for a Bedrock region (eu-west-1 -> eu). */
+export function inferenceGeo(region: string | undefined): string {
+  if (!region) return "global";
+  if (region.startsWith("eu-")) return "eu";
+  if (region.startsWith("us-") || region.startsWith("ca-")) return "us";
+  if (region.startsWith("ap-")) return "apac";
+  return "global";
+}
+
+/**
+ * Map a plain model name to what the provider expects. On Bedrock, the classic client takes
+ * cross-region inference profiles (eu.anthropic.claude-opus-5-5); the Mantle client takes
+ * anthropic.-prefixed IDs. Full IDs and ARNs pass through unchanged.
+ */
+export function resolveModel(model: string, provider: Provider, opts: Pick<ClaudeOptions, "region" | "bedrockClient"> = {}): string {
   if (provider !== "bedrock" || model.includes(".") || model.startsWith("arn:")) return model;
-  return `anthropic.${model}`;
+  if (bedrockKind(opts) === "mantle") return `anthropic.${model}`;
+  return `${inferenceGeo(bedrockRegion(opts))}.anthropic.${model}`;
 }
 
 /** Build the SDK client for the chosen provider. The Bedrock client is an optional dependency. */
@@ -59,15 +87,27 @@ export async function createClient(opts: ClaudeOptions): Promise<ClaudeClient> {
   } catch {
     throw new Error("--provider bedrock needs the optional package: npm install @anthropic-ai/bedrock-sdk");
   }
-  return new mod.AnthropicBedrockMantle({
-    awsRegion: opts.region ?? process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION,
-    ...(opts.awsProfile ? { awsProfile: opts.awsProfile } : {}),
+  const awsRegion = bedrockRegion(opts);
+  if (bedrockKind(opts) === "mantle") {
+    return new mod.AnthropicBedrockMantle({ awsRegion, ...(opts.awsProfile ? { awsProfile: opts.awsProfile } : {}) }) as unknown as ClaudeClient;
+  }
+  const profile = opts.awsProfile;
+  return new mod.AnthropicBedrock({
+    ...(awsRegion ? { awsRegion } : {}),
+    ...(profile
+      ? {
+          providerChainResolver: async () => {
+            const { fromNodeProviderChain } = await import("@aws-sdk/credential-providers");
+            return fromNodeProviderChain({ profile });
+          },
+        }
+      : {}),
   }) as unknown as ClaudeClient;
 }
 
 export function requestBase(opts: ClaudeOptions, defaultEffort: Effort) {
   const provider = providerOf(opts);
-  const model = resolveModel(opts.model ?? DEFAULT_MODEL, provider);
+  const model = resolveModel(opts.model ?? DEFAULT_MODEL, provider, opts);
   // Server-side refusal fallbacks exist on the Anthropic API only.
   const fallbacks = provider === "anthropic" && (opts.fallbacks ?? true) && FALLBACK_MODELS.test(model);
   return {
