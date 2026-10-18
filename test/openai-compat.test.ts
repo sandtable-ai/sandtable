@@ -312,3 +312,41 @@ describe("openaiCompatUser", () => {
     expect(models).toEqual(["gpt-test", "gpt-test"]);
   });
 });
+
+describe("retries", () => {
+  it("retries 429 and 5xx with backoff, honouring Retry-After, then succeeds", async () => {
+    const { openaiCompatAgent, backoffMs } = await import("../src/sim/openai-compat.ts");
+    expect(backoffMs(0, "2")).toBe(2000);
+    expect(backoffMs(3)).toBeLessThanOrEqual(5000);
+    const statuses = [429, 503];
+    let calls = 0;
+    vi.stubGlobal("fetch", async () => {
+      calls++;
+      const status = statuses.shift();
+      if (status) return new Response("busy", { status, headers: { "retry-after": "0" } });
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "hi" }, finish_reason: "stop" }] }), { status: 200 });
+    });
+    const session = await openaiCompatAgent({ baseUrl: "http://x/v1", model: "m" }).createSession({
+      domain: undefined as never,
+      system: "s",
+      tools: [],
+      sessionId: "t",
+    });
+    expect(await session.reply("hello", async () => ({ ok: true }))).toBe("hi");
+    expect(calls).toBe(3);
+    vi.unstubAllGlobals();
+  });
+
+  it("gives up after maxRetries and surfaces the status", async () => {
+    const { openaiCompatAgent } = await import("../src/sim/openai-compat.ts");
+    vi.stubGlobal("fetch", async () => new Response("down", { status: 500, headers: { "retry-after": "0" } }));
+    const session = await openaiCompatAgent({ baseUrl: "http://x/v1", model: "m", maxRetries: 1 }).createSession({
+      domain: undefined as never,
+      system: "s",
+      tools: [],
+      sessionId: "t",
+    });
+    await expect(session.reply("hello", async () => ({ ok: true }))).rejects.toThrow(/returned 500/);
+    vi.unstubAllGlobals();
+  });
+});

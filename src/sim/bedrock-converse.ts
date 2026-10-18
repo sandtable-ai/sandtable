@@ -50,7 +50,8 @@ async function makeClient(opts: BedrockConverseOptions): Promise<{ client: Conve
     const { fromNodeProviderChain } = await import("@aws-sdk/credential-providers");
     credentials = fromNodeProviderChain({ profile: opts.awsProfile });
   }
-  const client = new sdk.BedrockRuntimeClient({ ...(region ? { region } : {}), ...(credentials ? { credentials } : {}) } as never);
+  // Throttling is common when several trials run in parallel: give the SDK's retry strategy room.
+  const client = new sdk.BedrockRuntimeClient({ maxAttempts: 8, ...(region ? { region } : {}), ...(credentials ? { credentials } : {}) } as never);
   return {
     client: client as unknown as ConverseClient,
     command: (input) => new sdk.ConverseCommand(input as never),
