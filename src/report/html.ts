@@ -45,6 +45,7 @@ code{font:12px ui-monospace,Menlo,monospace}
 <div class="kpis" id="kpis"></div>
 <h2>Tasks</h2>
 <div class="wrap"><table><thead><tr><th>Task</th><th>Trials</th><th>Pass</th><th>Failed checks</th></tr></thead><tbody id="tasks"></tbody></table></div>
+<div id="tags"></div>
 <h2>Failure modes</h2>
 <div class="wrap"><table><thead><tr><th>Count</th><th>Check</th><th>Tasks</th><th>Example</th></tr></thead><tbody id="modes"></tbody></table></div>
 <div id="detail"></div>
@@ -72,6 +73,11 @@ $("tasks").innerHTML = R.tasks.map((t, ti) => {
     "</td><td class='" + (t.passes === t.trials.length ? "okt" : "badt") + "'>" + t.passes + "/" + t.trials.length + "</td><td>" +
     failed.map((f) => '<span class="chip">' + esc(f) + "</span>").join("") + "</td></tr>";
 }).join("");
+if (R.byTag && R.byTag.length > 1) {
+  $("tags").innerHTML = "<h2>By tag</h2><div class='wrap'><table><thead><tr><th>Tag</th><th>Tasks</th><th>pass^1</th>" + (R.k > 1 ? "<th>pass^" + R.k + "</th>" : "") + "</tr></thead><tbody>" +
+    R.byTag.map((t) => "<tr><td><span class='chip'>" + esc(t.tag) + "</span></td><td>" + t.tasks + "</td><td>" + pct(t.passHat1) + "</td>" + (R.k > 1 ? "<td>" + pct(t.passHatK) + "</td>" : "") + "</tr>").join("") +
+    "</tbody></table></div>";
+}
 $("modes").innerHTML = R.failureModes.length ? R.failureModes.map((m) =>
   "<tr><td class='badt'>" + m.count + "×</td><td><code>" + esc(m.id) + "</code><div class='meta'>" + esc(m.kind) + "</div></td><td>" +
   m.tasks.map((t) => '<span class="chip">' + esc(t) + "</span>").join("") + "</td><td>" + esc(m.example) + "</td></tr>").join("")

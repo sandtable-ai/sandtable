@@ -34,9 +34,18 @@ export interface SuiteResult {
   /** pass^1 .. pass^k */
   passHat: Record<string, number>;
   failureModes: FailureMode[];
+  /** pass^1 and pass^k per task tag ("untagged" for tasks without tags). */
+  byTag: TagScore[];
   usage: Usage;
   /** Time the agent took to answer each user turn, tool calls included. */
   latency: { agentTurnP50Ms: number | null; agentTurnP95Ms: number | null };
+}
+
+export interface TagScore {
+  tag: string;
+  tasks: number;
+  passHat1: number;
+  passHatK: number;
 }
 
 export interface SuiteOptions {
@@ -88,9 +97,23 @@ export async function runSuite(opts: SuiteOptions): Promise<SuiteResult> {
     tasks: summaries,
     passHat,
     failureModes: failureModes(results),
+    byTag: tagScores(summaries, k),
     usage: sumUsage(results.map((r) => r.usage)),
     latency: { agentTurnP50Ms: percentile(turnLatencies, 50), agentTurnP95Ms: percentile(turnLatencies, 95) },
   };
+}
+
+function tagScores(summaries: TaskSummary[], k: number): TagScore[] {
+  const groups = new Map<string, TaskSummary[]>();
+  for (const s of summaries) {
+    for (const tag of s.tags.length ? s.tags : ["untagged"]) groups.set(tag, [...(groups.get(tag) ?? []), s]);
+  }
+  return [...groups.entries()]
+    .map(([tag, tasks]) => {
+      const outcomes = tasks.map((t) => t.trials.map((tr) => tr.passed));
+      return { tag, tasks: tasks.length, passHat1: passHatK(outcomes, 1), passHatK: passHatK(outcomes, k) };
+    })
+    .sort((a, b) => a.passHat1 - b.passHat1 || a.tag.localeCompare(b.tag));
 }
 
 /** Cluster failed checks across trials so the most common failure surfaces first. */

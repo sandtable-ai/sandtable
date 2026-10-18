@@ -28,6 +28,9 @@ describe("freight example, offline", () => {
     const passed = r.tasks.filter((t) => t.passes > 0).map((t) => t.id);
     expect(passed).toEqual(["walk-away-above-ceiling", "expired-insurance", "inactive-authority", "do-not-use-carrier", "no-mc-number"]);
     expect(r.passHat["1"]).toBeCloseTo(0.5);
+    const byTag = Object.fromEntries(r.byTag.map((t) => [t.tag, t.passHat1]));
+    expect(byTag).toMatchObject({ refusal: 1, vetting: 1, "happy-path": 0, negotiation: 0.5, handoff: 0 });
+    expect(r.byTag[0]!.passHat1).toBe(0);
   });
 
   it("runs k trials per task and reports pass^1..k", async () => {

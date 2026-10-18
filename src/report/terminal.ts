@@ -55,6 +55,16 @@ export function renderTerminal(r: SuiteResult): string {
     for (const l of usageLines) lines.push(dim(`    ${l}`));
   }
 
+  if (r.byTag.length > 1) {
+    lines.push("");
+    lines.push(bold("  By tag"));
+    const tw = Math.max(...r.byTag.map((t) => t.tag.length));
+    for (const t of r.byTag) {
+      const kCol = r.k > 1 ? `   pass^${r.k} ${formatPercent(t.passHatK).padStart(6)}` : "";
+      lines.push(`  ${t.tag.padEnd(tw)}  ${dim(`${t.tasks} task${t.tasks === 1 ? "" : "s"}`.padEnd(8))}  pass^1 ${formatPercent(t.passHat1).padStart(6)}${kCol}`);
+    }
+  }
+
   if (r.failureModes.length) {
     lines.push("");
     lines.push(bold("  Top failure modes"));
