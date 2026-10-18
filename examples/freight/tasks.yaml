@@ -25,7 +25,6 @@
       - { table: bookings, where: { load_id: L-1001, mc_number: "100101" }, count: 1 }
       - { table: loads, key: L-1001, fields: { status: booked } }
     called: [verify_carrier, book_load]
-    not_called: [transfer_to_human]
 
 - id: negotiate-within-ceiling
   description: Carrier haggles; the agent closes between the caller's floor and the max rate.

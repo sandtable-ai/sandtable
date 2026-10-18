@@ -27,6 +27,7 @@ export function userSystemPrompt(domain: Domain, task: Task, persona?: Persona):
     "</instructions>",
     "\nRules:",
     "- Write only the customer's next message: plain spoken language, one short turn, no stage directions.",
+    "- Pursue only the goal in your instructions. Do not add new requests, questions or needs of your own (no extra paperwork, addresses, callbacks or follow-ups unless your instructions mention them).",
     "- Do not invent facts beyond your instructions. If asked something you do not know, say so.",
     "- Do not dump every detail at once; answer what is asked, like a real caller.",
     "- Hold the limits in your instructions (prices, conditions) even if the agent pushes back.",
