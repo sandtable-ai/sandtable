@@ -9,6 +9,7 @@ export { lintDomain, type LintReport, type TaskLint } from "./grade/lint.ts";
 export type * from "./sim/types.ts";
 export { claudeAgent, claudeUser, DEFAULT_MODEL, type ClaudeOptions, type ClaudeAgentOptions } from "./sim/claude.ts";
 export { httpAgent } from "./sim/http.ts";
+export { bedrockConverseAgent, type BedrockConverseOptions } from "./sim/bedrock-converse.ts";
 export { noopAgent } from "./sim/noop.ts";
 export { scriptedUser } from "./sim/scripted.ts";
 export { agentSystemPrompt, userSystemPrompt, STOP_TOKEN } from "./sim/prompts.ts";

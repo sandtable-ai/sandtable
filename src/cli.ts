@@ -9,6 +9,7 @@ import { formatPercent, renderTerminal } from "./report/terminal.ts";
 import { renderHtml } from "./report/html.ts";
 import { runSuite, type SuiteResult } from "./run/suite.ts";
 import { claudeAgent, claudeUser, type ClaudeOptions, type Provider } from "./sim/claude.ts";
+import { bedrockConverseAgent } from "./sim/bedrock-converse.ts";
 import { httpAgent } from "./sim/http.ts";
 import { noopAgent } from "./sim/noop.ts";
 import { scriptedUser } from "./sim/scripted.ts";
@@ -58,6 +59,13 @@ async function resolveAgent(spec: string, p: ClaudeOptions = {}): Promise<AgentA
   if (spec === "noop") return noopAgent();
   if (spec === "claude") return claudeAgent(p);
   if (spec.startsWith("claude:")) return claudeAgent({ ...p, model: spec.slice("claude:".length) });
+  if (spec.startsWith("bedrock:")) {
+    return bedrockConverseAgent({
+      modelId: spec.slice("bedrock:".length),
+      ...(p.region ? { region: p.region } : {}),
+      ...(p.awsProfile ? { awsProfile: p.awsProfile } : {}),
+    });
+  }
   if (/^https?:\/\//.test(spec)) return httpAgent(spec);
   if (spec === "scripted:naive" || spec === "scripted:careful") return freightScriptedAgent(spec.endsWith("naive") ? "naive" : "careful");
   const mod = (await import(pathToFileURL(path.resolve(spec)).href)) as { default?: unknown };
@@ -223,7 +231,7 @@ withProviderFlags(program
   .command("run"))
   .argument("<domain>", "domain directory (with sandtable.yaml) or file")
   .description("run every task k times against an agent and grade the results")
-  .option("-a, --agent <spec>", "claude | claude:<model> | noop | http(s)://endpoint | ./my-agent.js", "claude")
+  .option("-a, --agent <spec>", "claude | claude:<model> | bedrock:<model-id> | noop | http(s)://endpoint | ./my-agent.js", "claude")
   .option("-u, --user <spec>", "simulated user: claude | claude:<model> | scripted", "claude")
   .option("-k, --trials <n>", "trials per task (pass^k is reported up to k)", int, 1)
   .option("-t, --tasks <ids>", "comma-separated task ids to run")
