@@ -199,6 +199,19 @@ npm run sandtable -- run examples/freight --agent scripted:careful --user script
 
 Node ≥ 22.18 runs the TypeScript sources directly. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Citation
+
+If you use sandtable in research or a published evaluation, please cite it ([CITATION.cff](CITATION.cff)) and τ-bench, whose method it builds on:
+
+```bibtex
+@article{yao2024tau,
+  title   = {$\tau$-bench: A Benchmark for Tool-Agent-User Interaction in Real-World Domains},
+  author  = {Yao, Shunyu and Shinn, Noah and Razavi, Pedram and Narasimhan, Karthik},
+  journal = {arXiv preprint arXiv:2406.12045},
+  year    = {2024}
+}
+```
+
 ## License
 
 MIT

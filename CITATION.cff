@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use sandtable in research or reports, please cite it, and τ-bench, whose method it builds on."
+title: "sandtable: rehearse AI agents on a simulated copy of your customer's world"
+type: software
+license: MIT
+repository-code: "https://github.com/sandtable-ai/sandtable"
+authors:
+  - name: "The sandtable authors"
+keywords: [ai-agents, evaluation, simulation, tau-bench, pass^k]
+references:
+  - type: article
+    title: "τ-bench: A Benchmark for Tool-Agent-User Interaction in Real-World Domains"
+    authors:
+      - family-names: Yao
+        given-names: Shunyu
+      - family-names: Shinn
+        given-names: Noah
+      - family-names: Razavi
+        given-names: Pedram
+      - family-names: Narasimhan
+        given-names: Karthik
+    year: 2024
+    identifiers:
+      - type: other
+        value: "arXiv:2406.12045"
