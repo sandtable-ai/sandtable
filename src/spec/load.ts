@@ -16,7 +16,10 @@ export class DomainError extends Error {}
 export async function loadDomain(target: string): Promise<Domain> {
   const file = (await isDir(target)) ? path.join(target, DOMAIN_FILE) : target;
   const dir = path.dirname(file);
-  const raw = YAML.parse(await readFile(file, "utf8")) as Record<string, unknown>;
+  const text = await readFile(file, "utf8").catch(() => {
+    throw new DomainError(`no ${DOMAIN_FILE} found at ${target} (create one, or draft it with \`sandtable init\`)`);
+  });
+  const raw = YAML.parse(text) as Record<string, unknown>;
   if (!raw || typeof raw !== "object") throw new DomainError(`${file} is empty or not a YAML mapping`);
 
   for (const [key, value] of Object.entries(raw)) {

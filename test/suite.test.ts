@@ -140,7 +140,7 @@ describe("domain validation", () => {
   });
 
   it("rejects a missing file with a clear error", async () => {
-    await expect(loadDomain(path.resolve("examples/does-not-exist"))).rejects.toThrow();
+    await expect(loadDomain(path.resolve("examples/does-not-exist"))).rejects.toThrow(/no sandtable.yaml found at .*does-not-exist/);
     expect(DomainError).toBeDefined();
   });
 });
