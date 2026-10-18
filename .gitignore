@@ -8,3 +8,6 @@ coverage/
 .DS_Store
 # Private planning notes and raw research: never published
 notes/
+
+# Agent worktrees
+.claude/worktrees/
