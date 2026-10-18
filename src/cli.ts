@@ -9,6 +9,7 @@ import { renderHtml } from "./report/html.ts";
 import { runSuite, type SuiteResult } from "./run/suite.ts";
 import { claudeAgent, claudeUser } from "./sim/claude.ts";
 import { httpAgent } from "./sim/http.ts";
+import { noopAgent } from "./sim/noop.ts";
 import { scriptedUser } from "./sim/scripted.ts";
 import type { AgentAdapter, UserSimulator } from "./sim/types.ts";
 import { DomainError, loadDomain } from "./spec/load.ts";
@@ -27,6 +28,7 @@ const percent = (v: string) => {
 };
 
 async function resolveAgent(spec: string): Promise<AgentAdapter> {
+  if (spec === "noop") return noopAgent();
   if (spec === "claude") return claudeAgent();
   if (spec.startsWith("claude:")) return claudeAgent({ model: spec.slice("claude:".length) });
   if (/^https?:\/\//.test(spec)) return httpAgent(spec);
@@ -75,7 +77,7 @@ program
   .command("run")
   .argument("<domain>", "domain directory (with rehearsal.yaml) or file")
   .description("run every task k times against an agent and grade the results")
-  .option("-a, --agent <spec>", "claude | claude:<model> | http(s)://endpoint | ./my-agent.js", "claude")
+  .option("-a, --agent <spec>", "claude | claude:<model> | noop | http(s)://endpoint | ./my-agent.js", "claude")
   .option("-u, --user <spec>", "simulated user: claude | claude:<model> | scripted", "claude")
   .option("-k, --trials <n>", "trials per task (pass^k is reported up to k)", int, 1)
   .option("-t, --tasks <ids>", "comma-separated task ids to run")

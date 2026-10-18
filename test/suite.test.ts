@@ -2,6 +2,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { freightScriptedAgent } from "../src/demo/freight-agents.ts";
 import { runSuite } from "../src/run/suite.ts";
+import { noopAgent } from "../src/sim/noop.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
 import type { AgentAdapter } from "../src/sim/types.ts";
 import { DomainError, loadDomain, validateDomain } from "../src/spec/load.ts";
@@ -20,6 +21,13 @@ describe("freight example, offline", () => {
     expect(r.passHat["1"]).toBeCloseTo(0.2);
     const modes = Object.fromEntries(r.failureModes.map((m) => [m.id, m.count]));
     expect(modes).toMatchObject({ "verify-before-book": 8, "eligible-carrier": 3, "rate-ceiling": 2, "equipment-match": 1 });
+  });
+
+  it("the noop baseline passes exactly the tasks that reward doing nothing", async () => {
+    const r = await runSuite({ domain: await loadDomain(example), agent: noopAgent(), user: scriptedUser() });
+    const passed = r.tasks.filter((t) => t.passes > 0).map((t) => t.id);
+    expect(passed).toEqual(["walk-away-above-ceiling", "expired-insurance", "inactive-authority", "do-not-use-carrier", "no-mc-number"]);
+    expect(r.passHat["1"]).toBeCloseTo(0.5);
   });
 
   it("runs k trials per task and reports pass^1..k", async () => {

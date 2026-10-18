@@ -147,6 +147,10 @@ tasks:
 
 The simulated user ends the conversation by emitting `###STOP###` when its goal is met, impossible, or it has been handed off. Trials that hit `max_turns` are still graded on the end state.
 
+## Reading scores
+
+Run the `noop` baseline first: `rehearse run <domain> --agent noop --user scripted`. It never calls a tool, so it passes exactly the tasks whose success is "nothing happened": refusals, handoffs that only need a polite answer, and missing-information cases. On the freight example it scores 50%. A real agent's score means little until you know that floor. Balance refusal tasks with tasks that require a write, and compare per-tag scores.
+
 ## Results
 
 `run` writes `results.json` (a `SuiteResult`, with every trial's transcript, tool calls, checks and world diff) and `report.html` (self-contained, no external assets). `rehearse report results.json` re-renders the HTML.

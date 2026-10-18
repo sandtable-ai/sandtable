@@ -128,6 +128,7 @@ Full reference: [docs/spec.md](docs/spec.md).
 | `--agent claude` or `claude:<model>` | You want a baseline: Claude with the domain's tools and policy as its system prompt. |
 | `--agent http://…` | Your agent runs as a service. It receives the user message, returns either a reply or tool calls, and `rehearse` executes those against the simulated world ([protocol](docs/spec.md#http-agent-protocol)). |
 | `--agent ./my-agent.ts` | Your agent is a JS/TS function. Default-export an `AgentAdapter` ([example](examples/custom-agent.ts)). |
+| `--agent noop` | Baseline: never calls a tool, declines everything. Shows how much of your suite rewards doing nothing. |
 
 ```ts
 import type { AgentAdapter } from "rehearse-agents";

@@ -8,6 +8,7 @@ export { passHatK, binom } from "./grade/passk.ts";
 export type * from "./sim/types.ts";
 export { claudeAgent, claudeUser, DEFAULT_MODEL, type ClaudeOptions, type ClaudeAgentOptions } from "./sim/claude.ts";
 export { httpAgent } from "./sim/http.ts";
+export { noopAgent } from "./sim/noop.ts";
 export { scriptedUser } from "./sim/scripted.ts";
 export { agentSystemPrompt, userSystemPrompt, STOP_TOKEN } from "./sim/prompts.ts";
 export { runEpisode, type TrialResult, type TrajectoryEvent, type EndReason } from "./run/episode.ts";
