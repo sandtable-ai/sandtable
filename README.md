@@ -28,11 +28,11 @@ sandtable · freight-carrier-sales · agent scripted:naive · user scripted · k
      e.g. book_load rate=2600 exceeds the limit 2350
 ```
 
-> Status: **early alpha**. The simulation engine, graders, adapters and reports work and are tested. `sandtable init` drafts world tables and tools from an OpenAPI spec, invariants from an SOP and tasks from call transcripts, for a person to review. Model-backed steps have not yet been verified against the live API. See [ROADMAP.md](ROADMAP.md).
+> Status: **early alpha**. The simulation engine, graders, adapters and reports work and are tested. `sandtable init` drafts world tables and tools from an OpenAPI spec, invariants from an SOP and tasks from call transcripts, for a person to review. Every model-backed path has been verified against the live API ([results](docs/results.mdx)). See [ROADMAP.md](ROADMAP.md).
 
 ## First live results
 
-On the bundled freight example, Claude Opus 5.5 scores **pass^1 95%, pass^2 90%** (20 trials, $0.58). Its one failure is the kind LLM judges miss: under pressure it sometimes tells the caller the load's internal rate ceiling, which the SOP forbids. Details, harness lessons and `init` results: [docs/results.md](docs/results.md).
+On the bundled freight example, Claude Opus 5.5 scores **pass^1 95%, pass^2 90%** (20 trials, $0.58). Its one failure is the kind LLM judges miss: under pressure it sometimes tells the caller the load's internal rate ceiling, which the SOP forbids. Details, harness lessons and `init` results: [docs/results.mdx](docs/results.mdx).
 
 ## Why
 
@@ -127,15 +127,16 @@ tasks:
         - { table: bookings, count: 0 }
 ```
 
-Full reference: [docs/spec.md](docs/spec.md).
+Full reference: [docs/reference/spec.mdx](docs/reference/spec.mdx).
 
 ## Bring your own agent
 
 | Adapter | Use it when |
 |---|---|
 | `--agent claude` or `claude:<model>` | You want a baseline: Claude with the domain's tools and policy as its system prompt. |
+| `--agent bedrock:<model-id>` | Any tool-capable model on Amazon Bedrock through the Converse API (GPT, gpt-oss, Grok, Kimi, GLM, Qwen, Mistral, Nova), with `--region` and `--aws-profile`. |
 | `--agent openai:<model>` | You want to compare other models: GPT, Gemini, Llama, Qwen, DeepSeek and more, through any OpenAI-compatible endpoint, with the same prompt and tools ([run other models](#run-other-models)). |
-| `--agent http://…` | Your agent runs as a service. It receives the user message, returns either a reply or tool calls, and `sandtable` executes those against the simulated world ([protocol](docs/spec.md#http-agent-protocol)). |
+| `--agent http://…` | Your agent runs as a service. It receives the user message, returns either a reply or tool calls, and `sandtable` executes those against the simulated world ([protocol](docs/reference/http-protocol.mdx)). |
 | `--agent ./my-agent.ts` | Your agent is a JS/TS function. Default-export an `AgentAdapter` ([example](examples/custom-agent.ts)). |
 | `--agent noop` | Baseline: never calls a tool, declines everything. Shows how much of your suite rewards doing nothing. |
 
@@ -192,7 +193,7 @@ npx sandtable-ai run ./my-domain --openai-base-url http://localhost:11434/v1 \
 - The model must support tool calling on that server. vLLM, for example, needs `--enable-auto-tool-choice` and a `--tool-call-parser`.
 - Cost is estimated only for models in `PRICES` (Claude today). Other models show `n/a` until verified list prices are added, since prices vary by host.
 
-Details and library use: [docs/spec.md](docs/spec.md#openai-compatible-endpoints).
+Details and library use: [docs/guides/bring-your-agent.mdx](docs/guides/bring-your-agent.mdx#openai-compatible-endpoints).
 
 ## Compare models
 
@@ -234,7 +235,7 @@ Claude loads a skill when the conversation needs it, or you can call one by name
 
 ## Prior art
 
-`sandtable` stands on τ-bench's method (simulated user + stateful tools + end-state grading + pass^k). What it adds is making that method cheap to apply to *one customer's* workflow, as a file in their repo. Simulation frameworks such as LangWatch Scenario, IntellAgent and DeepEval's simulator, and closed platforms such as Sierra's and Decagon's simulations, cover nearby ground. See [docs/prior-art.md](docs/prior-art.md) for a fair comparison.
+`sandtable` stands on τ-bench's method (simulated user + stateful tools + end-state grading + pass^k). What it adds is making that method cheap to apply to *one customer's* workflow, as a file in their repo. Simulation frameworks such as LangWatch Scenario, IntellAgent and DeepEval's simulator, and closed platforms such as Sierra's and Decagon's simulations, cover nearby ground. See [docs/compare/overview.mdx](docs/compare/overview.mdx) for a fair comparison.
 
 ## Roadmap
 

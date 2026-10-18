@@ -21,7 +21,7 @@ Run the CLI as `npx sandtable-ai <command>` (inside the sandtable repository: `n
 | `claude` (default), `claude:<model>` | the reference agent: Claude with the domain's tools and `policy.md` as its system prompt. Anthropic API (`ANTHROPIC_API_KEY`), or Bedrock with `--provider bedrock` |
 | `openai:<model>` | the same prompt and tools on any OpenAI-compatible Chat Completions endpoint (OpenAI, OpenRouter, LiteLLM, vLLM, Ollama, …): for comparing models |
 | `bedrock:<model-id>` | the same prompt and tools on a non-Claude Bedrock model through the Converse API, e.g. `bedrock:qwen.qwen3-32b-v1:0` |
-| `http://…` or `https://…/step` | the engineer's agent as a service, speaking the step protocol (sandtable `docs/spec.md`, "HTTP agent protocol") |
+| `http://…` or `https://…/step` | the engineer's agent as a service, speaking the step protocol (sandtable `docs/reference/http-protocol.mdx`) |
 | `./my-agent.ts` or `./my-agent.js` | a module that default-exports an `AgentAdapter` (`.ts` needs Node ≥ 22.18) |
 | `noop` | never calls a tool, declines everything: the do-nothing floor |
 

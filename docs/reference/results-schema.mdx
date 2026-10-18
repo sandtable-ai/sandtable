@@ -1,0 +1,155 @@
+---
+title: "results.json"
+description: "The file every run writes: suite scores, failure modes, per-tag scores, usage, and every trial's transcript, tool calls, checks and world diff."
+---
+
+`sandtable run` writes two files to its output directory (`--out`, or `.sandtable/runs/<timestamp>-<domain>/`):
+
+- `results.json`: a `SuiteResult`, described below. It is the source of truth for a run.
+- `report.html`: a self-contained rendering of it, with no external assets, that you can attach to a pull request or send to a customer. `sandtable report results.json` re-renders it.
+
+The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`, `CheckResult` and the rest). While sandtable is alpha, fields may still be added or change; `version` will change when the format breaks.
+
+## SuiteResult
+
+| Field | Type | Description |
+|---|---|---|
+| `version` | `1` | format version |
+| `domain` | string | the domain's `name` |
+| `agent` | string | the agent's name, such as `claude:claude-opus-5-5`, `openai:gpt-4.1-mini`, `http:http://localhost:8787/step` |
+| `user` | string | the simulated user's name, such as `claude:claude-haiku-5-5` or `scripted` |
+| `k` | number | trials per task |
+| `startedAt` | string | ISO 8601 start time |
+| `durationMs` | number | wall-clock duration |
+| `tasks` | `TaskSummary[]` | one entry per task, with every trial |
+| `passHat` | object | pass^j for every j from 1 to k, keyed `"1"`, `"2"`, …, as fractions from 0 to 1 |
+| `failureModes` | `FailureMode[]` | failed checks clustered across trials, most frequent first |
+| `byTag` | `TagScore[]` | scores per task tag (`untagged` for tasks without tags), weakest first |
+| `usage` | `Usage` | tokens and estimated cost, summed over trials |
+| `pendingReview` | `PendingItem[]` | drafted items not yet accepted; while non-empty, the run is provisional |
+| `latency` | object | `agentTurnP50Ms` and `agentTurnP95Ms`: time the agent took per user turn, tool calls included (`null` with no turns) |
+
+### TaskSummary
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | task id |
+| `description` | string | task description, if any |
+| `tags` | string[] | task tags |
+| `trials` | `TrialResult[]` | ordered by trial number |
+| `passes` | number | trials that passed |
+
+### FailureMode
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | the check id, such as `verify-before-book` or `state:bookings#1` |
+| `kind` | string | the check kind (see below) |
+| `count` | number | failed trials containing this check |
+| `tasks` | string[] | tasks where it failed |
+| `example` | string | the detail from the first occurrence |
+
+### TagScore
+
+| Field | Type | Description |
+|---|---|---|
+| `tag` | string | the tag |
+| `tasks` | number | tasks with this tag |
+| `passHat1` | number | pass^1 over those tasks |
+| `passHatK` | number | pass^k over those tasks |
+
+### PendingItem
+
+| Field | Type | Description |
+|---|---|---|
+| `kind` | `"tool"`, `"invariant"`, `"task"` | what is pending |
+| `id` | string | its name or id |
+| `source` | object | `file` and optional `quote`, for invariants and tasks drafted from a source |
+
+## TrialResult
+
+| Field | Type | Description |
+|---|---|---|
+| `taskId` | string | task id |
+| `trial` | number | trial number, from 0 |
+| `passed` | boolean | true only if every check passed |
+| `checks` | `CheckResult[]` | every check, passed or failed |
+| `violations` | `Violation[]` | invariant violations |
+| `events` | `TrajectoryEvent[]` | the conversation and tool calls, in order |
+| `changes` | `Change[]` | the difference between the world's seed and its final state |
+| `endReason` | string | `user_stop`, `max_turns` or `error` |
+| `turns` | number | agent replies |
+| `durationMs` | number | trial duration |
+| `usage` | `Usage` | tokens and estimated cost for this trial |
+| `error` | string | present when the trial ended with an error |
+
+### CheckResult
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | invariant id, `state:<table>[<key>]#<n>`, `called:<tool>`, `not_called:<tool>`, `reply:<phrase>` or `runtime` |
+| `kind` | string | `invariant`, `state`, `called`, `not_called`, `reply` or `runtime` |
+| `passed` | boolean | whether it passed |
+| `detail` | string | a readable explanation, such as `book_load rate=2600 exceeds the limit 2350` |
+
+### Violation
+
+| Field | Type | Description |
+|---|---|---|
+| `invariant` | string | invariant id |
+| `description` | string | invariant description |
+| `detail` | string | what happened |
+| `callIndex` | number | for tool-call violations: the index of the call |
+| `messageIndex` | number | for `never_disclose`: the index of the agent message |
+
+### TrajectoryEvent
+
+One of:
+
+```jsonc
+{ "type": "user", "text": "MC 100101, Blue Mesa. I'm looking at L-1001." }
+{ "type": "agent", "text": "L-1001 pays $2100. Want me to book it?", "latencyMs": 812 }
+{ "type": "tool", "index": 0, "name": "get_load", "args": { "load_id": "L-1001" },
+  "ok": true, "result": { }, "violations": [] }   // or "ok": false with "error"
+```
+
+A tool event's `violations` lists the ids of invariants that call violated.
+
+### Change
+
+| Field | Type | Description |
+|---|---|---|
+| `table` | string | table name |
+| `key` | string | row key |
+| `kind` | string | `insert`, `update` or `delete` |
+| `before` | object | the row before (updates and deletes) |
+| `after` | object | the row after (inserts and updates) |
+
+## Usage
+
+```jsonc
+// illustrative numbers
+{
+  "agent": { "claude-opus-5-5": { "calls": 12, "input": 1200, "output": 3000, "cacheRead": 40000, "cacheWrite": 8000 } },
+  "user":  { "claude-haiku-5-5": { "calls": 8, "input": 6000, "output": 900, "cacheRead": 0, "cacheWrite": 0 } },
+  "costUsd": 0.11385
+}
+```
+
+Tokens are grouped by role and model. `input` excludes cache reads and writes, following the Anthropic convention. The Claude, Bedrock Converse and OpenAI-compatible adapters record usage automatically; custom modules can call `recordUsage`; the HTTP adapter cannot see your agent's model calls, so it records none.
+
+`costUsd` is an estimate at list prices from `PRICES` in `src/run/usage.ts`, which holds verified prices for Claude models only. If any model in the run has no known price, `costUsd` is `null` and reports show `n/a`.
+
+## Recipes
+
+```bash
+# pass^k
+jq '.passHat' results.json
+
+# every failed trial, with its failing checks
+jq -r '.tasks[] | .id as $t | .trials[] | select(.passed | not)
+  | "\($t)#\(.trial): \([.checks[] | select(.passed | not) | .id] | join(", "))"' results.json
+
+# failure modes, most frequent first
+jq -r '.failureModes[] | "\(.count)x \(.kind) \(.id)"' results.json
+```

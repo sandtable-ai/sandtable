@@ -58,7 +58,7 @@ Phrase matching is brittle. If the agent conveyed the same thing in other words,
 
 ## Worked examples
 
-These follow runs of the bundled, fictional freight domain: the first live runs recorded in the sandtable repository's `docs/results.md`, and the offline `scripted:naive` agent.
+These follow runs of the bundled, fictional freight domain: the first live runs recorded in the sandtable repository's `docs/results.mdx`, and the offline `scripted:naive` agent.
 
 **The caller hung up on its own deal.** A negotiation task failed its booking check. The user's last turn accepted the offer and ended the call in the same message (something like "Deal, book it. Bye!"), so the agent never had a turn to book. Owner: **simulated user**, plus the harness, which now gives the agent one final turn after a closing message with content. Fix: a stop condition in the instructions, "once you have a confirmation number, say thanks and end the call".
 

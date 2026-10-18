@@ -1,0 +1,69 @@
+---
+title: "pass^k and reliability"
+description: "pass^k is the chance that all k trials of a task succeed. Why it matters for customer-facing agents, how sandtable computes it, and how to choose k."
+---
+
+A customer does not experience your agent's average. They experience every call. An agent that gets a task right 80% of the time fails one caller in five, and the caller who hit the failure does not care that the next one went fine.
+
+**pass^k** measures that. It is the probability that *all k* independent trials of a task succeed, averaged over the tasks in the suite. It was introduced with [τ-bench](https://arxiv.org/abs/2406.12045) (Yao et al., 2024).
+
+## How it drops
+
+If an agent succeeds on every task with the same probability *p*, and trials are independent, pass^k is simply *p*<sup>k</sup>:
+
+| per-trial success | pass^1 | pass^2 | pass^4 | pass^8 |
+|---|---|---|---|---|
+| 80% | 80.0% | 64.0% | 41.0% | 16.8% |
+| 90% | 90.0% | 81.0% | 65.6% | 43.0% |
+| 95% | 95.0% | 90.3% | 81.5% | 66.3% |
+| 99% | 99.0% | 98.0% | 96.1% | 92.3% |
+
+Real agents are not that uniform: most tasks pass every time and a few are flaky. pass^k finds those few. In the [live freight run](/results), Claude Opus 5.5 scored pass^1 95% and pass^2 90%: one task leaked an internal price in one of its two trials, a failure a single trial would have missed half the time.
+
+## How sandtable computes it
+
+For each task with *n* trials and *c* successes, sandtable uses the unbiased estimator from τ-bench:
+
+```text
+pass^k(task) = C(c, k) / C(n, k)
+```
+
+then averages over tasks. `C` is the binomial coefficient. pass^1 is the plain success rate. A run with `-k 4` reports pass^1 through pass^4, overall and per tag.
+
+Worked example, one task, 4 trials, 3 passed:
+
+| | value | reading |
+|---|---|---|
+| pass^1 | 3/4 = 75% | a random single trial passes |
+| pass^2 | C(3,2)/C(4,2) = 3/6 = 50% | two random trials both pass |
+| pass^3 | C(3,3)/C(4,3) = 1/4 = 25% | three random trials all pass |
+| pass^4 | 0/1 = 0% | all four passed: they did not |
+
+## pass^k, not pass@k
+
+**pass@k** is the probability that *at least one* of k trials succeeds. It suits settings where you can pick the best attempt, such as generating code and running tests. A customer-facing agent gets one attempt per conversation, so sandtable reports pass^k. A pass@k column, flaky-task verdicts and confidence intervals are planned ([#27](https://github.com/sandtable-ai/sandtable/issues/27)).
+
+## Choosing k
+
+Cost and time grow linearly with tasks × k, so pick k by purpose:
+
+| Purpose | Suggested k | Why |
+|---|---|---|
+| Smoke test, debugging graders | 1, with `--user scripted` | cheap and deterministic |
+| Gate on a pull request | 3 to 4 | catches tasks that fail about one time in three |
+| Go-live evidence for a customer | 8 or more | shows consistency, not luck |
+
+Two things limit what a score can tell you:
+
+- **Few tasks means coarse scores.** With 10 tasks, one flaky task moves pass^k by up to 10 points. Treat small differences between runs as noise until intervals land.
+- **Variation needs a source.** Trials differ because the model samples and the simulated user improvises. A deterministic agent replaying a scripted user gives identical trials, so pass^k equals pass^1.
+
+## Gating on it
+
+`--fail-under` compares the **highest** pass^k a run computes (k = `--trials`) against a percentage, and exits 1 when it is below:
+
+```bash
+sandtable run ./my-domain --agent http://localhost:8787/step -k 4 --fail-under 85
+```
+
+Raising k with the same threshold makes the gate stricter. See [Use it in CI](/guides/ci).

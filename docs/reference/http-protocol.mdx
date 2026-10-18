@@ -1,0 +1,104 @@
+---
+title: "HTTP agent protocol"
+description: "How sandtable talks to an agent that runs as a service: one POST per step, a reply or tool calls back."
+---
+
+`--agent https://your-agent/step` rehearses any agent that runs as a service, in any language. sandtable sends one POST per step, and the agent answers with either its reply to the user or tool calls for sandtable to run against the simulated world. The agent keeps its own conversation state, keyed by `session_id`.
+
+```bash
+sandtable run ./my-domain --agent http://localhost:8787/step
+```
+
+## Request
+
+`POST <url>` with `content-type: application/json`:
+
+```jsonc
+{
+  "session_id": "walk-away-above-ceiling#0",   // stable per trial: key your conversation state on it
+  "system": "...",                             // sandtable's default prompt; ignore it if your agent has its own
+  "tools": [{ "name": "...", "description": "...", "input_schema": { } }],
+  "message": "I need $1,600 on that one.",     // a new user turn, or:
+  "tool_results": [{ "id": "c1", "ok": true, "result": { } }]  // results of your previous tool_calls
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `session_id` | string | `<task-id>#<trial>`, with trials numbered from 0. The same for every step of one trial |
+| `system` | string | the default system prompt: the domain description and the policy |
+| `tools` | array | the domain's tools: `name`, `description` and a JSON-schema `input_schema` (`type: "object"`, `properties`, `required`, `additionalProperties: false`) |
+| `message` | string | present when the user has spoken: the start of a new turn |
+| `tool_results` | array | present when sandtable has run the tool calls from your previous response |
+
+Each request carries either `message` or `tool_results`, never both. Each entry in `tool_results` has:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | the `id` of the tool call it answers |
+| `ok` | boolean | whether the call succeeded |
+| `result` | any | when `ok`: what the tool returned (a row, a list of rows, a created or updated row, or a fixed response) |
+| `error` | string | when not `ok`: the error, such as `Load L-1003 is not available` or `unknown argument "foo"` |
+
+## Response
+
+A `2xx` response with a JSON body, in one of two shapes:
+
+```jsonc
+// finish the turn...
+{ "reply": "Best I can do is $1,375." }
+
+// ...or ask sandtable to run tools against the simulated world
+{ "tool_calls": [{ "id": "c1", "name": "get_load", "arguments": { "load_id": "L-1002" } }] }
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `reply` | string | the agent's message to the user. Ends the turn. If present, `tool_calls` is ignored |
+| `tool_calls` | array | tool calls to run, each with an `id` you choose, the tool `name` and an `arguments` object |
+
+Tool calls in one response run in order. sandtable then POSTs all their results back in a single request with `tool_results`.
+
+## One turn, step by step
+
+```text
+→ { session_id, system, tools, message: "MC 100202 here, I want L-1001." }
+← { tool_calls: [{ id: "c1", name: "verify_carrier", arguments: { mc_number: "100202" } }] }
+→ { session_id, system, tools, tool_results: [{ id: "c1", ok: true, result: { mc_number: "100202", insurance_status: "expired", ... } }] }
+← { reply: "I'm sorry, I can't book you while your insurance is expired." }
+```
+
+## Rules and limits
+
+- **Tool calls are graded.** Every call is checked against the domain's invariants before it runs, then executed against the trial's mock world. Nothing reaches a real system.
+- **Step budget.** After 16 rounds of tool calls in one turn, the turn ends with the reply `[agent exceeded its step budget for this turn]`.
+- **Errors end the trial.** A non-2xx status (the error shows the status and body), a body that is not JSON, or a response with neither `reply` nor `tool_calls` ends the trial with a `runtime` failure. It counts as a failed trial.
+- **Concurrency.** Up to `--concurrency` trials (default 4) run at once, so your service sees interleaved sessions. Key all state on `session_id`.
+- **No timeout of its own.** sandtable does not abort slow requests, so a hung endpoint stalls its trial.
+- **No end-of-session call.** Your service is not told when a trial ends.
+- **No token usage.** sandtable cannot see your agent's model calls, so reported tokens and cost cover only the simulated user.
+
+<Warning>
+`session_id` repeats across runs: the first trial of a task is always `<task-id>#0`. If your service keeps conversation state between runs, clear it when a run starts, or the trial will continue an old conversation.
+</Warning>
+
+## Authentication and custom headers
+
+The CLI sends no extra headers. If your endpoint needs them, wrap the HTTP adapter in a small module and pass that to `--agent`:
+
+```js http-agent.mjs
+import { httpAgent } from "sandtable-ai";
+
+export default httpAgent("https://agent.example.com/step", {
+  headers: { authorization: `Bearer ${process.env.AGENT_TOKEN}` },
+  maxSteps: 16, // tool-call rounds per turn
+});
+```
+
+```bash
+sandtable run ./my-domain --agent ./http-agent.mjs
+```
+
+## A toy agent
+
+The [quickstart](/quickstart#run-it) has a complete agent in Node and in Python that implements this protocol, and runs against the bundled freight example.

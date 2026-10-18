@@ -1,0 +1,245 @@
+---
+title: "Run against your agent"
+description: "Rehearse Claude, models on Amazon Bedrock, any OpenAI-compatible endpoint, an agent behind HTTP, or a JS/TS module, and choose the simulated user."
+---
+
+The agent under test is whatever answers the simulated user. Whichever adapter you use, every tool call it makes goes through sandtable's simulated world: it is checked against the invariants, it changes only the mock records, and it is graded. Nothing touches the customer's real systems.
+
+## Pick an adapter
+
+| `--agent` | Use it when |
+|---|---|
+| `claude`, `claude:<model>` | You want a baseline: Claude with the domain's tools and policy as its system prompt. Runs on the Anthropic API or [Amazon Bedrock](#claude-on-amazon-bedrock). |
+| `bedrock:<model-id>` | You want a non-Claude model on Amazon Bedrock, through the [Converse API](#other-models-on-amazon-bedrock). |
+| `openai:<model>` | You want to compare other models (GPT, Gemini, Llama, Qwen, DeepSeek and more) through any [OpenAI-compatible endpoint](#openai-compatible-endpoints), with the same prompt and tools. |
+| `http://…`, `https://…` | Your agent runs as a service and speaks the [HTTP step protocol](#your-agent-over-http). |
+| `./my-agent.js`, `./my-agent.ts` | Your agent is a JS/TS function: default-export an [`AgentAdapter`](#your-agent-as-a-js-or-ts-module). |
+| `noop` | Baseline: never calls a tool and declines everything. See [the noop baseline](/concepts/baselines). |
+
+The model adapters (`claude`, `bedrock:`, `openai:`) all receive the same default system prompt (the domain description and policy) and the same tools, so their scores compare. Your own agent receives that prompt too and may ignore it.
+
+<Tabs>
+  <Tab title="Claude">
+    ```bash
+    export ANTHROPIC_API_KEY=...
+    sandtable run ./my-domain --agent claude -k 4
+    ```
+  </Tab>
+  <Tab title="Bedrock">
+    ```bash
+    npm install @anthropic-ai/bedrock-sdk
+    sandtable run ./my-domain --provider bedrock --region eu-west-1 --agent claude -k 4
+    ```
+  </Tab>
+  <Tab title="OpenAI-compatible">
+    ```bash
+    OPENAI_API_KEY=sk-... sandtable run ./my-domain --agent openai:gpt-4.1-mini -k 4
+    ```
+  </Tab>
+  <Tab title="HTTP">
+    ```bash
+    sandtable run ./my-domain --agent http://localhost:8787/step -k 4
+    ```
+  </Tab>
+  <Tab title="JS module">
+    ```bash
+    sandtable run ./my-domain --agent ./my-agent.ts -k 4
+    ```
+  </Tab>
+</Tabs>
+
+Unless you pass `--user`, the simulated user is Claude, so these runs also need Claude credentials. See [the simulated user](#the-simulated-user).
+
+## Claude on the Anthropic API
+
+`--agent claude` runs the reference agent: Claude with the domain's tools, and the domain description and policy as its system prompt. `--agent claude:<model>` picks the model (default `claude-opus-5-5`).
+
+- Authentication uses `ANTHROPIC_API_KEY`.
+- The system prompt, tools and history form an append-only prefix that is cached automatically, which keeps repeated trials cheap.
+- A user turn ends after 12 model calls; the reply is then `[agent exceeded its tool-call budget for this turn]`.
+- Where the model supports it, sandtable opts into server-side refusal fallbacks on the Anthropic API. A fallback means another model served that turn. To measure one model strictly, build the agent in code with `claudeAgent({ fallbacks: false })`.
+- Tokens are recorded per model, and cost is estimated at Anthropic list prices.
+
+Claude also plays the simulated user by default, and drafts invariants and tasks in [`sandtable init`](/guides/init).
+
+## Claude on Amazon Bedrock
+
+Model-backed commands (`run`, `demo --live`, `init --sop`, `init --transcripts`) use the Anthropic API by default. To run Claude on Amazon Bedrock with your AWS credentials, install the optional client and pass `--provider bedrock`:
+
+```bash
+npm install @anthropic-ai/bedrock-sdk
+sandtable demo --live --provider bedrock --region eu-west-1 --aws-profile my-profile
+```
+
+| Option | Default |
+|---|---|
+| `--provider bedrock` | `SANDTABLE_PROVIDER`, else `anthropic` |
+| `--region` | `AWS_REGION`, then `AWS_DEFAULT_REGION` |
+| `--aws-profile` | `AWS_PROFILE`, else the default credential chain |
+
+`--provider` applies to every Claude model in the command: the agent, the simulated user and `init`'s drafting steps.
+
+Plain model names map to the region's cross-region inference profile, so `claude-opus-5-5` becomes `eu.anthropic.claude-opus-5-5` in `eu-west-1`:
+
+| Region prefix | Profile prefix |
+|---|---|
+| `eu-` | `eu.` |
+| `us-`, `ca-` | `us.` |
+| `ap-` | `apac.` |
+| anything else, or no region | `global.` |
+
+Full model IDs and ARNs pass through unchanged. Set `SANDTABLE_BEDROCK_CLIENT=mantle` to use Bedrock's Messages-API endpoint instead, where your region serves the model; model names then become `anthropic.<model>`. Cost estimates use Anthropic list prices; your Bedrock rates may differ.
+
+## Other models on Amazon Bedrock
+
+`--agent bedrock:<model-id>` runs any tool-capable model on Bedrock through the Converse API, such as OpenAI, Qwen, Mistral or Amazon Nova models. Install the AWS SDK client first:
+
+```bash
+npm install @aws-sdk/client-bedrock-runtime
+sandtable run ./my-domain --agent bedrock:qwen.qwen3-32b-v1:0 -k 4
+```
+
+- `<model-id>` is the Bedrock model or inference profile ID, passed through unchanged. The model must be enabled for your account in that region.
+- The region comes from `--region`, then `AWS_REGION`, then `AWS_DEFAULT_REGION`. Credentials come from the default AWS chain, which honours `AWS_PROFILE`. Passing `--aws-profile` also needs `npm install @aws-sdk/credential-providers`.
+- A turn allows up to 12 model calls of up to 4,096 output tokens each. Output stopped by a guardrail or content filter becomes `[agent output was filtered]`.
+- This is an agent adapter only. The simulated user stays Claude; add `--provider bedrock` to run that on Bedrock too.
+- Tokens are recorded, but cost shows `n/a`: verified prices exist only for Claude models.
+
+## OpenAI-compatible endpoints
+
+`--agent openai:<model>` and `--user openai:<model>` talk to any server that implements OpenAI's Chat Completions API (`POST <base>/chat/completions`), using plain `fetch`. That covers OpenAI, OpenRouter, LiteLLM, vLLM, Ollama, Groq, Together and others.
+
+```bash
+# OpenAI
+OPENAI_API_KEY=sk-... sandtable run ./my-domain --agent openai:gpt-4.1-mini -k 4
+
+# OpenRouter: one key for GPT, Gemini, Llama, Qwen, DeepSeek and more
+OPENAI_API_KEY=$OPENROUTER_API_KEY sandtable run ./my-domain -k 4 \
+  --openai-base-url https://openrouter.ai/api/v1 --agent openai:google/gemini-2.5-flash
+
+# A local model on Ollama, as both agent and caller: no key needed
+sandtable run ./my-domain --openai-base-url http://localhost:11434/v1 \
+  --agent openai:llama3.1:8b --user openai:llama3.1:8b
+```
+
+- The base URL is `--openai-base-url`, else `OPENAI_BASE_URL`, else `https://api.openai.com/v1`. Agent and user share it.
+- `OPENAI_API_KEY`, when set, is sent as a bearer token. It is required only for the default OpenAI URL; local servers such as Ollama and vLLM need none.
+- The model name passes through unchanged: `openai:llama3.1:8b` asks for `llama3.1:8b`.
+- The caller stays Claude (`ANTHROPIC_API_KEY`) unless you pass `--user`. Keep the caller the same across agents, so that only the agent changes.
+- The model must support tool calling on that server. vLLM, for example, needs `--enable-auto-tool-choice` and a `--tool-call-parser`.
+
+The agent gets the same system prompt and tools as the Claude baseline. `temperature` is sent only when set:
+
+```jsonc
+{
+  "model": "gpt-4.1-mini",
+  "messages": [
+    { "role": "system", "content": "..." },
+    { "role": "user", "content": "MC 100101, anything Dallas to Atlanta?" }
+  ],
+  "tools": [{ "type": "function", "function": { "name": "verify_carrier", "description": "...", "parameters": { "type": "object", "properties": { } } } }]
+}
+```
+
+The agent runs its own tool loop:
+
+- Each entry in `tool_calls` runs against the simulated world. Its result goes back as a `role: "tool"` message with the same `tool_call_id`. A turn ends after `maxToolRounds` model calls (default 12).
+- Arguments that are not valid JSON go back to the model as a tool error it can correct. The attempt still shows in the trajectory as a failed call.
+- History is append-only. Assistant messages go back as the endpoint returned them, including provider fields such as reasoning and Gemini's thought signatures.
+- Inline `<think>…</think>` blocks are dropped from the reply, so neither the caller nor the graders see them.
+
+| `finish_reason` | What happens |
+|---|---|
+| `tool_calls` | the calls run and the model is asked again. Some servers send `stop` with tool calls; those run too |
+| `stop` | the message text is the reply |
+| `length` | the turn ends with the text so far. Cut-off tool calls are answered with an error, not run |
+| `content_filter` | the reply is `[agent reply blocked by the provider's content filter]`, and tool calls are not run |
+
+Usage is recorded under the requested model name:
+
+| sandtable | Chat Completions `usage` |
+|---|---|
+| `input` | `prompt_tokens` minus cached tokens |
+| `cacheRead` | `prompt_tokens_details.cached_tokens` (DeepSeek: `prompt_cache_hit_tokens`) |
+| `output` | `completion_tokens` |
+
+`PRICES` holds verified list prices for Claude models only. Other models have no price yet, so their cost shows as `n/a`, since prices vary by host.
+
+### Compare models in code
+
+`openaiCompatAgent({ baseUrl, model, apiKey?, headers?, temperature?, maxToolRounds? })` and `openaiCompatUser` (the same options, without `maxToolRounds`) build the adapters. They do not read environment variables, so pass `apiKey` yourself. To compare models, loop over them and keep the caller fixed:
+
+```ts
+import { claudeUser, loadDomain, openaiCompatAgent, runSuite } from "sandtable-ai";
+
+const domain = await loadDomain("./my-domain");
+const user = claudeUser({ model: "claude-haiku-5-5" }); // the same caller for every agent
+for (const model of ["openai/gpt-4.1", "google/gemini-2.5-flash", "meta-llama/llama-3.3-70b-instruct"]) {
+  const agent = openaiCompatAgent({ baseUrl: "https://openrouter.ai/api/v1", apiKey: process.env.OPENROUTER_API_KEY, model });
+  const result = await runSuite({ domain, agent, user, k: 4 });
+  console.log(model, result.passHat["4"]);
+}
+```
+
+## Your agent over HTTP
+
+If your agent runs as a service, in any language, give `--agent` its URL. sandtable sends one POST per step: a new user message, or the results of the tool calls your agent asked for. Your agent answers with a reply, or with more tool calls for sandtable to run against the simulated world.
+
+```bash
+sandtable run ./my-domain --agent http://localhost:8787/step -k 4
+```
+
+The [quickstart](/quickstart#run-it) has a runnable toy agent in Node and Python, and the [HTTP agent protocol](/reference/http-protocol) reference has every field, the error behaviour and the limits.
+
+<Warning>
+`session_id` is `<task-id>#<trial>`, so it repeats across runs. If your service keeps conversation state between runs, clear it when a run starts, or a trial may continue an old conversation.
+</Warning>
+
+## Your agent as a JS or TS module
+
+If your agent is a JavaScript or TypeScript function, default-export an `AgentAdapter`, or a function (sync or async) that returns one:
+
+```ts my-agent.ts
+import type { AgentAdapter } from "sandtable-ai";
+
+const agent: AgentAdapter = {
+  name: "my-agent",
+  async createSession({ system, tools, sessionId, recordUsage }) {
+    // system: sandtable's default prompt (domain description + policy); use your own if you have one
+    // tools: JSON-schema tool definitions, in the shape most model APIs accept
+    return {
+      async reply(userMessage, callTool) {
+        // run your own loop; every callTool() hits the simulated world and is graded
+        const carrier = await callTool("verify_carrier", { mc_number: "100101" });
+        return carrier.ok ? "You're all set to book." : "I couldn't find that MC number.";
+      },
+      async close() {
+        // optional: called when the trial ends
+      },
+    };
+  },
+};
+export default agent;
+```
+
+```bash
+sandtable run ./my-domain --agent ./my-agent.ts --user scripted
+```
+
+- `callTool(name, args)` resolves to `{ ok, result?, error? }`. Invalid arguments and failed checks come back as `ok: false` with an error your agent can show the model.
+- Call `recordUsage(model, { input, output, cacheRead, cacheWrite })` after each model call if you want tokens and cost in the report. It is optional.
+- A `.ts` module needs Node 22.18 or later, which strips types natively. On older Node, compile it to `.js` first.
+
+A complete minimal example ships in the repo: [`examples/custom-agent.ts`](https://github.com/sandtable-ai/sandtable/blob/main/examples/custom-agent.ts).
+
+## The simulated user
+
+| `--user` | What plays the caller |
+|---|---|
+| `claude` (default), `claude:<model>` | Claude, with the task's hidden instructions and persona. Default model `claude-opus-5-5`; a cheaper model such as `claude:claude-haiku-5-5` keeps runs cheap. |
+| `openai:<model>` | Any OpenAI-compatible endpoint, configured as [above](#openai-compatible-endpoints). |
+| `scripted` | A deterministic replay of `user.script`, line by line. No API key, no variation: use it for CI smoke tests and for debugging graders. |
+
+When you compare agents, keep the simulated user fixed (same model, same settings), so that only the agent changes. In `demo --live`, choose the models with `--agent-model` and `--user-model`.
+
+The simulated user can be wrong: it can drift from its goal or end a call early. Read failing trajectories in the report before blaming the agent. See [what the first live runs taught us](/results#what-the-first-live-runs-taught-us-about-the-harness).

@@ -1,6 +1,6 @@
 # Domain spec cheat sheet
 
-A condensed, checked copy of `docs/spec.md` in the sandtable repository, with the gotchas that cost time. Examples use the bundled, fictional freight carrier-sales domain.
+A condensed, checked copy of `docs/reference/spec.mdx` in the sandtable repository, with the gotchas that cost time. Examples use the bundled, fictional freight carrier-sales domain.
 
 ## Contents
 - [Top level](#top-level)

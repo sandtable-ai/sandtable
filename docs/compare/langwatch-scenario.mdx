@@ -1,0 +1,41 @@
+---
+title: "sandtable vs LangWatch Scenario"
+sidebarTitle: "LangWatch Scenario"
+description: "Agent tests in code with a judge agent, or a declarative world graded deterministically. When to use each."
+---
+
+**LangWatch Scenario** (Apache-2.0) is an SDK, for Python and TypeScript, for writing agent tests with a simulated user and a judge agent inside pytest or vitest. Scenarios are hand-written code and are judged mostly by an LLM. It pairs with the LangWatch platform.
+
+**sandtable** declares a stateful world, the customer's API as tools over it, and the rules the agent must never break, then grades every trial deterministically on the end state and the tool-call log.
+
+## Side by side
+
+| | sandtable | LangWatch Scenario |
+|---|---|---|
+| A test is | a task in YAML: hidden goal, persona, expected end state | code in your test suite |
+| Stateful world | declarative tables, fresh copy per trial | bring your own (your agent's real or mocked tools) |
+| Pass/fail | end state, invariants, required and forbidden tools; no judge | judge agent criteria plus your own assertions |
+| Rules checked on every tool call | yes | write them as assertions |
+| Repeated trials and pass^k | built in (`-k`) | not built in |
+| Drafting from customer artifacts | `init` from an OpenAPI spec, an SOP and transcripts | no |
+| Qualitative criteria (tone, empathy, wording) | not yet: soft checks are planned ([#16](https://github.com/sandtable-ai/sandtable/issues/16)) | yes, through the judge |
+
+## Choose Scenario when
+
+- You want agent tests to live in your existing test runner, next to unit tests.
+- Your criteria need judgment: tone, helpfulness, whether an explanation was clear.
+- You want to steer and assert on conversations programmatically, in code.
+- You already use the LangWatch platform.
+
+## Choose sandtable when
+
+- The rules are deterministic (eligibility, limits, ordering, disclosure) and a judge reading a transcript that "sounds fine" is not good enough.
+- Many tasks share one world and one rule set, and you want them declared once.
+- You need reliability across repeated trials, not a single pass.
+- The suite should be drafted from what a customer hands over, and reviewed by someone who does not write code.
+
+## Use both
+
+They answer different questions. Scenario can check how the agent sounds; sandtable checks what the agent did to the customer's records and whether it broke a rule while doing it. A team can keep conversational-quality tests in Scenario and gate releases on a sandtable pass^k threshold.
+
+Last reviewed October 2026. Something out of date or unfair? [Open an issue](https://github.com/sandtable-ai/sandtable/issues).

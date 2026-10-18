@@ -1,0 +1,177 @@
+---
+title: "Quickstart"
+description: "Run the offline demo, run the same example with Claude, then point it at your own agent over HTTP."
+---
+
+In about five minutes: an offline demo with no API key, the same example with Claude playing both sides, and the example run against an agent of your own.
+
+## Install
+
+<Tabs>
+  <Tab title="From source">
+    Works today. Needs Node 22.18 or later, which runs the TypeScript sources directly.
+
+    ```bash
+    git clone https://github.com/sandtable-ai/sandtable.git
+    cd sandtable
+    npm install
+    npm run sandtable -- --help
+    ```
+
+    Where these docs write `sandtable <command>`, run `npm run sandtable -- <command>`.
+  </Tab>
+  <Tab title="npm">
+    Needs Node 20 or later.
+
+    ```bash
+    npx sandtable-ai --help
+    # or pin it in a project
+    npm install --save-dev sandtable-ai
+    npx sandtable --help
+    ```
+  </Tab>
+  <Tab title="Python launcher">
+    Installs a `sandtable` command that runs the matching CLI release. Needs Node 20 or later.
+
+    ```bash
+    uvx sandtable-ai --help
+    # or
+    pip install sandtable-ai && sandtable --help
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+The npm and PyPI packages are placeholders until the first release ([#23](https://github.com/sandtable-ai/sandtable/issues/23)). Until then, install from source.
+</Warning>
+
+## Run it
+
+<Steps>
+  <Step title="Run the offline demo">
+    ```bash
+    sandtable demo
+    ```
+
+    Two rule-based agents replay ten scripted carrier calls against a fictional freight brokerage. The **naive** agent books whatever it is asked to and scores pass^1 20%, with its rule breaks grouped under "Top failure modes". The **careful** agent verifies carriers, respects the rate ceiling and hands off when it should, and scores 100%.
+
+    Each run writes `results.json` and `report.html` under `.sandtable/runs/` and opens the first report in your browser. Pass `--no-open` to skip that.
+  </Step>
+  <Step title="Read the report">
+    The HTML report is one self-contained file. For every task it shows each trial's transcript, the tool calls with their arguments and results, every check that passed or failed, and the changes the agent made to the world. Read a failing trial before trusting any score: it tells you whether the agent, the task or the simulated caller was wrong.
+  </Step>
+  <Step title="Run it with Claude">
+    Claude plays both the carrier and the agent, two trials per task by default.
+
+    <Tabs>
+      <Tab title="Anthropic API">
+        ```bash
+        export ANTHROPIC_API_KEY=...
+        sandtable demo --live --user-model claude-haiku-5-5
+        ```
+      </Tab>
+      <Tab title="Amazon Bedrock">
+        ```bash
+        npm install @anthropic-ai/bedrock-sdk
+        sandtable demo --live --provider bedrock --region eu-west-1 --user-model claude-haiku-5-5
+        ```
+        Uses your AWS credentials (`--aws-profile` or the default chain). See [Run against your agent](/guides/bring-your-agent#claude-on-amazon-bedrock).
+      </Tab>
+    </Tabs>
+
+    A cheaper model for the simulated caller keeps the cost down. With Claude Opus 5.5 as the agent and Claude Haiku 5.5 as the caller, the 20 trials cost about $0.58 at list prices ([results](/results)).
+  </Step>
+  <Step title="Point it at your own agent">
+    Any agent that answers one POST per step can be rehearsed. Here is a toy one that only verifies the caller's MC number:
+
+    <CodeGroup>
+    ```js agent-server.mjs
+    // A toy agent that speaks sandtable's HTTP step protocol. Replace decide() with your agent.
+    import { createServer } from "node:http";
+
+    function decide(step) {
+      if (step.message !== undefined) {
+        // A new user turn. A real agent appends it to the history it keeps under step.session_id.
+        const mc = /\bMC\s*#?\s*(\d{5,7})/i.exec(step.message)?.[1];
+        if (!mc) return { reply: "Thanks for calling. What's your MC number?" };
+        return { tool_calls: [{ id: "c1", name: "verify_carrier", arguments: { mc_number: mc } }] };
+      }
+      // Results of the tool calls this agent asked for in its previous response.
+      const [result] = step.tool_results;
+      if (!result.ok) return { reply: "I couldn't find that MC number." };
+      return { reply: `Thanks, ${result.result.name}, you're verified. Let me get a rep to finish the booking.` };
+    }
+
+    createServer(async (req, res) => {
+      let body = "";
+      for await (const chunk of req) body += chunk;
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify(decide(JSON.parse(body))));
+    }).listen(8787, () => console.log("agent listening on http://localhost:8787/step"));
+    ```
+
+    ```python agent_server.py
+    # A toy agent that speaks sandtable's HTTP step protocol. Replace decide() with your agent.
+    import json
+    import re
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+
+    def decide(step):
+        if "message" in step:
+            # A new user turn. A real agent appends it to the history it keeps under step["session_id"].
+            m = re.search(r"\bMC\s*#?\s*(\d{5,7})", step["message"], re.I)
+            if not m:
+                return {"reply": "Thanks for calling. What's your MC number?"}
+            return {"tool_calls": [{"id": "c1", "name": "verify_carrier", "arguments": {"mc_number": m.group(1)}}]}
+        # Results of the tool calls this agent asked for in its previous response.
+        result = step["tool_results"][0]
+        if not result["ok"]:
+            return {"reply": "I couldn't find that MC number."}
+        return {"reply": f"Thanks, {result['result']['name']}, you're verified. Let me get a rep to finish the booking."}
+
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            step = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            body = json.dumps(decide(step)).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+
+    ThreadingHTTPServer(("127.0.0.1", 8787), Handler).serve_forever()
+    ```
+    </CodeGroup>
+
+    Start it in one terminal, then run the freight example against it in another:
+
+    ```bash
+    node agent-server.mjs        # or: python3 agent_server.py
+    sandtable run examples/freight --agent http://localhost:8787/step --user scripted
+    ```
+
+    It scores pass^1 50%: exactly what the [noop baseline](/concepts/baselines) scores, because it never books anything and only passes the tasks where the right outcome is to do nothing. That floor is the first number to know about any suite.
+
+    From a clone, the example is at `examples/freight`. In an npm install it ships at `node_modules/sandtable-ai/examples/freight`.
+  </Step>
+</Steps>
+
+## Next
+
+<Columns cols={2}>
+  <Card title="How it works" icon="diagram-project" href="/how-it-works">
+    Worlds, tools, invariants, tasks and grading in one page.
+  </Card>
+  <Card title="Run against your agent" icon="plug" href="/guides/bring-your-agent">
+    Claude, Bedrock, OpenAI-compatible, HTTP and JS/TS module adapters in detail.
+  </Card>
+  <Card title="Draft a domain with init" icon="wand-magic-sparkles" href="/guides/init">
+    Build a domain for your own customer from their documents.
+  </Card>
+  <Card title="Use it in CI" icon="code-branch" href="/guides/ci">
+    Gate pull requests on pass^k.
+  </Card>
+</Columns>

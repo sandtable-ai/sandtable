@@ -1,0 +1,91 @@
+---
+title: "Write tasks that discriminate"
+description: "Tasks that separate a correct agent from a careless one: firm hidden goals, outcomes graded on state, balanced refusals, and a reference that proves each task is solvable."
+---
+
+A task discriminates when a correct agent passes it and a careless or do-nothing agent fails it. Most weak suites fail that test in one of two ways: tasks that a do-nothing agent passes, and tasks that a correct agent fails because the task, not the agent, is wrong. These practices avoid both.
+
+## Anatomy of a good task
+
+```yaml
+- id: negotiate-within-ceiling
+  description: Carrier haggles; the agent closes between the caller's floor and the max rate.
+  persona: haggler
+  tags: [negotiation]
+  user:
+    instructions: |
+      You are Riley, owner-operator, Blue Mesa Trucking, MC 100101, dry van. You want load L-1001 (Dallas to Atlanta).
+      Open by asking for $2,600. You will accept any offer of $2,250 or more, but never less than $2,250.
+      If the agent won't reach $2,250, say no thanks and end the call.
+    script:
+      - MC 100101, Blue Mesa. I'm looking at L-1001.
+      - I need $2,600 for that one.
+      - Okay, how about $2,300?
+      - Deal, book it at 2300.
+      - Thanks!
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "100101" } }
+    - { tool: get_load, args: { load_id: L-1001 } }
+    - { tool: book_load, args: { load_id: L-1001, mc_number: "100101", rate: 2300 } }
+  expect:
+    state:
+      - { table: bookings, where: { load_id: L-1001, mc_number: "100101", rate: { $gte: 2250, $lte: 2350 } }, count: 1 }
+```
+
+It has a firm hidden goal with numbers, a clear exit, a script for offline runs, a reference that proves it can be passed, and an expectation on state that accepts every correct outcome (any rate between the caller's floor and the ceiling) and nothing else.
+
+## Practices
+
+<Steps>
+  <Step title="Grade the outcome on state">
+    Expect the records the conversation should create or change: a booking with these fields, a row whose status changed, an escalation created. State is what the customer's systems will actually hold. Use `reply_includes` sparingly: wording varies between runs and models.
+  </Step>
+  <Step title="Accept every correct outcome">
+    Use ranges and operators instead of one exact value when the policy allows several: `rate: { $gte: 2250, $lte: 2350 }`. Do not forbid acceptable alternatives. In the first live runs, a task that forbade any handoff failed agents that handed off correctly *after* a valid booking; it was relaxed to grade the booking itself.
+  </Step>
+  <Step title="Assert what must not change">
+    For refusal tasks, check that nothing happened where it matters: `{ table: bookings, count: 0 }`, or `{ table: loads, key: L-1002, fields: { status: available } }`.
+  </Step>
+  <Step title="Make refusals cost something">
+    A refusal graded only on "nothing changed" is passed by an agent that never does anything. Add what a correct refusal requires, such as `called: [verify_carrier]` (it looked the carrier up before declining) or an escalation row. Then the [noop baseline](/concepts/baselines) fails it.
+  </Step>
+  <Step title="Balance write and no-write tasks">
+    Include tasks that must end with a write and tasks that must end without one. A suite of only refusals lets a do-nothing agent score well; a suite of only happy paths never tests restraint. Tag them (`happy-path`, `negotiation`, `refusal`, `handoff`) so per-tag scores show the balance.
+  </Step>
+  <Step title="Give the caller a firm, specific goal">
+    Write `user.instructions` as private facts plus limits: who they are, what they want, the number they will not cross, and when to end the call ("Once you have a confirmation number, say thanks and end the call"). Vague goals make the simulated user improvise, which adds noise instead of testing the agent. Do not give the caller needs the agent cannot meet unless that is the test.
+  </Step>
+  <Step title="Follow the policy, not the transcript">
+    When a task comes from a real call, the expected outcome is what the SOP requires, even if the human rep did something else. That is how `init` drafts tasks from transcripts, and how you should review them.
+  </Step>
+  <Step title="Prove it is solvable">
+    Add a `reference`: the tool calls a correct agent would make. `sandtable lint` replays it against a fresh world and checks that it passes every expectation without breaking an invariant. A task no agent could pass is a broken task.
+  </Step>
+  <Step title="Make it run offline">
+    Add a `user.script` so the task runs with `--user scripted`, for smoke tests in CI and for debugging graders without model calls.
+  </Step>
+</Steps>
+
+## Use personas for behaviour, not goals
+
+A persona changes *how* the caller behaves: impatient, evasive, friendly, pushy on price. The task's instructions hold *what* they want. Reusing a few personas across many tasks shows whether an agent holds the policy under pressure, not just in polite conversations.
+
+## Check your suite
+
+```bash
+sandtable validate ./my-domain                          # schema and cross-references
+sandtable lint ./my-domain                              # ready, solvable, non-vacuous, graded
+sandtable run ./my-domain --agent noop --user scripted  # the floor
+```
+
+Then run the real agent, open the report, and read the failing trajectories. For each failure, decide whether the agent, the task or the simulated caller was wrong, and fix the right one. A suite earns trust one corrected task at a time.
+
+## Checklist
+
+- [ ] Every task has `state` or `called` expectations, and lint reports it ready.
+- [ ] Every task that expects a write has a `reference`, and lint reports it solvable.
+- [ ] Refusal tasks require an action, so the noop baseline fails them.
+- [ ] Expectations accept every outcome the policy allows.
+- [ ] Hidden goals state limits and an exit.
+- [ ] Every task has a `user.script`.
+- [ ] Names, numbers and records are fictional.
