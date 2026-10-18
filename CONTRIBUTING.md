@@ -11,7 +11,7 @@ npm run typecheck
 npm run demo        # offline demo from the TypeScript sources
 ```
 
-Node ≥ 22.18 runs `src/*.ts` directly (type stripping), so there is no build step in development. `npm run build` compiles to `dist/` for publishing.
+Development needs Node ≥ 22.18, which runs `src/*.ts` directly (type stripping), so there is no build step. The published CLI is compiled to `dist/` and runs on Node ≥ 20.
 
 ## Ground rules
 

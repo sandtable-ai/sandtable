@@ -36,6 +36,6 @@
 | Policy rules checked on every tool call | yes | no | no | no |
 | pass^k across repeated trials | yes | yes | no | no |
 | Agent integration | HTTP, JS/TS module, Claude | Python agents / LLM APIs | adapter | adapter function |
-| Draft a domain from SOP + API + transcripts | planned (`init`) | no | from the system prompt | no |
+| Draft a domain from SOP + API + transcripts | yes (`init`, reviewed before use) | no | from the system prompt | no |
 
 Comparisons reflect the projects' public READMEs as of October 2026.

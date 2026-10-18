@@ -10,7 +10,7 @@ from . import NPM_VERSION
 def main() -> int:
     npx = shutil.which("npx")
     if npx is None:
-        sys.stderr.write("sandtable needs Node.js 22.18 or newer (https://nodejs.org); `npx` was not found on PATH.\n")
+        sys.stderr.write("sandtable needs Node.js 20 or newer (https://nodejs.org); `npx` was not found on PATH.\n")
         return 127
     cmd = [npx, "--yes", f"sandtable-ai@{NPM_VERSION}", *sys.argv[1:]]
     try:
