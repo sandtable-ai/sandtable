@@ -24,6 +24,7 @@
   "files": [
     "dist",
     "examples/freight",
+    "examples/clinic",
     "README.md",
     "LICENSE"
   ],
