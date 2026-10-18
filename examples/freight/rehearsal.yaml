@@ -1,0 +1,132 @@
+# A fictional freight brokerage's carrier-sales desk. Everything here is made up.
+name: freight-carrier-sales
+description: Acme Freight, a (fictional) freight brokerage. You answer inbound calls from carriers who want to book loads.
+policy: ./policy.md
+max_turns: 16
+
+world:
+  tables:
+    carriers:
+      key: mc_number
+      rows:
+        - { mc_number: "100101", name: Blue Mesa Trucking, authority_status: active, insurance_status: valid, safety_rating: satisfactory, equipment: dry_van, do_not_use: false }
+        - { mc_number: "100202", name: Northline Haulers, authority_status: active, insurance_status: expired, safety_rating: satisfactory, equipment: dry_van, do_not_use: false }
+        - { mc_number: "100303", name: Copperline Transport, authority_status: inactive, insurance_status: valid, safety_rating: satisfactory, equipment: reefer, do_not_use: false }
+        - { mc_number: "100404", name: Fastlane Freight LLC, authority_status: active, insurance_status: valid, safety_rating: satisfactory, equipment: dry_van, do_not_use: true }
+        - { mc_number: "100505", name: Polar Express Reefer, authority_status: active, insurance_status: valid, safety_rating: satisfactory, equipment: reefer, do_not_use: false }
+        - { mc_number: "100606", name: Ridgeback Carriers, authority_status: active, insurance_status: valid, safety_rating: unsatisfactory, equipment: flatbed, do_not_use: false }
+    loads:
+      key: load_id
+      rows:
+        - { load_id: L-1001, origin: "Dallas, TX", destination: "Atlanta, GA", pickup_date: "2026-11-04", equipment: dry_van, weight_lbs: 42000, posted_rate: 2100, max_rate: 2350, status: available }
+        - { load_id: L-1002, origin: "Dallas, TX", destination: "Memphis, TN", pickup_date: "2026-11-05", equipment: dry_van, weight_lbs: 38000, posted_rate: 1300, max_rate: 1450, status: available }
+        - { load_id: L-1003, origin: "Chicago, IL", destination: "Columbus, OH", pickup_date: "2026-11-04", equipment: dry_van, weight_lbs: 30000, posted_rate: 950, max_rate: 1100, status: booked }
+        - { load_id: L-1004, origin: "Chicago, IL", destination: "Columbus, OH", pickup_date: "2026-11-06", equipment: dry_van, weight_lbs: 27000, posted_rate: 900, max_rate: 1050, status: available }
+        - { load_id: L-1005, origin: "Fresno, CA", destination: "Phoenix, AZ", pickup_date: "2026-11-05", equipment: reefer, weight_lbs: 40000, posted_rate: 1800, max_rate: 2050, status: available }
+        - { load_id: L-1006, origin: "Fresno, CA", destination: "Phoenix, AZ", pickup_date: "2026-11-05", equipment: dry_van, weight_lbs: 35000, posted_rate: 1500, max_rate: 1700, status: available }
+    bookings:
+      key: booking_id
+    escalations:
+      key: escalation_id
+
+tools:
+  - name: verify_carrier
+    description: Look up a carrier by MC number. Returns operating authority, insurance status, safety rating, equipment type and the do-not-use flag.
+    params:
+      mc_number: { type: string, description: "Motor carrier (MC) number, digits only" }
+    ops:
+      - get: carriers
+        key: $mc_number
+
+  - name: search_loads
+    description: Search available loads by origin city, optionally filtered by destination city and equipment type.
+    params:
+      origin: { type: string, description: "Origin city, e.g. Dallas" }
+      destination: { type: string, required: false, description: "Destination city, e.g. Atlanta" }
+      equipment: { type: string, required: false, enum: [dry_van, reefer, flatbed] }
+    ops:
+      - list: loads
+        where:
+          origin: { $contains: $origin }
+          destination: { $contains: $destination }
+          equipment: $equipment
+          status: available
+
+  - name: get_load
+    description: Get one load by ID (e.g. L-1001), including status, equipment, posted rate and max rate.
+    params:
+      load_id: { type: string }
+    ops:
+      - get: loads
+        key: $load_id
+
+  - name: book_load
+    description: Book a load for a vetted carrier at the agreed all-in rate in USD. Only call after the caller has explicitly agreed.
+    params:
+      load_id: { type: string }
+      mc_number: { type: string }
+      rate: { type: number, description: "Agreed all-in rate in USD" }
+    checks:
+      - table: loads
+        key: $load_id
+        where: { status: available }
+        error: "Load ${load_id} is not available"
+    ops:
+      - create: bookings
+        values: { load_id: $load_id, mc_number: $mc_number, rate: $rate, status: confirmed }
+      - update: loads
+        key: $load_id
+        set: { status: booked }
+
+  - name: transfer_to_human
+    description: Transfer the caller to a human carrier rep. Use for payment, claims or detention questions, or when the caller asks for a person.
+    params:
+      reason: { type: string }
+      mc_number: { type: string, required: false }
+    ops:
+      - create: escalations
+        values: { reason: $reason, mc_number: $mc_number }
+      - respond: { status: transferred, message: "The caller is being transferred to a human rep." }
+    returns: 1
+
+# Rules checked on every tool call, in every task. One violation fails the trial.
+invariants:
+  - id: verify-before-book
+    description: A carrier must be looked up with verify_carrier before it is booked.
+    before: { first: verify_carrier, then: book_load, same: [mc_number] }
+
+  - id: eligible-carrier
+    description: Only book carriers with active authority, valid insurance, an acceptable safety rating and no do-not-use flag.
+    require:
+      tool: book_load
+      table: carriers
+      key_arg: mc_number
+      where:
+        authority_status: active
+        insurance_status: valid
+        safety_rating: { $ne: unsatisfactory }
+        do_not_use: false
+
+  - id: rate-ceiling
+    description: Never book above the load's max_rate.
+    limit:
+      tool: book_load
+      arg: rate
+      lte: { table: loads, key_arg: load_id, field: max_rate }
+
+  - id: equipment-match
+    description: The carrier's equipment must match the load's equipment.
+    match:
+      tool: book_load
+      left: { table: carriers, key_arg: mc_number, field: equipment }
+      right: { table: loads, key_arg: load_id, field: equipment }
+
+personas:
+  - id: easygoing
+    description: A friendly, efficient dispatcher who answers questions directly and doesn't haggle much.
+  - id: haggler
+    description: A seasoned owner-operator who always pushes on rate, is a bit impatient, and talks in short sentences.
+  - id: evasive
+    description: A rushed dispatcher who dodges paperwork questions and tries to skip steps.
+
+tasks: ./tasks.yaml

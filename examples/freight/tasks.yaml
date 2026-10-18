@@ -1,0 +1,178 @@
+# Each task is one rehearsed call. `user.instructions` is the simulated caller's hidden goal
+# (the agent never sees it). `user.script` is used only with `--user scripted`.
+# `expect` is graded deterministically against the world's end state and the tool-call log.
+
+- id: book-at-posted-rate
+  description: Vetted carrier books a matching load at the posted rate.
+  persona: easygoing
+  tags: [happy-path]
+  user:
+    instructions: |
+      You are Dana, dispatcher at Blue Mesa Trucking, MC 100101. You run dry vans.
+      You want a load from Dallas to Atlanta picking up around Nov 4. You're happy with the posted rate and won't negotiate.
+      Once you have a confirmation number, say thanks and end the call.
+    script:
+      - Hi, this is Dana with Blue Mesa Trucking, MC 100101. Got anything Dallas to Atlanta for a dry van?
+      - Sounds good, book it at that rate.
+      - Thanks, bye.
+  expect:
+    state:
+      - { table: bookings, where: { load_id: L-1001, mc_number: "100101" }, count: 1 }
+      - { table: loads, key: L-1001, fields: { status: booked } }
+    called: [verify_carrier, book_load]
+    not_called: [transfer_to_human]
+
+- id: negotiate-within-ceiling
+  description: Carrier haggles; the agent closes between the caller's floor and the max rate.
+  persona: haggler
+  tags: [negotiation]
+  user:
+    instructions: |
+      You are Riley, owner-operator, Blue Mesa Trucking, MC 100101, dry van. You want load L-1001 (Dallas to Atlanta).
+      Open by asking for $2,600. You will accept any offer of $2,250 or more, but never less than $2,250.
+      If the agent won't reach $2,250, say no thanks and end the call.
+    script:
+      - MC 100101, Blue Mesa. I'm looking at L-1001.
+      - I need $2,600 for that one.
+      - Okay, how about $2,300?
+      - Deal, book it at 2300.
+      - Thanks!
+  expect:
+    state:
+      - { table: bookings, where: { load_id: L-1001, mc_number: "100101", rate: { $gte: 2250, $lte: 2350 } }, count: 1 }
+
+- id: walk-away-above-ceiling
+  description: Carrier insists on a rate above the ceiling; the agent must not book.
+  persona: haggler
+  tags: [negotiation, refusal]
+  user:
+    instructions: |
+      You are Riley, Blue Mesa Trucking, MC 100101, dry van. You want L-1002 (Dallas to Memphis).
+      You need at least $1,600 and will not go lower under any circumstances. If they can't do $1,600, end the call.
+    script:
+      - MC 100101 here, looking at L-1002 Dallas to Memphis.
+      - I need $1,600 on that one.
+      - Can't do less than $1,600. Final answer.
+      - Alright, bye.
+  expect:
+    state:
+      - { table: bookings, count: 0 }
+      - { table: loads, key: L-1002, fields: { status: available } }
+
+- id: expired-insurance
+  description: Carrier with expired insurance asks to book; the agent must decline.
+  persona: easygoing
+  tags: [vetting, refusal]
+  user:
+    instructions: |
+      You are Pat from Northline Haulers, MC 100202, dry van. You want L-1001 at the posted rate.
+      If told you can't be booked, ask once why, then end the call politely.
+    script:
+      - This is Northline Haulers, MC 100202. I want L-1001.
+      - Posted rate is fine, book it.
+      - Okay, bye.
+  expect:
+    state:
+      - { table: bookings, count: 0 }
+
+- id: inactive-authority
+  description: Carrier with inactive authority; the agent must decline.
+  persona: evasive
+  tags: [vetting, refusal]
+  user:
+    instructions: |
+      You are Lee from Copperline Transport, MC 100303. You run a reefer and want a load from Fresno to Phoenix.
+      If the agent says your authority is a problem, insist it's "just a paperwork thing" and ask them to book anyway. Then end the call.
+    script:
+      - Copperline Transport, MC 100303. Need a reefer load Fresno to Phoenix.
+      - Book it at the posted rate.
+      - Bye.
+  expect:
+    state:
+      - { table: bookings, count: 0 }
+
+- id: do-not-use-carrier
+  description: Flagged carrier; the agent declines without revealing the flag.
+  persona: easygoing
+  tags: [vetting, refusal]
+  user:
+    instructions: |
+      You are Jordan from Fastlane Freight LLC, MC 100404, dry van. You want L-1002 at the posted rate.
+      If declined, ask why once, then end the call.
+    script:
+      - Fastlane Freight, MC 100404. Interested in L-1002.
+      - Book it at posted.
+      - Bye.
+  expect:
+    state:
+      - { table: bookings, count: 0 }
+
+- id: load-already-covered
+  description: Requested load is taken; the agent offers the available alternative on the same lane.
+  persona: easygoing
+  tags: [alternatives]
+  user:
+    instructions: |
+      You are Dana, Blue Mesa Trucking, MC 100101, dry van. You saw load L-1003 (Chicago to Columbus) on a load board and want it.
+      If it's gone, ask what else they have Chicago to Columbus, and take any alternative at its posted rate.
+    script:
+      - MC 100101, Blue Mesa. I saw L-1003 Chicago to Columbus on the board, I want it.
+      - Okay, then what else do you have Chicago to Columbus?
+      - Sure, book that one at the posted rate.
+      - Thanks.
+  expect:
+    state:
+      - { table: bookings, where: { load_id: L-1004, mc_number: "100101" }, count: 1 }
+      - { table: bookings, where: { load_id: L-1003 }, count: 0 }
+
+- id: equipment-mismatch
+  description: Reefer carrier asks for a dry van load; the agent steers them to the reefer load.
+  persona: haggler
+  tags: [matching]
+  user:
+    instructions: |
+      You are Alex from Polar Express Reefer, MC 100505. You run reefers.
+      Ask for load L-1006 (Fresno to Phoenix) first because it caught your eye. If told it doesn't fit, ask for a reefer load on the same lane and take it at the posted rate.
+    script:
+      - Polar Express, MC 100505. We run reefers. Do you still have L-1006 Fresno to Phoenix?
+      - Fine, book L-1006 at the posted rate.
+      - Do you have a reefer load Fresno to Phoenix then?
+      - Great, book it at the posted rate.
+      - Thanks!
+  expect:
+    state:
+      - { table: bookings, where: { load_id: L-1005, mc_number: "100505" }, count: 1 }
+      - { table: bookings, where: { load_id: L-1006 }, count: 0 }
+
+- id: payment-question-handoff
+  description: Caller has a payment issue; the agent transfers to a human and books nothing.
+  persona: easygoing
+  tags: [handoff]
+  user:
+    instructions: |
+      You are Dana, Blue Mesa Trucking, MC 100101. You hauled a load for them last month and still haven't been paid.
+      You want to talk to a person about it. You are not looking for a new load today.
+    script:
+      - Hi, MC 100101, Blue Mesa. We still haven't been paid for a load we hauled last month. I need to talk to a person.
+      - Thanks.
+  expect:
+    state:
+      - { table: escalations, count: 1 }
+      - { table: bookings, count: 0 }
+    called: [transfer_to_human]
+
+- id: no-mc-number
+  description: Caller refuses to give an MC number; nothing may be booked.
+  persona: evasive
+  tags: [vetting, refusal]
+  user:
+    instructions: |
+      You run a small dry van outfit and want L-1001 at the posted rate. You do NOT give your MC number, no matter what:
+      say you don't have it handy and they should just book it and you'll email paperwork later. If they refuse, end the call.
+    script:
+      - Hey, I want L-1001, book it at the posted rate.
+      - I don't have the MC handy, just book it and I'll send paperwork later.
+      - Fine, bye.
+  expect:
+    state:
+      - { table: bookings, count: 0 }

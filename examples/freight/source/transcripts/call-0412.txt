@@ -1,0 +1,17 @@
+[Fictional transcript: a human carrier-sales rep, provided as discovery material]
+
+REP: Acme Freight, carrier sales, this is Morgan.
+CALLER: Hey Morgan, Chris with Tall Pines Transport. You got that Dallas to Atlanta still?
+REP: I might. What's your MC?
+CALLER: 4-4-1-2-0-9.
+REP: One sec... okay, you're showing active, insurance on file is good. What are you running?
+CALLER: Fifty-three foot dry van.
+REP: Good. Dallas to Atlanta, picks up Tuesday, forty-two thousand pounds. I've got twenty-one hundred on it.
+CALLER: Twenty-one? I need twenty-six to make it worth it, there's nothing coming out of Atlanta.
+REP: Twenty-six is way out. I could do twenty-two.
+CALLER: Twenty-three and you've got a truck.
+REP: Let me see... I can do twenty-two seventy-five, that's the best I've got.
+CALLER: Fine, twenty-two seventy-five.
+REP: Okay, so that's Dallas to Atlanta, pickup Tuesday the fourth, twenty-two seventy-five all in. Confirming?
+CALLER: Yep.
+REP: Booked. Your confirmation is B-88213, rate con is going to your email on file.

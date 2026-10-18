@@ -1,0 +1,102 @@
+# The (fictional) brokerage's TMS API, as a customer would hand it over during discovery.
+# rehearsal.yaml was written by hand from this spec, policy.md and transcripts/.
+# Drafting that file automatically is the job of `rehearse init` (see ROADMAP.md).
+openapi: 3.1.0
+info:
+  title: Acme Freight TMS API
+  version: 2.3.0
+paths:
+  /carriers/{mc_number}:
+    get:
+      operationId: getCarrier
+      summary: Carrier compliance profile
+      parameters:
+        - { name: mc_number, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Carrier" } } } }
+        "404": { description: Unknown MC number }
+  /loads:
+    get:
+      operationId: searchLoads
+      summary: Search posted loads
+      parameters:
+        - { name: origin, in: query, required: true, schema: { type: string } }
+        - { name: destination, in: query, schema: { type: string } }
+        - { name: equipment, in: query, schema: { $ref: "#/components/schemas/Equipment" } }
+        - { name: status, in: query, schema: { type: string, enum: [available, booked, covered], default: available } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Load" } } } } }
+  /loads/{load_id}:
+    get:
+      operationId: getLoad
+      parameters:
+        - { name: load_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Load" } } } }
+        "404": { description: Not found }
+  /bookings:
+    post:
+      operationId: createBooking
+      summary: Book a load for a carrier (tenders the load; the load becomes `booked`)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [load_id, mc_number, rate]
+              properties:
+                load_id: { type: string }
+                mc_number: { type: string }
+                rate: { type: number, description: All-in rate in USD }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Booking" } } } }
+        "409": { description: Load is not available }
+  /escalations:
+    post:
+      operationId: createEscalation
+      summary: Hand the call to a human carrier rep
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+                mc_number: { type: string }
+      responses:
+        "201": { description: Created }
+components:
+  schemas:
+    Equipment: { type: string, enum: [dry_van, reefer, flatbed] }
+    Carrier:
+      type: object
+      properties:
+        mc_number: { type: string }
+        name: { type: string }
+        authority_status: { type: string, enum: [active, inactive, revoked] }
+        insurance_status: { type: string, enum: [valid, expired] }
+        safety_rating: { type: string, enum: [satisfactory, conditional, unsatisfactory] }
+        equipment: { $ref: "#/components/schemas/Equipment" }
+        do_not_use: { type: boolean }
+    Load:
+      type: object
+      properties:
+        load_id: { type: string }
+        origin: { type: string }
+        destination: { type: string }
+        pickup_date: { type: string, format: date }
+        equipment: { $ref: "#/components/schemas/Equipment" }
+        weight_lbs: { type: integer }
+        posted_rate: { type: number }
+        max_rate: { type: number, description: Internal ceiling. Never disclose to carriers. }
+        status: { type: string, enum: [available, booked, covered] }
+    Booking:
+      type: object
+      properties:
+        booking_id: { type: string }
+        load_id: { type: string }
+        mc_number: { type: string }
+        rate: { type: number }
+        status: { type: string }

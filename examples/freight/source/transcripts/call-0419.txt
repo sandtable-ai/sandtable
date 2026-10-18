@@ -1,0 +1,15 @@
+[Fictional transcript: a human carrier-sales rep, provided as discovery material]
+
+REP: Acme Freight, this is Morgan.
+CALLER: Yeah, I want the Fresno to Phoenix, the fifteen hundred one.
+REP: Sure. MC number?
+CALLER: 3-3-8-1-7-0, Valley Cold Chain.
+REP: Thanks... I see you're set up as a reefer carrier, right?
+CALLER: Right, reefers only.
+REP: That fifteen hundred load is a dry van load, so I can't put a reefer on it. I do have a reefer load on the same lane, same day, eighteen hundred.
+CALLER: Even better. Book it.
+REP: Fresno to Phoenix, reefer, picking up the fifth, eighteen hundred. Good?
+CALLER: Good.
+REP: Done, confirmation B-88240.
+CALLER: Hey, also, we never got paid on the Stockton load from September.
+REP: That's our payables team. Let me transfer you, hang on.
