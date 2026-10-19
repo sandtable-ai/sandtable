@@ -148,6 +148,19 @@ describe("Claude Code plugin", () => {
     expect(count).toBeGreaterThanOrEqual(15);
   });
 
+  it("quotes bundled freight tasks exactly where it says it does", () => {
+    const tasks = YAML.parse(read(path.join(root, "examples", "freight", "tasks.yaml"))) as { id: string }[];
+    let count = 0;
+    for (const file of docs) {
+      for (const m of read(file).matchAll(/^```yaml\n([\s\S]*?)^```\n\nThis is from the bundled, fictional freight domain/gm)) {
+        const [snippet] = YAML.parse(m[1]!) as { id: string }[];
+        expect(snippet, `${rel(file)}: ${snippet?.id}`).toEqual(tasks.find((t) => t.id === snippet?.id));
+        count++;
+      }
+    }
+    expect(count).toBeGreaterThan(0);
+  });
+
   it.skipIf(!process.features.typescript)("uses only commands and flags the CLI has", { timeout: 30_000 }, async () => {
     const run = promisify(execFile);
     const help = async (...args: string[]) => (await run(process.execPath, [path.join(root, "src", "cli.ts"), ...args, "--help"])).stdout;
