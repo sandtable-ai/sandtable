@@ -29,7 +29,24 @@ import { renderLeaderboardMarkdown, runLeaderboard } from "./run/leaderboard.ts"
 import { z } from "zod";
 import YAML from "yaml";
 
-const EXAMPLE = fileURLToPath(new URL("../examples/freight", import.meta.url));
+// The examples ship in the npm package, one level above both src/cli.ts and dist/cli.js.
+const BUNDLED_EXAMPLES = fileURLToPath(new URL("../examples/", import.meta.url));
+const EXAMPLE = path.join(BUNDLED_EXAMPLES, "freight");
+
+/**
+ * The domain path to load. The docs and skills run `examples/freight` and `examples/clinic`, which
+ * exist relative to the current directory only in a clone. When the path is missing and names a
+ * bundled example, use the copy shipped in the package, and say where it is.
+ */
+async function resolveDomain(p: string): Promise<string> {
+  if (await stat(p).catch(() => undefined)) return p;
+  const name = /^(?:\.\/)?examples\/([\w-]+)\/?$/.exec(p.replaceAll("\\", "/"))?.[1];
+  if (!name) return p;
+  const bundled = path.join(BUNDLED_EXAMPLES, name);
+  if (!(await stat(path.join(bundled, "sandtable.yaml")).catch(() => undefined))) return p;
+  console.error(`(no ${p} in this directory: using the copy bundled with sandtable-ai, ${bundled})`);
+  return bundled;
+}
 
 const int = (v: string) => {
   const n = Number.parseInt(v, 10);
@@ -157,6 +174,8 @@ function parseResults(text: string, file: string): SuiteResult {
   return r as SuiteResult;
 }
 
+const PRICES_HELP = "extra model prices, JSON in USD per million tokens: { \"<model-id>\": { input, output, cacheRead, cacheWrite } } (the sandtable repo's scripts/bedrock-prices.mjs writes one for Bedrock)";
+
 async function loadPrices(file?: string): Promise<void> {
   if (!file) return;
   const added = registerPrices(JSON.parse(await readFile(file, "utf8")));
@@ -253,7 +272,7 @@ program
   .description("check a domain spec for schema and cross-reference errors")
   .option("--strict", "also fail while drafted items are pending review")
   .action(async (domainPath: string, o: { strict?: boolean }) => {
-    const d = await loadDomain(domainPath);
+    const d = await loadDomain(await resolveDomain(domainPath));
     console.log(`✓ ${d.name}: ${Object.keys(d.world.tables).length} tables, ${d.tools.length} tools, ${d.invariants.length} invariants, ${d.tasks.length} tasks`);
     const pending = pendingReview(d);
     if (pending.length) {
@@ -267,7 +286,7 @@ program
   .argument("<domain>", "domain directory (with sandtable.yaml) or file")
   .description("prove every task is ready, solvable, non-vacuous and graded, without any model call")
   .action(async (domainPath: string) => {
-    const report = lintDomain(await loadDomain(domainPath));
+    const report = lintDomain(await loadDomain(await resolveDomain(domainPath)));
     for (const t of report.tasks) {
       const solvable = t.solvable === null ? "solvable ?" : t.solvable ? "solvable" : "NOT solvable";
       const kind = t.expectsWrite ? "write" : "no-write";
@@ -288,7 +307,7 @@ program
   .argument("<domain>", "domain directory (with sandtable.yaml) or file")
   .description("list drafted items that still need a person to accept them")
   .action(async (domainPath: string) => {
-    const pending = pendingReview(await loadDomain(domainPath));
+    const pending = pendingReview(await loadDomain(await resolveDomain(domainPath)));
     if (!pending.length) return console.log("Nothing pending review.");
     for (const p of pending) {
       console.log(`- ${p.kind} ${p.id}${p.source ? `  (${p.source.file})` : ""}`);
@@ -312,10 +331,10 @@ withProviderFlags(program
   .option("--no-html", "skip the HTML report")
   .option("--fail-under <pct>", "exit 1 if pass^k is below this percentage (CI gate)", percent)
   .option("--open", "open the HTML report in the browser when the run finishes")
-  .option("--prices <file>", "extra model prices (JSON from scripts/bedrock-prices.mjs, or { model: {input, output, cacheRead, cacheWrite} })")
+  .option("--prices <file>", PRICES_HELP)
   .action(async (domainPath: string, o: { agent: string; user: string; openaiBaseUrl?: string; trials: number; tasks?: string; concurrency: number; out?: string; html: boolean; failUnder?: number; open?: boolean; prices?: string } & ProviderFlags) => {
     await loadPrices(o.prices);
-    const domain = await loadDomain(domainPath);
+    const domain = await loadDomain(await resolveDomain(domainPath));
     if (domain.tasks.length === 0) throw new Error(`${domain.name} has no tasks yet: add some to tasks.yaml`);
     const agent = await resolveAgent(o.agent, providerOpts(o), o.openaiBaseUrl);
     const user = resolveUser(o.user, providerOpts(o), o.openaiBaseUrl);
@@ -366,10 +385,10 @@ withProviderFlags(program
   .option("--openai-base-url <url>", "OpenAI-compatible endpoint for openai:<model> entries")
   .option("-o, --out <dir>", "output directory (default: leaderboard/<domain name>)")
   .option("--no-resume", "rerun models even when matching results already exist")
-  .option("--prices <file>", "extra model prices (JSON from scripts/bedrock-prices.mjs)")
+  .option("--prices <file>", PRICES_HELP)
   .action(async (domainPath: string, o: { models: string; user?: string; trials?: number; tasks?: string; concurrency: number; openaiBaseUrl?: string; out?: string; resume: boolean; prices?: string } & ProviderFlags) => {
     await loadPrices(o.prices);
-    const domain = await loadDomain(domainPath);
+    const domain = await loadDomain(await resolveDomain(domainPath));
     const parsed = ModelsFile.safeParse(YAML.parse(await readFile(o.models, "utf8")));
     if (!parsed.success) throw new Error(`${o.models}:\n${z.prettifyError(parsed.error)}`);
     const cfg = parsed.data;

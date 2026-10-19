@@ -76,7 +76,15 @@ Guide: [draft a domain with init](https://sandtable.dev/guides/init). Spec: [ref
 `sandtable leaderboard` ranks several agents on one domain under the same simulated callers, next to a do-nothing baseline, by pass^k with rule violations, cost per trial and latency:
 
 ```bash
-npx sandtable-ai leaderboard examples/freight -m leaderboard/models.example.yaml -k 4
+npx sandtable-ai leaderboard examples/freight -m models.yaml -k 4
+```
+
+```yaml
+# models.yaml
+user: claude:claude-haiku-5-5   # the same simulated caller for every model
+models:
+  - { label: Claude Opus 5.5, agent: claude:claude-opus-5-5 }
+  - { label: GPT-5.5, agent: openai:gpt-5.5 }
 ```
 
 ## Bring your own agent
