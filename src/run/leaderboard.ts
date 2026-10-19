@@ -113,9 +113,9 @@ export function domainFingerprint(domain: Domain): string {
   return createHash("sha256").update(JSON.stringify(domain)).digest("hex").slice(0, 16);
 }
 
-/** Why results run under `had` cannot stand in for `want`. Results from before run.json existed have no key. */
+/** Why results run under `had` cannot stand in for `want`. Without a run.json, nothing says what they ran. */
 export function changedRunKey(had: RunKey | undefined, want: RunKey): string | undefined {
-  if (!had) return undefined;
+  if (!had) return "they have no run.json, so their agent spec and domain can't be checked";
   if (had.agent !== want.agent) return `they are for agent ${had.agent}, not ${want.agent}`;
   if (had.domain !== want.domain) return "the domain has changed since they ran";
   return undefined;

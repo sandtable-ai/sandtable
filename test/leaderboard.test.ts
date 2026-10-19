@@ -122,15 +122,16 @@ describe("leaderboard", () => {
     expect((await run("scripted:naive", edited)).seen).toEqual(["cached"]);
   });
 
-  it("still reuses results stored before run.json existed, when they match", async () => {
+  it("reruns results stored without run.json, since nothing says which agent and domain they ran", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
     const domain = await loadDomain(example);
     const base = { domain, user: scriptedUser(), k: 1, taskIds: ["no-mc-number"], outDir: dir, entries: [{ label: "Careful rules", agent: "scripted:careful" }] };
     await runLeaderboard({ ...base, resolveAgent: async () => freightScriptedAgent("careful") });
     await rm(path.join(dir, "careful-rules", "run.json"));
     const seen: string[] = [];
-    await runLeaderboard({ ...base, resolveAgent: async () => Promise.reject(new Error("should not rerun")), onEntry: (_l, status) => seen.push(status) });
-    expect(seen).toEqual(["cached"]);
+    await runLeaderboard({ ...base, resolveAgent: async () => freightScriptedAgent("careful"), onEntry: (_l, status, note) => seen.push(`${status}: ${note}`) });
+    expect(seen).toEqual(["ran: stored results not reused: they have no run.json, so their agent spec and domain can't be checked"]);
+    expect(JSON.parse(await readFile(path.join(dir, "careful-rules", "run.json"), "utf8"))).toMatchObject({ agent: "scripted:careful" });
   });
 
   it("skips a noop entry, since the do-nothing baseline is always there, and shows one pass column at k=1", async () => {
