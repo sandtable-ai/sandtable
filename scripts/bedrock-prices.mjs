@@ -5,7 +5,7 @@
 //   node scripts/bedrock-prices.mjs --from <get-products.json> <region> <model-id>...   (offline, from a saved dump)
 //
 // Output: { region, source, generatedAt, prices: { <model-id>: { input, output, cacheRead, cacheWrite, usageTypes } } }
-// in USD per million tokens. Models that cannot be resolved are listed under `unresolved`, never guessed.
+// in USD per million tokens. Models that cannot be resolved are listed under `unresolved` with the reason, never guessed.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
@@ -48,24 +48,52 @@ function core(modelId) {
   return noProvider.replace(/-v\d+(:\d+)?$/, "").replace(/-\d+:\d+$/, "").toLowerCase();
 }
 
+/**
+ * The words of a model ID or usage type, lower-cased: split at separators, between letters and digits
+ * and at camelCase, with a version's trailing ".0" dropped. Model IDs and usage types spell the same
+ * model differently: `nova-2-lite` and `Nova2.0Lite` both read as nova 2 lite.
+ */
+function words(s) {
+  return s
+    .replace(/(\d)\.0+(?!\d)/g, "$1")
+    .replace(/(?<=[a-z])(?=[A-Z])|(?<=[A-Za-z])(?=\d)|(?<=\d)(?=[A-Za-z])/g, "-")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+/** The usage type names the model: the model's words appear in it, in order and next to each other. */
+function names(type, key) {
+  const t = words(type);
+  return t.some((_, i) => key.every((w, j) => t[i + j] === w));
+}
+
 function pick(types, kind, global) {
-  const want = types.filter((t) => t.includes(kind) && !/-(batch|flex|priority)$/.test(t) && !/-(global-)?(batch|flex|priority)$/.test(t));
-  const scoped = want.filter((t) => (global ? t.includes("-global-") : !t.includes("-global-")));
+  const want = types.filter((t) => {
+    const w = words(t);
+    if (w.includes("batch") || w.includes("flex") || w.includes("priority")) return false;
+    return t.toLowerCase().includes(kind) && (kind.startsWith("cache") || !t.toLowerCase().includes("cache"));
+  });
+  // Global profiles are priced under usage types marked global (`-global-standard`, `-cross-region-global`).
+  const scoped = want.filter((t) => words(t).includes("global") === global);
   const pool = scoped.length ? scoped : want;
   // Prefer explicit "standard", then the shortest usage type (no extra qualifiers).
   return pool.sort((a, b) => Number(b.endsWith("standard")) - Number(a.endsWith("standard")) || a.length - b.length)[0];
 }
 
 const prices = {};
-const unresolved = [];
+/** model ID -> why it has no price. */
+const unresolved = {};
 for (const model of models) {
   const key = core(model);
-  const types = [...perK.keys()].filter((t) => t.toLowerCase().includes(key));
+  const types = [...perK.keys()].filter((t) => names(t, words(key)));
   const global = model.startsWith("global.");
   const input = pick(types, "input-tokens", global);
   const output = pick(types, "output-tokens", global);
   if (!input || !output) {
-    unresolved.push(model);
+    unresolved[model] = types.length
+      ? `${types.length} usage type(s) name ${key} (e.g. ${types[0]}), but none is a standard on-demand ${input ? "output" : "input"} token price`
+      : `no ${region} usage type names ${key}: the Pricing API doesn't list this model here`;
     continue;
   }
   const cacheRead = pick(types, "cache-read", global);
@@ -83,4 +111,5 @@ for (const model of models) {
 process.stdout.write(
   `${JSON.stringify({ region, source: "AWS Pricing API (AmazonBedrock, on-demand)", generatedAt: new Date().toISOString(), prices, unresolved }, null, 2)}\n`,
 );
-if (unresolved.length) console.error(`unresolved (cost will show n/a): ${unresolved.join(", ")}`);
+const missing = Object.entries(unresolved);
+if (missing.length) console.error(`unresolved (cost will show n/a):\n${missing.map(([model, why]) => `  ${model}: ${why}`).join("\n")}`);
