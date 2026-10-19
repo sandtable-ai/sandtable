@@ -49,6 +49,7 @@ First public release.
 - `sandtable --version` reports the installed version; 0.1.0-alpha.1 printed `0.1.0-alpha.0` ([#88](https://github.com/sandtable-ai/sandtable/issues/88)).
 - `run` and `demo --live` exit 1 and print the error when every trial ended in one, for example without `ANTHROPIC_API_KEY`, without an optional Bedrock package or with the agent's server down. Before, they printed a 0% score and exited 0 ([#95](https://github.com/sandtable-ai/sandtable/issues/95)).
 - `npx sandtable-ai` on Node.js 20 prints no `EBADENGINE` warning, and installs with `engine-strict=true`: the CLI uses commander 14, which supports Node 20, instead of commander 15, which requires Node 22.12 ([#101](https://github.com/sandtable-ai/sandtable/issues/101)).
+- **Python launcher**: the `sandtable` command becomes the `npx` process instead of waiting on it, so stopping it with SIGTERM (a process manager, a CI cancel) also stops the CLI, and a run killed by a signal exits 128+N. It reuses the cached CLI release instead of asking the registry first, so it starts in about a second without network. It tells you to install npm when Node.js is there but `npx` isn't, and the wheel ships the MIT license ([#104](https://github.com/sandtable-ai/sandtable/issues/104)).
 
 ## [0.1.0-alpha.1] - 2026-10-19
 
