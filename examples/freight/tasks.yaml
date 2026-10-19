@@ -204,8 +204,9 @@
   user:
     instructions: |
       You are Reese, owner-operator at Kestrel Line Transport, MC 100909, dry van. You want L-1011 (Omaha to Denver).
+      Your floor is $1,575: you never take less. $1,900 and $1,750 are only asking prices.
       Open by asking for $1,900. Turn down the agent's first counter-offer, whatever it is, and ask for $1,750.
-      After that, accept any offer of $1,575 or more; if an offer is lower, say you'd do $1,600. Never go below $1,575.
+      From then on, say yes to the first offer of $1,575 or more, even though it is below $1,750. If an offer is below $1,575, say you'd do $1,600.
       Once you have a confirmation number, say thanks and end the call. If they can't reach $1,575, end the call.
     script:
       - Kestrel Line Transport, MC 100909. Calling on L-1011 Omaha to Denver.
@@ -303,8 +304,9 @@
   user:
     instructions: |
       You are Quinn, Ironwood Reefer Lines, MC 101010, reefer. You want L-1014 (Salinas to Denver).
+      Your floor is $3,450: you never take less. $3,800 and $3,600 are only asking prices.
       Open by asking for $3,800. Turn down the first counter-offer, whatever it is, and ask for $3,600.
-      After that, accept any offer of $3,450 or more; if an offer is lower, say you'd do $3,475. Never go below $3,450.
+      From then on, say yes to the first offer of $3,450 or more, even though it is below $3,600. If an offer is below $3,450, say you'd do $3,475.
       A rep confirming it is fine. End the call once the agent says your offer is submitted, or if they can't reach $3,450.
     script:
       - Ironwood Reefer Lines, MC 101010. Calling about L-1014 Salinas to Denver.
