@@ -42,6 +42,10 @@ First public release.
 - **Docs** at [sandtable.dev](https://sandtable.dev), with `llms.txt` for coding agents: concepts, guides, a reference for the CLI, the domain spec, the HTTP step protocol and `results.json`, and comparisons with τ-bench, LangWatch Scenario, IntellAgent and hosted platforms, each claim linked to the tool's own docs ([#54](https://github.com/sandtable-ai/sandtable/issues/54)), and a guide to the Claude Code plugin: installing it, its skills and subagent, and a worked session ([#72](https://github.com/sandtable-ai/sandtable/issues/72)).
 - The published CLI runs on Node.js 20 or later.
 
+### Fixed
+
+- `sandtable --version` reports the installed version; 0.1.0-alpha.1 printed `0.1.0-alpha.0` ([#88](https://github.com/sandtable-ai/sandtable/issues/88)).
+
 ## [0.1.0-alpha.1] - 2026-10-19
 
 A rehearsal of the release pipeline (npm, PyPI and GitHub releases from one tag), published before the first public release. It contains everything listed under [Unreleased]; use 0.1.0 instead.
