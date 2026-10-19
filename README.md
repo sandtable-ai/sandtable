@@ -37,7 +37,10 @@ Three failures from the freight example, and why a judge reading the transcript 
 
 Every failing trial in the HTML report shows the checks, the changes to the records, and the transcript with the offending tool call marked:
 
-![The HTML report on a failing trial of the naive agent, with the offending tool call marked](assets/report.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/report-dark.png">
+  <img src="assets/report.png" width="800" alt="The HTML report on a failing trial of the naive agent, with the offending tool call marked">
+</picture>
 
 ## From your customer's docs to a red/green report
 
@@ -129,6 +132,11 @@ This repository is also a Claude Code plugin marketplace. The `sandtable` plugin
 A `failure-triager` subagent reads the failing trials of a large run outside the main conversation. The skills ask before any command that calls a model. They are plain `SKILL.md` files in [`plugin/skills`](plugin/skills), so other coding agents that read Agent Skills can use them too.
 
 ## How it works
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/trial-dark.png">
+  <img src="assets/trial.png" width="832" alt="One trial: a simulated caller talks to your agent, every tool call is checked against the invariants, and the trial is graded on the agent's messages, the violations and the end state, with no judge model">
+</picture>
 
 1. **World.** Tables of records (carriers, loads, patients), seeded with fictional rows. Every trial starts from a fresh copy.
 2. **Tools.** The customer's API, declared as operations on the world, with the checks the real API would enforce. Writes are atomic.

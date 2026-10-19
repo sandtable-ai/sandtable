@@ -4,8 +4,9 @@
 #   npm run build && vhs assets/demo.tape
 #
 # Sized for a README column (about 830 px): recorded at 1600 px wide with 28 px Menlo, so it shows
-# at about 14 px, crisp on high-DPI screens. The output is paged through `less -S`, which cuts long
-# lines at the edge instead of wrapping them, and scrolls in three steps:
+# at about 14 px, crisp on high-DPI screens. The terminal is 89 columns, and every line on screen
+# fits it. The output is paged through `less -S`, which keeps one output line per screen row so the
+# Down counts below match line numbers, and scrolls in three steps:
 #   1. the naive agent's task table, then its pass^1 (line 39 of the output)
 #   2. its top failure modes (from line 56)
 #   3. the careful agent's table and its pass^1 100.0% (line 112)
