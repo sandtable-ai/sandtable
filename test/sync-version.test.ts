@@ -79,6 +79,17 @@ describe("scripts/sync-version.mjs", () => {
     }
   });
 
+  it("writes no file when a field in a later file can't be found", async () => {
+    const dir = copy();
+    setVersion(dir, "0.4.0");
+    const pyproject = read(dir, "python/pyproject.toml");
+    edit(dir, "python/src/sandtable_ai/__init__.py", (s) => s.replace(/^NPM_VERSION = "[^"]*"$/m, "NPM_VERSION = '0.1.0'"));
+    const r = await sync(dir);
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("python/src/sandtable_ai/__init__.py: no NPM_VERSION found to sync");
+    expect(read(dir, "python/pyproject.toml")).toBe(pyproject);
+  });
+
   it("names each stale field under --check", async () => {
     const dir = copy();
     setVersion(dir, "0.3.0");

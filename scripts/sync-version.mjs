@@ -3,7 +3,8 @@
 // npm semver -> PEP 440: 0.1.0-alpha.0 -> 0.1.0a0, -beta.N -> bN, -rc.N -> rcN.
 // Usage: node scripts/sync-version.mjs [--check]
 //
-// Both modes read the values back: a field whose pattern no longer matches is an error, never "in sync".
+// Both modes read the values back: a field whose pattern no longer matches is an error, never "in sync",
+// and the sync writes no file unless every field can be set.
 import { readFileSync, writeFileSync } from "node:fs";
 
 const check = process.argv.includes("--check");
@@ -37,9 +38,11 @@ const files = {
 };
 
 const problems = [];
+const updates = [];
 for (const [rel, fields] of Object.entries(files)) {
   const url = new URL(`../${rel}`, import.meta.url);
-  let text = readFileSync(url, "utf8");
+  const before = readFileSync(url, "utf8");
+  let text = before;
   for (const field of fields) {
     const found = field.read(text);
     if (found === undefined) {
@@ -54,7 +57,7 @@ for (const [rel, fields] of Object.entries(files)) {
     text = field.write(text);
     if (field.read(text) !== field.want) problems.push(`${rel}: could not set ${field.name} to ${field.want}`);
   }
-  if (!check && !problems.length) writeFileSync(url, text);
+  if (text !== before) updates.push([url, text]);
 }
 
 if (problems.length) {
@@ -63,6 +66,7 @@ if (problems.length) {
       (check ? "\nRun node scripts/sync-version.mjs, or fix the pattern if a field moved." : ""),
   );
 }
+for (const [url, text] of updates) writeFileSync(url, text);
 console.log(`npm ${npm} <-> PyPI ${pep440}`);
 
 function fail(message) {
