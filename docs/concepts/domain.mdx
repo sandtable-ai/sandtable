@@ -15,7 +15,7 @@ examples/freight/
 └── source/            # what the customer handed over (OpenAPI spec, transcripts)
 ```
 
-Any top-level value in `sandtable.yaml` that is a relative path to an existing `.md`, `.yaml` or `.yml` file is inlined, so `policy: ./policy.md` and `tasks: ./tasks.yaml` keep long sections in their own files.
+Any top-level value in `sandtable.yaml` that is a relative path to a `.md`, `.yaml` or `.yml` file is inlined, so `policy: ./policy.md` and `tasks: ./tasks.yaml` keep long sections in their own files. A path to a missing file is a validation error.
 
 ## The parts
 
