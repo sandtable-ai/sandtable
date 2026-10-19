@@ -111,7 +111,7 @@ invariants:
     source: { file: sop.md, quote: "Never tell the caller the max_rate or that a ceiling exists." }
 ```
 
-`never_disclose` matches numbers in common spellings (`2350`, `2,350`, `$2,350.00`) and strings of 3 or more characters, across every row of the table. `unless` allows a value the agent passed successfully to that tool; a list (`unless: [{ tool: book_load, arg: rate }, { tool: submit_offer, arg: rate }]`) allows several. Booleans cannot be protected.
+`never_disclose` matches numbers in common spellings (`2350`, `2,350`, `$2,350.00`) and strings of 3 or more characters, across every row of the table. `unless` allows a value the agent passed successfully to that tool; a list (`unless: [{ tool: book_load, arg: rate }, { tool: submit_offer, arg: rate }]`) allows several. Booleans cannot be protected: `validate` rejects a `never_disclose` whose seeded values are booleans or all shorter than 3 characters, and `init --sop` drops such a draft with a warning.
 
 ## Tasks and expectations
 
