@@ -4,7 +4,7 @@ sidebarTitle: "Overview"
 description: "The closest projects to sandtable, what each is best at, and where sandtable fits."
 ---
 
-`sandtable` borrows its method from τ-bench and aims at a different job: rehearsing *one customer's* deployment, in that customer's repo, on every change. This page lists the closest projects and what each one is best at. If something here is out of date or unfair, please [open an issue](https://github.com/sandtable-ai/sandtable/issues).
+`sandtable` borrows its method from τ-bench and aims at a different job: rehearsing *one customer's* deployment, in that customer's repo, on every change. This page lists the closest projects and what each one is best at. Each claim links to the project's own docs, repo or paper, so you can check it. If something here is out of date or unfair, please [open an issue](https://github.com/sandtable-ai/sandtable/issues).
 
 <Columns cols={2}>
   <Card title="τ-bench" href="/compare/tau-bench">
@@ -14,7 +14,7 @@ description: "The closest projects to sandtable, what each is best at, and where
     Agent tests in code, with a simulated user and a judge agent.
   </Card>
   <Card title="IntellAgent" href="/compare/intellagent">
-    Scenarios generated from the agent's system prompt, critiqued by a model.
+    Many scenarios generated from a prompt or policy document, critiqued by a model.
   </Card>
   <Card title="Hosted platforms" href="/compare/hosted-platforms">
     Simulation inside agent platforms, voice testing services and eval platforms.
@@ -23,42 +23,60 @@ description: "The closest projects to sandtable, what each is best at, and where
 
 ## Method
 
-- **τ-bench / τ²-bench / τ³-bench** (Sierra Research, MIT). Introduced the setup `sandtable` uses: a policy, tools over a database, an LLM-simulated user with a hidden goal, grading on the final database state, and pass^k. Its airline, retail, telecom and banking domains are hand-built benchmarks for comparing models. Adding a domain means writing Python. Use it to compare models on public domains; use `sandtable` to build and gate a domain for your own customer. Exporting `sandtable` domains to τ-bench's format is on the roadmap ([#18](https://github.com/sandtable-ai/sandtable/issues/18)).
-- **τ^τ-bench (Hyper-τ)** (Sierra Research). Evaluates a coding agent that *builds* a customer-service agent from evidence (policies, transcripts, a client API), scored with τ³-bench. It benchmarks agent builders. It is not a tool for testing your own deployment.
+- **τ-bench, τ²-bench and τ³-bench** (Sierra Research, MIT: [tau-bench](https://github.com/sierra-research/tau-bench), [tau2-bench](https://github.com/sierra-research/tau2-bench)). [τ-bench](https://arxiv.org/abs/2406.12045) introduced the setup `sandtable` uses: a policy, tools over a database, an LLM-simulated user with an instruction hidden from the agent, grading on the final database state, and pass^k. Its domains (airline, retail, then telecom in [τ²-bench](https://arxiv.org/abs/2506.07982) and banking and voice in [τ³-bench](https://github.com/sierra-research/tau2-bench/releases/tag/v1.0.0)) are hand-built benchmarks for comparing models, with a public [leaderboard](https://taubench.com). Adding a domain means writing Python plus a policy, a database and tasks as data files. Use it to compare models on public domains; use `sandtable` to build and gate a domain for your own customer. Exporting `sandtable` domains to τ-bench's format is on the roadmap ([#18](https://github.com/sandtable-ai/sandtable/issues/18)).
+- **τ^τ-bench (Hyper-τ)** (Sierra Research, MIT: [repo](https://github.com/sierra-research/hyper-tau-bench), [paper](https://arxiv.org/abs/2609.04611)). Evaluates how well a coding agent builds a customer-service agent from evidence such as policy documents, support transcripts and a client REST API, then scores the built agent with τ³-bench. It benchmarks agent builders. It is not a tool for testing your own deployment.
 
 ## Open-source simulation frameworks
 
-- **IntellAgent** (Plurai, Apache-2.0). Builds a policy graph from the agent's *system prompt*, generates scenarios with database state, simulates users and critiques the conversation. `sandtable` starts from the customer's artifacts instead of the agent's prompt, so a rule missing from the prompt still gets tested. It also grades deterministically rather than by critique.
-- **LangWatch Scenario** (Apache-2.0). An SDK (Python and TS) for agent tests with a simulated user and a judge agent, inside pytest or vitest. Scenarios are hand-written code, judged mostly by an LLM. It pairs with the LangWatch platform.
-- **DeepEval's ConversationSimulator** and **promptfoo's simulated-user provider**. Multi-turn simulation inside general eval frameworks. Strong metric libraries, with no stateful world or invariant model.
-- **ArkSim** (Arklex, Apache-2.0). Simulated users with per-turn metrics and a CI gate.
-- **Rehearsal / rehearsal-kit** (MIT, with a hosted service). Compiles a "practice world" from an application's source repository and container images, runs the real application in a sandbox with fictional data, grades outcomes against the application's own database, injects faults, and proposes improved agent versions. It is the closest in spirit. It fits best when you own the application's code and images. `sandtable` targets deployments where you only have what a customer hands over (API docs, SOPs, transcripts), and keeps the world declarative, local and in the repo.
-- **Synkro** (MIT). Turns policy documents into conversation and tool-calling *datasets* (for evals or fine-tuning) rather than running an agent against a stateful world.
+- **[IntellAgent](https://github.com/plurai-ai/intellagent)** (Plurai, Apache-2.0). Takes the agent's system prompt or a policy document, plus its tools and a database schema, builds a policy graph, and generates many scenarios with database rows at varying complexity. It simulates the user and has an LLM critique each conversation. `sandtable` drafts a smaller suite from the customer's artifacts, has a person review it, and grades deterministically. [Comparison](/compare/intellagent).
+- **[LangWatch Scenario](https://langwatch.ai/scenario/)** (Apache-2.0). A library for agent tests in code, with a user simulator agent and a judge agent, inside pytest, Vitest or Jest. It also tests voice agents and has a red-team agent, and pairs with the LangWatch platform. [Comparison](/compare/langwatch-scenario).
+- **DeepEval's [ConversationSimulator](https://deepeval.com/docs/conversation-simulator)** ([Apache-2.0](https://github.com/confident-ai/deepeval)). Role-plays a user from a scenario, a persona and an expected outcome against your chatbot, then scores the conversation with DeepEval's multi-turn metrics. Tool state lives in your own application ([model callback](https://deepeval.com/docs/conversation-simulator-model-callback)).
+- **promptfoo's [simulated user provider](https://www.promptfoo.dev/docs/providers/simulated-user/)** ([MIT](https://github.com/promptfoo/promptfoo)). Multi-turn conversations between your agent and a simulated user, inspired by τ-bench, inside promptfoo's general eval framework. You mock tools with your own callbacks, and [`--repeat`](https://www.promptfoo.dev/docs/usage/command-line/) runs each test several times.
+- **[ArkSim](https://github.com/arklexai/arksim)** (Arklex, Apache-2.0). Synthetic users with their own profile, goal and knowledge level hold multi-turn conversations with your agent. Every turn is scored on metrics such as helpfulness, faithfulness and goal completion, and it [runs in CI](https://docs.arklex.ai/main/ci-integration) as a quality gate.
+- **[Rehearsal](https://github.com/MitudruDutta/rehearsal)** (MIT, with a [hosted service](https://rehearsalkit.xyz); the Python package is `rehearsal-kit`). Points at an application's source repository and published container images, starts the real application in an isolated sandbox with fictional data, and decides every outcome by reading the application's own database, with no model grading. It makes some requests fail on purpose, and an improvement agent proposes the next agent version from failed jobs. It is the closest in spirit. It fits best when you own the application's code and images. `sandtable` targets deployments where you only have what a customer hands over (API docs, SOPs, transcripts), and keeps the world declarative, local and in the repo.
 
-## Mock servers
+## Mock servers and simulated worlds
 
-**Prism, WireMock, Mockoon, Microcks** and newer agent-oriented mocks (**mockd**, **mockworld**, **faultbench**) simulate APIs. Most classic mocks are stateless or need hand-written state. `sandtable` keeps state minimal and declarative because its job is grading: the world is the thing being asserted on. A black-box mode that serves the world over REST and MCP is planned ([#14](https://github.com/sandtable-ai/sandtable/issues/14)).
+Classic API mocks either keep no state between requests ([Prism](https://github.com/stoplightio/prism/blob/main/docs/guides/01-mocking.md)) or keep state you configure endpoint by endpoint: [WireMock scenarios](https://wiremock.org/docs/stateful-behaviour/), [Microcks scripts](https://microcks.io/documentation/guides/usage/stateful-mocks/), or [Mockoon CRUD routes](https://mockoon.com/docs/latest/api-endpoints/crud-routes/) over in-memory data buckets. They are built for API consumers, not for grading an agent against business rules.
+
+Newer projects build worlds for agents:
+
+- **[faultbench](https://github.com/mit-hun-k/faultbench)** (Apache-2.0, pre-alpha) is the nearest of these to `sandtable`. You declare fake, stateful services in a YAML file, it serves them as MCP tools with injected faults, records every call, and lets you assert on the world's end state from pytest, over repeated runs.
+- **[mockworld](https://github.com/swarmproof/mockworld)** (Apache-2.0) runs fake services such as a payment provider, an inbox or a CRM as local MCP servers, with seeded, deterministic state and faults.
+- **[mockd](https://github.com/getmockd/mockd)** (Apache-2.0) is a multi-protocol mock server with stateful CRUD, chaos injection and an MCP server that lets AI assistants create mocks.
+
+`sandtable` keeps state minimal and declarative because its job is grading: the world is the thing being asserted on, with rules checked before each call and simulated callers driving the conversation. A black-box mode that serves the world over REST and MCP is planned ([#14](https://github.com/sandtable-ai/sandtable/issues/14)).
+
+## Runtime guardrails
+
+Guardrail layers such as [Invariant Guardrails](https://github.com/invariantlabs-ai/invariant) (Apache-2.0) check rules on tool calls in production, between the application and its MCP servers or LLM provider. They enforce rules on live traffic; `sandtable` tests whether the agent follows the rules before it ships. They combine well.
 
 ## Commercial platforms
 
-- **Sierra** (simulations, Ghostwriter) and **Decagon** (Simulations, AOP versioning) generate tests from customer SOPs and transcripts and run them on every agent change, inside their own platforms.
-- **Coval, Hamming, Cekura, Bluejay, Roark** and **Vapi Simulations** do simulation and regression testing for voice agents.
-- **LangSmith, Braintrust** and similar platforms offer datasets, judges and CI gating for LLM apps generally.
+- **Sierra** ([Simulations](https://sierra.ai/blog/simulations-the-secret-behind-every-great-agent)) generates tests from a customer's SOPs, knowledge bases and transcripts and runs them on every change, inside its own platform. **Decagon** ([Simulations](https://decagon.ai/product/testing-qa), [Agent Versioning](https://decagon.ai/blog/decagon-agent-versioning)) generates tests from its Agent Operating Procedures and production conversations and tests every agent version.
+- **[Coval](https://docs.coval.ai/concepts/simulations/overview), [Hamming](https://hamming.ai/), [Cekura](https://docs.cekura.ai/documentation/key-concepts/evaluators/overview), [Bluejay](https://docs.getbluejay.ai/test/simulations/types), [Roark](https://docs.roark.ai/documentation/simulation-testing/overview)** and **[Vapi](https://docs.vapi.ai/test/voice-testing)** do simulation and regression testing for voice agents, and several for chat agents too.
+- **[LangSmith](https://docs.langchain.com/langsmith/evaluation-concepts)** and **[Braintrust](https://www.braintrust.dev/docs/evaluate/advanced-evaluations)** offer datasets, judges, repeated trials and CI gating for LLM apps generally.
+
+Details, and when to choose each, are on the [hosted platforms](/compare/hosted-platforms) page.
 
 ## Where sandtable fits
 
 | | sandtable | τ-bench | IntellAgent | Scenario |
 |---|---|---|---|---|
-| Your own domain | YAML in the repo | Python code | generated from the agent's prompt | test code |
-| Stateful world | declarative tables | yes | generated database | bring your own |
-| How a trial is graded | end state + invariants, no judge | end state + expected actions | LLM critique | judge agent + your asserts |
-| Policy rules checked on every tool call | yes | no | no | no |
-| pass^k across repeated trials | yes | yes | no | no |
-| Agent integration | HTTP, JS/TS module, Claude, OpenAI-compatible endpoints | Python agents / LLM APIs | adapter | adapter function |
-| Draft a domain from SOP + API + transcripts | yes (`init`, reviewed before use) | no | from the system prompt | no |
+| Your own domain | YAML in the repo | Python code plus data files | generated from a prompt or policy document | test code |
+| Stateful world | declarative tables | yes | generated database rows | bring your own |
+| How a trial is graded | declared end state + invariants, no judge | final database vs a reference, plus required replies; some τ²/τ³ tasks add required actions or LLM-judged assertions | the simulated user's verdict, checked by an LLM critique | judge agent + your assertions |
+| Policy rules checked on every tool call, before it runs | yes | no: rules count through the outcome | no: judged from the dialog | no: you can assert on tool calls after the agent's turn |
+| Repeated trials | pass^k | pass^k | not built in | the LangWatch platform repeats up to 5 times and shows a pass rate |
+| Agent integration | HTTP, JS/TS module, Claude, Bedrock, OpenAI-compatible endpoints | Python agent classes, LiteLLM models, a Gymnasium interface | built-in LangChain agent or your LangGraph agent | a one-method adapter, with guides for many frameworks |
+| Drafting tests from customer material | `init` from an OpenAPI spec, an SOP and transcripts, reviewed before use | no: domains are written as code and data | generated from a prompt or policy document | the platform drafts a scenario from pasted text |
+| Voice | no, text only | yes (τ³-bench) | text chat | yes |
+| LLM-judged checks | not yet: planned as a separate soft score ([#16](https://github.com/sandtable-ai/sandtable/issues/16)) | natural-language assertions on some τ²/τ³ tasks | yes, the critique | yes, the judge agent |
+
+Every rule `sandtable init --sop` drafts quotes the SOP sentence it comes from and stays `review: pending` until a person accepts it ([guide](/guides/init#from-an-sop-claude-grounded)), so a failing trial points at a sentence in the customer's own procedure.
 
 ## What sandtable does not do (yet)
 
-A fair comparison includes the gaps. Today `sandtable` is text-only (no audio, timing or interruption testing), has no LLM-judged soft scores for tone or wording, no production monitoring, and no hosted UI: reports are files. It is early alpha. See the [roadmap](/roadmap) for what is planned.
+A fair comparison includes the gaps. Today `sandtable` is text-only (no audio, timing or interruption testing), has no LLM-judged soft scores for tone or wording, no production monitoring, no test generation from production traffic, and no hosted UI: reports are files. It is early alpha. See the [roadmap](/roadmap) for what is planned.
 
 Last reviewed October 2026.

@@ -4,37 +4,61 @@ sidebarTitle: "τ-bench"
 description: "sandtable applies τ-bench's method to one customer's workflow. When to use each, and how they differ."
 ---
 
-[τ-bench](https://arxiv.org/abs/2406.12045) (Sierra Research, MIT) introduced the setup sandtable is built on: a policy, tools over a database, an LLM-simulated user with a hidden goal, grading on the final database state, and **pass^k**. sandtable does not replace it. It takes the same method and makes it cheap to apply to *one customer's* workflow, as a file in their repo.
+[τ-bench](https://arxiv.org/abs/2406.12045) (Yao et al., 2024, from Sierra) introduced the setup sandtable is built on. Each domain has a database, Python API tools over it and a Markdown policy. Each task gives an LLM-simulated user an instruction that is hidden from the agent, and the trial is graded on the final database state. The same paper introduced **pass^k**: "the chance that all k i.i.d. task trials are successful, averaged across tasks".
+
+sandtable does not replace it. It takes the same method and makes it cheap to apply to *one customer's* workflow, as a file in their repo.
+
+The code is in [sierra-research/tau-bench](https://github.com/sierra-research/tau-bench) and its successor [sierra-research/tau2-bench](https://github.com/sierra-research/tau2-bench), both MIT-licensed ([LICENSE](https://github.com/sierra-research/tau2-bench/blob/main/LICENSE)).
 
 ## Different jobs
 
-**τ-bench** (with τ²-bench and τ³-bench) is a benchmark. Its airline, retail, telecom and banking domains are hand-built so that models can be compared on the same tasks. It is a common reference point when comparing models.
+**τ-bench** is a benchmark with a public [leaderboard](https://taubench.com). Its domains are hand-built so that models and agents can be compared on the same tasks, and each version added new ones:
 
-**sandtable** is a harness for your own deployment. The domain is the customer's API, SOP and records, and the question is not "which model is best" but "is *this* agent ready for *this* customer, and did the last prompt change break a rule?"
+- **τ-bench**: airline and retail.
+- **[τ²-bench](https://arxiv.org/abs/2506.07982)**: adds a telecom domain with *dual control*, where the simulated user also has tools and changes the shared environment.
+- **τ³-bench**, released as [version 1.0.0 of tau2-bench](https://github.com/sierra-research/tau2-bench/releases/tag/v1.0.0): adds a banking domain in which the agent works from about 700 knowledge documents ([τ-Knowledge](https://arxiv.org/abs/2603.04370)), and a full-duplex voice mode ([τ-Voice](https://arxiv.org/abs/2603.13686)).
+
+**sandtable** is a harness for your own deployment. The domain is the customer's API, SOP and records. The question is not "which model is best" but "is *this* agent ready for *this* customer, and did the last prompt change break a rule?"
+
+## How grading differs
+
+Both grade deterministically on the world's end state, apart from the natural-language assertions some τ²/τ³ tasks use, so that is not the main difference. The differences are where the expected outcome comes from, and when rules are checked.
+
+- **τ-bench** replays a reference sequence of tool calls on a fresh database and compares the agent's final database with the result. It also checks that required values appear in the agent's replies ([paper](https://arxiv.org/abs/2406.12045), section 3). τ²-bench and τ³-bench let each task combine database checks, assertions on the environment, required replies, required actions and natural-language assertions ([evaluation docs](https://github.com/sierra-research/tau2-bench/blob/main/docs/evaluation.md)). All of these are deterministic except the natural-language assertions, which an LLM judges. Some τ³ retail tasks use them.
+- **sandtable** has no reference trajectory. Each task declares the end state it expects: the records that should exist, change or stay untouched. The domain declares invariants, which are checked *before every tool call runs*, against the world at that moment. An agent that attempts a forbidden action fails the trial, even if the API would reject it and even if the final state looks right.
+
+What τ-bench's approach does better: comparing the whole database catches any write that nobody thought to check. A sandtable task checks only the records it declares, plus the invariants, so the task has to say what should stay unchanged.
+
+In τ-bench, policy rules count through the outcome. Some restrictions are enforced by the tool code, which returns an error, and others are not. The paper says so directly: a passing trial "might be a necessary but not sufficient condition for a successful episode e.g., the agent might issue the return without explicit user confirmation, which violates the policy". tau2-bench also has an optional LLM review that flags agent and user errors in each conversation (`tau2 review`, [CLI reference](https://github.com/sierra-research/tau2-bench/blob/main/docs/cli-reference.md)). It is separate from the reward ([reviewer.py](https://github.com/sierra-research/tau2-bench/blob/main/src/tau2/evaluator/reviewer.py)).
 
 ## Side by side
 
 | | sandtable | τ-bench |
 |---|---|---|
-| Domains | yours, one per customer or workflow | public, hand-built benchmark domains |
-| Adding a domain | YAML in the repo; `init` drafts it from an OpenAPI spec, an SOP and transcripts | Python code (data, tools, policy, tasks) |
-| Grading | declared end-state assertions, invariants checked on every tool call, protected values in messages; no judge | final database state compared with the state the annotated correct actions produce, plus required outputs |
-| Policy rules on every tool call | yes: attempting a forbidden action fails the trial | no: rules matter through the end state |
+| Built for | gating one agent for one customer on every change | comparing models and agents on shared tasks, with a public leaderboard |
+| Domains | yours, one per customer or workflow | airline, retail, telecom and banking, hand-built |
+| Adding a domain | YAML in the repo; `init` drafts it from an OpenAPI spec, an SOP and transcripts | Python code (a database model, a toolkit class and an environment, registered in the package), plus a Markdown policy, a JSON or TOML database and JSON tasks ([domain guide](https://github.com/sierra-research/tau2-bench/blob/main/src/tau2/domains/README.md)) |
+| Expected outcome | declared per task: the records that should exist, change or stay untouched | the database a reference sequence of actions produces, compared in full |
+| Other checks | required and forbidden tools; protected values never said | required values in replies; per task in τ²/τ³: environment assertions, required actions, LLM-judged assertions |
+| Policy rules on every tool call | yes, checked before the call runs | no: rules count through the outcome, and some are enforced by the tool code |
 | pass^k | yes | yes (it introduced the metric) |
-| Agent under test | anything behind HTTP, a JS/TS module, Claude, models on Amazon Bedrock, or any OpenAI-compatible endpoint | Python agents and LLM APIs |
-| CI | `--fail-under` gate, `validate --strict`, `lint`, HTML report per run | not its focus |
+| Simulated user | an LLM with a hidden goal, or a script for offline runs | an LLM with a hidden instruction; in τ²-bench's telecom domain the user also has tools |
+| Agent under test | anything behind HTTP, a JS/TS module, Claude, models on Amazon Bedrock, or any OpenAI-compatible endpoint | a Python agent class, or any model LiteLLM supports through the built-in agent ([agents](https://github.com/sierra-research/tau2-bench/blob/main/src/tau2/agent/README.md)); a Gymnasium interface for training ([gym](https://github.com/sierra-research/tau2-bench/blob/main/src/tau2/gym/README.md)) |
+| Voice | no, text only | yes, full-duplex voice in τ³-bench |
 
 ## Choose τ-bench when
 
-- You are comparing models or agent architectures on shared, public tasks.
-- You want results others can reproduce and compare with published numbers.
+- You are comparing models or agent architectures on shared, public tasks, and want numbers others can reproduce and compare on the leaderboard.
+- You need what its newer domains test: a user who also acts on the environment (telecom), work from a large set of knowledge documents (banking), or full-duplex voice.
+- You want every write checked against a reference database, not only the records a task names.
+- You want a Gymnasium environment with train and test splits, to train agents.
 - You are doing research on tool-agent-user interaction.
 
 ## Choose sandtable when
 
 - The domain is a specific customer's systems and rules, and it changes with them.
-- You need hard rules (verify before booking, never exceed a ceiling, never reveal a field) checked on every call, not only through the final state.
-- You want the suite in the customer's repo, gated in CI, with a report you can hand over.
+- You need hard rules (verify before booking, never exceed a ceiling, never reveal a field) checked at the moment of each call, so an attempt fails even when the API would have refused it.
+- You want the suite in the customer's repo, gated in CI with `--fail-under`, with a report you can hand over.
 
 ## Use both
 

@@ -1,38 +1,45 @@
 ---
 title: "sandtable vs IntellAgent"
 sidebarTitle: "IntellAgent"
-description: "Scenarios generated from the agent's own prompt, or a reviewed suite drafted from the customer's artifacts. When to use each."
+description: "Many generated scenarios critiqued by a model, or a reviewed suite graded deterministically. When to use each."
 ---
 
-**IntellAgent** (Plurai, Apache-2.0) builds a policy graph from the agent's *system prompt*, generates scenarios with database state, simulates users and critiques each conversation with a model.
+**[IntellAgent](https://github.com/plurai-ai/intellagent)** (Plurai, [Apache-2.0](https://github.com/plurai-ai/intellagent/blob/main/LICENSE), [paper](https://arxiv.org/abs/2501.11067)) generates test scenarios for a conversational agent automatically. It takes the agent's system prompt or a document of the company's policies, plus the agent's tools and a database schema ([how it works](https://intellagent-doc.plurai.ai/How_it_Works/how-it-works/)). It breaks the policies into a policy graph and generates events that combine several policies at a chosen complexity level, each with a user request and initial database rows. It then simulates the user, and an LLM critique reviews each conversation to find the policies the agent broke.
 
-**sandtable** starts from the customer's artifacts (API spec, SOP, call transcripts), keeps a reviewed suite in the repo, and grades deterministically on the world's end state and on invariants checked at every tool call.
+**sandtable** drafts a domain from the customer's artifacts (API spec, SOP, call transcripts), has a person review it, and keeps it in the repo. It grades deterministically on the world's end state and on invariants checked before every tool call.
 
-## The key difference: where the rules come from
+## The key difference: generated coverage or a reviewed suite
 
-IntellAgent derives what to test from the agent's prompt. That makes generating many scenarios fast, but a rule the prompt forgot is a rule nobody tests. sandtable derives rules from the customer's SOP, independently of the agent, so a rule missing from the prompt still gets tested, and its failure points at the gap.
+IntellAgent is built to explore. Its README describes generating "thousands of edge-case scenarios", and it reports success rates by policy category and by complexity level. Its paper generated 1,000 events per domain and found that model results on them closely track τ-bench's (Pearson correlation 0.98 for airline and 0.92 for retail). The same section shows it testing policies that a final database cannot show, such as asking for the user's consent ([paper](https://arxiv.org/abs/2501.11067), section 4.2).
+
+sandtable is built to gate. The suite is fixed and reviewed, and each rule traces back to its source. `init --sop` makes every drafted invariant quote the SOP sentence it comes from, warns when the quote is not found verbatim, and leaves it `review: pending` until someone accepts it. Each trial then passes or fails on checks anyone can re-run, so a score change means the agent changed, not the test.
+
+What you feed IntellAgent matters. Given the agent's system prompt, it tests the policies the prompt states; given the customer's policy document, it tests the customer's rules.
 
 ## Side by side
 
 | | sandtable | IntellAgent |
 |---|---|---|
-| Source of test cases | customer's API, SOP and transcripts (drafted by `init`, reviewed by a person) | the agent's system prompt |
-| Stateful world | declarative tables in the repo | generated database |
-| Pass/fail | end state, invariants, required and forbidden tools; no judge | LLM critique of the conversation |
-| pass^k across repeated trials | yes | no |
-| Agent integration | HTTP, JS/TS module, Claude, OpenAI-compatible endpoints | adapter |
+| Source of test cases | the customer's API, SOP and transcripts, drafted by `init` and reviewed by a person | generated from the system prompt or a policy document, the tools and a database schema |
+| Stateful world | declarative tables in the repo, fresh copy per trial | generated initial database rows for each scenario |
+| Pass/fail | end state, invariants, required and forbidden tools; no judge | the simulated user ends the dialog with success or failure, and an LLM critique checks that verdict and lists the policies broken ([paper](https://arxiv.org/abs/2501.11067), sections 3.2 and 3.3) |
+| Rules on every tool call | checked before each call runs | judged from the dialog by the critique |
+| Repeated trials and pass^k | yes | not built in; it reports success rates by policy category and complexity level |
+| Results | terminal summary, `results.json`, HTML report with failure clusters | a Streamlit dashboard with per-policy and per-complexity analysis |
+| Agent integration | HTTP, JS/TS module, Claude, models on Amazon Bedrock, OpenAI-compatible endpoints | a built-in LangChain tool-calling agent configured from your prompt, tools and database, or your own LangGraph agent ([custom chatbot](https://intellagent-doc.plurai.ai/customization/custom_chatbot/)) |
 
 ## Choose IntellAgent when
 
-- You want broad, automatically generated coverage quickly, to explore how an agent behaves.
-- The agent's prompt is the best available statement of its policy.
-- A model's critique is an acceptable verdict for your use.
+- You want broad, automatically generated coverage quickly, to explore how an agent behaves across many combinations of policies.
+- You want results broken down by policy category and by how hard the scenario is.
+- Some policies you care about leave no trace in the database, such as asking for consent, and a model's critique is an acceptable verdict for them.
+- Your agent is built on LangGraph, or a LangChain tool-calling agent fits.
 
 ## Choose sandtable when
 
-- The customer's documents, not the agent's prompt, define what is allowed.
+- The customer's documents define what is allowed, and each rule must trace back to a sentence in them.
 - Pass/fail has to be reproducible and explainable to the customer: "it booked carrier 100202, whose insurance was expired".
-- The suite must be stable across runs so that a score change means the agent changed.
+- The suite must be stable across runs, so that a score change means the agent changed.
 
 ## Use both
 
