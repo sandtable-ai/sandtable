@@ -1,7 +1,8 @@
 ---
-title: "sandtable vs LangWatch Scenario"
+title: "sandtable vs LangWatch Scenario: declared world or test code"
 sidebarTitle: "LangWatch Scenario"
-description: "Agent tests in code with a judge agent, or a declarative world graded deterministically. When to use each."
+description: "LangWatch Scenario writes agent tests in code with a judge agent; sandtable grades a declared world deterministically. What each does best, and when to use it."
+keywords: ["LangWatch Scenario", "agent tests in code", "judge agent", "user simulator", "pytest", "Vitest"]
 ---
 
 **[LangWatch Scenario](https://langwatch.ai/scenario/)** ([Apache-2.0](https://github.com/langwatch/scenario/blob/main/LICENSE)) is a library for testing agents through simulated conversations. You write each scenario in code: a description, your agent behind a [one-method adapter](https://langwatch.ai/scenario/agent-integration), a user simulator agent, and a judge agent with criteria. Scenarios run inside your test runner, such as pytest, Vitest or Jest ([test runner integration](https://langwatch.ai/scenario/basics/test-runner-integration)), and its docs list SDKs for Python, TypeScript and Go. It pairs with the [LangWatch platform](https://langwatch.ai/docs/agent-testing/overview), which shows runs as they happen and can also write and run scenarios without code.

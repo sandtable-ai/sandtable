@@ -1,7 +1,8 @@
 ---
-title: "sandtable vs IntellAgent"
+title: "sandtable vs IntellAgent: a reviewed suite or generated tests"
 sidebarTitle: "IntellAgent"
-description: "Many generated scenarios critiqued by a model, or a reviewed suite graded deterministically. When to use each."
+description: "IntellAgent generates many scenarios from a prompt or policy and a model critiques them; sandtable grades a reviewed suite deterministically. When to use each."
+keywords: ["IntellAgent", "Plurai", "generated scenarios", "policy graph", "LLM critique", "test coverage"]
 ---
 
 **[IntellAgent](https://github.com/plurai-ai/intellagent)** (Plurai, [Apache-2.0](https://github.com/plurai-ai/intellagent/blob/main/LICENSE), [paper](https://arxiv.org/abs/2501.11067)) generates test scenarios for a conversational agent automatically. It takes the agent's system prompt or a document of the company's policies, plus the agent's tools and a database schema ([how it works](https://intellagent-doc.plurai.ai/How_it_Works/how-it-works/)). It breaks the policies into a policy graph and generates events that combine several policies at a chosen complexity level, each with a user request and initial database rows. It then simulates the user, and an LLM critique reviews each conversation to find the policies the agent broke.

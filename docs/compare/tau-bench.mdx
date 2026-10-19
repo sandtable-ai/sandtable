@@ -1,7 +1,8 @@
 ---
-title: "sandtable vs τ-bench"
+title: "sandtable vs τ-bench: your customer's workflow or a benchmark"
 sidebarTitle: "τ-bench"
-description: "sandtable applies τ-bench's method to one customer's workflow. When to use each, and how they differ."
+description: "sandtable applies τ-bench's method to one customer's workflow, in their repo. How grading and domains differ, and when to use τ-bench, sandtable or both."
+keywords: ["τ-bench", "tau-bench", "tau2-bench", "τ³-bench", "benchmark", "pass^k", "Sierra Research"]
 ---
 
 [τ-bench](https://arxiv.org/abs/2406.12045) (Yao et al., 2024, from Sierra) introduced the setup sandtable is built on. Each domain has a database, Python API tools over it and a Markdown policy. Each task gives an LLM-simulated user an instruction that is hidden from the agent, and the trial is graded on the final database state. The same paper introduced **pass^k**: "the chance that all k i.i.d. task trials are successful, averaged across tasks".
