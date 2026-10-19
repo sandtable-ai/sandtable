@@ -7,14 +7,14 @@ Simulated callers talk to your agent, its tool calls hit stateful mocks of the c
 [![CI](https://github.com/sandtable-ai/sandtable/actions/workflows/ci.yml/badge.svg)](https://github.com/sandtable-ai/sandtable/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/sandtable-ai)](https://www.npmjs.com/package/sandtable-ai)
 [![PyPI](https://img.shields.io/pypi/v/sandtable-ai)](https://pypi.org/project/sandtable-ai/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/sandtable-ai/sandtable/blob/main/LICENSE)
 [![Docs](https://img.shields.io/badge/docs-sandtable.dev-B4532A)](https://sandtable.dev)
 
-**[Docs](https://sandtable.dev)** · **[Quickstart](https://sandtable.dev/quickstart)** · **[Examples](examples)** · **[Sample report](https://sandtable-ai.github.io/sandtable/)** · **[Comparisons](https://sandtable.dev/compare/overview)**
+**[Docs](https://sandtable.dev)** · **[Quickstart](https://sandtable.dev/quickstart)** · **[Examples](https://github.com/sandtable-ai/sandtable/tree/main/examples)** · **[Sample report](https://sandtable-ai.github.io/sandtable/)** · **[Comparisons](https://sandtable.dev/compare/overview)**
 
 On a fictional freight brokerage's carrier-sales desk, an agent that books whatever it is asked to passes 5 of 32 calls. sandtable names the rule each failing call broke: 25 calls booked without vetting the carrier, 7 booked above the load's rate ceiling, 7 booked a carrier that may not be booked. An agent that follows the desk's SOP passes all 32. Same callers, same records, same result on every run.
 
-![sandtable demo: the naive agent's failing task table and its top failure modes, then the careful agent passing every call](assets/demo.gif)
+![sandtable demo: the naive agent's failing task table and its top failure modes, then the careful agent passing every call](https://github.com/sandtable-ai/sandtable/raw/main/assets/demo.gif)
 
 ## Try it in 10 seconds
 
@@ -38,8 +38,8 @@ Three failures from the freight example, and why a judge reading the transcript 
 Every failing trial in the HTML report shows the checks, the changes to the records, and the transcript with the offending tool call marked:
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/report-dark.png">
-  <img src="assets/report.png" width="800" alt="The HTML report on a failing trial of the naive agent, with the offending tool call marked">
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/sandtable-ai/sandtable/raw/main/assets/report-dark.png">
+  <img src="https://github.com/sandtable-ai/sandtable/raw/main/assets/report.png" width="800" alt="The HTML report on a failing trial of the naive agent, with the offending tool call marked">
 </picture>
 
 ## From your customer's docs to a red/green report
@@ -96,12 +96,12 @@ Worked examples for agent frameworks, each a one-file adapter checked offline in
 
 | Framework | Example | How it connects |
 |---|---|---|
-| Vercel AI SDK | [`examples/frameworks/vercel-ai-sdk`](examples/frameworks/vercel-ai-sdk) | JS/TS module |
-| OpenAI Agents SDK | [`examples/frameworks/openai-agents`](examples/frameworks/openai-agents) | JS/TS module |
-| Claude Agent SDK | [`examples/frameworks/claude-agent-sdk`](examples/frameworks/claude-agent-sdk) | JS/TS module |
-| Pipecat | [`examples/frameworks/pipecat`](examples/frameworks/pipecat) | HTTP step protocol |
-| LiveKit Agents | [`examples/frameworks/livekit-agents`](examples/frameworks/livekit-agents) | HTTP step protocol |
-| No framework | [`examples/frameworks/http-service`](examples/frameworks/http-service) | HTTP step protocol |
+| Vercel AI SDK | [`examples/frameworks/vercel-ai-sdk`](https://github.com/sandtable-ai/sandtable/tree/main/examples/frameworks/vercel-ai-sdk) | JS/TS module |
+| OpenAI Agents SDK | [`examples/frameworks/openai-agents`](https://github.com/sandtable-ai/sandtable/tree/main/examples/frameworks/openai-agents) | JS/TS module |
+| Claude Agent SDK | [`examples/frameworks/claude-agent-sdk`](https://github.com/sandtable-ai/sandtable/tree/main/examples/frameworks/claude-agent-sdk) | JS/TS module |
+| Pipecat | [`examples/frameworks/pipecat`](https://github.com/sandtable-ai/sandtable/tree/main/examples/frameworks/pipecat) | HTTP step protocol |
+| LiveKit Agents | [`examples/frameworks/livekit-agents`](https://github.com/sandtable-ai/sandtable/tree/main/examples/frameworks/livekit-agents) | HTTP step protocol |
+| No framework | [`examples/frameworks/http-service`](https://github.com/sandtable-ai/sandtable/tree/main/examples/frameworks/http-service) | HTTP step protocol |
 
 ## Use it in CI
 
@@ -129,13 +129,13 @@ This repository is also a Claude Code plugin marketplace. The `sandtable` plugin
 | `running-and-reading-results` | `run`, choosing k, pass^k, `results.json` and `report.html`, attributing failures to the agent, the simulated user, the task or the harness |
 | `writing-good-tasks` | hidden goals, policy-correct end states, avoiding vacuous tasks, `never_disclose`, balanced suites |
 
-A `failure-triager` subagent reads the failing trials of a large run outside the main conversation. The skills ask before any command that calls a model. They are plain `SKILL.md` files in [`plugin/skills`](plugin/skills), so other coding agents that read Agent Skills can use them too. Guide, with a worked session: [Claude Code plugin](https://sandtable.dev/guides/claude-code-plugin).
+A `failure-triager` subagent reads the failing trials of a large run outside the main conversation. The skills ask before any command that calls a model. They are plain `SKILL.md` files in [`plugin/skills`](https://github.com/sandtable-ai/sandtable/tree/main/plugin/skills), so other coding agents that read Agent Skills can use them too. Guide, with a worked session: [Claude Code plugin](https://sandtable.dev/guides/claude-code-plugin).
 
 ## How it works
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/trial-dark.png">
-  <img src="assets/trial.png" width="832" alt="One trial: a simulated caller talks to your agent, every tool call is checked against the invariants, and the trial is graded on the agent's messages, the violations and the end state, with no judge model">
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/sandtable-ai/sandtable/raw/main/assets/trial-dark.png">
+  <img src="https://github.com/sandtable-ai/sandtable/raw/main/assets/trial.png" width="832" alt="One trial: a simulated caller talks to your agent, every tool call is checked against the invariants, and the trial is graded on the agent's messages, the violations and the end state, with no judge model">
 </picture>
 
 1. **World.** Tables of records (carriers, loads, patients), seeded with fictional rows. Every trial starts from a fresh copy.
@@ -144,7 +144,7 @@ A `failure-triager` subagent reads the failing trials of a large run outside the
 4. **Tasks.** A simulated caller with a persona and a hidden goal, plus the end state that counts as success.
 5. **Grading.** A trial passes only if the end state matches, the required tools ran, the forbidden ones didn't, no invariant was violated, and no protected value appeared in what the agent said.
 
-More: [how it works](https://sandtable.dev/how-it-works). The bundled examples are [`examples/freight`](examples/freight) (32 tasks, 16 invariants) and [`examples/clinic`](examples/clinic) (a clinic front desk, 25 tasks, 12 invariants). Both run offline.
+More: [how it works](https://sandtable.dev/how-it-works). The bundled examples are [`examples/freight`](https://github.com/sandtable-ai/sandtable/tree/main/examples/freight) (32 tasks, 16 invariants) and [`examples/clinic`](https://github.com/sandtable-ai/sandtable/tree/main/examples/clinic) (a clinic front desk, 25 tasks, 12 invariants). Both run offline.
 
 ## How it compares
 
@@ -154,7 +154,7 @@ Nearby tools do other jobs better. LangWatch Scenario puts agent tests with a ju
 
 ## Status
 
-Early alpha. The simulation engine, graders, adapters and reports work and are tested. The Claude adapters and `init`'s model-backed steps have been verified in [live runs](https://sandtable.dev/results). The OpenAI-compatible and Bedrock Converse adapters are newer. The spec may still change before 1.0; every breaking change is marked in the [changelog](CHANGELOG.md). Text only for now: no audio, timing or interruption testing. See the [roadmap](ROADMAP.md).
+Early alpha. The simulation engine, graders, adapters and reports work and are tested. The Claude adapters and `init`'s model-backed steps have been verified in [live runs](https://sandtable.dev/results). The OpenAI-compatible and Bedrock Converse adapters are newer. The spec may still change before 1.0; every breaking change is marked in the [changelog](https://github.com/sandtable-ai/sandtable/blob/main/CHANGELOG.md). Text only for now: no audio, timing or interruption testing. See the [roadmap](https://github.com/sandtable-ai/sandtable/blob/main/ROADMAP.md).
 
 ## Contributing
 
@@ -165,11 +165,11 @@ npm run typecheck
 npm run sandtable -- run examples/freight --agent scripted:careful --user scripted
 ```
 
-Node ≥ 22.18 runs the TypeScript sources directly. See [CONTRIBUTING.md](CONTRIBUTING.md); coding agents start from [AGENTS.md](AGENTS.md). Release notes are in [CHANGELOG.md](CHANGELOG.md).
+Node ≥ 22.18 runs the TypeScript sources directly. See [CONTRIBUTING.md](https://github.com/sandtable-ai/sandtable/blob/main/CONTRIBUTING.md); coding agents start from [AGENTS.md](https://github.com/sandtable-ai/sandtable/blob/main/AGENTS.md). Release notes are in [CHANGELOG.md](https://github.com/sandtable-ai/sandtable/blob/main/CHANGELOG.md).
 
 ## Citation
 
-If you use sandtable in research or a published evaluation, please cite it ([CITATION.cff](CITATION.cff)) and τ-bench, whose method it builds on:
+If you use sandtable in research or a published evaluation, please cite it ([CITATION.cff](https://github.com/sandtable-ai/sandtable/blob/main/CITATION.cff)) and τ-bench, whose method it builds on:
 
 ```bibtex
 @article{yao2024tau,
