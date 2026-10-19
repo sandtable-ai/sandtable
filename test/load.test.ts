@@ -1,4 +1,4 @@
-import { cpSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -42,8 +42,15 @@ describe("loadDomain includes", () => {
 
   it("keeps inline text that merely mentions a file", async () => {
     const dir = copyOfClinic();
-    edit(path.join(dir, "sandtable.yaml"), /^policy: \.\/policy\.md$/m, "policy: Follow the steps in policy.md.");
-    expect((await loadDomain(dir)).policy).toBe("Follow the steps in policy.md.");
+    edit(path.join(dir, "sandtable.yaml"), /^policy: \.\/policy\.md$/m, "policy: Follow the steps in policy.md");
+    expect((await loadDomain(dir)).policy).toBe("Follow the steps in policy.md");
+  });
+
+  it("inlines a file whose name has spaces", async () => {
+    const dir = copyOfClinic();
+    renameSync(path.join(dir, "policy.md"), path.join(dir, "Front Desk SOP.md"));
+    edit(path.join(dir, "sandtable.yaml"), /^policy: \.\/policy\.md$/m, "policy: ./Front Desk SOP.md");
+    expect((await loadDomain(dir)).policy).toBe(readFileSync(path.resolve("examples/clinic/policy.md"), "utf8"));
   });
 });
 

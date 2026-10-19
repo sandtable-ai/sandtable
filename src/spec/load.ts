@@ -11,8 +11,8 @@ export class DomainError extends Error {}
 /**
  * Load a domain from a directory containing sandtable.yaml (or the file itself).
  * Any top-level value that is a relative path to a .md/.yaml/.yml file is inlined,
- * so policy, world and tasks can live in their own files. A path to a missing file is an error,
- * never the value itself: a misspelled `policy: ./polcy.md` would otherwise become the policy.
+ * so policy, world and tasks can live in their own files. A one-token path to a missing file is an
+ * error, never the value itself: a misspelled `policy: ./polcy.md` would otherwise become the policy.
  */
 export async function loadDomain(target: string): Promise<Domain> {
   const file = (await isDir(target)) ? path.join(target, DOMAIN_FILE) : target;
@@ -24,9 +24,12 @@ export async function loadDomain(target: string): Promise<Domain> {
   if (!raw || typeof raw !== "object") throw new DomainError(`${file} is empty or not a YAML mapping`);
 
   for (const [key, value] of Object.entries(raw)) {
-    if (typeof value !== "string" || !INCLUDE.test(value.trim())) continue;
+    if (typeof value !== "string" || !/\.(md|ya?ml)$/i.test(value.trim())) continue;
     const included = path.resolve(dir, value.trim());
-    if (!(await exists(included))) throw new DomainError(`${file}: ${key}: ${value.trim()} not found (looked for ${included})`);
+    if (!(await exists(included))) {
+      if (PATH.test(value.trim())) throw new DomainError(`${file}: ${key}: ${value.trim()} not found (looked for ${included})`);
+      continue;
+    }
     const text = await readFile(included, "utf8");
     raw[key] = /\.md$/i.test(included) ? text : parseYaml(text, included);
   }
@@ -147,8 +150,8 @@ export function pendingReview(d: Domain): PendingItem[] {
   ];
 }
 
-/** One token ending in .md, .yaml or .yml: a file to inline, not inline text. */
-const INCLUDE = /^\S+\.(md|ya?ml)$/i;
+/** One token ending in .md, .yaml or .yml: a path, so a missing file is an error rather than inline text. */
+const PATH = /^\S+\.(md|ya?ml)$/i;
 
 function parseYaml(text: string, file: string): unknown {
   try {
