@@ -17,7 +17,7 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
-      # The same gate AGENTS.md asks for before a push: typecheck, tests, build, version and
+      # The same gate AGENTS.md asks for before a push: typecheck, build, tests, version and
       # changelog checks, then offline smoke runs where the careful scripted agents pass every task.
       - run: npm run check
 

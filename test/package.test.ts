@@ -7,8 +7,7 @@ import YAML from "yaml";
 
 // What `npm publish` would ship, from `npm pack --dry-run` (offline). The CLI needs dist/, package.json
 // and the bundled examples with every file they include; nothing else belongs in the package.
-// CI runs the tests before the build, so the dist/ checks run only when dist/ exists:
-// `npm run check` runs this file again after `npm run build`.
+// The dist/ checks run only when dist/ exists: `npm run check` builds before it tests.
 
 const root = process.cwd();
 const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as {
@@ -44,7 +43,7 @@ describe("npm package", () => {
         f === "examples/custom-agent.ts" ||
         /\.map$|(^|\/)\.DS_Store$|(^|\/)\.env/.test(f),
     );
-    expect(unwanted, "dist/ may be stale: `npm run build` rebuilds it from scratch").toEqual([]);
+    expect(unwanted, "these would ship: narrow `files` in package.json, or run `npm run build` if dist/ is stale").toEqual([]);
   });
 
   it("ships each bundled example with every file its sandtable.yaml includes", () => {
