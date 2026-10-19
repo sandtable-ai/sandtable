@@ -140,9 +140,9 @@ More: [how it works](https://sandtable.dev/how-it-works). The bundled examples a
 
 ## How it compares
 
-sandtable stands on [τ-bench](https://arxiv.org/abs/2406.12045)'s method: a simulated user with a hidden goal, tools over a database, grading on the final state, and pass^k. τ-bench is a benchmark for comparing models on shared domains. sandtable makes the same method cheap to apply to *one customer's* workflow, as a file in their repo, and adds rules checked on every tool call.
+sandtable stands on [τ-bench](https://arxiv.org/abs/2406.12045)'s method: a simulated user with a hidden goal, tools over a database, grading on the final state, and pass^k. τ-bench is a benchmark for comparing models on shared domains. sandtable makes the same method cheap to apply to *one customer's* workflow, as a file in their repo, and adds rules checked before each tool call runs.
 
-Nearby tools do some jobs better. LangWatch Scenario puts agent tests with a judge in your test runner and can score tone and wording, which sandtable does not. IntellAgent generates broad scenario coverage from an agent's prompt. Hosted platforms add dashboards, voice testing and production monitoring. [The comparison pages](https://sandtable.dev/compare/overview) say when to use each, with links to their docs.
+Nearby tools do other jobs better. LangWatch Scenario puts agent tests with a judge in your test runner and can score tone and wording, which sandtable does not yet. IntellAgent generates many scenarios from a prompt or a policy document. Hosted platforms test voice, generate tests from production calls and monitor live traffic. [The comparison pages](https://sandtable.dev/compare/overview) say when to use each, and link every claim to the tool's own docs.
 
 ## Status
 
