@@ -1,38 +1,56 @@
 ---
 title: "sandtable vs hosted platforms"
 sidebarTitle: "Hosted platforms"
-description: "Simulation built into agent platforms, voice testing services and LLM eval platforms, compared with an open-source harness in your repo."
+description: "Simulation built into agent platforms, voice and conversational testing services, and LLM eval platforms, compared with an open-source harness in your repo."
 ---
 
-Several hosted products cover nearby ground. They fall into three groups, and sandtable relates to each differently.
+Several hosted products cover nearby ground, and many of them do more than sandtable does today. They fall into three groups, and sandtable relates to each differently. Each description below says only what the linked page says.
 
 ## Agent platforms with built-in simulation
 
-**Sierra** (simulations, Ghostwriter) and **Decagon** (Simulations, AOP versioning) generate tests from customer SOPs and transcripts and run them on every agent change, inside their own platforms.
+- **Sierra** [Simulations](https://sierra.ai/blog/simulations-the-secret-behind-every-great-agent): when you create an agent, Sierra auto-generates test cases from your standard operating procedures, knowledge bases, historical coaching transcripts and conversation flows. Simulated conversations "can be run multiple times", a judge agent grades them, and you can run them through GitHub Actions or the command line to gate releases. [Voice Sims](https://sierra.ai/blog/voice-sims-test-agents-in-real-world-conditions-before-they-talk-to-your-customers) do the same for voice agents. [Ghostwriter](https://sierra.ai/product/ghostwriter), Sierra's agent for building and improving agents, also auto-generates simulations and runs them with every build or update. Sierra's research team also [introduced τ-bench](https://sierra.ai/blog/benchmarking-ai-agents) ([comparison](/compare/tau-bench)).
+- **Decagon** [Simulations](https://decagon.ai/product/testing-qa): an integrated testing suite that validates agent behaviour across channels before deployment and with every update. Teams can [auto-generate tests](https://decagon.ai/blog/the-next-generation-of-simulations) from AOPs (Decagon's Agent Operating Procedures) and production conversations, and every agent version is tested in CI/CD before it merges. Simulations can be [run multiple times](https://decagon.ai/resources/decagon-simulations) to check consistency. [Agent Versioning](https://decagon.ai/blog/decagon-agent-versioning) tracks every AOP, tool and guideline edit as a versioned commit that can be tested before it is published.
 
-- **Choose the platform's own simulation** when your agent is built on that platform. It knows the platform's runtime and you get it without extra setup.
-- **Choose sandtable** when you build the agent yourself, or deploy across stacks, and want the same method as open source: a domain in the customer's repo, deterministic grading, and no vendor account.
+**Choose the platform's own simulation** when your agent is built on that platform. It knows the platform's runtime, it generates tests from your procedures and conversations, and you get it without extra setup.
 
-## Voice agent testing services
+**Choose sandtable** when you build the agent yourself, or deploy across stacks, and want the same method as open source: a domain in the customer's repo, deterministic grading, and no vendor account.
 
-**Coval, Hamming, Cekura, Bluejay, Roark** and **Vapi Simulations** do simulation and regression testing for voice agents.
+## Voice and conversational agent testing services
+
+- **[Coval](https://docs.coval.ai/concepts/simulations/overview)** plays a realistic user against voice or chat agents and evaluates the conversation against criteria you define. Its generator [drafts test cases](https://docs.coval.ai/concepts/test-sets/create) from a description. Metrics include LLM-judged questions and an [API State](https://docs.coval.ai/concepts/metrics/types/deterministic) check that compares an external system's response with an expected value after the conversation. Its [GitHub Action](https://docs.coval.ai/getting-started/github-actions-tutorial) runs on pull requests and can run each test case several times.
+- **[Hamming](https://hamming.ai/)** does QA for voice and chat agents. It generates test scenarios from the agent's system prompt, turns a production failure into a regression test, and runs in CI/CD.
+- **[Cekura](https://docs.cekura.ai/documentation/key-concepts/evaluators/overview)** runs evaluators: simulated conversations that act as test cases for voice agents. A judge checks the expected outcome, and Python metrics can make [deterministic assertions on tool calls](https://docs.cekura.ai/documentation/guides/testing-agents/tool-call-testing), such as never transferring to a human before verifying identity. Its [GitHub Actions setup](https://docs.cekura.ai/documentation/guides/github-actions-ci-cd) runs each scenario N times on every change.
+- **[Bluejay](https://docs.getbluejay.ai/test/simulations/types)** simulates callers it calls digital humans, generated from a plain-language description or from the agent's workflow, or replayed from real transcripts. Its [GitHub Actions recipe](https://docs.getbluejay.ai/cookbook/github-actions) fails CI when the pass rate drops below a threshold.
+- **[Roark](https://docs.roark.ai/documentation/simulation-testing/overview)** combines simulation before launch with monitoring of production calls. It builds [customer flows](https://docs.roark.ai/documentation/simulation-testing/customer-flows) from a description, a transcript or real production calls. [Run plans](https://docs.roark.ai/documentation/simulation-testing/run-plans) repeat each test and set the share of simulations that must pass each check, [tool-call metrics](https://docs.roark.ai/documentation/recipes/tool-call-testing) grade whether the agent called the right tools with the right parameters in the right order, and a [CI step](https://docs.roark.ai/documentation/simulation-testing/ci-cd) fails the build when the agent falls short.
+- **[Vapi](https://docs.vapi.ai/test/voice-testing)** has two testing features for agents built on it. [Simulations](https://docs.vapi.ai/observability/simulations-overview) have an AI tester hold conversations with the assistant in voice or chat, for the number of iterations you choose. [Evals](https://docs.vapi.ai/observability/evals-quickstart) replay mock conversations and validate replies with exact match, regex or an AI judge, and verify tool calls and their arguments.
 
 sandtable is text-only today. It rehearses the agent's reasoning and tool use (what it says and what it does to the records), not audio, latency to first word or interruptions.
 
-- **Choose a voice testing service** when the risk is in the audio path: speech recognition, turn-taking, barge-in, latency.
-- **Choose sandtable** to gate the agent's decisions against the customer's rules before you spend on audio-level tests, or alongside them.
-- Planned: voice transport and timing metrics ([#17](https://github.com/sandtable-ai/sandtable/issues/17), [#43](https://github.com/sandtable-ai/sandtable/issues/43)), serving the world as REST, MCP and webhook tools for hosted voice platforms ([#14](https://github.com/sandtable-ai/sandtable/issues/14)), and importing voice-agent platform configs as draft domains ([#34](https://github.com/sandtable-ai/sandtable/issues/34), [#35](https://github.com/sandtable-ai/sandtable/issues/35)).
+**Choose a voice testing service** when the risk is in the audio path: speech recognition, turn-taking, barge-in, latency. Also choose one when you want production calls monitored, or turned into tests, in the same product.
+
+**Choose sandtable** to gate the agent's decisions against the customer's rules before you spend on audio-level tests, or alongside them.
+
+Planned: voice transport and timing metrics ([#17](https://github.com/sandtable-ai/sandtable/issues/17), [#43](https://github.com/sandtable-ai/sandtable/issues/43)), serving the world as REST, MCP and webhook tools for hosted voice platforms ([#14](https://github.com/sandtable-ai/sandtable/issues/14)), and importing voice-agent platform configs as draft domains ([#34](https://github.com/sandtable-ai/sandtable/issues/34), [#35](https://github.com/sandtable-ai/sandtable/issues/35)).
 
 ## LLM eval and observability platforms
 
-**LangSmith, Braintrust** and similar platforms offer datasets, judges and CI gating for LLM apps generally.
+- **[LangSmith](https://docs.langchain.com/langsmith/evaluation-concepts)** offers datasets, code and LLM-as-judge evaluators, and experiments for LLM apps generally. It runs in CI through [pytest](https://docs.langchain.com/langsmith/pytest) and [Vitest/Jest](https://docs.langchain.com/langsmith/vitest-jest), can [repeat each example](https://docs.langchain.com/langsmith/repetition) and show the standard deviation across repetitions, and can [simulate multi-turn conversations](https://docs.langchain.com/langsmith/multi-turn-simulation) with a simulated user.
+- **[Braintrust](https://www.braintrust.dev/docs/evaluate/advanced-evaluations)** offers datasets, scorers and experiments. [Scorers](https://www.braintrust.dev/docs/evaluate/write-scorers) can be LLM judges or code, including code for specific business rules and scorers that run on a single tool call. Trials run each input several times to measure score variance, and evals can [run on every pull request](https://www.braintrust.dev/docs/evaluate/run-in-ci) and gate merges.
 
-- **Choose an eval platform** for tracing, production monitoring, dataset management and judged scores across many kinds of LLM features.
-- **Choose sandtable** for the specific job of rehearsing a tool-using agent against a stateful copy of a customer's world, with rules checked on every call and pass^k over repeated trials.
-- They combine: `results.json` is plain JSON with every trial's transcript, tool calls and checks, so you can load it into another system yourself. There is no built-in integration.
+**Choose an eval platform** for tracing, production monitoring, dataset management and judged scores across many kinds of LLM features, with a shared UI for the team.
+
+**Choose sandtable** for the specific job of rehearsing a tool-using agent against a stateful copy of a customer's world, with rules checked on every call and pass^k over repeated trials.
+
+They combine: `results.json` is plain JSON with every trial's transcript, tool calls and checks, so you can load it into another system yourself. There is no built-in integration.
+
+## What is common, and where sandtable differs
+
+Most of these products generate tests for you, from procedures, prompts, transcripts or production calls, and most can repeat each test and gate CI. Where they report on repeats, it is as a pass rate or score variance; sandtable reports pass^k. Grading is mostly by judged criteria, and several add deterministic checks on tool calls or on an external system after the conversation (Coval, Cekura, Roark, Vapi Evals).
+
+What sandtable adds is narrower. Its rules are declared once per domain, in YAML in the customer's repo, and checked *before each tool call runs*, against the simulated world as it is at that moment. An attempt to book a carrier whose insurance has expired fails the trial, even if the API would reject it. None of the testing pages linked above describes that as a built-in. Runtime guardrails can block a call in production, such as Vapi's [tool rejection plan](https://docs.vapi.ai/tools/tool-rejection-plan); sandtable tests whether the agent follows the rule before it ships.
 
 ## What you give up with sandtable
 
-It is early alpha, local and file-based. There is no hosted dashboard, no team workspace, no production monitoring and no support contract. Reports are a terminal summary, `results.json` and a self-contained `report.html`.
+It is early alpha, local and file-based. There is no hosted dashboard, no team workspace, no production monitoring, no test generation from production traffic and no support contract. Reports are a terminal summary, `results.json` and a self-contained `report.html`.
 
 Last reviewed October 2026. Something out of date or unfair? [Open an issue](https://github.com/sandtable-ai/sandtable/issues).

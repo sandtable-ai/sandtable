@@ -4,38 +4,42 @@ sidebarTitle: "LangWatch Scenario"
 description: "Agent tests in code with a judge agent, or a declarative world graded deterministically. When to use each."
 ---
 
-**LangWatch Scenario** (Apache-2.0) is an SDK, for Python and TypeScript, for writing agent tests with a simulated user and a judge agent inside pytest or vitest. Scenarios are hand-written code and are judged mostly by an LLM. It pairs with the LangWatch platform.
+**[LangWatch Scenario](https://langwatch.ai/scenario/)** ([Apache-2.0](https://github.com/langwatch/scenario/blob/main/LICENSE)) is a library for testing agents through simulated conversations. You write each scenario in code: a description, your agent behind a [one-method adapter](https://langwatch.ai/scenario/agent-integration), a user simulator agent, and a judge agent with criteria. Scenarios run inside your test runner, such as pytest, Vitest or Jest ([test runner integration](https://langwatch.ai/scenario/basics/test-runner-integration)), and its docs list SDKs for Python, TypeScript and Go. It pairs with the [LangWatch platform](https://langwatch.ai/docs/agent-testing/overview), which shows runs as they happen and can also write and run scenarios without code.
 
-**sandtable** declares a stateful world, the customer's API as tools over it, and the rules the agent must never break, then grades every trial deterministically on the end state and the tool-call log.
+**sandtable** declares a stateful world, the customer's API as tools over it, and the rules the agent must never break. It then grades every trial deterministically on the end state and the tool-call log.
 
 ## Side by side
 
 | | sandtable | LangWatch Scenario |
 |---|---|---|
-| A test is | a task in YAML: hidden goal, persona, expected end state | code in your test suite |
-| Stateful world | declarative tables, fresh copy per trial | bring your own (your agent's real or mocked tools) |
-| Pass/fail | end state, invariants, required and forbidden tools; no judge | judge agent criteria plus your own assertions |
-| Rules checked on every tool call | yes | write them as assertions |
-| Repeated trials and pass^k | built in (`-k`) | not built in |
-| Drafting from customer artifacts | `init` from an OpenAPI spec, an SOP and transcripts | no |
+| A test is | a task in YAML: hidden goal, persona, expected end state | code in your test suite, or a scenario in the LangWatch platform |
+| Stateful world | declarative tables, fresh copy per trial | bring your own: your agent's real tools, or mocks you write ([mocking guide](https://langwatch.ai/scenario/testing-guides/mocks)) |
+| Pass/fail | end state, invariants, required and forbidden tools; no judge | the judge agent's criteria, plus assertions you write as script steps ([scripted simulations](https://langwatch.ai/scenario/basics/scripted-simulations)) |
+| Rules on every tool call | checked before each call runs | assertions on tool calls that you write, run after the agent's turn ([tool calling](https://langwatch.ai/scenario/testing-guides/tool-calling)) |
+| Repeated trials | `-k` trials per task, reported as pass^k | the SDK runs a scenario once; the platform repeats each scenario 1 to 5 times and reports a pass rate ([run plans](https://langwatch.ai/docs/agent-testing/run-plans)) |
+| Drafting tests | `init` drafts the world, tools, invariants and tasks from an OpenAPI spec, an SOP and transcripts | the platform's assistant writes a scenario from text you paste, such as a ticket or a transcript ([scenarios](https://langwatch.ai/docs/agent-testing/scenarios)) |
 | Qualitative criteria (tone, empathy, wording) | not yet: soft checks are planned ([#16](https://github.com/sandtable-ai/sandtable/issues/16)) | yes, through the judge |
+| Voice agents | no, text only | yes, over the agent's real transport, such as ElevenLabs, OpenAI Realtime, Pipecat or Twilio ([voice](https://langwatch.ai/scenario/voice/getting-started)) |
+| Adversarial testing | no | a red-team agent that escalates attacks over several turns ([red teaming](https://langwatch.ai/scenario/advanced/red-teaming)) |
 
 ## Choose Scenario when
 
-- You want agent tests to live in your existing test runner, next to unit tests.
+- You want agent tests to live in your existing test runner, next to unit tests, against your agent's real code.
 - Your criteria need judgment: tone, helpfulness, whether an explanation was clear.
-- You want to steer and assert on conversations programmatically, in code.
-- You already use the LangWatch platform.
+- You want to steer a conversation turn by turn and assert on it in code.
+- You test voice agents, or want multi-turn red-teaming in the same tool.
+- Your agent is built on a framework it has an integration guide for, such as LangGraph, CrewAI, Pydantic AI, Mastra or the Vercel AI SDK ([agent integrations](https://langwatch.ai/scenario/agent-integration)).
+- You already use the LangWatch platform, or want people who don't write code to write scenarios there.
 
 ## Choose sandtable when
 
-- The rules are deterministic (eligibility, limits, ordering, disclosure) and a judge reading a transcript that "sounds fine" is not good enough.
+- The rules are deterministic (eligibility, limits, ordering, disclosure), and a judge reading a transcript that "sounds fine" is not good enough.
 - Many tasks share one world and one rule set, and you want them declared once.
-- You need reliability across repeated trials, not a single pass.
+- You need reliability across repeated trials, measured as pass^k.
 - The suite should be drafted from what a customer hands over, and reviewed by someone who does not write code.
 
 ## Use both
 
-They answer different questions. Scenario can check how the agent sounds; sandtable checks what the agent did to the customer's records and whether it broke a rule while doing it. A team can keep conversational-quality tests in Scenario and gate releases on a sandtable pass^k threshold.
+They answer different questions. Scenario can check how the agent sounds; sandtable checks what the agent did to the customer's records and whether it broke a rule while doing it. A team can keep conversational-quality, voice and red-team tests in Scenario and gate releases on a sandtable pass^k threshold.
 
 Last reviewed October 2026. Something out of date or unfair? [Open an issue](https://github.com/sandtable-ai/sandtable/issues).
