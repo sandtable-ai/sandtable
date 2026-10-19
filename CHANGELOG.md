@@ -41,3 +41,10 @@ First public release.
   - worked examples that rehearse agents built with the Vercel AI SDK, the OpenAI Agents SDK, the Claude Agent SDK, Pipecat, LiveKit Agents and a plain HTTP service, each a one-file adapter checked offline in CI, with a guide (`docs/guides/frameworks.mdx`) ([#52](https://github.com/sandtable-ai/sandtable/issues/52))
 - **Docs** at [sandtable.dev](https://sandtable.dev), with `llms.txt` for coding agents: concepts, guides, a reference for the CLI, the domain spec, the HTTP step protocol and `results.json`, and comparisons with τ-bench, LangWatch Scenario, IntellAgent and hosted platforms, each claim linked to the tool's own docs ([#54](https://github.com/sandtable-ai/sandtable/issues/54)), and a guide to the Claude Code plugin: installing it, its skills and subagent, and a worked session ([#72](https://github.com/sandtable-ai/sandtable/issues/72)).
 - The published CLI runs on Node.js 20 or later.
+
+## [0.1.0-alpha.1] - 2026-10-19
+
+A rehearsal of the release pipeline (npm, PyPI and GitHub releases from one tag), published before the first public release. It contains everything listed under [Unreleased]; use 0.1.0 instead.
+
+[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v0.1.0-alpha.1...HEAD
+[0.1.0-alpha.1]: https://github.com/sandtable-ai/sandtable/releases/tag/v0.1.0-alpha.1
