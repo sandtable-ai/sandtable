@@ -1,6 +1,7 @@
 node_modules/
 dist/
 python/dist/
+__pycache__/
 .sandtable/
 coverage/
 .env

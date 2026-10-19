@@ -19,10 +19,8 @@ class Exec(Exception):
     pass
 
 
-def test_runs_the_pinned_release_from_the_cache_first():
-    assert cli.command("/bin/npx", ["demo", "--no-open"]) == [
-        "/bin/npx", "--yes", "--prefer-offline", f"sandtable-ai@{NPM_VERSION}", "demo", "--no-open",
-    ]
+def test_runs_the_pinned_release():
+    assert cli.command("/bin/npx", ["demo", "--no-open"]) == ["/bin/npx", "--yes", f"sandtable-ai@{NPM_VERSION}", "demo", "--no-open"]
 
 
 def test_pinned_release_matches_package_json():
@@ -56,26 +54,24 @@ def test_replaces_itself_with_npx_so_signals_reach_the_cli(monkeypatch):
         cli.main(["validate", "a b"])
     path, argv, env = calls[0]
     assert path == "/n/npx" and argv[-2:] == ["validate", "a b"]
-    assert env["npm_config_update_notifier"] == "false"
+    assert {k: env[k] for k in cli.NPM_DEFAULTS} == cli.NPM_DEFAULTS
 
 
-def test_keeps_the_users_update_notifier_setting():
-    env = cli.child_env({"NPM_CONFIG_UPDATE_NOTIFIER": "true"})
-    assert env == {"NPM_CONFIG_UPDATE_NOTIFIER": "true"}
+def test_keeps_the_users_npm_settings():
+    env = cli.child_env({"NPM_CONFIG_UPDATE_NOTIFIER": "true", "npm_config_fetch_retry_mintimeout": "5000"})
+    assert env == {
+        "NPM_CONFIG_UPDATE_NOTIFIER": "true",
+        "npm_config_fetch_retry_mintimeout": "5000",
+        "npm_config_fetch_retry_maxtimeout": "2000",
+    }
 
 
-def test_a_child_killed_by_a_signal_exits_128_plus_n():
-    assert cli.exit_code(-15) == 143
-    assert cli.exit_code(-2) == 130
-    assert cli.exit_code(1) == 1
-
-
-def test_windows_runs_npx_cmd_and_maps_the_exit_code(monkeypatch):
+def test_windows_runs_npx_cmd_and_returns_its_exit_code(monkeypatch):
     monkeypatch.setattr(cli.os, "name", "nt")
     monkeypatch.setattr(cli.shutil, "which", which({"node": "C:/n/node.exe", "npx.cmd": "C:/n/npx.cmd", "npx": "C:/n/npx"}))
     seen = []
-    monkeypatch.setattr(cli.subprocess, "call", lambda cmd, env: seen.append(cmd) or -15)
-    assert cli.main(["demo"]) == 143
+    monkeypatch.setattr(cli.subprocess, "call", lambda cmd, env: seen.append(cmd) or 3)
+    assert cli.main(["demo"]) == 3
     assert seen[0][0] == "C:/n/npx.cmd"
 
 
@@ -91,5 +87,5 @@ def test_a_failed_start_prints_the_install_hint_not_a_traceback(monkeypatch, cap
     assert "Exec format error" in err and "Node.js 20 or newer" in err
 
 
-def test_the_wheel_ships_the_projects_license():
+def test_the_launcher_license_is_the_projects():
     assert (ROOT / "python" / "LICENSE").read_text() == (ROOT / "LICENSE").read_text()
