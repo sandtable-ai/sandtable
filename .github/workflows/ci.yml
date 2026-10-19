@@ -30,3 +30,38 @@ jobs:
       - run: uv run --isolated --with python/dist/*.whl python -c "import sandtable_ai.cli"
       # `uvx sandtable-ai` needs an executable named after the package, next to `sandtable`.
       - run: unzip -p python/dist/*.whl "*.dist-info/entry_points.txt" | grep -q "^sandtable-ai = sandtable_ai.cli:main"
+
+  # Worked examples in examples/frameworks/: each has its own dependencies and an offline check
+  # (scripted or mock models, no API keys). Node examples import sandtable-ai from the built root.
+  frameworks:
+    name: frameworks (${{ matrix.example }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { example: vercel-ai-sdk, runtime: node }
+          - { example: openai-agents, runtime: node }
+          - { example: claude-agent-sdk, runtime: node }
+          - { example: pipecat, runtime: python }
+          - { example: livekit-agents, runtime: python }
+          - { example: http-service, runtime: python }
+    steps:
+      - uses: actions/checkout@v4
+      - if: matrix.runtime == 'node'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            examples/frameworks/${{ matrix.example }}/package-lock.json
+      - if: matrix.runtime == 'node'
+        run: npm ci && npm run build
+      - if: matrix.runtime == 'node'
+        working-directory: examples/frameworks/${{ matrix.example }}
+        run: npm ci && npm run check
+      - if: matrix.runtime == 'python'
+        uses: astral-sh/setup-uv@v6
+      - if: matrix.runtime == 'python'
+        run: uv run --directory examples/frameworks/${{ matrix.example }} python -m pytest -q
