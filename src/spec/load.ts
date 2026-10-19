@@ -108,9 +108,9 @@ export function validateDomain(d: Domain): string[] {
       }
     } else if ("never_disclose" in inv) {
       table(inv.never_disclose.table, where);
-      if (inv.never_disclose.unless) {
-        tool(inv.never_disclose.unless.tool, where);
-        arg(inv.never_disclose.unless.tool, inv.never_disclose.unless.arg, where);
+      for (const u of [inv.never_disclose.unless ?? []].flat()) {
+        tool(u.tool, where);
+        arg(u.tool, u.arg, where);
       }
     } else {
       tool(inv.never.tool, where);

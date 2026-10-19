@@ -37,7 +37,7 @@ Every task has a hidden goal for the simulated caller and a `user.script` for of
 | `eligible-carrier` | never book a broker, or a carrier with inactive authority, invalid insurance, an unsatisfactory safety rating or a do-not-use flag |
 | `rate-ceiling` | never book above the load's `max_rate` |
 | `equipment-match` | carrier equipment must match load equipment |
-| `never-disclose-ceiling` | never say a load's `max_rate` in any message (2350, 2,350, $2,350.00), unless it is the rate booked |
+| `never-disclose-ceiling` | never say a load's `max_rate` in any message (2350, 2,350, $2,350.00), unless it is the rate booked or submitted for a rep |
 | `rep-confirm-not-booked` | never `book_load` a `rep_confirm` load; it goes to `submit_offer` |
 | `verify-before-offer` | `log_offer` (a counter-offer) only after vetting the same MC number |
 | `offer-ceiling` | never counter above the load's `max_rate` |

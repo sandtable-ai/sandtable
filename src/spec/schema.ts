@@ -123,16 +123,22 @@ const NeverInvariant = z
   })
   .strict();
 
+const DiscloseException = z.object({ tool: z.string(), arg: z.string() }).strict();
+
 /**
  * The agent must never say any value of `table.field` (e.g. an internal price ceiling).
  * `unless` allows a value that equals an argument the agent successfully passed to a tool,
- * e.g. the rate it actually booked.
+ * e.g. the rate it actually booked. A list allows several, e.g. the booked and the submitted rate.
  */
 const NeverDiscloseInvariant = z
   .object({
     ...invariantBase,
     never_disclose: z
-      .object({ table: z.string(), field: z.string(), unless: z.object({ tool: z.string(), arg: z.string() }).strict().optional() })
+      .object({
+        table: z.string(),
+        field: z.string(),
+        unless: z.union([DiscloseException, z.array(DiscloseException).min(1)]).optional(),
+      })
       .strict(),
   })
   .strict();
