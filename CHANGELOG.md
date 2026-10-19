@@ -58,6 +58,7 @@ First public release.
 - `run` and `demo --live` exit 1 and print the error when every trial ended in one, for example without `ANTHROPIC_API_KEY`, without an optional Bedrock package or with the agent's server down. Before, they printed a 0% score and exited 0 ([#95](https://github.com/sandtable-ai/sandtable/issues/95)).
 - `npx sandtable-ai` on Node.js 20 prints no `EBADENGINE` warning, and installs with `engine-strict=true`: the CLI uses commander 14, which supports Node 20, instead of commander 15, which requires Node 22.12 ([#101](https://github.com/sandtable-ai/sandtable/issues/101)).
 - **Python launcher**: the `sandtable` command becomes the `npx` process instead of waiting on it, so stopping it with SIGTERM (a process manager, a CI cancel) also stops the CLI. Without network it starts from npm's cache in about 4 seconds instead of 70. It tells you to install npm when Node.js is there but `npx` isn't, and the wheel ships the MIT license ([#104](https://github.com/sandtable-ai/sandtable/issues/104)).
+- `sandtable.yaml`: a `policy`, `world` or `tasks` path to a missing file fails validation and names the file. Before, a misspelled `policy: ./polcy.md` passed `validate`, and every run gave the agent the text `./polcy.md` as its policy. YAML syntax errors now name the file they are in ([#97](https://github.com/sandtable-ai/sandtable/issues/97)).
 
 ## [0.1.0-alpha.1] - 2026-10-19
 

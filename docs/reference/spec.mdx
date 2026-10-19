@@ -5,7 +5,7 @@ description: "Every field of sandtable.yaml and tasks.yaml, the files that defin
 keywords: ["YAML schema", "sandtable.yaml", "tasks.yaml", "configuration", "where clauses", "templates"]
 ---
 
-A domain lives in a directory with a `sandtable.yaml`. Any top-level value that is a relative path to an existing `.md`, `.yaml` or `.yml` file is inlined, so you can keep `policy: ./policy.md` and `tasks: ./tasks.yaml` in separate files.
+A domain lives in a directory with a `sandtable.yaml`. Any top-level value that is a relative path to a `.md`, `.yaml` or `.yml` file is inlined, so you can keep `policy: ./policy.md` and `tasks: ./tasks.yaml` in separate files. A path to a missing file is a validation error, so a misspelled path can't become the policy text.
 
 Run `sandtable validate <dir>` after every edit. It checks the schema and every cross-reference (tables, tools, params, personas).
 
