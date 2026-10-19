@@ -2,210 +2,103 @@
 
 **Rehearse your AI agent on a sand table of your customer's world before it goes live.**
 
-A military sand table is a scale model of the terrain where a mission is rehearsed before anyone moves.
+Simulated callers talk to your agent, its tool calls hit stateful mocks of the customer's systems, and every trial is graded on what the agent did: the records it left behind and the business rules it broke. No judge model decides pass or fail.
 
-`sandtable` turns a customer's operating procedure, API and records into a [τ-bench](https://arxiv.org/abs/2406.12045)-style simulation. Simulated customers call your agent. Its tool calls hit stateful mocks of the customer's systems. Every trial is graded **deterministically**: on the state the agent left behind, and on the business rules it must never break. You get **pass^k** (does it succeed *every* time?), failure clusters, and a self-contained HTML report you can attach to a PR or send to the customer as go-live evidence.
+[![CI](https://github.com/sandtable-ai/sandtable/actions/workflows/ci.yml/badge.svg)](https://github.com/sandtable-ai/sandtable/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/sandtable-ai)](https://www.npmjs.com/package/sandtable-ai)
+[![PyPI](https://img.shields.io/pypi/v/sandtable-ai)](https://pypi.org/project/sandtable-ai/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-sandtable.dev-B4532A)](https://sandtable.dev)
 
-```text
-$ npx sandtable-ai demo
+**[Docs](https://sandtable.dev)** · **[Quickstart](https://sandtable.dev/quickstart)** · **[Examples](examples)** · **[Sample report](https://sandtable-ai.github.io/sandtable/)** · **[Comparisons](https://sandtable.dev/compare/overview)**
 
-sandtable · freight-carrier-sales · agent scripted:naive · user scripted · k=1
+On a fictional freight brokerage's carrier-sales desk, an agent that books whatever it is asked to passes 5 of 32 calls. sandtable names the rule it broke on each failing tool call: 25 bookings without vetting the carrier, 7 above the load's rate ceiling, 7 for carriers that may not be booked. An agent that follows the desk's SOP passes all 32. Same callers, same records, same result on every run.
 
-  task                            trials  pass
-  book-at-posted-rate             ✗       0/1
-  negotiate-within-ceiling        ✗       0/1
-  walk-away-above-ceiling         ✗       0/1
-  expired-insurance               ✗       0/1
-  ...
-  pass^1 15.6%
+![sandtable demo: the naive agent's failing task table and its top failure modes, then the careful agent passing every call](assets/demo.gif)
 
-  Top failure modes
-  25× invariant verify-before-book
-     e.g. book_load(load_id="L-1001", mc_number="100101", rate=2100) was called without a prior successful verify_carrier
-  7× invariant rate-ceiling
-     e.g. book_load rate=2600 exceeds the limit 2350
-  7× invariant eligible-carrier
-     e.g. book_load on carriers 100202: insurance_status is "expired", expected "valid"
-  4× invariant rep-confirm-not-booked
-     e.g. book_load on loads L-1013: booking_mode is "rep_confirm", expected {"$ne":"rep_confirm"}
-```
-
-> Status: **early alpha**. The simulation engine, graders, adapters and reports work and are tested. `sandtable init` drafts world tables and tools from an OpenAPI spec, invariants from an SOP and tasks from call transcripts, for a person to review. Every model-backed path has been verified against the live API ([results](docs/results.mdx)). See [ROADMAP.md](ROADMAP.md).
-
-## First live results
-
-On the first 10 tasks of the bundled freight example, Claude Opus 5.5 scores **pass^1 95%, pass^2 90%** (20 trials, $0.58). Its one failure is the kind LLM judges miss: under pressure it sometimes tells the caller the load's internal rate ceiling, which the SOP forbids. Details, harness lessons and `init` results: [docs/results.md](docs/results.md).
-
-## Why
-
-Agents that pass a demo fail on the seventh customer, because each customer has its own rules, systems and edge cases. The usual test setups miss this:
-
-- **LLM-as-judge scoring** reads the transcript, which sounds fine, and misses that the agent *booked a carrier whose insurance had expired*. The customer's rules are deterministic, so `sandtable` checks them deterministically, against the records and the tool-call log.
-- **Success rate hides unreliability.** An agent that is right 80% of the time fails one call in five in production. `sandtable` runs each task *k* times and reports pass^k, the probability that all *k* trials succeed ([Yao et al., 2024](https://arxiv.org/abs/2406.12045)).
-- **Benchmarks don't know your customer.** τ-bench's airline and retail domains are great for comparing models, but you need a benchmark of *this* customer's workflow, kept in their repo and run on every prompt or model change.
-
-## Quickstart
+## Try it in 10 seconds
 
 ```bash
-npx sandtable-ai demo          # offline: two rule-based agents, no API key needed
-npx sandtable-ai demo --live   # Claude plays both the caller and the agent (needs ANTHROPIC_API_KEY)
+npx sandtable-ai demo      # Node.js 20+
+uvx sandtable-ai demo      # or through Python's uv (still needs Node.js 20+)
 ```
 
-Then draft a domain from your customer's API and point it at your agent:
+No API key and no model calls: two rule-based agents take the same 32 scripted calls. Each run writes `results.json` and a self-contained `report.html` under `.sandtable/runs/`, and the naive agent's report opens in your browser.
+
+To watch a real model, `npx sandtable-ai demo --live --user-model claude-haiku-5-5` has Claude play both the caller and the agent, two trials per task. It needs `ANTHROPIC_API_KEY` and costs money.
+
+## What it catches
+
+Three failures from the freight example, and why a judge reading the transcript would likely pass them:
+
+- **A rule break that sounds fine.** The agent books carrier 100202 and says "Booked L-1001 at $2100. Confirmation bookings-1." The call reads well. The carrier's insurance has expired, and that fact lives in the carrier's record, not in the conversation. The `eligible-carrier` invariant checks the record when `book_load` is called, and fails the trial.
+- **A leak under pressure.** In a [live run](https://sandtable.dev/results), a firm caller refused every offer, and Claude Opus 5.5 answered "the best I can do is $1,450". To a reader that is a normal counter-offer. It is also the load's internal `max_rate`, which the SOP says never to reveal. `never_disclose` compares what the agent says with the record, and caught it.
+- **A failure that happens one time in two.** That leak appeared in one of two trials of the task. One trial per task gives pass^1 95%. Requiring both trials to pass gives pass^2 90%. A single graded run would most likely have missed it. sandtable runs each task k times and reports pass^k ([Yao et al., 2024](https://arxiv.org/abs/2406.12045)).
+
+Every failing trial in the HTML report shows the checks, the changes to the records, and the transcript with the offending tool call marked:
+
+![The HTML report on a failing trial of the naive agent, with the offending tool call marked](assets/report.png)
+
+## From your customer's docs to a red/green report
 
 ```bash
-npx sandtable-ai init --openapi ./api.yaml --sop ./sop.md --transcripts ./calls -o ./my-domain   # draft, then review
-npx sandtable-ai review ./my-domain        # what still needs a human decision
-npx sandtable-ai lint ./my-domain          # every task ready, solvable, non-vacuous (no model calls)
+npx sandtable-ai init --openapi ./api.yaml --sop ./sop.md --transcripts ./calls -o ./my-domain
+npx sandtable-ai review ./my-domain     # what still needs a person's decision
+npx sandtable-ai lint ./my-domain       # every task ready, solvable, non-vacuous (no model calls)
 npx sandtable-ai run ./my-domain --agent http://localhost:8787/step -k 4 --fail-under 90
 ```
 
-`run` writes `results.json` and `report.html` to `.sandtable/runs/<timestamp>/`.
+- **From the OpenAPI spec**, `init` drafts the tables and tools, deterministically.
+- **From the SOP**, it drafts invariants with Claude. Each one quotes the sentence it comes from.
+- **From call transcripts**, it drafts tasks, personas and fictional seed rows. Personal data is scrubbed locally first.
+- Everything drafted stays `review: pending` until a person accepts it. `lint` then proves each task can be solved and isn't passed by doing nothing, without a model call.
 
-## How it works
-
-```mermaid
-flowchart LR
-  subgraph domain [sandtable.yaml]
-    P[policy / SOP]
-    W[world: tables + seed rows]
-    T[tools: API ops on the world]
-    I[invariants: rules never to break]
-    K[tasks: hidden caller goals + expected end state]
-  end
-  U[simulated user<br/>Claude · OpenAI-compatible · scripted] <-- conversation --> A[your agent<br/>Claude · OpenAI-compatible · HTTP · JS module]
-  A -- tool calls --> S[(stateful mock world)]
-  I -. checked on every call .-> S
-  S --> G[graders: end state, invariants,<br/>required / forbidden tools]
-  G --> R[pass^k · failure modes · HTML report]
-  K --> U
-  K --> G
-```
-
-1. **World.** Tables of records (carriers, loads, orders, patients) seeded with realistic rows. Every trial starts from a fresh copy.
-2. **Tools.** The customer's API, declared as operations on the world: `get`, `list`, `create`, `update`, plus `checks` the real API would enforce (404, 409). Writes are atomic.
-3. **Invariants.** Policy rules checked *before* every tool call, using the world as it was when the agent decided. Attempting a forbidden action is a violation even if the API would have rejected it.
-4. **Tasks.** A simulated user with a persona and a hidden goal ("you need at least $1,600 and won't go lower"), plus the end state that counts as success.
-5. **Grading.** A trial passes only if the end state matches, required tools ran, forbidden ones didn't, no invariant was violated, and no protected value (`never_disclose`) appeared in what the agent said. No judge model in the loop.
-
-## A domain at a glance
-
-The bundled example ([`examples/freight`](examples/freight)) is a fictional freight brokerage's carrier-sales desk: carriers call to book loads, and the agent must vet them, search by lane, dates and equipment, negotiate under a ceiling and log each round, send high-value loads to a human rep, and log the truck or a callback when nothing is booked. It has 32 tasks and 16 invariants; half the tasks must end without a write.
+A drafted invariant, ready for review:
 
 ```yaml
-tools:
-  - name: book_load
-    description: Book a load for a vetted carrier at the agreed all-in rate in USD.
-    params:
-      load_id: { type: string }
-      mc_number: { type: string }
-      rate: { type: number }
-    checks:
-      - { table: loads, key: $load_id, where: { status: available }, error: "Load ${load_id} is not available" }
-    ops:
-      - create: bookings
-        values: { load_id: $load_id, mc_number: $mc_number, rate: $rate, status: confirmed }
-      - update: loads
-        key: $load_id
-        set: { status: booked }
-
 invariants:
-  - id: verify-before-book
-    description: A carrier must be looked up with verify_carrier before it is booked.
-    before: { first: verify_carrier, then: book_load, same: [mc_number] }
   - id: rate-ceiling
     description: Never book above the load's max_rate.
     limit: { tool: book_load, arg: rate, lte: { table: loads, key_arg: load_id, field: max_rate } }
-
-tasks:
-  - id: walk-away-above-ceiling
-    persona: haggler
-    user:
-      instructions: |
-        You are Riley, Blue Mesa Trucking, MC 100101. You want L-1002 (Dallas to Memphis).
-        You need at least $1,600 and will not go lower. If they can't do $1,600, end the call.
-    expect:
-      state:
-        - { table: bookings, count: 0 }
+    source: { file: policy.md, quote: "Never book above `max_rate`." }
+    review: pending
 ```
 
-Full reference: [docs/reference/spec.mdx](docs/reference/spec.mdx).
+Guide: [draft a domain with init](https://sandtable.dev/guides/init). Spec: [reference](https://sandtable.dev/reference/spec).
 
-A second example, [`examples/clinic`](examples/clinic), is a fictional clinic's phone receptionist. Its 25 calls test identity checks, double booking, insurance coverage and self-pay, a 24-hour cancellation policy, patient privacy and an emergency script. It ships with rule-based careful and naive agents, so it also runs offline.
+## Leaderboard
 
-## Bring your own agent
+<!-- leaderboard: pending #47 -->
 
-| Adapter | Use it when |
-|---|---|
-| `--agent claude` or `claude:<model>` | You want a baseline: Claude with the domain's tools and policy as its system prompt. |
-| `--agent bedrock:<model-id>` | Any tool-capable model on Amazon Bedrock through the Converse API (GPT, gpt-oss, Grok, Kimi, GLM, Qwen, Mistral, Nova), with `--region` and `--aws-profile`. |
-| `--agent openai:<model>` | You want to compare other models: GPT, Gemini, Llama, Qwen, DeepSeek and more, through any OpenAI-compatible endpoint, with the same prompt and tools ([run other models](#run-other-models)). |
-| `--agent http://…` | Your agent runs as a service. It receives the user message, returns either a reply or tool calls, and `sandtable` executes those against the simulated world ([protocol](docs/reference/http-protocol.mdx)). |
-| `--agent ./my-agent.ts` | Your agent is a JS/TS function. Default-export an `AgentAdapter` ([example](examples/custom-agent.ts)). |
-| `--agent noop` | Baseline: never calls a tool, declines everything. Shows how much of your suite rewards doing nothing. |
-
-```ts
-import type { AgentAdapter } from "sandtable-ai";
-
-const agent: AgentAdapter = {
-  name: "my-agent",
-  async createSession({ system, tools }) {
-    return {
-      async reply(userMessage, callTool) {
-        // run your own loop; every callTool() hits the simulated world and is graded
-        const carrier = await callTool("verify_carrier", { mc_number: "100101" });
-        return carrier.ok ? "You're all set to book." : "I couldn't find that MC number.";
-      },
-    };
-  },
-};
-export default agent;
-```
-
-### Claude on the Anthropic API or Amazon Bedrock
-
-Model-backed commands (`run`, `demo --live`, `init --sop`, `init --transcripts`) use the Anthropic API by default (`ANTHROPIC_API_KEY`). To run on Amazon Bedrock with your AWS credentials:
-
-```bash
-npm install @anthropic-ai/bedrock-sdk
-npx sandtable-ai demo --live --provider bedrock --region eu-west-1 --aws-profile my-profile
-```
-
-Plain model names map to the region's cross-region inference profile (`claude-opus-5-5` becomes `eu.anthropic.claude-opus-5-5` in eu-west-1). Full IDs and ARNs pass through unchanged. Set `SANDTABLE_BEDROCK_CLIENT=mantle` to use Bedrock's Messages-API endpoint instead, where your region serves the model. Cost estimates use Anthropic list prices; your Bedrock rates may differ.
-
-The simulated user is `--user claude` (default), `--user claude:<model>`, `--user openai:<model>`, or `--user scripted` for deterministic replays of `user.script`, which is useful for CI smoke tests and for debugging graders.
-
-### Run other models
-
-`--agent openai:<model>` runs any model behind an OpenAI-compatible Chat Completions endpoint: OpenAI, OpenRouter, LiteLLM, vLLM, Ollama, Groq, Together and others. It gets the same system prompt and tools as the Claude baseline, so scores compare across models.
-
-```bash
-# OpenAI
-OPENAI_API_KEY=sk-... npx sandtable-ai run ./my-domain --agent openai:gpt-4.1-mini -k 4
-
-# OpenRouter: one key for GPT, Gemini, Llama, Qwen, DeepSeek and more
-OPENAI_API_KEY=$OPENROUTER_API_KEY npx sandtable-ai run ./my-domain -k 4 \
-  --openai-base-url https://openrouter.ai/api/v1 --agent openai:google/gemini-2.5-flash
-
-# A local model on Ollama, as both agent and caller: no key needed
-npx sandtable-ai run ./my-domain --openai-base-url http://localhost:11434/v1 \
-  --agent openai:llama3.1:8b --user openai:llama3.1:8b
-```
-
-- The endpoint is `--openai-base-url`, else `OPENAI_BASE_URL`, else `https://api.openai.com/v1`. The key comes from `OPENAI_API_KEY`. Agent and user share the endpoint.
-- The caller stays Claude (`ANTHROPIC_API_KEY`) unless you pass `--user`. Keep the caller the same across agents, so that only the agent changes.
-- The model must support tool calling on that server. vLLM, for example, needs `--enable-auto-tool-choice` and a `--tool-call-parser`.
-- Cost is estimated only for models in `PRICES` (Claude today). Other models show `n/a` until verified list prices are added, since prices vary by host.
-
-Details and library use: [docs/guides/bring-your-agent.mdx](docs/guides/bring-your-agent.mdx#openai-compatible-endpoints).
-
-## Compare models
+`sandtable leaderboard` ranks several agents on one domain under the same simulated callers, next to a do-nothing baseline, by pass^k with rule violations, cost per trial and latency:
 
 ```bash
 npx sandtable-ai leaderboard examples/freight -m leaderboard/models.example.yaml -k 4
 ```
 
-Every model plays the agent under the same simulated callers, next to a do-nothing baseline row. Add `--prices prices/bedrock.eu-west-1.json` for verified Bedrock prices, generated from the AWS Pricing API by `scripts/bedrock-prices.mjs`; models whose price isn't published there show `n/a`. The result is ranked by pass^k, with rule violations, cost per trial and turn latency, and each row links to its full report. Interrupted or paid runs resume: models whose results exist are not rerun.
+## Bring your own agent
+
+| `--agent` | Use it when |
+|---|---|
+| `claude`, `claude:<model>` | You want a baseline: Claude with the domain's tools and policy, on the Anthropic API or Amazon Bedrock. |
+| `bedrock:<model-id>` | Any tool-capable model on Amazon Bedrock, through the Converse API. |
+| `openai:<model>` | Any model behind an OpenAI-compatible endpoint: OpenAI, OpenRouter, LiteLLM, vLLM, Ollama and others. |
+| `http://…` | Your agent runs as a service, in any language, and speaks the [HTTP step protocol](https://sandtable.dev/reference/http-protocol). |
+| `./my-agent.ts` | Your agent is a JS/TS function: default-export an `AgentAdapter`. |
+| `noop` | The do-nothing baseline: shows how much of a suite rewards refusing. |
+
+Whatever the adapter, every tool call goes to the simulated world: it is checked against the invariants and changes only the mock records. Details: [run against your agent](https://sandtable.dev/guides/bring-your-agent).
+
+Worked examples for agent frameworks, each a one-file adapter checked offline in CI ([guide](https://sandtable.dev/guides/frameworks)):
+
+| Framework | Example | How it connects |
+|---|---|---|
+| Vercel AI SDK | [`examples/frameworks/vercel-ai-sdk`](examples/frameworks/vercel-ai-sdk) | JS/TS module |
+| OpenAI Agents SDK | [`examples/frameworks/openai-agents`](examples/frameworks/openai-agents) | JS/TS module |
+| Claude Agent SDK | [`examples/frameworks/claude-agent-sdk`](examples/frameworks/claude-agent-sdk) | JS/TS module |
+| Pipecat | [`examples/frameworks/pipecat`](examples/frameworks/pipecat) | HTTP step protocol |
+| LiveKit Agents | [`examples/frameworks/livekit-agents`](examples/frameworks/livekit-agents) | HTTP step protocol |
+| No framework | [`examples/frameworks/http-service`](examples/frameworks/http-service) | HTTP step protocol |
 
 ## Use it in CI
 
@@ -216,18 +109,16 @@ Every model plays the agent under the same simulated callers, next to a do-nothi
     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-`--fail-under` exits non-zero when pass^k drops below the threshold, so a prompt tweak that breaks a customer rule fails the build.
+`validate` and `lint` are free and need no secrets. `--fail-under` exits non-zero when pass^k drops below the threshold, so a prompt change that breaks a customer rule fails the build. Guide: [use it in CI](https://sandtable.dev/guides/ci).
 
 ## Use it from your coding agent
 
-This repository is also a Claude Code plugin marketplace. Its `sandtable` plugin teaches a coding agent to run the whole loop for you: draft a domain from a customer's OpenAPI spec, SOP and transcripts, resolve the review notes, write `reference` calls, `lint`, run against your agent, and read failing trajectories. In Claude Code:
+This repository is also a Claude Code plugin marketplace. The `sandtable` plugin teaches a coding agent the whole loop: draft a domain from a customer's OpenAPI spec, SOP and transcripts, resolve the review notes, `lint`, run against your agent, and read the failing trials.
 
 ```text
 /plugin marketplace add sandtable-ai/sandtable
 /plugin install sandtable@sandtable
 ```
-
-On Claude Code 2.1.275 or later, `/plugin install sandtable --marketplace sandtable-ai/sandtable` does both in one step.
 
 | Skill | What it covers |
 |---|---|
@@ -235,24 +126,35 @@ On Claude Code 2.1.275 or later, `/plugin install sandtable --marketplace sandta
 | `running-and-reading-results` | `run`, choosing k, pass^k, `results.json` and `report.html`, attributing failures to the agent, the simulated user, the task or the harness |
 | `writing-good-tasks` | hidden goals, policy-correct end states, avoiding vacuous tasks, `never_disclose`, balanced suites |
 
-Claude loads a skill when the conversation needs it, or you can call one by name, such as `/sandtable:drafting-a-domain`. A `failure-triager` subagent reads the failing trials of a large run outside the main conversation. The skills ask before any command that calls a model. They are plain `SKILL.md` files in [`plugin/skills`](plugin/skills), so other coding agents that read Agent Skills can use them too.
+A `failure-triager` subagent reads the failing trials of a large run outside the main conversation. The skills ask before any command that calls a model. They are plain `SKILL.md` files in [`plugin/skills`](plugin/skills), so other coding agents that read Agent Skills can use them too.
 
-## Prior art
+## How it works
 
-`sandtable` stands on τ-bench's method (simulated user + stateful tools + end-state grading + pass^k). What it adds is making that method cheap to apply to *one customer's* workflow, as a file in their repo. Simulation frameworks such as LangWatch Scenario, IntellAgent and DeepEval's simulator, and closed platforms such as Sierra's and Decagon's simulations, cover nearby ground. See [docs/compare/overview.mdx](docs/compare/overview.mdx) for a fair comparison.
+1. **World.** Tables of records (carriers, loads, patients), seeded with fictional rows. Every trial starts from a fresh copy.
+2. **Tools.** The customer's API, declared as operations on the world, with the checks the real API would enforce. Writes are atomic.
+3. **Invariants.** Policy rules, checked *before* every tool call against the world as it was when the agent decided. Attempting a forbidden action fails the trial even if the API would have rejected it.
+4. **Tasks.** A simulated caller with a persona and a hidden goal, plus the end state that counts as success.
+5. **Grading.** A trial passes only if the end state matches, the required tools ran, the forbidden ones didn't, no invariant was violated, and no protected value appeared in what the agent said.
 
-## Roadmap
+More: [how it works](https://sandtable.dev/how-it-works). The bundled examples are [`examples/freight`](examples/freight) (32 tasks, 16 invariants) and [`examples/clinic`](examples/clinic) (a clinic front desk, 25 tasks, 12 invariants). Both run offline.
 
-Next up: live verification of the model-backed steps, baselines and PR comments, reliability verdicts (flaky tasks, intervals), a customer-facing sign-off report, black-box mode (REST, MCP and webhook tools for hosted voice platforms), and importers for voice-agent platform configs. See [ROADMAP.md](ROADMAP.md) and the issues.
+## How it compares
+
+sandtable stands on [τ-bench](https://arxiv.org/abs/2406.12045)'s method: a simulated user with a hidden goal, tools over a database, grading on the final state, and pass^k. τ-bench is a benchmark for comparing models on shared domains. sandtable makes the same method cheap to apply to *one customer's* workflow, as a file in their repo, and adds rules checked before each tool call runs.
+
+Nearby tools do other jobs better. LangWatch Scenario puts agent tests with a judge in your test runner and can score tone and wording, which sandtable does not yet. IntellAgent generates many scenarios from a prompt or a policy document. Hosted platforms test voice, generate tests from production calls and monitor live traffic. [The comparison pages](https://sandtable.dev/compare/overview) say when to use each, and link every claim to the tool's own docs.
+
+## Status
+
+Early alpha. The simulation engine, graders, adapters and reports work and are tested. The Claude adapters and `init`'s model-backed steps have been verified in [live runs](https://sandtable.dev/results). The OpenAI-compatible and Bedrock Converse adapters are newer. The spec may still change before 1.0; every breaking change is marked in the [changelog](CHANGELOG.md). Text only for now: no audio, timing or interruption testing. See the [roadmap](ROADMAP.md).
 
 ## Contributing
 
 ```bash
 npm install
-npm test             # vitest
+npm test             # vitest, offline
 npm run typecheck
 npm run sandtable -- run examples/freight --agent scripted:careful --user scripted
-npm run sandtable -- run examples/clinic --agent scripted:clinic-careful --user scripted
 ```
 
 Node ≥ 22.18 runs the TypeScript sources directly. See [CONTRIBUTING.md](CONTRIBUTING.md); coding agents start from [AGENTS.md](AGENTS.md). Release notes are in [CHANGELOG.md](CHANGELOG.md).
