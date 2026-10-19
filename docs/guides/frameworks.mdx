@@ -132,7 +132,7 @@ A framework-free Python service on the Anthropic Messages API: it keeps each ses
 
 ## Run the offline checks
 
-The TypeScript examples import `sandtable-ai` from the repository until the first release, so build the root first. They need Node 22.18 or later.
+The TypeScript examples import `sandtable-ai` from this repository (`"sandtable-ai": "file:../../.."`), so they check the code next to them. Build the root first. They need Node 22.18 or later. In your own project, install `sandtable-ai` from npm instead.
 
 ```bash
 npm ci && npm run build

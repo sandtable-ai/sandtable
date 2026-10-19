@@ -21,7 +21,7 @@ SuiteResult
   failureModes[]               { id, kind, count, tasks[], example }: failed checks clustered, most frequent first
   pendingReview[]              { kind, id, source? }: non-empty means the run is provisional
   usage                        { agent: {<model>: tokens}, user: {<model>: tokens}, costUsd }: costUsd is null when a
-                               model has no known price (anything but Claude today)
+                               model has no known price (Claude, or passed with --prices)
   latency                      { agentTurnP50Ms, agentTurnP95Ms }
   tasks[]                      { id, description, tags[], passes, trials[] }
     trials[]                   sorted by trial number

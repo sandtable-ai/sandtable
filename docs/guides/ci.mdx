@@ -81,7 +81,7 @@ jobs:
 The uploaded artifact holds `report.html` and `results.json`, so a reviewer can open the failing transcripts from the pull request.
 
 <Note>
-Until the first npm release ([#23](https://github.com/sandtable-ai/sandtable/issues/23)), `sandtable-ai` on npm is a placeholder. Pin a released version once it exists. While sandtable is alpha, pin an exact version: the spec and outputs may change between releases.
+While sandtable is alpha, pin an exact version of `sandtable-ai` in `package.json` (for example `npm install --save-dev --save-exact sandtable-ai`): the spec and outputs may change between releases.
 </Note>
 
 ### Other agent setups
@@ -128,7 +128,7 @@ Until the first npm release ([#23](https://github.com/sandtable-ai/sandtable/iss
 
 ## Cost
 
-Each run costs tasks × k conversations. For scale: the first 10 tasks of the bundled freight example, 2 trials each, with Claude Opus 5.5 as the agent and Claude Haiku 5.5 as the caller, cost about $0.58 at list prices ([results](/results)). The terminal summary and report show estimated cost for Claude models; other models show `n/a`.
+Each run costs tasks × k conversations. For scale: the first 10 tasks of the bundled freight example, 2 trials each, with Claude Opus 5.5 as the agent and Claude Haiku 5.5 as the caller, cost about $0.58 at list prices ([results](/results)). The terminal summary and report show an estimated cost for Claude models, and for any other model whose prices you pass with `--prices`; without a price, cost shows `n/a`.
 
 ## Coming next
 

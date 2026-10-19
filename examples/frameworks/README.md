@@ -15,7 +15,7 @@ None of the examples has been run live against a model in this repository. A liv
 
 ## Run the checks
 
-TypeScript examples (Node 22.18 or later). Until the first release they depend on this repository (`"sandtable-ai": "file:../../.."`) and read its types from `dist/`, so build the root first:
+TypeScript examples (Node 22.18 or later). They depend on this repository (`"sandtable-ai": "file:../../.."`), so they check the code next to them, and read its types from `dist/`. Build the root first:
 
 ```bash
 npm ci && npm run build

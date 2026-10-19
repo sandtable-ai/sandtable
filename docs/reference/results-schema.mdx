@@ -141,7 +141,7 @@ A tool event's `violations` lists the ids of invariants that call violated.
 
 Tokens are grouped by role and model. `input` excludes cache reads and writes, following the Anthropic convention. The Claude, Bedrock Converse and OpenAI-compatible adapters record usage automatically; custom modules can call `recordUsage`; the HTTP adapter cannot see your agent's model calls, so it records none.
 
-`costUsd` is an estimate at list prices from `PRICES` in `src/run/usage.ts`, which holds verified prices for Claude models only. If any model in the run has no known price, `costUsd` is `null` and reports show `n/a`.
+`costUsd` is an estimate at list prices from `PRICES` in `src/run/usage.ts`, which holds verified prices for Claude models, plus any prices passed with `--prices`. If any model in the run has no known price, `costUsd` is `null` and reports show `n/a`.
 
 ## Recipes
 

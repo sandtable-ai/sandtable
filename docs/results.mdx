@@ -11,7 +11,7 @@ Real runs of the bundled freight example and of `sandtable init`, kept here so c
 
 Agent: Claude Opus 5.5 (reference agent, effort `medium`). Simulated caller: Claude Haiku 5.5.
 
-This run used the example's first 10 tasks. The example has since grown to 32 tasks and 16 invariants (#45), so scores on the current suite are not comparable until it is rerun.
+This run used the example's first 10 tasks. The example has since grown (#45), so scores on the current suite are not comparable until it is rerun.
 
 | | |
 |---|---|
@@ -41,6 +41,8 @@ The lesson: read failing trajectories before trusting a score. Automatic attribu
 
 Inputs: `examples/freight/source/openapi.yaml`, `examples/freight/policy.md`, two transcripts. Drafting model: Claude Opus 5.5.
 
+This run (October 2026) used the freight SOP and domain from before the example grew (#45). The OpenAPI step is deterministic and still drafts the same tables and tools. The SOP has since gained rules, so a rerun of the SOP and transcript steps is likely to draft more, and "the hand-written domain" below means the domain as it was then.
+
 - **OpenAPI → 4 tables and 5 tools**, deterministically, with two review notes: the 409 condition on booking, and the side effect "the load becomes booked".
 - **SOP → 9 invariants**, each quoting its sentence. They cover all four hand-written rules:
   - verify before booking
@@ -66,4 +68,4 @@ sandtable demo --live --provider bedrock --region eu-west-1 --user-model claude-
 ```
 </CodeGroup>
 
-`demo --live` runs the freight example with k=2 by default. Your numbers will differ from run to run; that variance is the point of reporting pass^k.
+`demo --live` runs every task of the current freight example with k=2 by default, so it runs more trials than the 10-task run above and costs proportionally more. Your numbers will differ from run to run; that variance is the point of reporting pass^k.

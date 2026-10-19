@@ -63,7 +63,7 @@ flowchart LR
 - **pass^k** for every j up to k: the chance that all j trials of a task succeed, averaged over tasks. See [pass^k and reliability](/concepts/pass-k).
 - **Failure modes**: failed checks clustered across trials, most frequent first, each with an example.
 - **Scores by tag**, so a weak area (negotiation, vetting, handoffs) stands out.
-- **Usage**: tokens per model, an estimated cost at list prices (Claude models only for now; others show `n/a`), and p50/p95 agent turn latency.
+- **Usage**: tokens per model, an estimated cost at list prices (Claude models, plus any model whose prices you pass with `--prices`; others show `n/a`), and p50/p95 agent turn latency.
 - **Pending review**: drafted items nobody has accepted yet, which make the run provisional.
 
 It writes `results.json` (every trial's transcript, tool calls, checks and world diff; see [results.json](/reference/results-schema)) and a self-contained `report.html` to `.sandtable/runs/<timestamp>-<domain>/`, or to `--out`.
