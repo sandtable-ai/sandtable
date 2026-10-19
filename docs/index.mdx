@@ -34,21 +34,24 @@ $ sandtable demo
 
 sandtable · freight-carrier-sales · agent scripted:naive · user scripted · k=1
 
-  task                      trials  pass
-  book-at-posted-rate       ✗       0/1
-  negotiate-within-ceiling  ✗       0/1
-  walk-away-above-ceiling   ✗       0/1
-  expired-insurance         ✗       0/1
+  task                            trials  pass
+  book-at-posted-rate             ✗       0/1
+  negotiate-within-ceiling        ✗       0/1
+  walk-away-above-ceiling         ✗       0/1
+  expired-insurance               ✗       0/1
   ...
-  pass^1 20.0%
-
+  pass^1 15.6%
+  ...
   Top failure modes
-  8× invariant verify-before-book
-     e.g. book_load(load_id="L-1001", mc_number="100101", rate=2100) was called without a prior successful verify_carrier for the same mc_number
-  3× invariant eligible-carrier
-     e.g. book_load on carriers 100202: insurance_status is "expired", expected "valid"
-  2× invariant rate-ceiling
+  25× invariant verify-before-book (book-at-posted-rate, … +24 more)
+     e.g. book_load(load_id="L-1001", mc_number="100101", rate=2100) was called…
+  13× state state:bookings#1 (negotiate-within-ceiling, … +12 more)
+     e.g. 0 bookings row(s) match {"load_id":"L-1001","mc_number":"100101","rat…
+  7× invariant rate-ceiling (negotiate-within-ceiling, … +6 more)
      e.g. book_load rate=2600 exceeds the limit 2350
+  7× invariant eligible-carrier (expired-insurance, … +6 more)
+     e.g. book_load on carriers 100202: insurance_status is "expired", expected…
+  ...
 ```
 
 ## Why
