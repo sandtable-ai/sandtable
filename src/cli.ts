@@ -9,7 +9,7 @@ import { clinicScriptedAgent } from "./demo/clinic-agents.ts";
 import { freightScriptedAgent } from "./demo/freight-agents.ts";
 import { formatPercent, renderTerminal } from "./report/terminal.ts";
 import { renderHtml } from "./report/html.ts";
-import { runSuite, type SuiteResult } from "./run/suite.ts";
+import { everyTrialFailed, runSuite, type SuiteResult } from "./run/suite.ts";
 import { claudeAgent, claudeUser, type ClaudeOptions, type Provider } from "./sim/claude.ts";
 import { registerPrices } from "./run/usage.ts";
 import { bedrockConverseAgent } from "./sim/bedrock-converse.ts";
@@ -123,6 +123,15 @@ function openInBrowser(file: string): void {
   } catch {
     // no browser available (CI, containers): the path is printed anyway
   }
+}
+
+/** A run where every trial ended in an error graded nothing: say so and exit 1, whatever the score. */
+function failIfNothingGraded(result: SuiteResult): boolean {
+  const error = everyTrialFailed(result);
+  if (error === undefined) return false;
+  console.error(`\n✗ Every trial ended in an error, so this run says nothing about the agent. The first error:\n  ${error}`);
+  process.exitCode = 1;
+  return true;
 }
 
 async function loadPrices(file?: string): Promise<void> {
@@ -299,6 +308,7 @@ withProviderFlags(program
     console.log(renderTerminal(result));
     const out = await save(result, o.out ?? defaultOut(domain.name), o.html);
     console.log(`\n  results: ${path.join(out, "results.json")}${o.html ? `\n  report:  ${path.join(out, "report.html")}` : ""}`);
+    if (failIfNothingGraded(result)) return;
     if (o.open && o.html) openInBrowser(path.join(out, "report.html"));
     const score = result.passHat[String(o.trials)] ?? 0;
     if (o.failUnder !== undefined && !(score >= o.failUnder)) {
@@ -380,6 +390,7 @@ withProviderFlags(program
       console.log(renderTerminal(result));
       const out = await save(result, defaultOut("demo-live"), true);
       console.log(`\n  report: ${path.join(out, "report.html")}`);
+      if (failIfNothingGraded(result)) return;
       if (shouldOpen) openInBrowser(path.join(out, "report.html"));
       return;
     }

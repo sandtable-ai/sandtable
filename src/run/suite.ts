@@ -112,6 +112,16 @@ export async function runSuite(opts: SuiteOptions): Promise<SuiteResult> {
   };
 }
 
+/**
+ * The first trial's error when every trial ended in an error, else undefined. Such a run graded
+ * nothing about the agent: credentials, an optional package or the agent's endpoint were missing.
+ */
+export function everyTrialFailed(result: SuiteResult): string | undefined {
+  const trials = result.tasks.flatMap((t) => t.trials);
+  if (trials.length === 0 || !trials.every((t) => t.endReason === "error")) return undefined;
+  return trials[0]!.error ?? "unknown error";
+}
+
 function tagScores(summaries: TaskSummary[], k: number): TagScore[] {
   const groups = new Map<string, TaskSummary[]>();
   for (const s of summaries) {
