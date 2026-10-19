@@ -1,0 +1,12 @@
+[project]
+name = "sandtable-example-pipecat"
+version = "0.0.0"
+description = "Rehearse a Pipecat bot's LLM and tools with sandtable, as text, over the HTTP step protocol."
+requires-python = ">=3.11"
+dependencies = ["pipecat-ai[anthropic]>=1.13,<2"]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.uv]
+package = false

@@ -1,0 +1,12 @@
+[project]
+name = "sandtable-example-http-service"
+version = "0.0.0"
+description = "A plain Python HTTP agent on the Claude Messages API, rehearsed with sandtable over the HTTP step protocol."
+requires-python = ">=3.10"
+dependencies = ["anthropic>=1.15,<2"]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.uv]
+package = false

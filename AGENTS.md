@@ -133,6 +133,7 @@ Update these in the same PR as the code change:
 - `src/demo/`: rule-based agents for the bundled examples.
 - Outside `src/`:
   - `examples/freight` and `examples/clinic` are bundled domains, shipped in the npm package.
+  - `examples/frameworks/` holds worked examples for agent frameworks. Each has its own dependencies and offline check (`npm run check` in its folder, the `frameworks` CI job); none is in the npm package.
   - `plugin/` and `.claude-plugin/` hold the Claude Code plugin, which is not in the npm package.
   - `python/` holds the PyPI launcher.
   - `docs/` is the Mintlify site; its rules are in `CONTRIBUTING.md`.
