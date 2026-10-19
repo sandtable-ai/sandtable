@@ -1,0 +1,69 @@
+name: pages
+# Publishes the sample reports linked from the README to GitHub Pages. They are rebuilt from main
+# on every push with the offline rule-based agents and the scripted user, so no model is called and
+# the reports always match the code. Enable Pages with "GitHub Actions" as the source.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Render the sample reports
+        run: |
+          node dist/cli.js run examples/freight --agent scripted:naive --user scripted -o site/freight-naive
+          node dist/cli.js run examples/freight --agent scripted:careful --user scripted -o site/freight-careful
+          node dist/cli.js run examples/clinic --agent scripted:clinic-naive --user scripted -o site/clinic-naive
+          node dist/cli.js run examples/clinic --agent scripted:clinic-careful --user scripted -o site/clinic-careful
+          cat > site/index.html <<'EOF'
+          <!doctype html>
+          <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>sandtable sample reports</title>
+          <style>body{margin:0 auto;max-width:720px;padding:40px 16px;font:16px/1.6 ui-sans-serif,system-ui,sans-serif;color:#1d1d1b;background:#fbfaf8}@media (prefers-color-scheme:dark){body{color:#ecebe7;background:#141413}}a{color:inherit}</style>
+          </head><body>
+          <h1>sandtable sample reports</h1>
+          <p>Offline runs of the bundled examples with rule-based agents and scripted callers, rebuilt from the latest commit on main. Each report is one self-contained HTML file, as <code>sandtable run</code> writes it.</p>
+          <ul>
+          <li><a href="freight-naive/report.html">Freight desk, naive agent</a>: books whatever it is asked to</li>
+          <li><a href="freight-careful/report.html">Freight desk, careful agent</a>: follows the SOP</li>
+          <li><a href="clinic-naive/report.html">Clinic front desk, naive agent</a></li>
+          <li><a href="clinic-careful/report.html">Clinic front desk, careful agent</a></li>
+          </ul>
+          <p><a href="https://github.com/sandtable-ai/sandtable">github.com/sandtable-ai/sandtable</a></p>
+          </body></html>
+          EOF
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    # GitHub Pages needs a public repository on the current plan. Until the repository is public,
+    # the build above still runs and the deploy is skipped.
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write # publish to GitHub Pages
+      id-token: write # verify the deployment's origin
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
