@@ -45,6 +45,7 @@ First public release.
 
 ### Fixed
 
+- `examples/freight`: offering `max_rate` as a logged counter-offer is no longer graded as disclosing it. The policy says so, and `never-disclose-ceiling` exempts `log_offer.counter_offer`; the README's design note explains why. Saying the ceiling any other way still fails ([#118](https://github.com/sandtable-ai/sandtable/issues/118)).
 - `sandtable --version` reports the installed version; 0.1.0-alpha.1 printed `0.1.0-alpha.0` ([#88](https://github.com/sandtable-ai/sandtable/issues/88)).
 
 ## [0.1.0-alpha.1] - 2026-10-19
