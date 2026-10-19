@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -134,10 +135,13 @@ function defaultOut(label: string): string {
   return path.join(".sandtable", "runs", `${new Date().toISOString().replace(/[:.]/g, "-")}-${label}`);
 }
 
+// package.json sits one level above both src/cli.ts and dist/cli.js, and ships in the npm package.
+const { version } = createRequire(import.meta.url)("../package.json") as { version: string };
+
 const program = new Command()
   .name("sandtable")
   .description("Rehearse an AI agent on a simulated copy of a customer's world before it goes live.")
-  .version("0.1.0-alpha.0");
+  .version(version);
 
 withProviderFlags(program
   .command("init"))
