@@ -59,6 +59,8 @@ const percent = (v: string) => {
   return n / 100;
 };
 
+const PRICES_HELP = "extra model prices, JSON in USD per million tokens: { \"<model-id>\": { input, output, cacheRead, cacheWrite } } (the sandtable repo's scripts/bedrock-prices.mjs writes one for Bedrock)";
+
 interface ProviderFlags {
   provider?: Provider;
   region?: string;
@@ -173,8 +175,6 @@ function parseResults(text: string, file: string): SuiteResult {
   }
   return r as SuiteResult;
 }
-
-const PRICES_HELP = "extra model prices, JSON in USD per million tokens: { \"<model-id>\": { input, output, cacheRead, cacheWrite } } (the sandtable repo's scripts/bedrock-prices.mjs writes one for Bedrock)";
 
 async function loadPrices(file?: string): Promise<void> {
   if (!file) return;
