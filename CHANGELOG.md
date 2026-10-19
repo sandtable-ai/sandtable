@@ -40,5 +40,5 @@ First public release.
 - **Docs** at [sandtable.dev](https://sandtable.dev), with `llms.txt` for coding agents: concepts, guides, a reference for the CLI, the domain spec, the HTTP step protocol and `results.json`, and comparisons with τ-bench, LangWatch Scenario, IntellAgent and hosted platforms, each claim linked to the tool's own docs ([#54](https://github.com/sandtable-ai/sandtable/issues/54)).
 - **Docs** at [sandtable.dev](https://sandtable.dev), with `llms.txt` for coding agents: concepts, guides, a reference for the CLI, the domain spec, the HTTP step protocol and `results.json`, and comparisons with other tools.
   - worked examples that rehearse agents built with the Vercel AI SDK, the OpenAI Agents SDK, the Claude Agent SDK, Pipecat, LiveKit Agents and a plain HTTP service, each a one-file adapter checked offline in CI, with a guide (`docs/guides/frameworks.mdx`) ([#52](https://github.com/sandtable-ai/sandtable/issues/52))
-- **Docs**: concepts, guides, a reference for the CLI, the domain spec, the HTTP step protocol and `results.json`, and comparisons with other tools.
+- **Docs** at [sandtable.dev](https://sandtable.dev), with `llms.txt` for coding agents: concepts, guides, a reference for the CLI, the domain spec, the HTTP step protocol and `results.json`, and comparisons with other tools.
 - The published CLI runs on Node.js 20 or later.
