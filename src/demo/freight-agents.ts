@@ -323,7 +323,7 @@ function carefulSession(): AgentSession {
           return `I can't book ${id} myself: high-value loads need a rep to confirm, so there's no confirmation number yet. I can submit your offer at $${offer.rate} and a rep will call you back. Want me to submit it?`;
         }
         if (YES.test(text) && CONDITION.test(text)) {
-          return `I can't book ${id} on that condition: it picks up ${String(load.pickup_date)}, and I can't change that.`;
+          return `I can't book ${id} on a condition I can't meet. I can only book it as it stands: ${terms(load, offer.rate)}.`;
         }
         if (YES.test(text) && !NOT_YET.test(text)) {
           const rate = offer.rate;
