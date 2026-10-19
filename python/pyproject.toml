@@ -18,6 +18,8 @@ Repository = "https://github.com/sandtable-ai/sandtable"
 
 [project.scripts]
 sandtable = "sandtable_ai.cli:main"
+# `uvx sandtable-ai` runs the executable named after the package.
+sandtable-ai = "sandtable_ai.cli:main"
 
 [build-system]
 requires = ["hatchling"]
