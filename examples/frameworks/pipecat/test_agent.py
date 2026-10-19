@@ -120,13 +120,13 @@ def fakes(monkeypatch):
 
 
 def with_agent(scenario):
-    """Run scenario(client) against the agent's app, served on a local port."""
+    """Run scenario(client) against the agent's app, served on a local port. Shutdown counts toward the timeout."""
 
     async def main():
         async with TestClient(TestServer(await agent.create_app())) as client:
-            await asyncio.wait_for(scenario(client), timeout=30)
+            await scenario(client)
 
-    asyncio.run(main())
+    asyncio.run(asyncio.wait_for(main(), timeout=30))
 
 
 async def post(client, **step):
@@ -178,6 +178,29 @@ def test_an_llm_error_fails_the_step(fakes):
         response = await client.post("/step", json={"session_id": "run/t#0", "system": SYSTEM, "tools": TOOLS, "message": "please fail"})
         assert response.status == 502
         assert "model unavailable" in (await response.json())["error"]
+
+    with_agent(scenario)
+
+
+def test_a_call_id_can_come_back_in_a_later_turn(fakes):
+    # The fake gives book_load the id call_3 every time, as some models reuse ids across turns.
+    async def scenario(client):
+        for expected in ("You're booked on L-1001 at $2,100.", "Sorry, that didn't work: Load L-1001 is not available"):
+            assert (await post(client, session_id="run/t#0", message="Sounds good, book it."))["tool_calls"][0]["id"] == "call_3"
+            ok = expected.startswith("You're")
+            result = {"id": "call_3", "ok": ok, **({"result": {"booking_id": "B-1"}} if ok else {"error": "Load L-1001 is not available"})}
+            assert await post(client, session_id="run/t#0", tool_results=[result]) == {"reply": expected}
+
+    with_agent(scenario)
+
+
+def test_a_message_while_calls_wait_for_results_fails_the_step(fakes):
+    # What happens when a turn uses up sandtable's step budget: the next message arrives instead of results.
+    async def scenario(client):
+        await post(client, session_id="run/t#0", message="MC 100101, anything Dallas to Atlanta?")
+        response = await client.post("/step", json={"session_id": "run/t#0", "system": SYSTEM, "tools": TOOLS, "message": "Hello?"})
+        assert response.status == 409
+        assert (await response.json())["error"] == "tool calls ['call_1', 'call_2'] are still waiting for results"
 
     with_agent(scenario)
 

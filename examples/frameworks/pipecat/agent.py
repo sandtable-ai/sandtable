@@ -90,6 +90,7 @@ class Session:
     def __init__(self, step: dict):
         self.outbox: asyncio.Queue[dict] = asyncio.Queue()
         self.results: dict[str, asyncio.Future] = {}  # tool_call_id -> what sandtable returned
+        self.unanswered: list[str] = []  # ids of the tool calls in the last response sent
         llm = create_llm(step)
         llm.register_function(None, self.run_in_sandtable)  # catch-all: every function call goes to sandtable
         # User turns arrive whole, as text, so no audio turn detection (its default loads a model per session).
@@ -110,7 +111,9 @@ class Session:
         return self.results.setdefault(call_id, asyncio.get_running_loop().create_future())
 
     async def run_in_sandtable(self, params: FunctionCallParams):
-        await params.result_callback(await self.result(params.tool_call_id))
+        result = await self.result(params.tool_call_id)
+        del self.results[params.tool_call_id]  # some models reuse call ids in later turns
+        await params.result_callback(result)
 
 
 async def create_app() -> web.Application:
@@ -125,6 +128,10 @@ async def create_app() -> web.Application:
             session = sessions[session_id] = Session(body)
             session.worker.add_event_handler("on_pipeline_finished", lambda *_: sessions.pop(session_id, None))
             await runner.add_workers(session.worker)
+        if "message" in body and session.unanswered:
+            # sandtable stops sending results when a turn uses up its step budget; this turn can't resume.
+            error = f"tool calls {session.unanswered} are still waiting for results"
+            return web.json_response({"error": error}, status=409)
         if "message" in body:
             frame = LLMMessagesAppendFrame(messages=[{"role": "user", "content": body["message"]}], run_llm=True)
             await session.worker.queue_frame(frame)
@@ -134,6 +141,7 @@ async def create_app() -> web.Application:
             for r in body["tool_results"]:
                 session.result(r["id"]).set_result({"result": r.get("result")} if r["ok"] else {"error": r.get("error")})
         out = await session.outbox.get()
+        session.unanswered = [call["id"] for call in out.get("tool_calls", [])]
         return web.json_response(out, status=502 if "error" in out else 200)
 
     async def run_workers(app: web.Application):

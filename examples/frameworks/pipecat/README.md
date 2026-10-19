@@ -25,6 +25,7 @@ A few details matter:
 - Results reach the LLM as `{"result": ...}` or `{"error": ...}`. Pipecat runs the LLM again only after a truthy result, and a search that finds nothing returns `[]`, which would stall the turn.
 - User turns arrive whole, as text, so the user aggregator uses `ExternalUserTurnStrategies`. The default strategy loads a turn-detection model for every session.
 - If the LLM service reports an error, the step fails with status 502, and sandtable ends the trial as a runtime failure.
+- If a turn uses up sandtable's 16 rounds of tool calls, sandtable sends the next message without the last results. That turn cannot resume, so the step fails with status 409 and the trial ends as a runtime failure.
 - A session's pipeline ends 5 minutes after its last LLM response, through Pipecat's idle timeout. The protocol has no end-of-session call.
 
 ## Plug in your bot
@@ -65,7 +66,7 @@ Until `sandtable-ai` is published on npm, run the same command from a clone of t
 
 Written and tested against `pipecat-ai` 1.13.0.
 
-- **Offline, in CI:** `uv run --directory examples/frameworks/pipecat python -m pytest -q`. Most tests replace the LLM service with a fake that pushes the same frames a real service pushes and starts calls through Pipecat's own `run_function_calls`, so the aggregators, the function-call machinery and the bridge are real. They check that two calls from one response come back as one step with their ids, that results reach the LLM and the turn ends with a reply, that an empty result still runs the LLM, that a failed call reaches the LLM as an error, that an LLM error fails the step with 502, and that sessions do not share history.
+- **Offline, in CI:** `uv run --directory examples/frameworks/pipecat python -m pytest -q`. Most tests replace the LLM service with a fake that pushes the same frames a real service pushes and starts calls through Pipecat's own `run_function_calls`, so the aggregators, the function-call machinery and the bridge are real. They check that two calls from one response come back as one step with their ids, that results reach the LLM and the turn ends with a reply, that an empty result still runs the LLM, that a failed call reaches the LLM as an error, that an LLM error fails the step with 502, that a call id can come back in a later turn, that a message arriving while calls wait for results fails the step with 409, and that sessions do not share history.
 - **Offline, in CI:** one test keeps the real `create_llm()` and `AnthropicLLMService` and replaces only the network client, with one that streams scripted Messages API events. It checks the model, system prompt, tool schemas and `tool_result` blocks in the requests Pipecat builds.
 - **Offline, where Node 22.18 or later and the repository's `node_modules` are present:** the last test runs the real sandtable CLI against the server on the freight task `book-at-posted-rate`, and expects pass^1 of 100%. CI's Python job has no Node, so the test is skipped there.
 - **Not verified:** a live run with a model. It needs an API key and has not been run, so there is no score for this bot yet. Nothing about audio is tested.

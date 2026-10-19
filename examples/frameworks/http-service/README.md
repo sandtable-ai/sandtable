@@ -63,5 +63,6 @@ Requests opt into server-side fallback (`fallbacks="default"`): if the model dec
 ## Limits
 
 - Sessions stay in memory until the service restarts. The protocol has no end-of-session call.
+- If a turn uses up sandtable's 16 rounds of tool calls, sandtable sends the next message without the last results. The Messages API needs a `tool_result` for every `tool_use`, so that request fails with status 502 and the trial ends as a runtime failure.
 - A slow model call stalls its trial, because sandtable does not time out requests.
 - sandtable cannot see this agent's model calls, so reported tokens and cost cover only the simulated user.
