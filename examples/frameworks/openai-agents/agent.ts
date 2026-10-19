@@ -7,9 +7,9 @@
  * The SDK's Runner runs the tool loop, and every function tool's `execute` goes through
  * sandtable's `callTool`, so it runs against the simulated world and is graded.
  *
- * Model: OPENAI_MODEL, default gpt-5.6-terra. Key: OPENAI_API_KEY.
+ * Model: OPENAI_MODEL, else the SDK's default model. Key: OPENAI_API_KEY.
  */
-import { Agent, Runner, tool, type AgentInputItem, type Model, type Tool } from "@openai/agents";
+import { Agent, Runner, getDefaultModel, tool, type AgentInputItem, type Model, type Tool } from "@openai/agents";
 import type { AgentAdapter, CallTool, ToolSchema } from "sandtable-ai";
 
 export interface Options {
@@ -50,7 +50,7 @@ function worldTools(schemas: ToolSchema[], callTool: CallTool): Tool[] {
 }
 
 export default function openaiAgentsAgent(options: Options = {}): AgentAdapter {
-  const model = options.model ?? process.env.OPENAI_MODEL ?? "gpt-5.6-terra";
+  const model = options.model ?? process.env.OPENAI_MODEL ?? getDefaultModel();
   const maxTurns = options.maxTurns ?? 12;
   return {
     name: "openai-agents",

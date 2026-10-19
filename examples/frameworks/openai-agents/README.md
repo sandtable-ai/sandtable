@@ -23,7 +23,7 @@ export ANTHROPIC_API_KEY=...                 # Claude as the default simulated c
 npm run sandtable -- run examples/freight --agent examples/frameworks/openai-agents/agent.ts -k 4
 ```
 
-The model is `OPENAI_MODEL`, default `gpt-5.6-terra`. Add `--user scripted` to replay each task's script instead of a Claude caller; then only `OPENAI_API_KEY` is needed. Running a `.ts` agent needs Node 22.18 or later.
+The model is `OPENAI_MODEL`, else the SDK's default model (`OPENAI_DEFAULT_MODEL`, or the SDK's built-in default). Add `--user scripted` to replay each task's script instead of a Claude caller; then only `OPENAI_API_KEY` is needed. Running a `.ts` agent needs Node 22.18 or later.
 
 ## Check it offline
 
