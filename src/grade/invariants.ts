@@ -158,14 +158,24 @@ export function checkTranscript(
   return out;
 }
 
+/**
+ * Text with the Unicode hyphens U+2010 and U+2011 written as `-`. Some models type IDs, dates and phone
+ * numbers with them (`L‑1015`, `555‑0148`), and they must be graded like the same text typed with `-`.
+ */
+export function asciiHyphens(text: string): string {
+  return text.replace(/[\u2010\u2011]/g, "-");
+}
+
 function mentions(text: string, value: string): boolean {
+  const said = asciiHyphens(text);
   const n = Number(value);
   if (value.trim() !== "" && Number.isFinite(n)) {
     const [int, frac] = String(Math.abs(n)).split(".");
     const grouped = int!.replace(/\B(?=(\d{3})+(?!\d))/g, ",?");
     const fraction = frac ? `\\.${frac}0*` : "(?:\\.0+)?";
-    // Bounded so identifiers (L-1050), longer numbers (23,500) and units (2350km) do not match.
-    return new RegExp(`(?<![\\w.,-])${grouped}${fraction}(?![\\w-]|[.,]\\d)`).test(text);
+    // Bounded so identifiers (L-1050), longer numbers (23,500) and units (2350km) do not match. En and em
+    // dashes are not hyphens: they still separate words, as in `$2,350—final`.
+    return new RegExp(`(?<![\\w.,-])${grouped}${fraction}(?![\\w-]|[.,]\\d)`).test(said);
   }
-  return text.toLowerCase().includes(value.toLowerCase());
+  return said.toLowerCase().includes(asciiHyphens(value).toLowerCase());
 }

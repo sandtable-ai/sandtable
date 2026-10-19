@@ -1,7 +1,7 @@
 import type { StateAssert, Task } from "../spec/schema.ts";
 import { matches, mismatch } from "../world/match.ts";
 import type { World } from "../world/store.ts";
-import type { CallRecord, Violation } from "./invariants.ts";
+import { asciiHyphens, type CallRecord, type Violation } from "./invariants.ts";
 
 export type CheckKind = "invariant" | "state" | "called" | "not_called" | "reply" | "runtime";
 
@@ -56,7 +56,7 @@ export function gradeTrial(input: {
   }
 
   for (const phrase of task.expect.reply_includes) {
-    const ok = agentMessages.some((m) => m.toLowerCase().includes(phrase.toLowerCase()));
+    const ok = agentMessages.some((m) => asciiHyphens(m).toLowerCase().includes(asciiHyphens(phrase).toLowerCase()));
     checks.push({
       id: `reply:${phrase}`,
       kind: "reply",
