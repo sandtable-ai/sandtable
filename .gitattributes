@@ -1,0 +1,4 @@
+# Parallel PRs all add lines under ## [Unreleased]. A union merge keeps both sides on a local
+# merge or rebase. Check where your entry landed afterwards: `pr / changelog` fails if it fell
+# into a released section.
+CHANGELOG.md merge=union

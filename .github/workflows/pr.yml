@@ -1,0 +1,52 @@
+name: pr
+# Checks on the pull request itself, rather than on the code: the title (it becomes the squash
+# commit on main) and the changelog entry. Make both jobs required checks on main.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  title:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Conventional Commit title
+        env:
+          TITLE: ${{ github.event.pull_request.title }} # via env, never inline: titles are untrusted input
+        run: |
+          if ! printf '%s' "$TITLE" | grep -Eq '^(feat|fix|docs|test|refactor|perf|ci|build|chore|revert)(\([a-z0-9-]+\))?!?: [^ ].*[^.]$'; then
+            echo "::error::PR title \"$TITLE\" is not a Conventional Commit, e.g. \"fix(run): agent session ids are unique per run\". It becomes the commit on main. See AGENTS.md."
+            exit 1
+          fi
+
+  changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # the merge commit and its first parent, the base branch
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Product changes come with an entry under [Unreleased]
+        if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-changelog') }}
+        run: |
+          changed="$(git diff --name-only HEAD^1 HEAD)"
+          if printf '%s\n' "$changed" | grep -Eq '^(src|examples|plugin|\.claude-plugin|docs|python/src)/|^README\.md$' \
+             && ! printf '%s\n' "$changed" | grep -qx 'CHANGELOG.md'; then
+            echo "::error file=CHANGELOG.md::Add a user-facing entry under ## [Unreleased] in CHANGELOG.md (brief: AGENTS.md, \"Changelog\"), or label this PR no-changelog if no user can notice the change."
+            exit 1
+          fi
+      - name: Format is valid and released sections are unchanged
+        env:
+          HISTORY: ${{ contains(github.event.pull_request.labels.*.name, 'changelog-history') }}
+        run: |
+          git show HEAD^1:CHANGELOG.md > "$RUNNER_TEMP/CHANGELOG.base.md"
+          if [ "$HISTORY" = true ]; then node scripts/changelog.mjs check
+          else node scripts/changelog.mjs check --base "$RUNNER_TEMP/CHANGELOG.base.md"; fi

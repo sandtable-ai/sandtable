@@ -1,7 +1,8 @@
 name: release
-# Push a tag vX.Y.Z (or vX.Y.Z-alpha.N) that matches package.json. Both registries use
-# Trusted Publishing (OIDC): no tokens are stored in this repository. npm releases are
-# staged and go live after a maintainer approves them on npmjs.com.
+# Push a tag vX.Y.Z (or vX.Y.Z-alpha.N) on main after the release PR merges (AGENTS.md,
+# "Releasing"). The tag must match package.json and have a CHANGELOG.md section. Both
+# registries use Trusted Publishing (OIDC): no tokens are stored in this repository. npm
+# releases are staged and go live after a maintainer approves them on npmjs.com.
 on:
   push:
     tags: ["v*"]
@@ -21,13 +22,11 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
-      - run: node dist/cli.js lint examples/freight
-      - run: node scripts/sync-version.mjs --check
+      - run: npm run check
       - name: Tag matches package.json
         run: test "v$(node -p 'require("./package.json").version')" = "${GITHUB_REF_NAME}"
+      - name: CHANGELOG.md has a section for this tag
+        run: node scripts/changelog.mjs notes "${GITHUB_REF_NAME}" > /dev/null
       - id: meta
         run: echo "prerelease=$([[ "${GITHUB_REF_NAME}" == *-* ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
@@ -66,12 +65,15 @@ jobs:
           packages-dir: python/dist
 
   github-release:
-    needs: [npm, pypi]
+    needs: [check, npm, pypi] # the needs context only holds direct dependencies, and this job reads needs.check
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - run: gh release create "${GITHUB_REF_NAME}" --generate-notes ${{ needs.check.outputs.prerelease == 'true' && '--prerelease' || '' }}
+      - run: node scripts/changelog.mjs notes "${GITHUB_REF_NAME}" > "$RUNNER_TEMP/notes.md"
+      # The curated CHANGELOG section comes first; --generate-notes appends the merged PRs,
+      # first-time contributors and the compare link.
+      - run: gh release create "${GITHUB_REF_NAME}" --verify-tag --title "${GITHUB_REF_NAME}" --notes-file "$RUNNER_TEMP/notes.md" --generate-notes ${{ needs.check.outputs.prerelease == 'true' && '--prerelease' || '' }}
         env:
           GH_TOKEN: ${{ github.token }}

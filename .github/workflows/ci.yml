@@ -17,15 +17,9 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
-      - run: node dist/cli.js lint examples/freight
-      - run: node dist/cli.js lint examples/clinic
-      - run: node scripts/sync-version.mjs --check
-      # Offline smoke tests: the careful scripted agents must pass every task.
-      - run: node dist/cli.js run examples/freight --agent scripted:careful --user scripted --fail-under 100 --no-html
-      - run: node dist/cli.js run examples/clinic --agent scripted:clinic-careful --user scripted --fail-under 100 --no-html
+      # The same gate AGENTS.md asks for before a push: typecheck, tests, build, version and
+      # changelog checks, then offline smoke runs where the careful scripted agents pass every task.
+      - run: npm run check
 
   python-launcher:
     runs-on: ubuntu-latest

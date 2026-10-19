@@ -44,13 +44,12 @@ npx mint broken-links   # check internal links
 
 Keep examples fictional, and check every flag against `npm run sandtable -- <command> --help`.
 
+## Pull requests and the changelog
+
+Every change starts from an issue and lands through a pull request with a Conventional Commit title (`fix(run): ...`), squash-merged once CI is green. Before you push, `npm run check` runs what CI runs.
+
+If users can notice your change, add one entry under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md) in the same pull request: what they can do now or what changed for them, with the issue link. The `pr / changelog` check asks for it when you touch `src/`, `examples/`, `plugin/`, `docs/`, `python/src/` or the README. Changes nobody can notice (refactors, tests, CI) carry the `no-changelog` label instead. The full brief, written for people and coding agents alike, is in [AGENTS.md](AGENTS.md).
+
 ## Releasing
 
-1. `npm version <patch|minor|prerelease --preid alpha>`. The `version` script syncs the Python launcher's and the plugin's versions.
-2. `git push --follow-tags`. The `release` workflow then:
-   - checks everything
-   - stages `sandtable-ai` on npm (pre-releases under the `next` tag)
-   - publishes it to PyPI
-   Both go through Trusted Publishing.
-   - creates the GitHub release.
-3. Approve the staged npm release on npmjs.com (or with `npm stage approve <id>`). It goes live after that 2FA-protected click.
+Releases go through a release pull request and then a tag on main: see [AGENTS.md](AGENTS.md#releasing-maintainers-only). Both registries use Trusted Publishing, and the npm release goes live only after a maintainer approves it on npmjs.com.

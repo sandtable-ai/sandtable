@@ -255,7 +255,7 @@ npm run sandtable -- run examples/freight --agent scripted:careful --user script
 npm run sandtable -- run examples/clinic --agent scripted:clinic-careful --user scripted
 ```
 
-Node ≥ 22.18 runs the TypeScript sources directly. See [CONTRIBUTING.md](CONTRIBUTING.md).
+Node ≥ 22.18 runs the TypeScript sources directly. See [CONTRIBUTING.md](CONTRIBUTING.md); coding agents start from [AGENTS.md](AGENTS.md). Release notes are in [CHANGELOG.md](CHANGELOG.md).
 
 ## Citation
 
