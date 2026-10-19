@@ -73,7 +73,7 @@ npx sandtable-ai leaderboard examples/freight -m leaderboard/models.example.yaml
 ```
 
 - Keep the caller (`user:` in the models file) fixed across models, or the comparison is meaningless. Disclose which model plays the caller, since it may favour its own family.
-- Re-running skips models whose results exist, so an interrupted run never pays twice. Pass `--no-resume` to redo one.
+- Re-running skips models whose results exist for the same domain, k, caller and tasks, so an interrupted run never pays twice. Any other change reruns the model and prints why. Pass `--no-resume` to redo one, or `-t <ids>` for a cheap check of a few tasks.
 - Costs are estimates. Claude uses list prices, and `--prices` adds verified Bedrock prices from `scripts/bedrock-prices.mjs`. Anything else shows `n/a`; never fill it in by hand.
 
 ## Where the results are

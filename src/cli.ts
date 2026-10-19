@@ -322,12 +322,13 @@ withProviderFlags(program
   .requiredOption("-m, --models <file>", "YAML file: { user?, k?, models: [{ label, agent }] } (agent specs as in `run --agent`)")
   .option("-u, --user <spec>", "simulated user for every model (overrides the models file; default claude)")
   .option("-k, --trials <n>", "trials per task (overrides the models file; default 4)", int)
+  .option("-t, --tasks <ids>", "comma-separated task ids to run, for every model and the baseline")
   .option("-c, --concurrency <n>", "episodes in parallel per model", int, 4)
   .option("--openai-base-url <url>", "OpenAI-compatible endpoint for openai:<model> entries")
   .option("-o, --out <dir>", "output directory (default: leaderboard/<domain name>)")
-  .option("--no-resume", "rerun models even when their results already exist")
+  .option("--no-resume", "rerun models even when matching results already exist")
   .option("--prices <file>", "extra model prices (JSON from scripts/bedrock-prices.mjs)")
-  .action(async (domainPath: string, o: { models: string; user?: string; trials?: number; concurrency: number; openaiBaseUrl?: string; out?: string; resume: boolean; prices?: string } & ProviderFlags) => {
+  .action(async (domainPath: string, o: { models: string; user?: string; trials?: number; tasks?: string; concurrency: number; openaiBaseUrl?: string; out?: string; resume: boolean; prices?: string } & ProviderFlags) => {
     await loadPrices(o.prices);
     const domain = await loadDomain(domainPath);
     const parsed = ModelsFile.safeParse(YAML.parse(await readFile(o.models, "utf8")));
@@ -337,17 +338,21 @@ withProviderFlags(program
     const user = resolveUser(o.user ?? cfg.user ?? "claude", p, o.openaiBaseUrl);
     const k = o.trials ?? cfg.k ?? 4;
     const out = o.out ?? path.join("leaderboard", domain.name);
-    console.log(`Leaderboard: ${cfg.models.length} model(s) on ${domain.name} (${domain.tasks.length} tasks, k=${k}, caller ${user.name})\n`);
+    const taskIds = o.tasks?.split(",").map((s) => s.trim()).filter(Boolean);
+    const tasks = taskIds?.length ? taskIds.length : domain.tasks.length;
+    console.log(`Leaderboard: ${cfg.models.length} model(s) on ${domain.name} (${tasks} tasks, k=${k}, caller ${user.name})\n`);
+    const mark = { cached: "↺ cached ", ran: "✓ ran    ", failed: "✗ failed ", skipped: "- skipped" } as const;
     const result = await runLeaderboard({
       domain,
       entries: cfg.models,
       user,
       k,
+      ...(taskIds?.length ? { taskIds } : {}),
       outDir: out,
       concurrency: o.concurrency,
       resume: o.resume,
       resolveAgent: (spec) => resolveAgent(spec, p, o.openaiBaseUrl),
-      onEntry: (label, status) => console.log(`  ${status === "cached" ? "↺ cached" : status === "ran" ? "✓ ran   " : "✗ failed"}  ${label}`),
+      onEntry: (label, status, note) => console.log(`  ${mark[status]}  ${label}${note ? `  (${note})` : ""}`),
     });
     console.log(`\n${renderLeaderboardMarkdown(result)}`);
     console.log(`  ${path.join(out, "leaderboard.html")}`);

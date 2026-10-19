@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -65,5 +65,81 @@ describe("leaderboard", () => {
     });
     expect(seen).toEqual(["Careful rules:cached"]);
     expect(again.rows[0]!.passHat1).toBe(1);
+  });
+
+  it("reruns a model whose stored results are for another k, caller or task set, or have crashed trials", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const domain = await loadDomain(example);
+    const entries = [{ label: "Careful rules", agent: "scripted:careful" }];
+    const careful = async () => freightScriptedAgent("careful");
+    const run = async (opts: { k: number; taskIds?: string[] }) => {
+      const seen: string[] = [];
+      const lb = await runLeaderboard({ domain, entries, user: scriptedUser(), outDir: dir, resolveAgent: careful, onEntry: (_l, status, note) => seen.push(`${status}${note ? `: ${note}` : ""}`), ...opts });
+      return { lb, seen };
+    };
+    await run({ k: 1 });
+    expect((await run({ k: 2 })).seen).toEqual(["ran: stored results not reused: they are for k=1, not k=2"]);
+    const subset = await run({ k: 2, taskIds: ["book-at-posted-rate", "no-mc-number"] });
+    expect(subset.seen).toEqual(["ran: stored results not reused: they cover different tasks"]);
+    expect(subset.lb.rows.map((r) => r.tasks)).toEqual([2, 2]);
+    expect((await run({ k: 2, taskIds: ["no-mc-number", "book-at-posted-rate"] })).seen).toEqual(["cached"]);
+
+    const file = path.join(dir, "careful-rules", "results.json");
+    const stored = JSON.parse(await readFile(file, "utf8"));
+    stored.tasks[0].trials[0].endReason = "error";
+    await writeFile(file, JSON.stringify(stored));
+    expect((await run({ k: 2, taskIds: ["book-at-posted-rate", "no-mc-number"] })).seen).toEqual(["ran: stored results not reused: 1 trial(s) crashed"]);
+  });
+
+  it("skips a noop entry, since the do-nothing baseline is always there, and shows one pass column at k=1", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const domain = await loadDomain(example);
+    const seen: string[] = [];
+    const lb = await runLeaderboard({
+      domain,
+      entries: [{ label: "Careful rules", agent: "scripted:careful" }, { label: "Do nothing", agent: "noop" }],
+      user: scriptedUser(),
+      k: 1,
+      outDir: dir,
+      resolveAgent: async () => freightScriptedAgent("careful"),
+      onEntry: (label, status) => seen.push(`${label}:${status}`),
+    });
+    expect(seen).toEqual(["Careful rules:ran", "Do nothing:skipped"]);
+    expect(lb.rows.map((r) => r.label)).toEqual(["Careful rules", "Do-nothing baseline"]);
+    const md = await readFile(path.join(dir, "LEADERBOARD.md"), "utf8");
+    expect(md).toContain("on every task once");
+    expect(md).toContain("| # | Model | pass^1 | Rule violations |");
+    expect(md).toContain("| 1 | Careful rules | 100.0% | 0 |");
+    expect(await readFile(path.join(dir, "leaderboard.html"), "utf8")).toContain("<th>Model</th><th>pass^1</th><th>Rule violations</th>");
+  });
+
+  it("shows a model whose trials crashed as an error, not as a 0% score", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const domain = await loadDomain(example);
+    const broken: AgentAdapter = { name: "broken", createSession: async () => ({ reply: async () => { throw new Error("Failed to resolve AWS credentials"); } }) };
+    const seen: string[] = [];
+    const lb = await runLeaderboard({
+      domain,
+      entries: [{ label: "No credentials", agent: "broken" }],
+      user: scriptedUser(),
+      k: 1,
+      taskIds: ["book-at-posted-rate", "no-mc-number"],
+      outDir: dir,
+      resolveAgent: async () => broken,
+      onEntry: (label, status, note) => seen.push(`${label}:${status}: ${note}`),
+    });
+    expect(seen).toEqual(["No credentials:failed: 2 of 2 trial(s) crashed: Failed to resolve AWS credentials"]);
+    expect(lb.rows.map((r) => [r.label, r.error ?? ""])).toEqual([
+      ["Do-nothing baseline", ""],
+      ["No credentials", "2 of 2 trial(s) crashed: Failed to resolve AWS credentials"],
+    ]);
+    expect(await readFile(path.join(dir, "LEADERBOARD.md"), "utf8")).toContain("|  | No credentials | error |  | 2 of 2 trial(s) crashed: Failed to resolve AWS credentials |  |  |");
+  });
+
+  it("rejects unknown task ids before running anything", async () => {
+    const domain = await loadDomain(example);
+    await expect(
+      runLeaderboard({ domain, entries: [], user: scriptedUser(), k: 1, outDir: os.tmpdir(), taskIds: ["nope"], resolveAgent: async () => freightScriptedAgent("careful") }),
+    ).rejects.toThrow(/unknown task id\(s\): nope/);
   });
 });
