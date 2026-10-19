@@ -38,7 +38,7 @@ Credentials and endpoints:
 - `bedrock:` needs `npm install @aws-sdk/client-bedrock-runtime` (plus `@aws-sdk/credential-providers` when you pass `--aws-profile`), and takes `--region` and `--aws-profile`.
 - `--provider bedrock --region <region> --aws-profile <name>` moves the Claude agent and user to Amazon Bedrock (`npm install @anthropic-ai/bedrock-sdk`).
 
-**Comparing models.** Change only the agent: keep the same `--user`, k and tasks for every model, so differences come from the agent. Estimated cost covers Claude models only; others show `n/a`.
+**Comparing models.** Change only the agent: keep the same `--user`, k and tasks for every model, so differences come from the agent. Estimated cost covers Claude models, plus any model whose prices you pass with `--prices`; others show `n/a`.
 
 ```bash
 npx sandtable-ai run ./sandtable --agent claude --user claude -k 4 -o .sandtable/runs/claude
@@ -93,7 +93,7 @@ In the terminal summary and the report:
 
 ## Read failing trials before trusting a score
 
-Failure modes show what failed, not whose fault it was. Open the transcripts. In the first live freight run, most failures were the simulated caller's: it hung up right after accepting an offer, and it invented requests outside its goal. The score went from 70% to 95% by fixing the harness and one over-strict task, not the agent.
+Failure modes show what failed, not whose fault it was. Open the transcripts. In the first live freight run (on the example's first 10 tasks), most failures were the simulated caller's: it hung up right after accepting an offer, and it invented requests outside its goal. The score went from 70% to 95% by fixing the harness and one over-strict task, not the agent.
 
 For each failing trial, find the **first** point where the trajectory leaves what the SOP and the task's `reference` describe, then attribute it:
 

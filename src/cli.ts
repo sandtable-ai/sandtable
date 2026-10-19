@@ -249,7 +249,8 @@ program
       for (const w of t.warnings) console.log(`    ! ${w}`);
     }
     const noWrite = report.tasks.filter((t) => !t.expectsWrite).length;
-    console.log(`\n${report.tasks.length} tasks: ${report.tasks.length - noWrite} expect a write, ${noWrite} do not (the noop baseline passes those by design).`);
+    const noopPasses = report.tasks.filter((t) => t.noopPasses).length;
+    console.log(`\n${report.tasks.length} tasks: ${report.tasks.length - noWrite} expect a write, ${noWrite} do not; a do-nothing agent passes ${noopPasses} of ${report.tasks.length}.`);
     console.log(`${report.errors} error(s), ${report.warnings} warning(s)`);
     if (report.errors) process.exitCode = 1;
   });

@@ -20,7 +20,7 @@ If an agent succeeds on every task with the same probability *p*, and trials are
 | 95% | 95.0% | 90.3% | 81.5% | 66.3% |
 | 99% | 99.0% | 98.0% | 96.1% | 92.3% |
 
-Real agents are not that uniform: most tasks pass every time and a few are flaky. pass^k finds those few. In the [live freight run](/results), Claude Opus 5.5 scored pass^1 95% and pass^2 90%: one task leaked an internal price in one of its two trials, a failure a single trial would have missed half the time.
+Real agents are not that uniform: most tasks pass every time and a few are flaky. pass^k finds those few. In a [live run](/results) on the first 10 tasks of the freight example, Claude Opus 5.5 scored pass^1 95% and pass^2 90%: one task leaked an internal price in one of its two trials, a failure a single trial would have missed half the time.
 
 ## How sandtable computes it
 

@@ -16,6 +16,7 @@ sandtable <command> [options]
 | [`lint`](#lint) | prove every task is ready, solvable, non-vacuous and graded, without model calls |
 | [`review`](#review) | list drafted items that still need a person to accept them |
 | [`run`](#run) | run every task k times against an agent and grade the results |
+| [`leaderboard`](#leaderboard) | rank several agents on one domain under the same simulated users, next to a do-nothing baseline |
 | [`demo`](#demo) | rehearse the bundled freight example |
 | [`report`](#report) | re-render the HTML report for a past run |
 
@@ -180,7 +181,7 @@ sandtable demo --live --user-model claude-haiku-5-5  # Claude plays the caller a
 | `--no-open` | do not open the HTML report in the browser |
 | `--provider`, `--region`, `--aws-profile` | where Claude runs; see [provider options](#provider-options) |
 
-The offline demo runs the `scripted:naive` and `scripted:careful` agents against scripted callers and writes a report for each. Reports open in the browser only when the output is a terminal.
+The offline demo runs the `scripted:naive` and `scripted:careful` agents against scripted callers and writes a report for each. The naive agent's report opens in the browser, and only when the output is a terminal.
 
 ## report
 
@@ -199,7 +200,7 @@ It prints the path it wrote.
 
 ## Provider options
 
-`init`, `run` and `demo` accept:
+`init`, `run`, `leaderboard` and `demo` accept:
 
 | Option | Description |
 |---|---|

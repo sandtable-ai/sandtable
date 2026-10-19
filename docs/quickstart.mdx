@@ -10,8 +10,31 @@ In about five minutes: an offline demo with no API key, the same example with Cl
 ## Install
 
 <Tabs>
+  <Tab title="npm">
+    Needs Node 20 or later.
+
+    ```bash
+    npx sandtable-ai --help
+    # or pin it in a project
+    npm install --save-dev sandtable-ai
+    npx sandtable --help
+    ```
+
+    Where these docs write `sandtable <command>`, run `npx sandtable-ai <command>`, or `npx sandtable <command>` once it is installed in the project.
+  </Tab>
+  <Tab title="Python launcher">
+    Installs a `sandtable` command that runs the matching CLI release. Needs Node 20 or later.
+
+    ```bash
+    uvx sandtable-ai --help
+    # or
+    pip install sandtable-ai && sandtable --help
+    ```
+
+    Where these docs write `sandtable <command>`, run `uvx sandtable-ai <command>`, or `sandtable <command>` after `pip install`.
+  </Tab>
   <Tab title="From source">
-    Works today. Needs Node 22.18 or later, which runs the TypeScript sources directly.
+    For contributors. Needs Node 22.18 or later, which runs the TypeScript sources directly.
 
     ```bash
     git clone https://github.com/sandtable-ai/sandtable.git
@@ -22,30 +45,7 @@ In about five minutes: an offline demo with no API key, the same example with Cl
 
     Where these docs write `sandtable <command>`, run `npm run sandtable -- <command>`.
   </Tab>
-  <Tab title="npm">
-    Needs Node 20 or later.
-
-    ```bash
-    npx sandtable-ai --help
-    # or pin it in a project
-    npm install --save-dev sandtable-ai
-    npx sandtable --help
-    ```
-  </Tab>
-  <Tab title="Python launcher">
-    Installs a `sandtable` command that runs the matching CLI release. Needs Node 20 or later.
-
-    ```bash
-    uvx sandtable-ai --help
-    # or
-    pip install sandtable-ai && sandtable --help
-    ```
-  </Tab>
 </Tabs>
-
-<Warning>
-The npm and PyPI packages are placeholders until the first release ([#23](https://github.com/sandtable-ai/sandtable/issues/23)). Until then, install from source.
-</Warning>
 
 ## Run it
 
@@ -81,7 +81,7 @@ The npm and PyPI packages are placeholders until the first release ([#23](https:
       </Tab>
     </Tabs>
 
-    A cheaper model for the simulated caller keeps the cost down. With Claude Opus 5.5 as the agent and Claude Haiku 5.5 as the caller, the 20 trials cost about $0.58 at list prices ([results](/results)).
+    A cheaper model for the simulated caller keeps the cost down. The run has one conversation per task per trial, tasks × 2 in all, so cost grows with both. For scale: on the example's first 10 tasks (20 trials), Claude Opus 5.5 as the agent and Claude Haiku 5.5 as the caller cost about $0.58 at list prices ([results](/results)). The full example has more tasks, so expect proportionally more.
   </Step>
   <Step title="Point it at your own agent">
     Any agent that answers one POST per step can be rehearsed. Here is a toy one that only verifies the caller's MC number:

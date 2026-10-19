@@ -10,7 +10,7 @@ A military sand table is a scale model of the terrain where a mission is rehears
 **sandtable** turns a customer's operating procedure, API and records into a [τ-bench](https://arxiv.org/abs/2406.12045)-style simulation. Simulated customers call your agent. Its tool calls hit stateful mocks of the customer's systems. Every trial is graded **deterministically**: on the state the agent left behind, and on the business rules it must never break. You get **pass^k** (does it succeed *every* time?), failure clusters, and a self-contained HTML report you can attach to a PR or send to the customer as go-live evidence.
 
 <Warning>
-sandtable is **early alpha**. The simulation engine, graders, adapters and reports work and are tested, and the Claude adapters and `init`'s model-backed steps have been verified in [live runs](/results). The OpenAI-compatible and Bedrock Converse adapters are newer. The npm and PyPI packages are placeholders until the first release ([#23](https://github.com/sandtable-ai/sandtable/issues/23)), and the spec may still change. See the [roadmap](/roadmap).
+sandtable is **early alpha**. The simulation engine, graders, adapters and reports work and are tested, and the Claude adapters and `init`'s model-backed steps have been verified in [live runs](/results). The OpenAI-compatible and Bedrock Converse adapters are newer. The spec may still change before 1.0. See the [roadmap](/roadmap).
 </Warning>
 
 ## What it catches
@@ -25,7 +25,7 @@ These come from the bundled example, a fictional freight brokerage whose agent b
     A caller pushes back and the agent says "the best I can do is $1,450", which is the load's internal ceiling. `never_disclose` catches it.
   </Card>
   <Card title="Intermittent failures" icon="repeat">
-    An agent that passes 95% of trials passes only 90% of tasks on both of two tries. pass^k makes that gap visible before customers do.
+    An agent can pass a task on one try and fail it on the next. pass^k counts a task only when every trial passes, so the gap shows up before customers see it.
   </Card>
 </Columns>
 

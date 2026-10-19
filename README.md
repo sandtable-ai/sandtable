@@ -12,7 +12,7 @@ Simulated callers talk to your agent, its tool calls hit stateful mocks of the c
 
 **[Docs](https://sandtable.dev)** · **[Quickstart](https://sandtable.dev/quickstart)** · **[Examples](examples)** · **[Sample report](https://sandtable-ai.github.io/sandtable/)** · **[Comparisons](https://sandtable.dev/compare/overview)**
 
-On a fictional freight brokerage's carrier-sales desk, an agent that books whatever it is asked to passes 5 of 32 calls. sandtable names the rule it broke on each failing tool call: 25 bookings without vetting the carrier, 7 above the load's rate ceiling, 7 for carriers that may not be booked. An agent that follows the desk's SOP passes all 32. Same callers, same records, same result on every run.
+On a fictional freight brokerage's carrier-sales desk, an agent that books whatever it is asked to passes 5 of 32 calls. sandtable names the rule each failing call broke: 25 calls booked without vetting the carrier, 7 booked above the load's rate ceiling, 7 booked a carrier that may not be booked. An agent that follows the desk's SOP passes all 32. Same callers, same records, same result on every run.
 
 ![sandtable demo: the naive agent's failing task table and its top failure modes, then the careful agent passing every call](assets/demo.gif)
 
@@ -33,7 +33,7 @@ Three failures from the freight example, and why a judge reading the transcript 
 
 - **A rule break that sounds fine.** The agent books carrier 100202 and says "Booked L-1001 at $2100. Confirmation bookings-1." The call reads well. The carrier's insurance has expired, and that fact lives in the carrier's record, not in the conversation. The `eligible-carrier` invariant checks the record when `book_load` is called, and fails the trial.
 - **A leak under pressure.** In a [live run](https://sandtable.dev/results), a firm caller refused every offer, and Claude Opus 5.5 answered "the best I can do is $1,450". To a reader that is a normal counter-offer. It is also the load's internal `max_rate`, which the SOP says never to reveal. `never_disclose` compares what the agent says with the record, and caught it.
-- **A failure that happens one time in two.** That leak appeared in one of two trials of the task. One trial per task gives pass^1 95%. Requiring both trials to pass gives pass^2 90%. A single graded run would most likely have missed it. sandtable runs each task k times and reports pass^k ([Yao et al., 2024](https://arxiv.org/abs/2406.12045)).
+- **A failure that happens one time in two.** That leak appeared in one of two trials of the task. In that run (the example's first 10 tasks, two trials each), one trial per task gives pass^1 95%, and requiring both trials to pass gives pass^2 90%. A single graded run would most likely have missed it. sandtable runs each task k times and reports pass^k ([Yao et al., 2024](https://arxiv.org/abs/2406.12045)).
 
 Every failing trial in the HTML report shows the checks, the changes to the records, and the transcript with the offending tool call marked:
 
@@ -112,7 +112,7 @@ Worked examples for agent frameworks, each a one-file adapter checked offline in
     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-`validate` and `lint` are free and need no secrets. `--fail-under` exits non-zero when pass^k drops below the threshold, so a prompt change that breaks a customer rule fails the build. Guide: [use it in CI](https://sandtable.dev/guides/ci).
+`validate` and `lint` are free and need no secrets. A `.ts` agent module needs Node 22.18 or later on the runner. `--fail-under` exits non-zero when pass^k drops below the threshold, so a prompt change that breaks a customer rule fails the build. Guide: [use it in CI](https://sandtable.dev/guides/ci).
 
 ## Use it from your coding agent
 
