@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -89,6 +89,48 @@ describe("leaderboard", () => {
     stored.tasks[0].trials[0].endReason = "error";
     await writeFile(file, JSON.stringify(stored));
     expect((await run({ k: 2, taskIds: ["book-at-posted-rate", "no-mc-number"] })).seen).toEqual(["ran: stored results not reused: 1 trial(s) crashed"]);
+  });
+
+  it("reruns a model whose agent spec or domain changed under the same label", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const domain = await loadDomain(example);
+    const taskIds = ["book-at-posted-rate", "no-mc-number"];
+    const run = async (agent: string, d = domain) => {
+      const seen: string[] = [];
+      const lb = await runLeaderboard({
+        domain: d,
+        entries: [{ label: "Candidate", agent }],
+        user: scriptedUser(),
+        k: 1,
+        taskIds,
+        outDir: dir,
+        resolveAgent: async (spec) => agents[spec]!(),
+        onEntry: (_l, status, note) => seen.push(`${status}${note ? `: ${note}` : ""}`),
+      });
+      return { row: lb.rows.find((r) => r.label === "Candidate")!, seen };
+    };
+    expect((await run("scripted:careful")).row.passHat1).toBe(1);
+    expect((await run("scripted:careful")).seen).toEqual(["cached"]);
+
+    const swapped = await run("scripted:naive");
+    expect(swapped.seen).toEqual(["ran: stored results not reused: they are for agent scripted:careful, not scripted:naive"]);
+    expect(swapped.row.passHat1).toBeLessThan(1);
+    expect(JSON.parse(await readFile(path.join(dir, "candidate", "run.json"), "utf8"))).toMatchObject({ agent: "scripted:naive" });
+
+    const edited = { ...domain, policy: `${domain.policy}\n\nA new rule.` };
+    expect((await run("scripted:naive", edited)).seen).toEqual(["ran: stored results not reused: the domain has changed since they ran"]);
+    expect((await run("scripted:naive", edited)).seen).toEqual(["cached"]);
+  });
+
+  it("still reuses results stored before run.json existed, when they match", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const domain = await loadDomain(example);
+    const base = { domain, user: scriptedUser(), k: 1, taskIds: ["no-mc-number"], outDir: dir, entries: [{ label: "Careful rules", agent: "scripted:careful" }] };
+    await runLeaderboard({ ...base, resolveAgent: async () => freightScriptedAgent("careful") });
+    await rm(path.join(dir, "careful-rules", "run.json"));
+    const seen: string[] = [];
+    await runLeaderboard({ ...base, resolveAgent: async () => Promise.reject(new Error("should not rerun")), onEntry: (_l, status) => seen.push(status) });
+    expect(seen).toEqual(["cached"]);
   });
 
   it("skips a noop entry, since the do-nothing baseline is always there, and shows one pass column at k=1", async () => {

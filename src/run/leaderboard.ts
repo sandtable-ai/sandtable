@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
@@ -97,6 +98,29 @@ export function staleReason(r: SuiteResult, want: { domain: string; k: number; u
   return undefined;
 }
 
+/**
+ * What defines a model's stored results beyond what results.json records: the agent spec from the
+ * models file (results.json has only the adapter's name, and `claude` names a default model) and
+ * the domain's content. Written next to results.json as run.json.
+ */
+interface RunKey {
+  agent: string;
+  domain: string;
+}
+
+/** A short hash of the loaded domain: any edit to its tools, rules, tasks or records changes it. */
+export function domainFingerprint(domain: Domain): string {
+  return createHash("sha256").update(JSON.stringify(domain)).digest("hex").slice(0, 16);
+}
+
+/** Why results run under `had` cannot stand in for `want`. Results from before run.json existed have no key. */
+export function changedRunKey(had: RunKey | undefined, want: RunKey): string | undefined {
+  if (!had) return undefined;
+  if (had.agent !== want.agent) return `they are for agent ${had.agent}, not ${want.agent}`;
+  if (had.domain !== want.domain) return "the domain has changed since they ran";
+  return undefined;
+}
+
 function errorRow(entry: LeaderboardEntry, error: string): LeaderboardRow {
   return {
     label: entry.label,
@@ -157,6 +181,7 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
   if (unknown.length) throw new Error(`unknown task id(s): ${unknown.join(", ")}`);
   const tasks = opts.taskIds?.length ? domain.tasks.filter((t) => opts.taskIds!.includes(t.id)) : domain.tasks;
   const taskIds = tasks.map((t) => t.id);
+  const fingerprint = domainFingerprint(domain);
   await mkdir(outDir, { recursive: true });
   const rows: LeaderboardRow[] = [];
 
@@ -167,12 +192,15 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
     }
     const dir = path.join(outDir, slugify(entry.label));
     const file = path.join(dir, "results.json");
+    const keyFile = path.join(dir, "run.json");
+    const key: RunKey = { agent: entry.agent, domain: fingerprint };
     let result: SuiteResult | undefined;
     let stale: string | undefined;
     let fresh = false;
     if ((opts.resume ?? true) && (await exists(file))) {
       const stored = JSON.parse(await readFile(file, "utf8")) as SuiteResult;
-      stale = staleReason(stored, { domain: domain.name, k, user: user.name, taskIds });
+      const storedKey = await readFile(keyFile, "utf8").then((t) => JSON.parse(t) as RunKey, () => undefined);
+      stale = changedRunKey(storedKey, key) ?? staleReason(stored, { domain: domain.name, k, user: user.name, taskIds });
       if (!stale) {
         result = stored;
         opts.onEntry?.(entry.label, "cached");
@@ -184,6 +212,7 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
         result = await runSuite({ domain, agent, user, k, taskIds, concurrency: opts.concurrency ?? 4 });
         await mkdir(dir, { recursive: true });
         await writeFile(file, JSON.stringify(result, null, 2));
+        await writeFile(keyFile, JSON.stringify(key, null, 2));
         await writeFile(path.join(dir, "report.html"), renderHtml(result));
         fresh = true;
       } catch (err) {
