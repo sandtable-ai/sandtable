@@ -60,8 +60,8 @@
     }
   },
   "unresolved": {
-    "global.openai.gpt-6.1-sol": "no eu-west-1 usage type names gpt-6.1-sol: the Pricing API doesn't list this model here",
-    "global.openai.gpt-5.5": "no eu-west-1 usage type names gpt-5.5: the Pricing API doesn't list this model here",
-    "global.zai.glm-5.3": "no eu-west-1 usage type names glm-5.3: the Pricing API doesn't list this model here"
+    "global.openai.gpt-6.1-sol": "no eu-west-1 usage type names gpt-6.1-sol",
+    "global.openai.gpt-5.5": "no eu-west-1 usage type names gpt-5.5",
+    "global.zai.glm-5.3": "no eu-west-1 usage type names glm-5.3"
   }
 }
