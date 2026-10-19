@@ -70,6 +70,52 @@ describe("bedrockConverseAgent", () => {
     expect(await session.reply("hi", async () => ({ ok: true }))).toBe("[agent output was filtered]");
   });
 
+  // gpt-oss on Bedrock usually sends reasoning in reasoningContent blocks, but now and then inside the
+  // text as <reasoning>…</reasoning>, sometimes with no closing tag. The caller must never hear it.
+  describe("reasoning sent as text", () => {
+    const session = async (client: ConverseClient, usage: unknown[] = []) =>
+      bedrockConverseAgent({ modelId: "openai.gpt-oss-120b-1:0", client }).createSession({
+        domain: await loadDomain(example),
+        system: "s",
+        tools: [],
+        sessionId: "x",
+        recordUsage: (m, u) => usage.push([m, u]),
+      });
+    const noTools = async () => ({ ok: true }) as const;
+
+    it("drops closed <reasoning> spans from the reply", async () => {
+      const { client } = stub([
+        say("I'll transfer you to a rep.<reasoning>We have completed.</reasoning>"),
+        {
+          stopReason: "end_turn",
+          output: { message: { role: "assistant", content: [{ text: "<reasoning>Max is 2350.</reasoning>" }, { text: "L-1001 is posted at $2,100." }] } },
+        },
+      ]);
+      const s = await session(client);
+      expect(await s.reply("hi", noTools)).toBe("I'll transfer you to a rep.");
+      expect(await s.reply("and L-1001?", noTools)).toBe("L-1001 is posted at $2,100.");
+    });
+
+    it("asks again when <reasoning> is never closed, and records usage for every request", async () => {
+      const { client, requests } = stub([say("<reasoning>L-1001 max 2350. Open at posted.L-1001 is posted at $2,100."), say("L-1001 is posted at $2,100.")]);
+      const usage: unknown[] = [];
+      const s = await session(client, usage);
+      expect(await s.reply("What's L-1001 paying?", noTools)).toBe("L-1001 is posted at $2,100.");
+      expect(requests).toHaveLength(2);
+      // The malformed response never enters the conversation.
+      expect(requests[1]!.messages).toEqual(requests[0]!.messages);
+      expect(usage).toHaveLength(2);
+    });
+
+    it("returns the text as it is after two more tries", async () => {
+      const bad = "<reasoning>Still thinking. Posted is $2,100.";
+      const { client, requests } = stub([say(bad), say(bad), say(bad)]);
+      const s = await session(client);
+      expect(await s.reply("hi", noTools)).toBe(bad);
+      expect(requests).toHaveLength(3);
+    });
+  });
+
   it("can be graded end to end on the freight example", async () => {
     // Turn 1: verify, search, offer. Turn 2: book. Turn 3: goodbye.
     const { client } = stub([

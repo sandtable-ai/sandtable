@@ -56,6 +56,22 @@ async function makeClient(opts: BedrockConverseOptions): Promise<{ client: Conve
 }
 
 /**
+ * gpt-oss on Bedrock usually sends its reasoning in reasoningContent blocks, but now and then inside the
+ * text as <reasoning>…</reasoning>, sometimes with no closing tag. The caller must never hear it.
+ */
+const REASONING = /<reasoning>[\s\S]*?<\/reasoning>/g;
+const MALFORMED_RETRIES = 2;
+
+const textOf = (content: ConverseBlock[]) =>
+  content
+    .map((b) => b.text ?? "")
+    .join("")
+    .replace(REASONING, "");
+
+/** A reply whose reasoning was never closed: the reasoning and the answer can't be told apart. */
+const unclosedReasoning = (res: ConverseResponse) => res.stopReason !== "tool_use" && textOf(res.output?.message?.content ?? []).includes("<reasoning>");
+
+/**
  * Agent adapter for any tool-capable model on Amazon Bedrock through the Converse API
  * (OpenAI GPT and gpt-oss, Grok, Kimi, GLM, Qwen, Mistral, Nova, ...).
  */
@@ -74,7 +90,7 @@ export function bedrockConverseAgent(opts: BedrockConverseOptions): AgentAdapter
       return {
         async reply(userMessage, callTool) {
           messages.push({ role: "user", content: [{ text: userMessage || "(silence)" }] });
-          for (let round = 0; round < maxRounds; round++) {
+          const request = async () => {
             const res = await client.send(
               command({
                 modelId: opts.modelId,
@@ -93,12 +109,15 @@ export function bedrockConverseAgent(opts: BedrockConverseOptions): AgentAdapter
                 cacheWrite: u.cacheWriteInputTokens ?? 0,
               });
             }
+            return res;
+          };
+          for (let round = 0; round < maxRounds; round++) {
+            let res = await request();
+            // Ask again before taking a reply whose reasoning never closed; it is never added to the conversation.
+            for (let retry = 0; retry < MALFORMED_RETRIES && unclosedReasoning(res); retry++) res = await request();
             const message = res.output?.message ?? { role: "assistant" as const, content: [] };
             messages.push({ role: "assistant", content: message.content });
-            const text = message.content
-              .map((b) => b.text ?? "")
-              .join("")
-              .trim();
+            const text = textOf(message.content).trim();
             if (res.stopReason === "guardrail_intervened" || res.stopReason === "content_filtered") return "[agent output was filtered]";
             const uses = message.content.filter((b) => b.toolUse).map((b) => b.toolUse!);
             if (res.stopReason !== "tool_use" || uses.length === 0) return text;
