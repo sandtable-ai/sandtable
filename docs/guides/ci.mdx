@@ -21,9 +21,10 @@ Every command exits 1 when it should block a merge, so they work as plain CI ste
 | `validate --strict` | the domain is invalid, or a drafted item is still `review: pending` |
 | `lint` | any task is not graded, not ready, vacuous or not solvable |
 | `run --fail-under <pct>` | pass^k, with k = `--trials`, is below `pct` |
+| `run`, `demo --live` | every trial ended in an error, so nothing was graded: missing credentials or package, or an agent that isn't running. This holds without `--fail-under` too |
 | any command | the domain cannot be loaded, an adapter cannot be built, or another error stops it |
 
-A trial whose agent throws or whose endpoint returns an error counts as a failed trial, not a skipped one. Reporting infrastructure errors separately is planned ([#27](https://github.com/sandtable-ai/sandtable/issues/27)).
+When only some trials end in an error, each counts as a failed trial, not a skipped one. Reporting infrastructure errors separately is planned ([#27](https://github.com/sandtable-ai/sandtable/issues/27)).
 
 ## A GitHub Actions workflow
 
