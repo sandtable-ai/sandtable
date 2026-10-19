@@ -13,7 +13,7 @@ import type { AgentAdapter } from "./types.ts";
 export function httpAgent(url: string, opts: { headers?: Record<string, string>; maxSteps?: number } = {}): AgentAdapter {
   const maxSteps = opts.maxSteps ?? 16;
   return {
-    name: `http:${url}`,
+    name: url,
     async createSession(ctx) {
       const post = async (body: Record<string, unknown>): Promise<HttpAgentResponse> => {
         let res: Response;

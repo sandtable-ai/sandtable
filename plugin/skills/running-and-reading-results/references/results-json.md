@@ -13,7 +13,7 @@ R="$RUN/results.json"
 SuiteResult
   version: 1
   domain, agent, user          names, e.g. "freight-carrier-sales"; "claude:claude-opus-5-5", "openai:gpt-4.1-mini",
-                               "bedrock:qwen.qwen3-32b-v1:0", "http:http://localhost:8787/step", "noop", "scripted"
+                               "bedrock:qwen.qwen3-32b-v1:0", "http://localhost:8787/step", "noop", "scripted"
   k                            trials per task
   startedAt, durationMs
   passHat                      { "1": 0.95, "2": 0.9 }: pass^1 .. pass^k, as fractions
