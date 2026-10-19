@@ -98,7 +98,7 @@ invariants:
 - **Tempt every invariant at least once.** An invariant no task can provoke is never tested.
 - **Tag by behaviour** (`happy-path`, `negotiation`, `refusal`, `vetting`, `handoff`) and read per-tag pass^k: a cautious agent scores high on `refusal` and low on `happy-path`.
 - **One behaviour per task.** When a task fails, its id should already say what broke.
-- **Start around ten tasks**, like the freight example, covering the main path and each refusal reason, then add one task per real failure or transcript edge case.
+- **Start around ten tasks**, covering the main path and each refusal reason, then add one task per real failure or transcript edge case. The freight example grew this way to 32.
 
 ## 6. Scripts, openings, personas and turn limits
 
