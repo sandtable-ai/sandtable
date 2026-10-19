@@ -182,16 +182,9 @@ async function loadPrices(file?: string): Promise<void> {
   console.log(`  prices: ${added.length} model(s) from ${file}`);
 }
 
-/**
- * How the user ran sandtable, so printed hints run as written: the PyPI launcher says how it was
- * run, npx marks its runs, and the repo's `npm run sandtable` is the clone's way.
- */
-function invokedAs(env: NodeJS.ProcessEnv = process.env): string {
-  if (env.SANDTABLE_INVOKED_AS) return env.SANDTABLE_INVOKED_AS;
-  if (env.npm_lifecycle_event === "npx") return "npx sandtable-ai";
-  if (env.npm_command === "run-script" && (env.npm_lifecycle_event === "sandtable" || env.npm_lifecycle_event === "demo")) return "npm run sandtable --";
-  return "sandtable";
-}
+// Printed next steps use `npx sandtable-ai`: every way of installing sandtable needs Node.js and npm
+// (the PyPI launcher runs npx itself), so the line runs as written for every user.
+const NEXT = "npx sandtable-ai";
 
 function defaultOut(label: string): string {
   return path.join(".sandtable", "runs", `${new Date().toISOString().replace(/[:.]/g, "-")}-${label}`);
@@ -274,8 +267,7 @@ withProviderFlags(program
       console.log(`  ${res.tasks.length} task(s), ${res.personas.length} persona(s), ${rows} seed row(s) drafted; ${res.redactions} PII redaction(s)`);
       for (const w of res.warnings) console.log(`  ! ${w}`);
     }
-    const me = invokedAs();
-    console.log(`\nNext: ${me} review ${o.out}, accept or fix each item, then ${me} validate ${o.out} --strict`);
+    console.log(`\nNext: accept or fix each drafted item, then validate:\n  ${NEXT} review ${o.out}\n  ${NEXT} validate ${o.out} --strict`);
   });
 
 program
@@ -456,12 +448,11 @@ withProviderFlags(program
       console.log(`\n  report: ${path.join(out, "report.html")}\n`);
     }
     if (shouldOpen && firstReport) openInBrowser(firstReport);
-    const me = invokedAs();
     console.log("Next:");
     console.log("  Claude on both sides, Haiku as the cheaper caller (needs ANTHROPIC_API_KEY):");
-    console.log(`    ${me} demo --live --user-model claude-haiku-5-5`);
+    console.log(`    ${NEXT} demo --live --user-model claude-haiku-5-5`);
     console.log("  Draft a domain from your customer's API spec and SOP:");
-    console.log(`    ${me} init --openapi api.yaml --sop sop.md -o mine`);
+    console.log(`    ${NEXT} init --openapi api.yaml --sop sop.md -o mine`);
   });
 
 program

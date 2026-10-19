@@ -89,32 +89,3 @@ def test_a_failed_start_prints_the_install_hint_not_a_traceback(monkeypatch, cap
 
 def test_the_launcher_license_is_the_projects():
     assert (ROOT / "python" / "LICENSE").read_text() == (ROOT / "LICENSE").read_text()
-
-
-@pytest.mark.parametrize(
-    "argv0, environ, expected",
-    [
-        ("/home/u/.cache/uv/archive-v0/x/bin/sandtable-ai", {"UV": "/usr/bin/uv"}, "uvx sandtable-ai"),
-        ("/usr/local/bin/sandtable", {}, "sandtable"),
-        ("/usr/local/bin/sandtable-ai", {}, "sandtable-ai"),
-        ("C:\\Python\\Scripts\\sandtable.exe", {}, "sandtable"),
-        ("/site-packages/sandtable_ai/__main__.py", {}, "python -m sandtable_ai"),
-    ],
-)
-def test_tells_the_cli_how_it_was_run(argv0, environ, expected):
-    assert cli.invoked_as(argv0.replace("\\", "/"), environ) == expected
-
-
-def test_passes_how_it_was_run_to_the_cli(monkeypatch):
-    seen = []
-
-    def fake_execve(path, argv, env):
-        seen.append(env)
-        raise Exec()
-
-    monkeypatch.setattr(cli.shutil, "which", which({"node": "/n/node", "npx": "/n/npx"}))
-    monkeypatch.setattr(cli.os, "execve", fake_execve)
-    monkeypatch.setattr(cli.sys, "argv", ["/bin/sandtable", "demo"])
-    with pytest.raises(Exec):
-        cli.main(["demo"])
-    assert seen[0]["SANDTABLE_INVOKED_AS"] == "sandtable"

@@ -41,18 +41,6 @@ def child_env(environ):
     return env
 
 
-def invoked_as(argv0, environ):
-    """How the user ran this launcher, so the CLI's printed hints run as written."""
-    base = os.path.basename(argv0)
-    if base == "__main__.py":
-        return "python -m sandtable_ai"
-    name = os.path.splitext(base)[0]
-    # uvx runs the executable named after the package, and sets UV for what it runs.
-    if name == "sandtable-ai" and "UV" in environ:
-        return "uvx sandtable-ai"
-    return name if name in ("sandtable", "sandtable-ai") else "sandtable"
-
-
 def main(argv=None) -> int:
     args = sys.argv[1:] if argv is None else argv
     if shutil.which("node") is None:
@@ -68,7 +56,6 @@ def main(argv=None) -> int:
         return 127
     cmd = command(npx, args)
     env = child_env(os.environ)
-    env.setdefault("SANDTABLE_INVOKED_AS", invoked_as(sys.argv[0], os.environ))
     try:
         if os.name != "nt":
             # Become npx, so signals (Ctrl+C, SIGTERM from a process manager or a CI cancel)

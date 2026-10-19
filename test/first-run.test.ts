@@ -6,31 +6,25 @@ import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { httpAgent } from "../src/sim/http.ts";
 
-// What a new user sees on the first run: the demo's next steps must run as printed, however
-// sandtable was started (npx, uvx through the PyPI launcher, or an installed `sandtable`).
+// What a new user sees on the first run: the next steps must run as printed for every install
+// (npm, npx, or the PyPI launcher, which needs npx too), so they use `npx sandtable-ai`.
 
 const cli = path.resolve("src/cli.ts");
-const cleanEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("npm_") && k !== "SANDTABLE_INVOKED_AS"));
+const nextSteps = (stdout: string) => stdout.slice(stdout.lastIndexOf("Next:")).trimEnd().split("\n");
 
-async function demoNext(env: Record<string, string>): Promise<string[]> {
-  const cwd = mkdtempSync(path.join(tmpdir(), "sandtable-demo-"));
-  const { stdout } = await promisify(execFile)(process.execPath, [cli, "demo", "--no-open"], { cwd, env: { ...cleanEnv, ...env } });
-  return stdout.slice(stdout.lastIndexOf("Next:")).trimEnd().split("\n");
-}
+describe.skipIf(!process.features.typescript)("the next steps", () => {
+  it("after demo: npx commands, with the cheap caller model, within 80 columns", async () => {
+    const cwd = mkdtempSync(path.join(tmpdir(), "sandtable-demo-"));
+    const lines = nextSteps((await promisify(execFile)(process.execPath, [cli, "demo", "--no-open"], { cwd })).stdout);
+    expect(lines).toContain("    npx sandtable-ai demo --live --user-model claude-haiku-5-5");
+    expect(lines).toContain("    npx sandtable-ai init --openapi api.yaml --sop sop.md -o mine");
+    for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(80);
+  });
 
-describe.skipIf(!process.features.typescript)("the demo's next steps", () => {
-  it("use the command the user ran, with the cheap caller model, and fit 80 columns", async () => {
-    for (const [env, me] of [
-      [{ npm_lifecycle_event: "npx", npm_command: "exec" }, "npx sandtable-ai"],
-      [{ SANDTABLE_INVOKED_AS: "uvx sandtable-ai", npm_lifecycle_event: "npx" }, "uvx sandtable-ai"],
-      [{ npm_lifecycle_event: "demo", npm_command: "run-script" }, "npm run sandtable --"],
-      [{}, "sandtable"],
-    ] as const) {
-      const lines = await demoNext(env);
-      expect(lines).toContain(`    ${me} demo --live --user-model claude-haiku-5-5`);
-      expect(lines).toContain(`    ${me} init --openapi api.yaml --sop sop.md -o mine`);
-      for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(80);
-    }
+  it("after init: npx commands to review and validate the draft", async () => {
+    const out = path.join(mkdtempSync(path.join(tmpdir(), "sandtable-init-")), "mine");
+    const { stdout } = await promisify(execFile)(process.execPath, [cli, "init", "--openapi", path.resolve("examples/freight/source/openapi.yaml"), "-o", out]);
+    expect(nextSteps(stdout).slice(1)).toEqual([`  npx sandtable-ai review ${out}`, `  npx sandtable-ai validate ${out} --strict`]);
   });
 });
 
