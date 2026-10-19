@@ -134,6 +134,9 @@ describe("init from OpenAPI: edge cases", () => {
 describe("init from OpenAPI: what it refuses", () => {
   it("accepts an OpenAPI 3.x document with paths", async () => {
     expect(openApiProblem(await freightSpec())).toBeUndefined();
+    // `openapi: 3.0` without quotes parses as a number.
+    expect(openApiProblem({ openapi: 3, paths: { "/a": {} } })).toBeUndefined();
+    expect(openApiProblem({ openapi: 3.1, paths: { "/a": {} } })).toBeUndefined();
   });
 
   it("names Swagger 2.0, other documents and empty specs", () => {

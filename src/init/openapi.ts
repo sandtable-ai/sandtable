@@ -54,7 +54,9 @@ export function openApiProblem(spec: unknown): string | undefined {
   if (s.swagger !== undefined) {
     return `is Swagger ${String(s.swagger)}; init reads OpenAPI 3.x. Convert it to OpenAPI 3 first (for example with the Swagger Editor or swagger2openapi), then run init again`;
   }
-  if (typeof s.openapi !== "string" || !s.openapi.startsWith("3.")) {
+  // An unquoted `openapi: 3.0` is a YAML number, and hand-written specs use it.
+  const version = typeof s.openapi === "string" || typeof s.openapi === "number" ? String(s.openapi) : undefined;
+  if (!version || !/^3(\.|$)/.test(version)) {
     return s.openapi === undefined ? "is not an OpenAPI 3.x document (no top-level `openapi: 3.x` field)" : `is OpenAPI ${String(s.openapi)}; init reads OpenAPI 3.x`;
   }
   if (!s.paths || typeof s.paths !== "object" || Object.keys(s.paths).length === 0) return "has no paths, so there is nothing to draft tools from";
