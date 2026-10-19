@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { UsageRecorder } from "../run/usage.ts";
+import { importOptional } from "./optional.ts";
 import { STOP_TOKEN, USER_KICKOFF, userSystemPrompt } from "./prompts.ts";
 import type { AgentAdapter, UserSimulator } from "./types.ts";
 
@@ -81,30 +82,79 @@ export function resolveModel(model: string, provider: Provider, opts: Pick<Claud
 export async function createClient(opts: ClaudeOptions): Promise<ClaudeClient> {
   if (opts.client) return opts.client;
   // More retries than the SDK default: long multi-trial runs hit rate limits.
-  if (providerOf(opts) !== "bedrock") return new Anthropic({ maxRetries: 5 });
-  let mod: typeof import("@anthropic-ai/bedrock-sdk");
-  try {
-    mod = await import("@anthropic-ai/bedrock-sdk");
-  } catch {
-    throw new Error("--provider bedrock needs the optional package: npm install @anthropic-ai/bedrock-sdk");
-  }
+  if (providerOf(opts) !== "bedrock") return withHints(new Anthropic({ maxRetries: 5 }), "anthropic");
+  const mod = await importOptional("@anthropic-ai/bedrock-sdk", () => import("@anthropic-ai/bedrock-sdk"), "--provider bedrock");
   const awsRegion = bedrockRegion(opts);
   if (bedrockKind(opts) === "mantle") {
-    return new mod.AnthropicBedrockMantle({ awsRegion, maxRetries: 5, ...(opts.awsProfile ? { awsProfile: opts.awsProfile } : {}) }) as unknown as ClaudeClient;
+    return withHints(new mod.AnthropicBedrockMantle({ awsRegion, maxRetries: 5, ...(opts.awsProfile ? { awsProfile: opts.awsProfile } : {}) }) as unknown as ClaudeClient, "bedrock");
   }
   const profile = opts.awsProfile;
-  return new mod.AnthropicBedrock({
-    maxRetries: 5,
-    ...(awsRegion ? { awsRegion } : {}),
-    ...(profile
-      ? {
-          providerChainResolver: async () => {
-            const { fromNodeProviderChain } = await import("@aws-sdk/credential-providers");
-            return fromNodeProviderChain({ profile });
-          },
+  return withHints(
+    new mod.AnthropicBedrock({
+      maxRetries: 5,
+      ...(awsRegion ? { awsRegion } : {}),
+      ...(profile
+        ? {
+            providerChainResolver: async () => {
+              const { fromNodeProviderChain } = await importOptional(
+                "@aws-sdk/credential-providers",
+                () => import("@aws-sdk/credential-providers"),
+                "--aws-profile",
+              );
+              return fromNodeProviderChain({ profile });
+            },
+          }
+        : {}),
+    }) as unknown as ClaudeClient,
+    "bedrock",
+  );
+}
+
+/**
+ * Rewrite the SDK's credential errors into what to do about them. Without a key, the Anthropic SDK
+ * says "Could not resolve authentication method. Expected one of apiKey, authToken, ...".
+ */
+export function explainClaudeError(err: unknown, provider: Provider): unknown {
+  const message = err instanceof Error ? err.message : String(err);
+  const status = (err as { status?: number } | undefined)?.status;
+  if (provider === "anthropic") {
+    if (message.includes("Could not resolve authentication method")) {
+      return new Error(
+        "no Anthropic credentials: set ANTHROPIC_API_KEY (or sign in with `ant auth login`), or pass --provider bedrock to run Claude on Amazon Bedrock with your AWS credentials",
+      );
+    }
+    if (status === 401) return new Error(`the Anthropic API rejected the credentials (401): check ANTHROPIC_API_KEY. ${message}`);
+    return err;
+  }
+  if (/Failed to resolve AWS credentials|Could not load credentials/i.test(message)) {
+    return new Error(
+      `no AWS credentials for --provider bedrock: pass --aws-profile or set AWS_PROFILE, or configure the default AWS credential chain. ${message}`,
+    );
+  }
+  return err;
+}
+
+/** Wrap the client's `beta.messages` calls so credential errors say what to do. */
+export function withHints(client: ClaudeClient, provider: Provider): ClaudeClient {
+  const messages = new Proxy(client.beta.messages, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver) as unknown;
+      if (typeof value !== "function") return value;
+      return (...args: unknown[]) => {
+        try {
+          const out = (value as (...a: unknown[]) => unknown).apply(target, args);
+          return out instanceof Promise
+            ? out.catch((err: unknown) => {
+                throw explainClaudeError(err, provider);
+              })
+            : out;
+        } catch (err) {
+          throw explainClaudeError(err, provider);
         }
-      : {}),
-  }) as unknown as ClaudeClient;
+      };
+    },
+  });
+  return { beta: { messages } } as ClaudeClient;
 }
 
 export function requestBase(opts: ClaudeOptions, defaultEffort: Effort) {

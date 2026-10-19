@@ -16,13 +16,26 @@ export function httpAgent(url: string, opts: { headers?: Record<string, string>;
     name: `http:${url}`,
     async createSession(ctx) {
       const post = async (body: Record<string, unknown>): Promise<HttpAgentResponse> => {
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "content-type": "application/json", ...opts.headers },
-          body: JSON.stringify({ session_id: ctx.sessionId, system: ctx.system, tools: ctx.tools, ...body }),
-        });
-        if (!res.ok) throw new Error(`agent endpoint returned ${res.status}: ${await res.text()}`);
-        return (await res.json()) as HttpAgentResponse;
+        let res: Response;
+        try {
+          res = await fetch(url, {
+            method: "POST",
+            headers: { "content-type": "application/json", ...opts.headers },
+            body: JSON.stringify({ session_id: ctx.sessionId, system: ctx.system, tools: ctx.tools, ...body }),
+          });
+        } catch (err) {
+          // fetch says only "fetch failed"; the reason (ECONNREFUSED, ENOTFOUND, ...) is in err.cause.
+          const cause = (err as { cause?: { code?: string; message?: string } }).cause;
+          const reason = cause?.code ?? cause?.message ?? (err instanceof Error ? err.message : String(err));
+          throw new Error(`could not reach the agent at ${url} (${reason}): is it running and listening there?`);
+        }
+        const text = await res.text();
+        if (!res.ok) throw new Error(`agent endpoint ${url} returned ${res.status}: ${text}`);
+        try {
+          return JSON.parse(text) as HttpAgentResponse;
+        } catch {
+          throw new Error(`agent endpoint ${url} did not answer with JSON: ${text.slice(0, 200)}`);
+        }
       };
 
       return {

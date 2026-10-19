@@ -91,7 +91,15 @@ async function resolveAgent(spec: string, p: ClaudeOptions = {}, openaiBaseUrl?:
   if (/^https?:\/\//.test(spec)) return httpAgent(spec);
   if (spec === "scripted:naive" || spec === "scripted:careful") return freightScriptedAgent(spec.endsWith("naive") ? "naive" : "careful");
   if (spec === "scripted:clinic-naive" || spec === "scripted:clinic-careful") return clinicScriptedAgent(spec.endsWith("naive") ? "naive" : "careful");
-  const mod = (await import(pathToFileURL(path.resolve(spec)).href)) as { default?: unknown };
+  const file = path.resolve(spec);
+  if (!(await stat(file).catch(() => undefined))) {
+    throw new Error(
+      `unknown agent "${spec}": use claude, claude:<model>, bedrock:<model-id>, openai:<model>, noop, an http(s):// URL, scripted:naive|careful|clinic-naive|clinic-careful, or the path of a JS/TS module (there is no file at ${file})`,
+    );
+  }
+  const mod = (await import(pathToFileURL(file).href).catch((err: unknown) => {
+    throw new Error(`could not load the agent module ${spec}: ${err instanceof Error ? err.message : String(err)}`);
+  })) as { default?: unknown };
   const exported = typeof mod.default === "function" ? await (mod.default as () => unknown)() : mod.default;
   if (!exported || typeof (exported as AgentAdapter).createSession !== "function") {
     throw new Error(`${spec} must default-export an AgentAdapter (or a function returning one)`);
@@ -132,6 +140,21 @@ function failIfNothingGraded(result: SuiteResult): boolean {
   console.error(`\n✗ Every trial ended in an error, so this run says nothing about the agent. The first error:\n  ${error}`);
   process.exitCode = 1;
   return true;
+}
+
+/** Parse a results.json written by `run`, or say what the file is not. */
+function parseResults(text: string, file: string): SuiteResult {
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch (err) {
+    throw new Error(`${file} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  const r = data as Partial<SuiteResult> | null;
+  if (!r || typeof r !== "object" || !Array.isArray(r.tasks) || typeof r.passHat !== "object" || typeof r.domain !== "string") {
+    throw new Error(`${file} is not a results.json written by \`sandtable run\` (a leaderboard has one per model, in its folder)`);
+  }
+  return r as SuiteResult;
 }
 
 async function loadPrices(file?: string): Promise<void> {
@@ -416,7 +439,7 @@ program
   .description("re-render the HTML report for a past run")
   .option("-o, --out <file>", "output HTML path (default: next to results.json)")
   .action(async (resultsPath: string, o: { out?: string }) => {
-    const result = JSON.parse(await readFile(resultsPath, "utf8")) as SuiteResult;
+    const result = parseResults(await readFile(resultsPath, "utf8"), resultsPath);
     const out = o.out ?? path.join(path.dirname(resultsPath), "report.html");
     await writeFile(out, renderHtml(result));
     console.log(out);

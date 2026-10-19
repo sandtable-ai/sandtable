@@ -1,3 +1,4 @@
+import { importOptional } from "./optional.ts";
 import type { AgentAdapter } from "./types.ts";
 
 /** The slice of BedrockRuntimeClient this adapter uses; injectable for tests. */
@@ -34,11 +35,7 @@ export interface BedrockConverseOptions {
 }
 
 async function loadSdk() {
-  try {
-    return await import("@aws-sdk/client-bedrock-runtime");
-  } catch {
-    throw new Error("--agent bedrock:<model> needs the optional package: npm install @aws-sdk/client-bedrock-runtime");
-  }
+  return importOptional("@aws-sdk/client-bedrock-runtime", () => import("@aws-sdk/client-bedrock-runtime"), "--agent bedrock:<model-id>");
 }
 
 async function makeClient(opts: BedrockConverseOptions): Promise<{ client: ConverseClient; command: (input: unknown) => unknown }> {
@@ -47,7 +44,7 @@ async function makeClient(opts: BedrockConverseOptions): Promise<{ client: Conve
   const region = opts.region ?? process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION;
   let credentials: unknown;
   if (opts.awsProfile) {
-    const { fromNodeProviderChain } = await import("@aws-sdk/credential-providers");
+    const { fromNodeProviderChain } = await importOptional("@aws-sdk/credential-providers", () => import("@aws-sdk/credential-providers"), "--aws-profile");
     credentials = fromNodeProviderChain({ profile: opts.awsProfile });
   }
   // Throttling is common when several trials run in parallel: give the SDK's retry strategy room.
