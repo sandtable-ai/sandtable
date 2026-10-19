@@ -22,6 +22,8 @@ sandtable <command> [options]
 
 `sandtable --version` prints the version and `sandtable <command> --help` lists a command's options. From a clone of the repo, run `npm run sandtable -- <command>`.
 
+`validate`, `lint`, `review`, `run` and `leaderboard` accept `examples/freight` and `examples/clinic` outside a clone too. When the current directory has no folder of that name, they use the copy bundled with the package and print its path on stderr. A folder of that name in the current directory always wins, and any other path is used as given.
+
 ## init
 
 Draft a domain from a customer's artifacts. Review the output before trusting it. See [Draft a domain with init](/guides/init).
@@ -106,7 +108,7 @@ sandtable run ./my-domain --agent http://localhost:8787/step -k 4 --fail-under 8
 | `--no-html` | skip the HTML report |
 | `--fail-under <pct>` | exit 1 if pass^k (k = `--trials`) is below this percentage, `0` to `100`. A trailing `%` is accepted |
 | `--open` | open the HTML report in the browser when the run finishes |
-| `--prices <file>` | extra model prices for the cost estimate: the JSON from `scripts/bedrock-prices.mjs`, or `{ "<model-id>": { "input", "output", "cacheRead", "cacheWrite" } }` in USD per million tokens |
+| `--prices <file>` | extra model prices for the cost estimate: `{ "<model-id>": { "input", "output", "cacheRead", "cacheWrite" } }` in USD per million tokens. For Bedrock, [`scripts/bedrock-prices.mjs`](https://github.com/sandtable-ai/sandtable/blob/main/scripts/bedrock-prices.mjs) in the repo writes this file from the AWS Pricing API |
 | `--provider`, `--region`, `--aws-profile` | where Claude runs, and the AWS settings for `bedrock:<model-id>`; see [provider options](#provider-options) |
 
 `--agent` accepts:
@@ -131,11 +133,11 @@ The run prints a summary (per-task results, pass^k, latency, cost, per-tag score
 Rank several agents on one domain under the same simulated users, next to a do-nothing baseline.
 
 ```bash
-sandtable leaderboard examples/freight -m leaderboard/models.example.yaml -k 4 \
-  --provider bedrock --region eu-west-1 --prices prices/bedrock.eu-west-1.json
+sandtable leaderboard examples/freight -m models.yaml -k 4 \
+  --provider bedrock --region eu-west-1 --prices bedrock-prices.json
 ```
 
-The models file lists the agents, with an optional shared caller and k:
+The models file (`models.yaml` above) lists the agents, with an optional shared caller and k:
 
 ```yaml
 user: claude:claude-sonnet-5-5   # every model faces the same simulated callers
@@ -144,6 +146,8 @@ models:
   - { label: Claude Opus 5.5, agent: claude:claude-opus-5-5 }
   - { label: GPT-5.5, agent: bedrock:global.openai.gpt-5.5 }
 ```
+
+The repo has a longer one, [`leaderboard/models.example.yaml`](https://github.com/sandtable-ai/sandtable/blob/main/leaderboard/models.example.yaml), and the Bedrock prices it was run with, [`prices/bedrock.eu-west-1.json`](https://github.com/sandtable-ai/sandtable/blob/main/prices/bedrock.eu-west-1.json).
 
 | Argument / option | Description |
 |---|---|

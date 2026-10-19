@@ -4,6 +4,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import YAML from "yaml";
+import { ModelsFile } from "../src/run/leaderboard.ts";
 import { InvariantSpec, PersonaSpec, TableSpec, TaskSpec, ToolSpec } from "../src/spec/schema.ts";
 
 // The Claude Code plugin's skills teach coding agents exact commands and spec snippets.
@@ -50,7 +51,7 @@ function fences(text: string): { lang: string; code: string }[] {
 
 const schemas = { tools: ToolSpec, invariants: InvariantSpec, tasks: TaskSpec, personas: PersonaSpec } as const;
 
-/** Problems with one YAML snippet: a domain fragment (a mapping of top-level keys) or a list of tools, invariants or tasks. */
+/** Problems with one YAML snippet: a domain fragment (a mapping of top-level keys), a leaderboard models file, or a list of tools, invariants or tasks. */
 function snippetProblems(value: unknown): string[] {
   const check = (schema: { safeParse(v: unknown): { success: boolean; error?: { message: string } } }, item: unknown, where: string) => {
     const r = schema.safeParse(item);
@@ -65,6 +66,7 @@ function snippetProblems(value: unknown): string[] {
   };
   if (Array.isArray(value)) return value.flatMap(listItem);
   if (!value || typeof value !== "object") return ["not a mapping or a list"];
+  if ("models" in value) return check(ModelsFile, value, "leaderboard models file");
   const problems: string[] = [];
   for (const [key, v] of Object.entries(value)) {
     if (typeof v === "string") continue; // e.g. tasks: ./tasks.yaml

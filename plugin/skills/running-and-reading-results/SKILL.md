@@ -66,16 +66,23 @@ npx sandtable-ai run ./sandtable --agent http://localhost:8787/step -k 4 --fail-
 
 ## Compare models
 
-Rank several agents on one domain under the same simulated callers, next to a do-nothing baseline:
+Rank several agents on one domain under the same simulated callers, next to a do-nothing baseline. Write the models file in the user's project; agent specs are the same as `run --agent`:
+
+```yaml
+# models.yaml
+user: claude:claude-haiku-5-5
+models:
+  - { label: Claude Opus 5.5, agent: claude:claude-opus-5-5 }
+  - { label: GPT-5.5, agent: bedrock:global.openai.gpt-5.5 }
+```
 
 ```bash
-npx sandtable-ai leaderboard examples/freight -m leaderboard/models.example.yaml -k 4 \
-  --provider bedrock --region eu-west-1 --prices prices/bedrock.eu-west-1.json
+npx sandtable-ai leaderboard ./sandtable -m models.yaml -k 4 --provider bedrock --region eu-west-1
 ```
 
 - Keep the caller (`user:` in the models file) fixed across models, or the comparison is meaningless. Disclose which model plays the caller, since it may favour its own family.
 - Re-running skips models whose results exist for the same domain, k, caller and tasks, so an interrupted run never pays twice. Any other change reruns the model and prints why. Pass `--no-resume` to redo one, or `-t <ids>` for a cheap check of a few tasks.
-- Costs are estimates. Claude uses list prices, and `--prices` adds verified Bedrock prices from `scripts/bedrock-prices.mjs`. Anything else shows `n/a`; never fill it in by hand.
+- Costs are estimates. Claude uses list prices, and `--prices <file>` adds verified prices for other models (`{ "<model-id>": { input, output, cacheRead, cacheWrite } }` in USD per million tokens; for Bedrock, `scripts/bedrock-prices.mjs` in the sandtable repo writes the file). Anything else shows `n/a`; never fill it in by hand.
 
 ## Where the results are
 
