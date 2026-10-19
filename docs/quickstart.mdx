@@ -74,10 +74,10 @@ In about five minutes: an offline demo with no API key, the same example with Cl
       </Tab>
       <Tab title="Amazon Bedrock">
         ```bash
-        npm install @anthropic-ai/bedrock-sdk
-        sandtable demo --live --provider bedrock --region eu-west-1 --user-model claude-haiku-5-5
+        npm install --save-dev sandtable-ai @anthropic-ai/bedrock-sdk
+        npx sandtable demo --live --provider bedrock --region eu-west-1 --user-model claude-haiku-5-5
         ```
-        Uses your AWS credentials (`--aws-profile` or the default chain). See [Run against your agent](/guides/bring-your-agent#claude-on-amazon-bedrock).
+        Uses your AWS credentials (`--aws-profile` or the default chain). The Bedrock client is an optional package, so it goes next to `sandtable-ai`. See [Run against your agent](/guides/bring-your-agent#claude-on-amazon-bedrock).
       </Tab>
     </Tabs>
 
