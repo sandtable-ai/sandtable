@@ -22,7 +22,7 @@ node src/cli.ts run examples/freight --agent scripted:careful --user scripted --
 Before you push, run what CI runs, and fix every failure. Never assume a failure was already on main.
 
 ```bash
-npm run check   # typecheck, tests, build, version and changelog checks, then `npm run smoke`:
+npm run check   # typecheck, build, tests (the package contents too), version and changelog checks, then `npm run smoke`:
                 # lint both examples and run their careful scripted agents offline at --fail-under 100
 ```
 
