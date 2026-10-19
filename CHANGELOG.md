@@ -47,7 +47,7 @@ First public release.
 
 - `examples/freight`: offering `max_rate` as a logged counter-offer is no longer graded as disclosing it. The policy says so, and `never-disclose-ceiling` exempts `log_offer.counter_offer`; the README's design note explains why. Saying the ceiling any other way still fails ([#118](https://github.com/sandtable-ai/sandtable/issues/118)).
 - `sandtable lint` ends with how many tasks a do-nothing agent passes, for example `a do-nothing agent passes 9 of 25` on the clinic example. It used to say the noop baseline passes every task that expects no write, which is false when a refusal must also look something up ([#100](https://github.com/sandtable-ai/sandtable/issues/100)).
-- Error messages say what to do ([#96](https://github.com/sandtable-ai/sandtable/issues/96)):
+- **Error messages** for the setup problems a new user hits first say what to do ([#96](https://github.com/sandtable-ai/sandtable/issues/96)):
   - a missing `ANTHROPIC_API_KEY` names the key, instead of the SDK's "Could not resolve authentication method"
   - an unreachable HTTP agent names its URL and the reason, instead of "fetch failed"
   - an unknown `--agent` lists the valid forms
