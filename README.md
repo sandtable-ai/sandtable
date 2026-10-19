@@ -129,7 +129,7 @@ This repository is also a Claude Code plugin marketplace. The `sandtable` plugin
 | `running-and-reading-results` | `run`, choosing k, pass^k, `results.json` and `report.html`, attributing failures to the agent, the simulated user, the task or the harness |
 | `writing-good-tasks` | hidden goals, policy-correct end states, avoiding vacuous tasks, `never_disclose`, balanced suites |
 
-A `failure-triager` subagent reads the failing trials of a large run outside the main conversation. The skills ask before any command that calls a model. They are plain `SKILL.md` files in [`plugin/skills`](plugin/skills), so other coding agents that read Agent Skills can use them too.
+A `failure-triager` subagent reads the failing trials of a large run outside the main conversation. The skills ask before any command that calls a model. They are plain `SKILL.md` files in [`plugin/skills`](plugin/skills), so other coding agents that read Agent Skills can use them too. Guide, with a worked session: [Claude Code plugin](https://sandtable.dev/guides/claude-code-plugin).
 
 ## How it works
 
