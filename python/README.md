@@ -10,4 +10,4 @@ uvx sandtable-ai demo
 pip install sandtable-ai && sandtable demo
 ```
 
-Docs and source: https://github.com/sandtable-ai/sandtable
+Docs: https://sandtable.dev · Source: https://github.com/sandtable-ai/sandtable

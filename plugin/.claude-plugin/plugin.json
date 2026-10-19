@@ -6,7 +6,7 @@
     "name": "The sandtable authors",
     "url": "https://github.com/sandtable-ai"
   },
-  "homepage": "https://github.com/sandtable-ai/sandtable#readme",
+  "homepage": "https://sandtable.dev",
   "repository": "https://github.com/sandtable-ai/sandtable",
   "license": "MIT",
   "keywords": ["sandtable", "agent-testing", "evals", "simulation", "tau-bench", "pass-k"]

@@ -37,5 +37,5 @@ First public release.
 - **Examples**:
   - a fictional freight carrier-sales desk with 32 tasks (16 that must write, 16 that must not) and 16 invariants. It covers vetting, search by lane, pickup window and equipment, multi-round negotiation with every counter-offer logged, offers a human rep confirms, capacity logging, callbacks and handoffs. `sandtable demo` rehearses it offline and opens the failing report.
   - a fictional clinic front desk with 25 tasks and 12 invariants, and offline careful and naive agents (`--agent scripted:clinic-careful`)
-- **Docs**: concepts, guides, a reference for the CLI, the domain spec, the HTTP step protocol and `results.json`, and comparisons with other tools.
+- **Docs** at [sandtable.dev](https://sandtable.dev), with `llms.txt` for coding agents: concepts, guides, a reference for the CLI, the domain spec, the HTTP step protocol and `results.json`, and comparisons with other tools.
 - The published CLI runs on Node.js 20 or later.
