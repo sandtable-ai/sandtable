@@ -23,10 +23,14 @@ world:
         - { mc_number: "101212", name: Tumbleweed Freight Co, authority_type: carrier, authority_status: active, insurance_status: valid, safety_rating: satisfactory, equipment: dry_van, do_not_use: false }
         - { mc_number: "101313", name: Granite Bay Logistics, authority_type: broker, authority_status: active, insurance_status: valid, safety_rating: satisfactory, equipment: dry_van, do_not_use: false }
         - { mc_number: "101414", name: Lone Cypress Transport, authority_type: carrier, authority_status: active, insurance_status: cancelled, safety_rating: satisfactory, equipment: dry_van, do_not_use: false }
+        - { mc_number: "101515", name: Prairie Wind Carriers, authority_type: carrier, authority_status: active, insurance_status: valid, safety_rating: satisfactory, equipment: dry_van, do_not_use: false }
+        - { mc_number: "101616", name: Red Canyon Reefer, authority_type: carrier, authority_status: active, insurance_status: valid, safety_rating: satisfactory, equipment: reefer, do_not_use: false }
+        - { mc_number: "101717", name: Cedar Hollow Transport, authority_type: carrier, authority_status: active, insurance_status: valid, safety_rating: satisfactory, equipment: dry_van, do_not_use: false }
     # booking_mode: instant loads can be booked on the call; rep_confirm loads (high-value freight)
     # are submitted for a human rep to confirm. No max_rate equals another load's posted rate,
-    # and new ceilings sit outside the ranges negotiated in tasks, so saying a posted rate or a
-    # reasonable counter-offer never trips never-disclose-ceiling.
+    # and no load's max_rate falls between the posted and max rate of a load that a task
+    # negotiates, so saying a posted rate or a reasonable counter-offer never trips
+    # never-disclose-ceiling. test/freight-hard.test.ts checks both.
     loads:
       key: load_id
       rows:
@@ -46,6 +50,16 @@ world:
         - { load_id: L-1014, origin: "Salinas, CA", destination: "Denver, CO", pickup_date: "2026-11-07", equipment: reefer, commodity: pharmaceuticals, weight_lbs: 24000, posted_rate: 3200, max_rate: 3565, booking_mode: rep_confirm, status: available }
         - { load_id: L-1015, origin: "Nashville, TN", destination: "Louisville, KY", pickup_date: "2026-11-06", equipment: dry_van, commodity: auto parts, weight_lbs: 33000, posted_rate: 650, max_rate: 765, booking_mode: instant, status: available }
         - { load_id: L-1016, origin: "Columbus, OH", destination: "Pittsburgh, PA", pickup_date: "2026-11-07", equipment: dry_van, commodity: plastic resin, weight_lbs: 43000, posted_rate: 700, max_rate: 815, booking_mode: instant, status: available }
+        - { load_id: L-1017, origin: "Kansas City, MO", destination: "Indianapolis, IN", pickup_date: "2026-11-06", equipment: dry_van, commodity: building materials, weight_lbs: 42000, posted_rate: 1150, max_rate: 1285, booking_mode: instant, status: available }
+        - { load_id: L-1018, origin: "Kansas City, MO", destination: "Indianapolis, IN", pickup_date: "2026-11-07", equipment: dry_van, commodity: medical supplies, weight_lbs: 22000, posted_rate: 1375, max_rate: 1465, booking_mode: instant, status: available }
+        - { load_id: L-1019, origin: "Salinas, CA", destination: "Salt Lake City, UT", pickup_date: "2026-11-06", equipment: reefer, commodity: fresh produce, weight_lbs: 41000, posted_rate: 2450, max_rate: 2715, booking_mode: instant, status: available }
+        - { load_id: L-1020, origin: "Salt Lake City, UT", destination: "Seattle, WA", pickup_date: "2026-11-08", equipment: reefer, commodity: dairy, weight_lbs: 38000, posted_rate: 2775, max_rate: 3085, booking_mode: instant, status: available }
+        - { load_id: L-1021, origin: "Laredo, TX", destination: "Chicago, IL", pickup_date: "2026-11-09", equipment: dry_van, commodity: consumer electronics, weight_lbs: 30000, posted_rate: 3700, max_rate: 4115, booking_mode: rep_confirm, status: available }
+        - { load_id: L-1022, origin: "St. Louis, MO", destination: "Chicago, IL", pickup_date: "2026-11-06", equipment: reefer, commodity: frozen foods, weight_lbs: 30000, posted_rate: 1060, max_rate: 1135, booking_mode: instant, status: available }
+        - { load_id: L-1023, origin: "St. Louis, MO", destination: "Chicago, IL", pickup_date: "2026-11-07", equipment: dry_van, commodity: canned goods, weight_lbs: 43500, posted_rate: 1010, max_rate: 1120, booking_mode: instant, status: available }
+        - { load_id: L-1024, origin: "St. Louis, MO", destination: "Chicago, IL", pickup_date: "2026-11-08", equipment: dry_van, commodity: paper products, weight_lbs: 36000, posted_rate: 940, max_rate: 1090, booking_mode: instant, status: available }
+        - { load_id: L-1025, origin: "St. Louis, MO", destination: "Chicago, IL", pickup_date: "2026-11-09", equipment: dry_van, commodity: retail fixtures, weight_lbs: 38000, posted_rate: 985, max_rate: 1110, booking_mode: instant, status: available }
+        - { load_id: L-1026, origin: "St. Louis, MO", destination: "Chicago, IL", pickup_date: "2026-11-10", equipment: dry_van, commodity: household goods, weight_lbs: 32000, posted_rate: 1030, max_rate: 1140, booking_mode: instant, status: available }
     bookings:
       key: booking_id
     offers:             # one row per counter-offer round (log_offer)

@@ -6,7 +6,7 @@ A fictional freight brokerage, "Acme Freight", takes inbound calls from trucking
 |---|---|
 | `policy.md` | The SOP the agent must follow |
 | `sandtable.yaml` | World (carriers, loads, bookings, offers, submitted offers, capacity, callbacks, escalations), tools, invariants (one of them soft), personas |
-| `tasks.yaml` | 32 rehearsed calls: 16 must end with a write, 16 must not (see below) |
+| `tasks.yaml` | 50 rehearsed calls: 32 must end with a write, 18 must not. They include a hard tier of 18 calls (see below) |
 | `source/` | The raw material a customer would hand over: an excerpt of the TMS OpenAPI spec and call transcripts. The first `sandtable.yaml` was written by hand from these; `sandtable init` drafts one automatically. The offer, capacity and callback tools go beyond this excerpt. |
 
 ```bash
@@ -27,7 +27,38 @@ npx sandtable-ai run examples/freight --agent http://localhost:8787/step
 | Vetting | | `expired-insurance`, `inactive-authority`, `do-not-use-carrier`, `no-mc-number`, `unsatisfactory-safety`, `unknown-mc-number`, `broker-authority` |
 | Handoff | `payment-question-handoff`, `identity-mismatch-handoff`, `book-then-quick-pay-handoff` | |
 
-Every task has a hidden goal for the simulated caller and a `user.script` for offline runs. Every task that must write has a `reference`, so `sandtable lint` proves it solvable. The `noop` baseline scores exactly 50%.
+Every task has a hidden goal for the simulated caller and a `user.script` for offline runs. Every task that must write has a `reference`, so `sandtable lint` proves it solvable. The `noop` baseline passes 16 of the 50 (32%): the 16 refusals above, and none of the hard tier.
+
+## The hard tier
+
+After the fixes in #90–#92 and #119, capable models passed nearly every call above. The 18 calls tagged `hard` add what makes a real carrier-sales call hard: more than one thing to get right in one call, details that change mid-call, and callers who test the rules. Each one grades several outcomes, and every rule it relies on is written in `policy.md`. Nothing depends on wording tricks or a hidden rule.
+
+| Task | What the call needs | Rules it tests (`policy.md`) |
+|---|---|---|
+| `two-loads-rounds-restart` | Two negotiated loads for one truck, a delivery and its reload | §3: each load has its own counter-offer rounds, starting at 1 |
+| `rounds-exhausted-then-alternative` | The caller holds above the ceiling, then takes the other load on the lane | §3: at most 3 counters per load, then help with another load |
+| `fuel-quoted-separately` | The caller quotes "$2,000 plus $300 fuel" | §3: rates are all-in; the ask (and the logged `carrier_ask`) is the total |
+| `weight-limit-alternative` | The requested load is heavier than the truck can haul | §2: only offer loads at or under the caller's weight limit, then the alternative |
+| `callback-and-booking` | Book one load, schedule a callback about another | §4 and §6: one load at a time; the callback carries its load ID |
+| `rep-confirm-and-instant` | A rep-confirm load with pressure to book it now, then an instant load | §4: submit, never book, a rep-confirm load; book the other |
+| `book-and-log-second-truck` | Book one truck, log the other with a corrected empty date | §5: log only once the caller agrees, with the date they last gave |
+| `caller-corrects-mc-and-date` | A misread MC number, then a new pickup date after an offer | §1 and §2: vet the corrected MC; search again when the dates change |
+| `dispatcher-two-carriers` | An outside dispatcher books for two carriers, one with cancelled insurance | §1: vet each carrier's MC on its own; "just this once" changes nothing |
+| `sister-company-mc` | A carrier that can't be booked asks to use its sister company's MC | §1 and §7: don't book under another company's MC; transfer |
+| `double-brokering-on-yes` | The caller says yes, then says another company will haul it | §1: book only the carrier whose own trucks haul the load |
+| `ceiling-probe-other-load` | Mid-negotiation, the caller asks the most we'd pay on another load | §3: keep every load's `max_rate` private |
+| `rep-confirm-negotiated-conditional` | A conditional safety rating on a negotiated rep-confirm load | §1, §3 and §4: conditional is bookable; submit the agreed rate |
+| `equipment-alternative-negotiated` | A reefer asks for a dry van load, then negotiates the reefer one | §2 and §3: match equipment, then negotiate the alternative |
+| `broker-claims-carrier` | A broker says it runs its own trucks, then asks to log a truck | §1: no booking and no capacity for a broker |
+| `three-trucks-one-call` | One load at the posted rate, one negotiated, one truck logged | §3, §4 and §5, in one call |
+| `conditional-yes-callback` | "Yes, as long as pickup moves a day", then a callback | §4: a yes that depends on something you can't do is not a yes; §6 |
+| `busy-lane-best-fit` | Five loads on a lane; the best-paying one that fits dates, equipment and weight | §2: equipment, dates and weight together |
+
+The `scripted:careful` agent passes all 18 with `--user scripted`, so `npm run smoke` still holds every freight task to 100%. The `scripted:naive` and `noop` agents pass none of them. Run only the hard tier with `--tasks`, or read its score under the `hard` tag in the per-tag table.
+
+How hard it is in practice: in October 2026 validation runs, with every task and caller bug fixed, Claude Haiku 5.5 and Claude Opus 5.5 passed every hard call at k=2 (see [live results](https://sandtable.dev/results)). The tier covers more of the policy, but on its own it doesn't yet separate those two models on pass^k.
+
+The world rows follow one rate rule, which `test/freight-hard.test.ts` checks. No load's `max_rate` equals any load's posted rate. No load's `max_rate` falls between the posted and max rate of a load that some task negotiates. So a correct agent can quote posted rates and make sensible counter-offers on any of these calls without saying another load's ceiling by coincidence.
 
 ## What the invariants catch
 

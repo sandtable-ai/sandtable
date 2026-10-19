@@ -12,7 +12,7 @@ Simulated callers talk to your agent, its tool calls hit stateful mocks of the c
 
 **[Docs](https://sandtable.dev)** · **[Quickstart](https://sandtable.dev/quickstart)** · **[Examples](https://github.com/sandtable-ai/sandtable/tree/main/examples)** · **[Sample report](https://sandtable-ai.github.io/sandtable/)** · **[Comparisons](https://sandtable.dev/compare/overview)**
 
-On a fictional freight brokerage's carrier-sales desk, an agent that books whatever it is asked to passes 5 of 32 calls. sandtable names the rule each failing call broke: 25 calls booked without vetting the carrier, 7 booked above the load's rate ceiling, 7 booked a carrier that may not be booked. An agent that follows the desk's SOP passes all 32. Same callers, same records, same result on every run.
+On a fictional freight brokerage's carrier-sales desk, an agent that books whatever it is asked to passes 5 of 50 calls. sandtable names the rule each failing call broke: 43 calls booked without vetting the carrier, 13 booked above the load's rate ceiling, 9 booked a carrier that may not be booked. An agent that follows the desk's SOP passes all 50. Same callers, same records, same result on every run.
 
 ![sandtable demo: the naive agent's failing task table and its top failure modes, then the careful agent passing every call](https://github.com/sandtable-ai/sandtable/raw/main/assets/demo.gif)
 
@@ -23,7 +23,7 @@ npx sandtable-ai demo      # Node.js 20+
 uvx sandtable-ai demo      # or through Python's uv (still needs Node.js 20+)
 ```
 
-No API key and no model calls: two rule-based agents take the same 32 scripted calls. Each run writes `results.json` and a self-contained `report.html` under `.sandtable/runs/`, and the naive agent's report opens in your browser.
+No API key and no model calls: two rule-based agents take the same 50 scripted calls. Each run writes `results.json` and a self-contained `report.html` under `.sandtable/runs/`, and the naive agent's report opens in your browser.
 
 To watch a real model, `npx sandtable-ai demo --live --user-model claude-haiku-5-5` has Claude play both the caller and the agent, two trials per task. It needs `ANTHROPIC_API_KEY` and costs money.
 
@@ -152,7 +152,7 @@ A `failure-triager` subagent reads the failing trials of a large run outside the
 4. **Tasks.** A simulated caller with a persona and a hidden goal, plus the end state that counts as success.
 5. **Grading.** A trial passes only if the end state matches, the required tools ran, the forbidden ones didn't, no invariant was violated, and no protected value appeared in what the agent said.
 
-More: [how it works](https://sandtable.dev/how-it-works). The bundled examples are [`examples/freight`](https://github.com/sandtable-ai/sandtable/tree/main/examples/freight) (32 tasks, 17 invariants) and [`examples/clinic`](https://github.com/sandtable-ai/sandtable/tree/main/examples/clinic) (a clinic front desk, 25 tasks, 12 invariants). Both run offline.
+More: [how it works](https://sandtable.dev/how-it-works). The bundled examples are [`examples/freight`](https://github.com/sandtable-ai/sandtable/tree/main/examples/freight) (50 tasks, 17 invariants) and [`examples/clinic`](https://github.com/sandtable-ai/sandtable/tree/main/examples/clinic) (a clinic front desk, 25 tasks, 12 invariants). Both run offline.
 
 ## How it compares
 

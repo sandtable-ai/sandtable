@@ -16,11 +16,11 @@ describe("terminal summary", () => {
     expect(modes).toHaveLength(16);
     for (const line of modes) expect(line.length, line).toBeLessThanOrEqual(80);
 
-    // 25 tasks broke verify-before-book: the first ones by name, then a count of the rest.
+    // 43 tasks broke verify-before-book: the first ones by name, then a count of the rest.
     const head = modes[0]!;
-    expect(head).toMatch(/^ {2}25× invariant verify-before-book \(book-at-posted-rate, .*… \+\d+ more\)$/);
+    expect(head).toMatch(/^ {2}43× invariant verify-before-book \(book-at-posted-rate, .*… \+\d+ more\)$/);
     const shown = head.slice(head.indexOf("(") + 1, head.indexOf("…")).split(", ").filter(Boolean).length;
-    expect(shown + Number(head.match(/\+(\d+) more/)![1])).toBe(25);
+    expect(shown + Number(head.match(/\+(\d+) more/)![1])).toBe(43);
 
     // A long example is cut at the edge with an ellipsis.
     expect(modes[1]).toMatch(/^ {5}e\.g\. book_load\(load_id="L-1001", mc_number="100101", rate=2100\) was called.*…$/);
