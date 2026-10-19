@@ -161,7 +161,8 @@ export async function draftTasksFromTranscripts(input: {
     if (conv.persona && !candidate.personas.some((p) => p.id === conv.persona!.id)) candidate.personas.push(conv.persona);
     if (candidate.tasks.some((x) => x.id === conv.task.id)) rowProblem ??= `a task with id ${conv.task.id} already exists`;
     candidate.tasks = [...candidate.tasks, conv.task];
-    const problems = rowProblem ? [rowProblem] : validateDomain(candidate);
+    // Problems with existing invariants are not this task's: validate reports them on the domain.
+    const problems = rowProblem ? [rowProblem] : validateDomain(candidate).filter((p) => !p.startsWith("invariants."));
     if (problems.length) {
       out.warnings.push(`${t.file}: dropped ${conv.task.id}: ${problems.join("; ")}`);
       continue;

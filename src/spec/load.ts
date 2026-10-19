@@ -112,6 +112,8 @@ export function validateDomain(d: Domain): string[] {
       }
     } else if ("never_disclose" in inv) {
       table(inv.never_disclose.table, where);
+      const blind = undetectable(d, inv.never_disclose.table, inv.never_disclose.field);
+      if (blind) problems.push(`${where}: never_disclose can never fire on ${inv.never_disclose.table}.${inv.never_disclose.field}: ${blind}`);
       for (const u of [inv.never_disclose.unless ?? []].flat()) {
         tool(u.tool, where);
         arg(u.tool, u.arg, where);
@@ -133,6 +135,23 @@ export function validateDomain(d: Domain): string[] {
     for (const name of [...task.expect.called, ...task.expect.not_called]) tool(name, `${where}.expect`);
   }
   return problems;
+}
+
+/**
+ * Why a never_disclose field can't be found in what the agent says, judged from the seed rows:
+ * the transcript check looks only for numbers and strings of 3 or more characters. A table
+ * without seed rows, or rows without the field, can't be judged (tools may create the values).
+ */
+function undetectable(d: Domain, table: string, field: string): string | undefined {
+  const values = (d.world.tables[table]?.rows ?? []).map((r) => r[field]).filter((v) => v !== undefined && v !== null);
+  const fix = "protect a field that holds numbers or longer text, or remove the invariant and keep the rule as a comment";
+  if (values.some((v) => typeof v === "boolean")) {
+    return `it holds booleans, and only numbers and strings of 3 or more characters can be found in what the agent says; ${fix}`;
+  }
+  if (values.length && values.every((v) => typeof v === "string" && v.trim().length < 3)) {
+    return `every seeded value is shorter than 3 characters, and shorter strings are not checked; ${fix}`;
+  }
+  return undefined;
 }
 
 export interface PendingItem {
