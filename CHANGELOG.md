@@ -48,6 +48,7 @@ First public release.
 - `examples/freight`: offering `max_rate` as a logged counter-offer is no longer graded as disclosing it. The policy says so, and `never-disclose-ceiling` exempts `log_offer.counter_offer`; the README's design note explains why. Saying the ceiling any other way still fails ([#118](https://github.com/sandtable-ai/sandtable/issues/118)).
 - `sandtable --version` reports the installed version; 0.1.0-alpha.1 printed `0.1.0-alpha.0` ([#88](https://github.com/sandtable-ai/sandtable/issues/88)).
 - `run` and `demo --live` exit 1 and print the error when every trial ended in one, for example without `ANTHROPIC_API_KEY`, without an optional Bedrock package or with the agent's server down. Before, they printed a 0% score and exited 0 ([#95](https://github.com/sandtable-ai/sandtable/issues/95)).
+- `npx sandtable-ai` on Node.js 20 prints no `EBADENGINE` warning, and installs with `engine-strict=true`: the CLI uses commander 14, which supports Node 20, instead of commander 15, which requires Node 22.12 ([#101](https://github.com/sandtable-ai/sandtable/issues/101)).
 
 ## [0.1.0-alpha.1] - 2026-10-19
 
