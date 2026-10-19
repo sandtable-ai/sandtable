@@ -182,6 +182,10 @@ async function loadPrices(file?: string): Promise<void> {
   console.log(`  prices: ${added.length} model(s) from ${file}`);
 }
 
+// Printed next steps use `npx sandtable-ai`: every way of installing sandtable needs Node.js and npm
+// (the PyPI launcher runs npx itself), so the line runs as written for every user.
+const NEXT = "npx sandtable-ai";
+
 function defaultOut(label: string): string {
   return path.join(".sandtable", "runs", `${new Date().toISOString().replace(/[:.]/g, "-")}-${label}`);
 }
@@ -263,7 +267,7 @@ withProviderFlags(program
       console.log(`  ${res.tasks.length} task(s), ${res.personas.length} persona(s), ${rows} seed row(s) drafted; ${res.redactions} PII redaction(s)`);
       for (const w of res.warnings) console.log(`  ! ${w}`);
     }
-    console.log(`\nNext: sandtable review ${o.out}, accept or fix each item, then sandtable validate ${o.out} --strict`);
+    console.log(`\nNext: accept or fix each drafted item, then validate:\n  ${NEXT} review ${o.out}\n  ${NEXT} validate ${o.out} --strict`);
   });
 
 program
@@ -321,7 +325,7 @@ withProviderFlags(program
   .command("run"))
   .argument("<domain>", "domain directory (with sandtable.yaml) or file")
   .description("run every task k times against an agent and grade the results")
-  .option("-a, --agent <spec>", "claude | claude:<model> | bedrock:<model-id> | openai:<model> | noop | http(s)://endpoint | ./my-agent.js", "claude")
+  .option("-a, --agent <spec>", "claude | claude:<model> | bedrock:<model-id> | openai:<model> | noop | http(s)://endpoint | ./my-agent.js | scripted:naive, scripted:careful, scripted:clinic-naive, scripted:clinic-careful (rule-based demo agents for the bundled examples)", "claude")
   .option("-u, --user <spec>", "simulated user: claude | claude:<model> | openai:<model> | scripted", "claude")
   .option("--openai-base-url <url>", `OpenAI-compatible endpoint for openai:<model> (default: OPENAI_BASE_URL or ${DEFAULT_OPENAI_BASE_URL}); key from OPENAI_API_KEY`)
   .option("-k, --trials <n>", "trials per task (pass^k is reported up to k)", int, 1)
@@ -445,8 +449,10 @@ withProviderFlags(program
     }
     if (shouldOpen && firstReport) openInBrowser(firstReport);
     console.log("Next:");
-    console.log("  sandtable demo --live                                  Claude plays the carrier and the agent (k=2)");
-    console.log("  sandtable init --openapi api.yaml --sop sop.md -o mine  draft a domain from your customer's docs");
+    console.log("  Claude on both sides, Haiku as the cheaper caller (needs ANTHROPIC_API_KEY):");
+    console.log(`    ${NEXT} demo --live --user-model claude-haiku-5-5`);
+    console.log("  Draft a domain from your customer's API spec and SOP:");
+    console.log(`    ${NEXT} init --openapi api.yaml --sop sop.md -o mine`);
   });
 
 program
