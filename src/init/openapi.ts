@@ -44,6 +44,23 @@ const METHODS = ["get", "post", "put", "patch", "delete"] as const;
 const PAGINATION = new Set(["limit", "offset", "page", "per_page", "page_size", "cursor", "after", "before", "sort", "order"]);
 const SIDE_EFFECT_HINT = /\b(becomes?|marks?|sets?|tenders?|reserves?|cancels?|updates?|changes?|transitions?)\b/i;
 
+/**
+ * Why `spec` can't be drafted from, or undefined when it is an OpenAPI 3.x document with paths.
+ * Swagger 2.0 and other YAML would otherwise draft an empty domain that fails validation.
+ */
+export function openApiProblem(spec: unknown): string | undefined {
+  if (!spec || typeof spec !== "object" || Array.isArray(spec)) return "is not an OpenAPI document (expected a YAML or JSON mapping)";
+  const s = spec as Json;
+  if (s.swagger !== undefined) {
+    return `is Swagger ${String(s.swagger)}; init reads OpenAPI 3.x. Convert it to OpenAPI 3 first (for example with the Swagger Editor or swagger2openapi), then run init again`;
+  }
+  if (typeof s.openapi !== "string" || !s.openapi.startsWith("3.")) {
+    return s.openapi === undefined ? "is not an OpenAPI 3.x document (no top-level `openapi: 3.x` field)" : `is OpenAPI ${String(s.openapi)}; init reads OpenAPI 3.x`;
+  }
+  if (!s.paths || typeof s.paths !== "object" || Object.keys(s.paths).length === 0) return "has no paths, so there is nothing to draft tools from";
+  return undefined;
+}
+
 export function draftFromOpenApi(spec: Json): OpenApiDraft {
   const warnings: string[] = [];
   const deref = makeDeref(spec);

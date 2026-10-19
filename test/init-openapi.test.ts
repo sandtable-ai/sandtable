@@ -1,9 +1,11 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import YAML from "yaml";
 import { describe, expect, it } from "vitest";
-import { draftFromOpenApi, singularize, snake } from "../src/init/openapi.ts";
+import { promisify } from "node:util";
+import { draftFromOpenApi, openApiProblem, singularize, snake } from "../src/init/openapi.ts";
 import { DOMAIN_FILE, POLICY_PLACEHOLDER, renderDraft, TASKS_PLACEHOLDER, writeDraft } from "../src/init/render.ts";
 import { loadDomain } from "../src/spec/load.ts";
 
@@ -126,5 +128,33 @@ describe("init from OpenAPI: edge cases", () => {
     expect(snake("listCustomerOrders")).toBe("list_customer_orders");
     expect(snake("get-load by id")).toBe("get_load_by_id");
     expect(["carriers", "categories", "addresses", "status"].map(singularize)).toEqual(["carrier", "category", "address", "status"]);
+  });
+});
+
+describe("init from OpenAPI: what it refuses", () => {
+  it("accepts an OpenAPI 3.x document with paths", async () => {
+    expect(openApiProblem(await freightSpec())).toBeUndefined();
+  });
+
+  it("names Swagger 2.0, other documents and empty specs", () => {
+    expect(openApiProblem({ swagger: "2.0", info: { title: "t" }, paths: { "/a": {} } })).toMatch(/^is Swagger 2\.0; init reads OpenAPI 3\.x\. Convert it/);
+    expect(openApiProblem({ hello: "world" })).toMatch(/^is not an OpenAPI 3\.x document/);
+    expect(openApiProblem({ openapi: "4.0.0", paths: { "/a": {} } })).toBe("is OpenAPI 4.0.0; init reads OpenAPI 3.x");
+    expect(openApiProblem({ openapi: "3.1.0", paths: {} })).toMatch(/^has no paths/);
+    expect(openApiProblem(["not", "a", "mapping"])).toMatch(/^is not an OpenAPI document/);
+  });
+
+  it.skipIf(!process.features.typescript)("writes nothing for a Swagger 2.0 spec and exits 1", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-init-"));
+    const spec = path.join(dir, "swagger.yaml");
+    await writeFile(spec, 'swagger: "2.0"\ninfo: { title: legacy, version: "1" }\npaths: {}\n');
+    const out = path.join(dir, "domain");
+    const err = await promisify(execFile)(process.execPath, [path.resolve("src/cli.ts"), "init", "--openapi", spec, "-o", out]).then(
+      () => undefined,
+      (e: { code: number; stderr: string }) => e,
+    );
+    expect(err?.code).toBe(1);
+    expect(err?.stderr).toContain("is Swagger 2.0; init reads OpenAPI 3.x");
+    await expect(readdir(out)).rejects.toThrow(/ENOENT/);
   });
 });

@@ -54,6 +54,7 @@ First public release.
   - a missing optional package says to install it next to `sandtable-ai`, or to name both packages with `npx -p`; a package installed on its own was invisible to `npx sandtable-ai`
   - `report` refuses a file that isn't a `results.json`
 - **README**: every link and image is an absolute URL, so they work on the npmjs.com package page and in any viewer of the README shipped in the package, dark-mode screenshots included ([#103](https://github.com/sandtable-ai/sandtable/issues/103)).
+- `init --openapi` refuses a Swagger 2.0 spec, a file without `openapi: 3.x` and a spec it can't draft a single tool from, and writes nothing. Before, it wrote a domain with 0 tools, which `validate` then rejected ([#98](https://github.com/sandtable-ai/sandtable/issues/98)).
 - `sandtable --version` reports the installed version; 0.1.0-alpha.1 printed `0.1.0-alpha.0` ([#88](https://github.com/sandtable-ai/sandtable/issues/88)).
 - `run` and `demo --live` exit 1 and print the error when every trial ended in one, for example without `ANTHROPIC_API_KEY`, without an optional Bedrock package or with the agent's server down. Before, they printed a 0% score and exited 0 ([#95](https://github.com/sandtable-ai/sandtable/issues/95)).
 - `npx sandtable-ai` on Node.js 20 prints no `EBADENGINE` warning, and installs with `engine-strict=true`: the CLI uses commander 14, which supports Node 20, instead of commander 15, which requires Node 22.12 ([#101](https://github.com/sandtable-ai/sandtable/issues/101)).
