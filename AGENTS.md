@@ -91,7 +91,7 @@ Update these in the same PR as the code change:
 | the domain spec (`src/spec/schema.ts`) | `docs/reference/spec.mdx`, `plugin/skills/drafting-a-domain/references/spec-cheatsheet.md`, affected `examples/` |
 | `results.json` | `docs/reference/results-schema.mdx`, `plugin/skills/running-and-reading-results/references/results-json.md` |
 | the HTTP step protocol (`src/sim/http.ts`) | `docs/reference/http-protocol.mdx` |
-| the set of skills | `test/plugin.test.ts` (its skill list), the README skill table |
+| the set of skills | `test/plugin.test.ts` (its skill list), the README skill table, `docs/guides/claude-code-plugin.mdx` |
 
 `test/plugin.test.ts` fails when a skill uses a command or flag that `--help` doesn't list, or a YAML snippet that the schema rejects. Take flags from `npm run sandtable -- <command> --help`, never from memory.
 

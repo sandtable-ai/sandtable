@@ -1,0 +1,187 @@
+---
+title: "Claude Code plugin: draft, lint and run sandtable from Claude"
+sidebarTitle: "Claude Code plugin"
+description: "Install the sandtable plugin for Claude Code: three skills and a subagent that draft a domain, review and lint it, run it against your agent, triage failures."
+keywords: ["Claude Code", "plugin", "Agent Skills", "subagent", "coding agent", "failure triage", "marketplace"]
+---
+
+The sandtable repository is also a Claude Code plugin marketplace. Its `sandtable` plugin gives Claude Code three skills and one subagent that know sandtable's workflow. They draft a domain from a customer's documents, make it trustworthy, run it against your agent and work out why trials failed. You describe what you want; Claude runs the CLI and shows you each decision that needs a person.
+
+## Install
+
+<Tabs>
+  <Tab title="In a Claude Code session">
+    ```text
+    /plugin marketplace add sandtable-ai/sandtable
+    /plugin install sandtable@sandtable
+    ```
+
+    The marketplace and the plugin are both named `sandtable`. `/plugin install` opens the plugin's details, where you choose a scope. On Claude Code v2.1.275 or later, one command does both steps: `/plugin install sandtable --marketplace sandtable-ai/sandtable`.
+  </Tab>
+  <Tab title="From your shell">
+    ```bash
+    claude plugin marketplace add sandtable-ai/sandtable
+    claude plugin install sandtable@sandtable
+    ```
+
+    This installs at user scope. Plugins installed from the shell load the next time you start Claude Code, or after `/reload-plugins`. On Claude Code v2.1.292 or later, one command does both steps: `claude plugin install sandtable --marketplace sandtable-ai/sandtable`.
+  </Tab>
+</Tabs>
+
+Type `/sandtable:` in a session to check: the skills appear as `/sandtable:drafting-a-domain`, `/sandtable:writing-good-tasks` and `/sandtable:running-and-reading-results`.
+
+- **For a team**, install at project scope: `claude plugin install sandtable@sandtable --scope project` records the plugin in `.claude/settings.json`, which you commit. Each collaborator runs the same command once to download it.
+- **Updates.** Claude Code doesn't auto-update third-party marketplaces by default. Run `claude plugin update sandtable@sandtable`, or turn on auto-update for the `sandtable` marketplace in the **Marketplaces** tab of `/plugin`.
+- **What it needs.** The skills run the CLI as `npx sandtable-ai <command>`, which uses the project's copy when `sandtable-ai` is a dependency. The machine needs Node.js 20 or later. Commands that call a model need `ANTHROPIC_API_KEY`, or AWS credentials with `--provider bedrock`.
+
+The plugin is installed from GitHub. It is not part of the `sandtable-ai` npm package, and its version matches the CLI release it was written for. See Claude Code's [plugin docs](https://code.claude.com/docs/en/discover-plugins) for scopes and the `/plugin` panel.
+
+## What's inside
+
+Claude loads a skill when the conversation needs it, from its description. You can also call one by name, such as `/sandtable:drafting-a-domain`.
+
+| Skill | What it does | Claude uses it when |
+|---|---|---|
+| `drafting-a-domain` | Drafts `sandtable.yaml`, `policy.md` and `tasks.yaml` with `init`, then makes them trustworthy. It walks you through every `review` item and `TODO(review)` note, seeds the world, writes `reference` calls, and gets `validate --strict` and `lint` to pass. It finishes by measuring the do-nothing floor. | you hand over discovery material (an API spec, an SOP, transcripts), start a new simulation, or have a draft with pending review items or lint errors |
+| `writing-good-tasks` | Writes and reviews tasks that measure an agent fairly. Each task gets a hidden goal with numeric limits and a stop condition, and an end state that follows the SOP rather than what a human rep did. It avoids vacuous or over-strict expectations, protects internal values with `never_disclose`, and balances writes against refusals. | you add, edit or review tasks, turn a transcript or bug report into a task, or a suite scores well for a do-nothing agent or fails a correct one |
+| `running-and-reading-results` | Runs a domain against an agent, chooses k and reads pass^k. It reads `results.json` and `report.html`, attributes each failing trial to the agent, the simulated user, the task spec or the harness, and proposes fixes and the rerun that proves them. | you want to rehearse or regression-test an agent, compare models, gate CI on pass^k, or find out why trials failed or a score changed |
+
+Each skill loads its reference files only when it needs them. They hold the spec cheatsheet, how to resolve review notes, more task patterns, the `results.json` shape with `jq` queries, and the failure-attribution procedure.
+
+The **`failure-triager`** subagent reads failing trials outside the main conversation, so a run with many failures doesn't fill your context with transcripts.
+- **Input:** the path to `results.json` and the domain directory.
+- **Method:** it lists the failing trials with `jq` and reads each transcript up to the first divergence from the SOP or the task. It attributes each failure to exactly one owner (`agent`, `simulated user`, `task spec` or `harness`), quoting the event as evidence, and groups trials that share a root cause.
+- **Report:**
+  - a summary line
+  - a table of task, trial, owner, failed check, evidence and proposed fix
+  - counts per owner
+  - concrete edits
+  - the `run` command that would confirm them
+- **Limits:** it only reads. It has `Read`, `Grep`, `Glob` and `Bash`, doesn't edit files, and doesn't run anything that calls a model. It never proposes deleting a failing task, loosening an expectation the SOP supports, or lowering k or `--fail-under`.
+
+### What runs without asking
+
+The skills ask before any command that calls a model, because it needs keys and costs money:
+
+| Free and deterministic | Calls a model: Claude asks first |
+|---|---|
+| `init --openapi`, `validate`, `review`, `lint`, `report` | `init --sop`, `init --transcripts` |
+| `run --agent noop --user scripted`, `demo` | `run` with a model agent (`claude`, `openai:`, `bedrock:`) or a model user (the default `claude`, `openai:`), `demo --live` |
+
+## A worked session
+
+This session drafts a domain from the fictional freight brokerage's sources that ship in the repository, [`examples/freight/source/openapi.yaml`](https://github.com/sandtable-ai/sandtable/tree/main/examples/freight/source) and [`examples/freight/policy.md`](https://github.com/sandtable-ai/sandtable/blob/main/examples/freight/policy.md), copied into `discovery/`. Every output below is from a real offline run.
+
+<Steps>
+  <Step title="Draft the domain">
+    > Draft a sandtable domain from discovery/openapi.yaml and discovery/sop.md into ./sandtable.
+
+    Claude loads `drafting-a-domain` and runs the free, deterministic OpenAPI step:
+
+    ```bash
+    npx sandtable-ai init --openapi discovery/openapi.yaml -o sandtable
+    ```
+
+    ```text
+    Drafted acme-freight-tms-api: 4 tables, 5 tools, 2 review notes.
+      wrote sandtable/sandtable.yaml
+      wrote sandtable/policy.md
+      wrote sandtable/tasks.yaml
+    ```
+
+    The SOP step drafts invariants with Claude, so Claude asks before it runs it:
+
+    ```bash
+    npx sandtable-ai init --sop discovery/sop.md -o sandtable
+    ```
+
+    Each drafted invariant quotes the SOP sentence it comes from and stays `review: pending`. See [Draft a domain with init](/guides/init).
+  </Step>
+  <Step title="Resolve the review notes">
+    > Walk me through what still needs review.
+
+    ```bash
+    npx sandtable-ai review sandtable
+    ```
+
+    ```text
+    - tool create_booking
+        see the TODO(review) comments above it in sandtable.yaml
+    ```
+
+    The notes above the tool say what the spec implies but `init` could not encode:
+
+    ```text
+    # TODO(review): The API can answer 409 (Load is not available): encode that condition as a check with a `where`.
+    # TODO(review): The description mentions a side effect ("Book a load for a carrier (tenders the load; the load becomes `booked`)"): add ops for any other table it changes.
+    ```
+
+    For each item, Claude shows you the quote, what the item will enforce and the fix it proposes. Here that is a `check` that the load is `available`, and an `update` op that sets it to `booked`. It accepts an item only after you agree. It never bulk-accepts to make `validate --strict` pass: an accepted item is a claim about the customer's rules. Then it seeds the world, gives every write task a `reference`, and lints:
+
+    ```bash
+    npx sandtable-ai validate sandtable --strict && npx sandtable-ai lint sandtable
+    ```
+
+    On the finished freight example, the end of `lint` reads:
+
+    ```text
+    ✓ book-then-quick-pay-handoff  (write · ready · solvable · noop fails)
+
+    32 tasks: 16 expect a write, 16 do not (the noop baseline passes those by design).
+    0 error(s), 0 warning(s)
+    ```
+  </Step>
+  <Step title="Run it offline">
+    > Run it offline first: the do-nothing baseline, then the naive demo agent.
+
+    Claude loads `running-and-reading-results`. Both runs are free. The rest of this session uses `examples/freight`, the reviewed version of the same sources, which ships with rule-based demo agents.
+
+    ```bash
+    npx sandtable-ai run examples/freight --agent noop --user scripted
+    npx sandtable-ai run examples/freight --agent scripted:naive --user scripted
+    ```
+
+    The noop baseline scores `pass^1 50.0%`: the share of the suite that rewards doing nothing. The naive agent, which books whatever it is asked to, scores `pass^1 15.6%`:
+
+    ```text
+      Top failure modes
+      25× invariant verify-before-book (book-at-posted-rate, … +24 more)
+         e.g. book_load(load_id="L-1001", mc_number="100101", rate=2100) was called…
+      13× state state:bookings#1 (negotiate-within-ceiling, … +12 more)
+         e.g. 0 bookings row(s) match {"load_id":"L-1001","mc_number":"100101","rat…
+      7× invariant rate-ceiling (negotiate-within-ceiling, … +6 more)
+         e.g. book_load rate=2600 exceeds the limit 2350
+      7× invariant eligible-carrier (expired-insurance, … +6 more)
+         e.g. book_load on carriers 100202: insurance_status is "expired", expected…
+    ```
+  </Step>
+  <Step title="Run it against your agent">
+    > Now run it against my agent at http://localhost:8787/step.
+
+    Claude checks the wiring first with the scripted caller. Then it tells you how many trials a run with the Claude caller means (tasks × k) and asks before starting it:
+
+    ```bash
+    npx sandtable-ai run examples/freight --agent http://localhost:8787/step --user scripted
+    npx sandtable-ai run examples/freight --agent http://localhost:8787/step -k 4 --fail-under 90
+    ```
+
+    Your agent can be any service that speaks the [HTTP step protocol](/reference/http-protocol), or a JS/TS module. See [Run against your agent](/guides/bring-your-agent).
+  </Step>
+  <Step title="Triage the failures">
+    > Why did those trials fail?
+
+    With more than a few failing trials, Claude hands `results.json` and the domain directory to `failure-triager`. It gets back the owner table, the counts and the proposed edits. It changes the agent's prompt or code for failures owned by the agent, and proposes a YAML change citing the SOP for task-spec failures, which you approve. Then it reruns the affected tasks at the same k:
+
+    ```bash
+    npx sandtable-ai run examples/freight --agent http://localhost:8787/step --tasks walk-away-above-ceiling,expired-insurance -k 4
+    ```
+  </Step>
+</Steps>
+
+## Tips and limits
+
+- **Keep data fictional.** The skills tell Claude not to paste customer documents into its own prompts or commit them to a public repository. `init --transcripts` scrubs emails, phone numbers and card numbers locally before anything is sent. Seed rows, names and IDs in a domain should be invented.
+- **Review drafted items before trusting a score.** While anything is `review: pending`, the terminal and the report mark the run **provisional**, and `validate --strict` fails. See [the review workflow](/concepts/review-workflow).
+- **Read failing trials, not only the score.** The simulated caller can be wrong too. The skills attribute every failure before changing the agent or the suite.
+- **The skills trust `--help` over themselves.** If a flag in a skill is rejected, Claude checks `npx sandtable-ai <command> --help`. The [CLI reference](/reference/cli) lists every flag.
+- **Other coding agents.** The skills are plain `SKILL.md` files in [`plugin/skills`](https://github.com/sandtable-ai/sandtable/tree/main/plugin/skills), so agents that read Agent Skills can use them without Claude Code. Agents that read docs can use the [domain spec](/reference/spec), the [CLI reference](/reference/cli) and the [`results.json` schema](/reference/results-schema). Each page is also available as Markdown, by adding `.md` to its URL, and `sandtable.dev/llms-full.txt` holds the whole site in one file.

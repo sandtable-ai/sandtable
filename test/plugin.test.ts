@@ -23,6 +23,19 @@ function walk(dir: string): string[] {
 
 const docs = walk(pluginDir).filter((f) => f.endsWith(".md"));
 const rel = (file: string) => path.relative(root, file);
+// Pages outside the plugin that teach its install and its skills.
+const guide = path.join(root, "docs", "guides", "claude-code-plugin.mdx");
+const readme = path.join(root, "README.md");
+
+/** Skill names in the first column of the tables under `heading`, e.g. "| `drafting-a-domain` | ... |". */
+function skillTable(file: string, heading: string): string[] {
+  const text = read(file);
+  const start = text.indexOf(`\n${heading}\n`);
+  if (start < 0) throw new Error(`${rel(file)} has no "${heading}" section`);
+  const end = text.indexOf("\n## ", start + heading.length + 2);
+  const section = text.slice(start, end < 0 ? undefined : end);
+  return [...section.matchAll(/^\| `([a-z][\w-]*)` \|/gm)].map((m) => m[1]!);
+}
 
 function frontmatter(file: string): { meta: Record<string, unknown>; body: string } {
   const m = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(read(file));
@@ -31,7 +44,8 @@ function frontmatter(file: string): { meta: Record<string, unknown>; body: strin
 }
 
 function fences(text: string): { lang: string; code: string }[] {
-  return [...text.matchAll(/^```(\w*)\n([\s\S]*?)^```/gm)].map((m) => ({ lang: m[1]!, code: m[2]! }));
+  // Docs pages indent fences inside <Steps> and <Tabs>; the closing fence has the same indent.
+  return [...text.matchAll(/^([ \t]*)```(\w*)\n([\s\S]*?)^\1```/gm)].map((m) => ({ lang: m[2]!, code: m[3]! }));
 }
 
 const schemas = { tools: ToolSpec, invariants: InvariantSpec, tasks: TaskSpec, personas: PersonaSpec } as const;
@@ -100,6 +114,17 @@ describe("Claude Code plugin", () => {
     }
   });
 
+  it("is described skill by skill in the README and the docs guide", () => {
+    const skills = readdirSync(path.join(pluginDir, "skills")).sort();
+    expect(skillTable(readme, "## Use it from your coding agent").sort(), "README skill table").toEqual(skills);
+    expect(skillTable(guide, "## What's inside").sort(), rel(guide)).toEqual(skills);
+    for (const file of walk(path.join(pluginDir, "agents"))) {
+      const agent = path.basename(file, ".md");
+      expect(read(readme), `README names ${agent}`).toContain(`\`${agent}\``);
+      expect(read(guide), `${rel(guide)} names ${agent}`).toContain(`\`${agent}\``);
+    }
+  });
+
   it("links only to files that exist", () => {
     for (const file of docs) {
       const text = read(file);
@@ -136,7 +161,7 @@ describe("Claude Code plugin", () => {
       ),
     );
     let count = 0;
-    for (const file of docs) {
+    for (const file of [...docs, guide]) {
       const text = read(file);
       const code = [...fences(text).map((f) => f.code), ...[...text.matchAll(/`([^`\n]+)`/g)].map((m) => m[1]!)];
       for (const snippet of code) {
