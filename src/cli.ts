@@ -25,7 +25,7 @@ import { draftTasksFromTranscripts } from "./init/transcripts.ts";
 import { DOMAIN_FILE, POLICY_PLACEHOLDER, renderDraft, TASKS_PLACEHOLDER, writeDraft } from "./init/render.ts";
 import { DomainError, loadDomain, pendingReview } from "./spec/load.ts";
 import { lintDomain } from "./grade/lint.ts";
-import { renderLeaderboardMarkdown, runLeaderboard } from "./run/leaderboard.ts";
+import { ModelsFile, renderLeaderboardMarkdown, runLeaderboard } from "./run/leaderboard.ts";
 import { z } from "zod";
 import YAML from "yaml";
 
@@ -364,14 +364,6 @@ withProviderFlags(program
       process.exitCode = 1;
     }
   });
-
-const ModelsFile = z
-  .object({
-    user: z.string().optional(),
-    k: z.number().int().positive().optional(),
-    models: z.array(z.object({ label: z.string(), agent: z.string() }).strict()).min(1),
-  })
-  .strict();
 
 withProviderFlags(program
   .command("leaderboard"))

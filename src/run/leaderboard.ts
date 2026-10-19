@@ -1,5 +1,6 @@
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { z } from "zod";
 import { renderHtml } from "../report/html.ts";
 import type { Domain } from "../spec/schema.ts";
 import { noopAgent } from "../sim/noop.ts";
@@ -7,6 +8,15 @@ import { scriptedUser } from "../sim/scripted.ts";
 import type { AgentAdapter, UserSimulator } from "../sim/types.ts";
 import { runSuite, type SuiteResult } from "./suite.ts";
 import { costOf, totalTokens } from "./usage.ts";
+
+/** The models file `sandtable leaderboard -m <file>` reads. */
+export const ModelsFile = z
+  .object({
+    user: z.string().optional(),
+    k: z.number().int().positive().optional(),
+    models: z.array(z.object({ label: z.string(), agent: z.string() }).strict()).min(1),
+  })
+  .strict();
 
 export interface LeaderboardEntry {
   /** Display name, e.g. "Claude Opus 5.5". */
