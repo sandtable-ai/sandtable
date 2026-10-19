@@ -104,7 +104,7 @@ invariants:
     description: Refunds above $500 need a supervisor.
     never: { tool: issue_refund, when: { amount: { $gt: 500 } } }
 
-  - id: never-disclose-ceiling         # no agent message may contain any value of table.field
+  - id: never-disclose-ceiling         # no agent message may contain a value of table.field it hasn't been allowed yet
     description: Never tell the caller a load's max_rate, unless it is the rate actually booked.
     never_disclose: { table: loads, field: max_rate, unless: { tool: book_load, arg: rate } }
     review: pending
@@ -116,7 +116,7 @@ invariants:
     limit: { tool: log_offer, arg: counter_offer, lt: { table: loads, key_arg: load_id, field: max_rate } }
 ```
 
-`never_disclose` matches numbers in common spellings (`2350`, `2,350`, `$2,350.00`) and strings of 3 or more characters, across every row of the table. `unless` allows a value the agent passed successfully to that tool; a list (`unless: [{ tool: book_load, arg: rate }, { tool: submit_offer, arg: rate }]`) allows several. Booleans cannot be protected: `validate` rejects a `never_disclose` whose seeded values are booleans or all shorter than 3 characters, and `init --sop` drops such a draft with a warning.
+`never_disclose` matches numbers in common spellings (`2350`, `2,350`, `$2,350.00`) and strings of 3 or more characters, across every row of the table. `unless` allows a value the agent passed successfully to that tool, from the agent turn of that call on (a message in an earlier turn still fails); a list (`unless: [{ tool: book_load, arg: rate }, { tool: submit_offer, arg: rate }]`) allows several. A value the caller said before the agent did is never a leak when the agent repeats it. Booleans cannot be protected: `validate` rejects a `never_disclose` whose seeded values are booleans or all shorter than 3 characters, and `init --sop` drops such a draft with a warning.
 
 `soft: true` works on every kind. A soft invariant is checked the same way, but breaking it never fails a trial: runs report how often it was broken, in the trials where it applied (its tool was called; for `never_disclose`, the agent spoke). Use it for behaviour the SOP allows but the customer wants measured, such as conceding all the way to a price ceiling. Anything the SOP forbids stays hard.
 

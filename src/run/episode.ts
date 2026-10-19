@@ -123,7 +123,7 @@ export async function runEpisode(input: {
   }
 
   const keys = Object.fromEntries(Object.keys(domain.world.tables).map((t) => [t, world.keyOf(t)]));
-  const said = checkTranscript(domain, world, runner.calls, agentMessages);
+  const said = checkTranscript(domain, world, runner.calls, events);
   const violations: Violation[] = [...runner.violations, ...said.filter((v) => !v.soft)];
   const soft = softChecks(domain, runner.calls, agentMessages.length, [...runner.soft, ...said.filter((v) => v.soft)]);
   const { passed, checks } = gradeTrial({ task, world, calls: runner.calls, agentMessages, violations, error });
