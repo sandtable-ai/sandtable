@@ -3,7 +3,7 @@
   "version": "0.1.0-alpha.0",
   "description": "Rehearse your AI agent on a simulated copy of your customer's world before it goes live: tau-bench-style simulations with stateful tools, policy invariants and pass^k.",
   "license": "MIT",
-  "homepage": "https://github.com/sandtable-ai/sandtable#readme",
+  "homepage": "https://sandtable.dev",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sandtable-ai/sandtable.git"

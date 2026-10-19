@@ -4,6 +4,7 @@ title: "sandtable: rehearse AI agents on a simulated copy of your customer's wor
 type: software
 license: MIT
 repository-code: "https://github.com/sandtable-ai/sandtable"
+url: "https://sandtable.dev"
 authors:
   - name: "The sandtable authors"
 keywords: [ai-agents, evaluation, simulation, tau-bench, pass^k]

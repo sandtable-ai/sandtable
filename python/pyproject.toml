@@ -13,8 +13,10 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/sandtable-ai/sandtable"
+Homepage = "https://sandtable.dev"
+Documentation = "https://sandtable.dev"
 Repository = "https://github.com/sandtable-ai/sandtable"
+Changelog = "https://github.com/sandtable-ai/sandtable/blob/main/CHANGELOG.md"
 
 [project.scripts]
 sandtable = "sandtable_ai.cli:main"
