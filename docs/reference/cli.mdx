@@ -22,6 +22,8 @@ sandtable <command> [options]
 
 `sandtable --version` prints the version and `sandtable <command> --help` lists a command's options. From a clone of the repo, run `npm run sandtable -- <command>`.
 
+`validate`, `lint`, `review`, `run` and `leaderboard` accept `examples/freight` and `examples/clinic` outside a clone too. When the current directory has no folder of that name, they use the copy bundled with the package and print its path on stderr. A folder of that name in the current directory always wins, and any other path is used as given.
+
 ## init
 
 Draft a domain from a customer's artifacts. Review the output before trusting it. See [Draft a domain with init](/guides/init).

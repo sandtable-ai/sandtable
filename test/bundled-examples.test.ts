@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -30,9 +30,17 @@ describe.skipIf(!process.features.typescript)("bundled examples", () => {
     expect(stdout).toContain("pass^1 100.0%");
   });
 
-  it("a local folder of that name wins, and other missing paths still fail", async () => {
-    const local = await run(["validate", "examples/freight"], process.cwd());
+  it("a local folder of that name wins, even one without a sandtable.yaml, and other missing paths still fail", async () => {
+    const mine = mkdtempSync(path.join(tmpdir(), "sandtable-local-"));
+    cpSync(path.resolve("examples/clinic"), path.join(mine, "examples", "freight"), { recursive: true });
+    const local = await run(["validate", "examples/freight"], mine);
+    expect(local.stdout).toContain("✓ clinic-front-desk:");
     expect(local.stderr).not.toContain("bundled");
+    const broken = mkdtempSync(path.join(tmpdir(), "sandtable-local-"));
+    mkdirSync(path.join(broken, "examples", "freight"), { recursive: true });
+    const noSpec = await run(["validate", "examples/freight"], broken);
+    expect(noSpec.code).toBe(1);
+    expect(noSpec.stderr).toContain("no sandtable.yaml found at examples/freight");
     const missing = await run(["validate", "examples/nope"], empty);
     expect(missing.code).toBe(1);
     expect(missing.stderr).toContain("no sandtable.yaml found at examples/nope");
