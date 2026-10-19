@@ -41,7 +41,7 @@ The lesson: read failing trajectories before trusting a score. Automatic attribu
 
 Inputs: `examples/freight/source/openapi.yaml`, `examples/freight/policy.md`, two transcripts. Drafting model: Claude Opus 5.5.
 
-This run (October 2026) used the freight SOP and domain from before the example grew (#45). The OpenAPI step is deterministic and still drafts the same tables and tools; the SOP has since gained rules, and the hand-written domain now has invariants for all of the rules below, so a rerun of the SOP and transcript steps will draft more.
+This run (October 2026) used the freight SOP and domain from before the example grew (#45). The OpenAPI step is deterministic and still drafts the same tables and tools. The SOP has since gained rules, so a rerun of the SOP and transcript steps is likely to draft more, and "the hand-written domain" below means the domain as it was then.
 
 - **OpenAPI → 4 tables and 5 tools**, deterministically, with two review notes: the 409 condition on booking, and the side effect "the load becomes booked".
 - **SOP → 9 invariants**, each quoting its sentence. They cover all four hand-written rules:
