@@ -123,37 +123,58 @@ function fmt(args: Args): string {
 }
 
 /**
+ * The conversation in order, as `checkTranscript` reads it: what the caller and the agent said, and
+ * where each tool call fell. A trial's `events` fit this shape. In one agent turn, the tool calls the
+ * agent made come before its reply.
+ */
+export type TranscriptEvent = { type: "user" | "agent"; text: string } | { type: "tool"; index: number };
+
+/**
  * Transcript-level invariants (never_disclose): scan every agent message for protected values,
- * in the usual spellings (2350, 2,350, $2,350.00). Values the agent legitimately agreed to via
- * the `unless` tool argument are allowed.
+ * in the usual spellings (2350, 2,350, $2,350.00). A value is not a leak in a message when:
+ * - a successful call to an `unless` tool passed it, earlier in the conversation or in the same
+ *   agent turn as the message (the rate the agent logged, booked or submitted), or
+ * - the caller said it before the agent did (the agent repeats the caller's own ask).
+ * `calls` holds the tool calls that `events` refer to by index.
  */
 export function checkTranscript(
   domain: Domain,
   world: World,
   calls: readonly CallRecord[],
-  agentMessages: readonly string[],
+  events: readonly TranscriptEvent[],
 ): Violation[] {
   const out: Violation[] = [];
   for (const inv of domain.invariants) {
     if (!("never_disclose" in inv)) continue;
     const { table, field, unless } = inv.never_disclose;
-    const allowed = new Set(
-      [unless ?? []].flat().flatMap((u) => calls.filter((c) => c.ok && c.name === u.tool).map((c) => String(c.args[u.arg]))),
-    );
+    const exceptions = [unless ?? []].flat();
     const values = new Set<string>();
     for (const row of world.list(table)) {
       const v = row[field];
-      if ((typeof v === "number" || (typeof v === "string" && v.trim().length >= 3)) && !allowed.has(String(v))) values.add(String(v));
+      if (typeof v === "number" || (typeof v === "string" && v.trim().length >= 3)) values.add(String(v));
     }
-    agentMessages.forEach((msg, i) => {
-      for (const v of values) {
-        if (mentions(msg, v)) {
-          const detail = `agent message ${i + 1} disclosed ${table}.${field}=${v}`;
-          out.push({ invariant: inv.id, description: inv.description, detail, messageIndex: i, ...(inv.soft ? { soft: true as const } : {}) });
-          return;
-        }
+    // Values the agent may say from this point of the conversation on.
+    const cleared = new Set<string>();
+    // Values the agent has already leaked: the caller repeating one doesn't make it the caller's.
+    const leaked = new Set<string>();
+    let message = 0;
+    for (const e of events) {
+      if (e.type === "tool") {
+        const c = calls[e.index];
+        if (c?.ok) for (const u of exceptions) if (c.name === u.tool) cleared.add(String(c.args[u.arg]));
+        continue;
       }
-    });
+      if (e.type === "user") {
+        for (const v of values) if (!leaked.has(v) && mentions(e.text, v)) cleared.add(v);
+        continue;
+      }
+      const i = message++;
+      const found = [...values].filter((v) => !cleared.has(v) && mentions(e.text, v));
+      if (found.length === 0) continue;
+      for (const v of found) leaked.add(v);
+      const detail = `agent message ${i + 1} disclosed ${table}.${field}=${found[0]}`;
+      out.push({ invariant: inv.id, description: inv.description, detail, messageIndex: i, ...(inv.soft ? { soft: true as const } : {}) });
+    }
   }
   return out;
 }

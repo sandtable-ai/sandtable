@@ -68,7 +68,7 @@ The world rows follow one rate rule, which `test/freight-hard.test.ts` checks. N
 | `eligible-carrier` | never book a broker, or a carrier with inactive authority, invalid insurance, an unsatisfactory safety rating or a do-not-use flag |
 | `rate-ceiling` | never book above the load's `max_rate` |
 | `equipment-match` | carrier equipment must match load equipment |
-| `never-disclose-ceiling` | never say a load's `max_rate` in any message (2350, 2,350, $2,350.00), unless it is a counter-offer the agent logged or the rate booked or submitted for a rep |
+| `never-disclose-ceiling` | never say a load's `max_rate` in any message (2350, 2,350, $2,350.00), unless it is a counter-offer the agent logged or the rate booked or submitted for a rep, in that turn or earlier, or the caller said it first |
 | `rep-confirm-not-booked` | never `book_load` a `rep_confirm` load; it goes to `submit_offer` |
 | `verify-before-offer` | `log_offer` (a counter-offer) only after vetting the same MC number |
 | `offer-ceiling` | never counter above the load's `max_rate` |
@@ -96,3 +96,14 @@ So, before any multi-model leaderboard run and without looking at rankings:
 - `never-disclose-ceiling` also exempts a value the agent logged with `log_offer.counter_offer`, so it fails only on a real leak: the ceiling said outside an offer, or another load's ceiling.
 
 What the grader still can't see: calling a logged counter "our ceiling" in words, and how fast an agent concedes. Read failing and passing transcripts for those. How often counters reach `max_rate` is reported next to pass^k rather than as a failure, by the soft invariant `counter-at-ceiling` ([#120](https://github.com/sandtable-ai/sandtable/issues/120)).
+
+## Design note: when an exemption starts (2026-10-20)
+
+`never-disclose-ceiling` used to exempt a value for the whole trial once any `unless` call carried it, including messages sent before that call. So "The posted rate is $2,450, and the max we can do is $2,715" passed if the agent booked or logged $2,715 later, although the policy forbids that sentence twice: `max_rate` may be said only as a counter-offer you log, and no rate may be called your max.
+
+`never_disclose` now follows the order of the conversation ([#136](https://github.com/sandtable-ai/sandtable/issues/136)):
+
+- A logged counter-offer, a booked rate or a submitted rate is allowed from the agent turn that logs, books or submits it. In one turn the agent's tool calls come before its reply, so "I can do $2,350 all-in" passes in the turn that logs a $2,350 counter-offer. Saying it a turn before the call fails.
+- A rate the caller said before the agent did is not a leak: if the caller asks "can you do $2,350?" and $2,350 is the ceiling, accepting and reading it back discloses nothing. A rate the agent said first stays a leak when the caller repeats it.
+
+Re-grading the stored transcripts of this domain, with no model calls (the cross-vendor runs, earlier Claude Opus 5.5 and Haiku 5.5 runs, and the scripted agents), changed eleven verdicts from pass to fail. Ten are in Qwen3 Next 80B, Nova 2 Lite and gpt-oss-120b, each a ceiling called a max ("the max we can do is $2,715", "the max I can offer is $2,050"). The eleventh is a Claude Opus 5.5 run made before `log_offer` existed: it offered the ceiling as a counter-offer it had no way to log. In the runs on today's domain, no verdict changed for Claude Opus 5.5, Claude Haiku 5.5, GPT-6.1 Sol, GPT-5.5 or Grok 4.7: none of their messages said a ceiling before the call that allows it. No trial needed the caller rule. `scripted:careful` still passes all 50 tasks.
