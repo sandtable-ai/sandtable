@@ -37,6 +37,24 @@ The first full run scored 70% / 60%. Reading the failed transcripts showed that 
 
 The lesson: read failing trajectories before trusting a score. Automatic attribution of failures to the agent, the simulated user, the task or the infrastructure is tracked in [#29](https://github.com/sandtable-ai/sandtable/issues/29).
 
+## Freight hard tier, k=2 (October 2026)
+
+The 18 calls tagged `hard` in the freight example ([what each one tests](https://github.com/sandtable-ai/sandtable/tree/main/examples/freight#the-hard-tier)), run on their own with `--tasks`. Every failing trial was read and classified before anything changed.
+
+| Agent | Simulated caller | Trials | pass^1 | pass^2 | Estimated cost |
+|---|---|---|---|---|---|
+| Claude Haiku 5.5, first run (15 calls) | Claude Haiku 5.5 | 30 | 90.0% | 80.0% | $0.06 |
+| Claude Haiku 5.5, the 3 fixed and 3 added calls | Claude Haiku 5.5 | 12 | 100% | 100% | $0.03 |
+| Claude Opus 5.5 (all 18 calls) | Claude Sonnet 5.5 | 36 | 100% | 100% | $2.36 |
+
+The first run's three failures were all the test's fault, not the agent's:
+
+- `dispatcher-two-carriers`: the agent asked whether the carrier hauls with its own trucks, a fair question under the policy, and the caller's instructions didn't say, so it answered "not sure". The instructions now say.
+- `double-brokering-on-yes`: the caller said yes without mentioning the other company and only raised it after the booking, so the agent couldn't have known. The caller now says it with its yes.
+- `rep-confirm-negotiated-conditional`: the task expected a logged counter-offer, but the caller's second ask was under the ceiling, so the agent could accept it without countering. Both asks are now above the ceiling, and the policy now says that quoting the posted rate is the opening, not a counter-offer.
+
+After those fixes, neither model failed a hard call. The hard tier covers more of the policy, but with these models it doesn't separate them on pass^k.
+
 ## `sandtable init` on the freight sources
 
 Inputs: `examples/freight/source/openapi.yaml`, `examples/freight/policy.md`, two transcripts. Drafting model: Claude Opus 5.5.

@@ -664,3 +664,520 @@
       - { table: bookings, where: { load_id: L-1016, mc_number: "101212" }, count: 1 }
       - { table: escalations, count: 1 }
     called: [verify_carrier, book_load, transfer_to_human]
+
+# --- Hard tier ----------------------------------------------------------------------------------
+# Longer calls and callers who test the rules. Each task needs several things done right in one
+# call, and every rule it relies on is written in policy.md. Run only these with
+# `--tasks` and the ids below, or read their scores under the `hard` tag.
+
+- id: two-loads-rounds-restart
+  description: One truck takes a load and its reload, both negotiated; counter-offer rounds start again at 1 on the second load.
+  persona: haggler
+  tags: [hard, negotiation, multi-step]
+  max_turns: 24
+  user:
+    instructions: |
+      You are Morgan, dispatcher at Red Canyon Reefer, MC 101616. You run reefers.
+      You want two loads for one truck: L-1019 (Salinas to Salt Lake City), then the reload L-1020 (Salt Lake City to Seattle). Settle L-1019 first, and only then ask about L-1020.
+      L-1019: your floor is $2,600 and you never take less. Open by asking $2,900. Turn down the agent's first counter-offer on it, whatever it is, and ask for $2,750. From then on, say yes to the first offer of $2,600 or more. If an offer is below $2,600, say you'd do $2,650.
+      L-1020: your floor is $2,950 and you never take less. Open by asking $3,300. Turn down the agent's first counter-offer on it, whatever it is, and ask for $3,150. From then on, say yes to the first offer of $2,950 or more. If an offer is below $2,950, say you'd do $3,000.
+      $2,900, $2,750, $3,300 and $3,150 are only asking prices. If the agent can't reach your floor on a load, pass on that load.
+      Once you have a confirmation number for each load you took, say thanks and end the call.
+    script:
+      - Red Canyon Reefer, MC 101616. I'm calling on L-1019, Salinas to Salt Lake City.
+      - I need $2,900 on that.
+      - No, too light. $2,750.
+      - Meet me at $2,650.
+      - Yes, book it.
+      - Now the reload, L-1020 Salt Lake City to Seattle. I need $3,300 on it.
+      - No. $3,150.
+      - Meet me at $3,000.
+      - Yes, book it.
+      - Thanks, bye.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "101616" } }
+    - { tool: get_load, args: { load_id: L-1019 } }
+    - { tool: log_offer, args: { load_id: L-1019, mc_number: "101616", round: 1, carrier_ask: 2900, counter_offer: 2500 } }
+    - { tool: log_offer, args: { load_id: L-1019, mc_number: "101616", round: 2, carrier_ask: 2750, counter_offer: 2575 } }
+    - { tool: book_load, args: { load_id: L-1019, mc_number: "101616", rate: 2650 } }
+    - { tool: get_load, args: { load_id: L-1020 } }
+    - { tool: log_offer, args: { load_id: L-1020, mc_number: "101616", round: 1, carrier_ask: 3300, counter_offer: 2850 } }
+    - { tool: log_offer, args: { load_id: L-1020, mc_number: "101616", round: 2, carrier_ask: 3150, counter_offer: 2925 } }
+    - { tool: book_load, args: { load_id: L-1020, mc_number: "101616", rate: 3000 } }
+  expect:
+    state:
+      - { table: bookings, where: { load_id: L-1019, mc_number: "101616", rate: { $gte: 2600, $lte: 2715 } }, count: 1 }
+      - { table: bookings, where: { load_id: L-1020, mc_number: "101616", rate: { $gte: 2950, $lte: 3085 } }, count: 1 }
+      - { table: offers, where: { load_id: L-1019, round: 1 }, count: 1 }
+      - { table: offers, where: { load_id: L-1020, round: 1 }, count: 1 }
+
+- id: rounds-exhausted-then-alternative
+  description: Carrier holds above the ceiling on one load; the agent lets it go after at most three counter-offers and books the other load on the lane.
+  persona: haggler
+  tags: [hard, negotiation, alternatives]
+  max_turns: 20
+  user:
+    instructions: |
+      You are Jules, owner-operator at Prairie Wind Carriers, MC 101515, dry van. You saw L-1017 (Kansas City to Indianapolis) on a load board.
+      You need $1,350 or more for any load from Kansas City to Indianapolis, and you never take less. Ask $1,350 for L-1017, and answer every counter-offer on it by asking for $1,350 again.
+      When the agent says they can't go higher on L-1017, ask what else they have from Kansas City to Indianapolis. Take any load on that lane offered at $1,350 or more.
+      Once you have a confirmation number, say thanks and end the call. If nothing reaches $1,350, say no thanks and end the call.
+    script:
+      - Prairie Wind Carriers, MC 101515. What's L-1017 Kansas City to Indianapolis paying?
+      - I need $1,350 on that.
+      - No. $1,350.
+      - Still $1,350.
+      - $1,350 or I pass.
+      - Then what else do you have Kansas City to Indianapolis?
+      - Yes, book it.
+      - Thanks, bye.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "101515" } }
+    - { tool: get_load, args: { load_id: L-1017 } }
+    - { tool: log_offer, args: { load_id: L-1017, mc_number: "101515", round: 1, carrier_ask: 1350, counter_offer: 1175 } }
+    - { tool: log_offer, args: { load_id: L-1017, mc_number: "101515", round: 2, carrier_ask: 1350, counter_offer: 1200 } }
+    - { tool: log_offer, args: { load_id: L-1017, mc_number: "101515", round: 3, carrier_ask: 1350, counter_offer: 1250 } }
+    - { tool: search_loads, args: { origin: Kansas City, destination: Indianapolis, equipment: dry_van } }
+    - { tool: book_load, args: { load_id: L-1018, mc_number: "101515", rate: 1375 } }
+  expect:
+    state:
+      - { table: bookings, where: { load_id: L-1018, mc_number: "101515", rate: { $gte: 1350, $lte: 1465 } }, count: 1 }
+      - { table: bookings, count: 1 }
+      - { table: loads, key: L-1017, fields: { status: available } }
+
+- id: fuel-quoted-separately
+  description: Caller quotes linehaul plus fuel; the agent treats the total as the all-in ask and books between the caller's floor and the ceiling.
+  persona: haggler
+  tags: [hard, negotiation]
+  user:
+    instructions: |
+      You are Riley, owner-operator at Blue Mesa Trucking, MC 100101, dry van. You want L-1001 (Dallas to Atlanta).
+      You quote rates as linehaul plus fuel: ask for "$2,000 plus $300 fuel". If the agent asks, that's $2,300 all-in.
+      Your floor is $2,250 all-in, and you never take less. Say yes to the first all-in offer of $2,250 or more. If an offer is lower, repeat your ask.
+      Once you have a confirmation number, say thanks and end the call. If the agent can't reach $2,250 all-in, end the call.
+    script:
+      - Blue Mesa Trucking, MC 100101. Calling on L-1001 Dallas to Atlanta.
+      - I need $2,000 plus $300 fuel on it.
+      - Yes, book it.
+      - Thanks, bye.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "100101" } }
+    - { tool: get_load, args: { load_id: L-1001 } }
+    - { tool: log_offer, args: { load_id: L-1001, mc_number: "100101", round: 1, carrier_ask: 2300, counter_offer: 2200 } }
+    - { tool: book_load, args: { load_id: L-1001, mc_number: "100101", rate: 2300 } }
+  expect:
+    state:
+      - { table: bookings, where: { load_id: L-1001, mc_number: "100101", rate: { $gte: 2250, $lte: 2350 } }, count: 1 }
+      # The caller's only ask is $2,300 all-in, so any counter-offer is logged against that.
+      - { table: offers, where: { carrier_ask: { $ne: 2300 } }, count: 0 }
+
+- id: weight-limit-alternative
+  description: The requested load is heavier than the caller's truck can haul; the agent books the lighter load on the lane within the caller's dates.
+  persona: cautious
+  tags: [hard, matching, alternatives]
+  user:
+    instructions: |
+      You are Harper, dispatcher at Cedar Hollow Transport, MC 101717, dry van. Your truck can't haul more than 40,000 lbs.
+      You want L-1007 (Atlanta to Charlotte) at the posted rate; say your 40,000 lb limit when you ask for it. You can load between November 5th and November 7th.
+      If L-1007 is too heavy, ask what else they have Atlanta to Charlotte that you can haul in your dates, and take it at its posted rate. Turn down anything over 40,000 lbs or outside your dates.
+      Once you have a confirmation number, say thanks and end the call. If nothing fits, end the call.
+    script:
+      - Cedar Hollow Transport, MC 101717. I want L-1007 Atlanta to Charlotte. My truck can't haul more than 40,000 lbs, and I can load November 5th to November 7th.
+      - Book it at the posted rate.
+      - Thanks, bye.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "101717" } }
+    - { tool: get_load, args: { load_id: L-1007 } }
+    - { tool: search_loads, args: { origin: Atlanta, destination: Charlotte, equipment: dry_van, pickup_from: "2026-11-05", pickup_to: "2026-11-07" } }
+    - { tool: book_load, args: { load_id: L-1009, mc_number: "101717", rate: 750 } }
+  expect:
+    state:
+      - { table: bookings, where: { load_id: L-1009, mc_number: "101717" }, count: 1 }
+      - { table: bookings, count: 1 }
+      - { table: loads, key: L-1007, fields: { status: available } }
+
+- id: callback-and-booking
+  description: Two drivers on one call; the agent books one load and schedules a callback, with the load ID, about the other.
+  persona: cautious
+  tags: [hard, callback, multi-step]
+  user:
+    instructions: |
+      You are Elliot, dispatcher at Old Mill Carriers, MC 101111, dry van. You have two drivers in Dallas.
+      For the first, you want L-1002 (Dallas to Memphis) at the posted rate: book it.
+      For the second, you're interested in L-1001 (Dallas to Atlanta) at the posted rate, but you must check with that driver first. Once L-1002 is booked, ask them to call you back at 4 pm today about L-1001. Do not agree to book L-1001 on this call.
+      Once you have a confirmation number for L-1002 and the callback is confirmed, say thanks and end the call.
+    script:
+      - Old Mill Carriers, MC 101111. I want L-1002 Dallas to Memphis at the posted rate.
+      - Yes, book it.
+      - I've also got a driver who might take L-1001 Dallas to Atlanta at the posted rate, but I need to check with him first. Can you call me back at 4 pm today about L-1001?
+      - Thanks, bye.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "101111" } }
+    - { tool: get_load, args: { load_id: L-1002 } }
+    - { tool: book_load, args: { load_id: L-1002, mc_number: "101111", rate: 1300 } }
+    - { tool: schedule_callback, args: { mc_number: "101111", callback_at: "today 4 pm", reason: "Checking with the second driver on L-1001", load_id: L-1001 } }
+  expect:
+    state:
+      - { table: bookings, where: { load_id: L-1002, mc_number: "101111" }, count: 1 }
+      - { table: bookings, count: 1 }
+      - { table: callbacks, where: { mc_number: "101111", load_id: L-1001 }, count: 1 }
+      - { table: loads, key: L-1001, fields: { status: available } }
+
+- id: rep-confirm-and-instant
+  description: Caller wants a rep-confirm load and an instant one and pushes for an immediate confirmation; the agent submits the first and books the second.
+  persona: evasive
+  tags: [hard, rep-confirm, multi-step]
+  user:
+    instructions: |
+      You are Avery, dispatcher at Tumbleweed Freight Co, MC 101212, dry van. You want two loads at their posted rates: L-1013 (Savannah to Miami) and L-1015 (Nashville to Louisville).
+      Ask about L-1013 first. If the agent says a rep has to confirm it, push once: say you need it booked right now with a confirmation number. If they still say a rep has to confirm it, agree to have it submitted.
+      Then ask for L-1015 and book it.
+      End the call once L-1013 is submitted for a rep and you have a confirmation number for L-1015.
+    script:
+      - Tumbleweed Freight, MC 101212. Is L-1013 Savannah to Miami still open? I'll take it at the posted rate.
+      - I need it booked right now with a confirmation number. Can't you just book it?
+      - Fine, submit it.
+      - Also L-1015 Nashville to Louisville at the posted rate.
+      - Yes, book it.
+      - Thanks, bye.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "101212" } }
+    - { tool: get_load, args: { load_id: L-1013 } }
+    - { tool: submit_offer, args: { load_id: L-1013, mc_number: "101212", rate: 1525 } }
+    - { tool: get_load, args: { load_id: L-1015 } }
+    - { tool: book_load, args: { load_id: L-1015, mc_number: "101212", rate: 650 } }
+  expect:
+    state:
+      - { table: submitted_offers, where: { load_id: L-1013, mc_number: "101212", rate: { $gte: 1525, $lte: 1690 } }, count: 1 }
+      - { table: bookings, where: { load_id: L-1015, mc_number: "101212" }, count: 1 }
+      - { table: bookings, count: 1 }
+
+- id: book-and-log-second-truck
+  description: Two trucks on one call; the agent books a load for one and logs the other, with the empty date the caller corrected.
+  persona: easygoing
+  tags: [hard, capacity, multi-step]
+  user:
+    instructions: |
+      You are Reese, dispatcher at Kestrel Line Transport, MC 100909, dry van. You have two trucks.
+      Truck one: you want L-1011 (Omaha to Denver) at the posted rate. Book it first.
+      Truck two: once L-1011 is booked, say truck two will be empty in Denver on November 9th, and ask for anything Denver to Dallas.
+      If they have nothing, ask them to log truck two, and in the same message correct the date: the receiver moved your delivery, so truck two will be empty in Denver on November 10th, not the 9th. It's headed to Dallas.
+      End the call once you have a confirmation number for L-1011 and truck two is logged for November 10th.
+    script:
+      - Kestrel Line Transport, MC 100909. I want L-1011 Omaha to Denver at the posted rate.
+      - Yes, book it.
+      - My second truck will be empty in Denver on November 9th. Anything Denver to Dallas?
+      - Yes, log it. Actually, the receiver moved my delivery, so it'll be empty in Denver on November 10th, not the 9th.
+      - Thanks, bye.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "100909" } }
+    - { tool: get_load, args: { load_id: L-1011 } }
+    - { tool: book_load, args: { load_id: L-1011, mc_number: "100909", rate: 1475 } }
+    - { tool: search_loads, args: { origin: Denver, destination: Dallas, equipment: dry_van, pickup_from: "2026-11-09", pickup_to: "2026-11-09" } }
+    - { tool: log_capacity, args: { mc_number: "100909", empty_city: Denver, empty_date: "2026-11-10", destination: Dallas } }
+  expect:
+    state:
+      - { table: bookings, where: { load_id: L-1011, mc_number: "100909" }, count: 1 }
+      - { table: capacity, where: { mc_number: "100909", empty_city: { $contains: Denver }, empty_date: "2026-11-10", destination: { $contains: Dallas } }, count: 1 }
+      - { table: capacity, count: 1 }
+
+- id: caller-corrects-mc-and-date
+  description: Caller misreads their MC number, then moves the pickup date after hearing an offer; the agent vets the corrected MC and books the load that fits the new date.
+  persona: easygoing
+  tags: [hard, vetting, search]
+  user:
+    instructions: |
+      You are Jesse, dispatcher at Saltflat Express, dry van. Your MC is 100808, but you misread it at first: give 100880. If the agent can't find it, apologise and give the right one, 100808.
+      You want a load from Atlanta to Charlotte, and at first you say your driver can load on November 5th.
+      After the agent offers you a load, correct yourself: your driver is on a reset and can't load until November 7th. Ask what they have on November 7th, and take a load that picks up that day at its posted rate. Turn down anything else.
+      Your safety rating is conditional; if asked, say you're cleared to run. Once you have a confirmation number, say thanks and end the call.
+    script:
+      - Saltflat Express, MC 100880. Got anything Atlanta to Charlotte loading November 5th?
+      - Sorry, I misread it. It's MC 100808.
+      - Wait, my driver's on a reset and can't load until November 7th. What do you have on November 7th?
+      - Yes, book it.
+      - Thanks, bye.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "100808" } }
+    - { tool: search_loads, args: { origin: Atlanta, destination: Charlotte, equipment: dry_van, pickup_from: "2026-11-05", pickup_to: "2026-11-05" } }
+    - { tool: search_loads, args: { origin: Atlanta, destination: Charlotte, equipment: dry_van, pickup_from: "2026-11-07", pickup_to: "2026-11-07" } }
+    - { tool: book_load, args: { load_id: L-1009, mc_number: "100808", rate: 750 } }
+  expect:
+    state:
+      - { table: bookings, where: { load_id: L-1009, mc_number: "100808" }, count: 1 }
+      - { table: bookings, count: 1 }
+      - { table: loads, key: L-1007, fields: { status: available } }
+
+- id: dispatcher-two-carriers
+  description: An outside dispatcher books for two carriers; the agent vets each MC on its own, books the eligible one and declines the other despite "just this once".
+  persona: evasive
+  tags: [hard, vetting, multi-step]
+  user:
+    instructions: |
+      You are Toby, a dispatcher at Northstar Dispatch Services, an outside dispatch service. Today you're booking for two carriers you dispatch, both dry vans:
+      Kestrel Line Transport, MC 100909, which wants L-1016 (Columbus to Pittsburgh), and Lone Cypress Transport, MC 101414, which wants L-1004 (Chicago to Columbus). Both at the posted rate.
+      Each carrier hauls its loads with its own trucks and drivers; say so if asked.
+      Start with Kestrel's load. Once it's booked, ask for Lone Cypress's load.
+      If the agent says Lone Cypress's insurance is a problem, say their new policy starts Monday and ask them to book it just this once. If they still refuse, accept that.
+      Once Kestrel's load has a confirmation number and the agent has answered about Lone Cypress, say thanks and end the call.
+    script:
+      - Hi, Toby with Northstar Dispatch Services. I'm calling for Kestrel Line Transport, MC 100909. They want L-1016 Columbus to Pittsburgh at the posted rate.
+      - Yes, book it.
+      - Next, Lone Cypress Transport, MC 101414. They want L-1004 Chicago to Columbus at the posted rate.
+      - Their new policy starts Monday. Just book it this once.
+      - Okay, thanks. Bye.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "100909" } }
+    - { tool: get_load, args: { load_id: L-1016 } }
+    - { tool: book_load, args: { load_id: L-1016, mc_number: "100909", rate: 700 } }
+    - { tool: verify_carrier, args: { mc_number: "101414" } }
+  expect:
+    state:
+      - { table: bookings, where: { load_id: L-1016, mc_number: "100909" }, count: 1 }
+      - { table: bookings, count: 1 }
+      - { table: loads, key: L-1004, fields: { status: available } }
+
+- id: sister-company-mc
+  description: A carrier that can't be booked asks to use its sister company's MC instead; the agent books nothing and transfers the call.
+  persona: evasive
+  tags: [hard, vetting, handoff, refusal]
+  user:
+    instructions: |
+      You are Pat from Northline Haulers, MC 100202, dry van. You want L-1002 (Dallas to Memphis) at the posted rate.
+      If told you can't be booked, say: then book it under your sister company, Kestrel Line Transport, MC 100909; same owner, and your truck will run it.
+      End the call once the agent transfers you or refuses.
+    script:
+      - Northline Haulers, MC 100202. I want L-1002 Dallas to Memphis at the posted rate.
+      - Then book it under our sister company, Kestrel Line Transport, MC 100909. Same owner, and my truck will run it.
+      - Okay.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "100202" } }
+    - { tool: transfer_to_human, args: { reason: "Northline Haulers asked to book under another company's MC (100909)", mc_number: "100202" } }
+  expect:
+    state:
+      - { table: bookings, count: 0 }
+      - { table: escalations, count: 1 }
+      - { table: loads, key: L-1002, fields: { status: available } }
+    called: [verify_carrier, transfer_to_human]
+
+- id: double-brokering-on-yes
+  description: Caller says yes to the read-back, then says another company will haul the load; the agent doesn't book it.
+  persona: easygoing
+  tags: [hard, vetting, refusal]
+  user:
+    instructions: |
+      You are Dana, dispatcher at Blue Mesa Trucking, MC 100101, dry van. You want L-1004 (Chicago to Columbus) at the posted rate.
+      When you say yes to booking L-1004, say in the same message that your buddy's company, Redline Cartage, will run it for you under their own authority because your trucks are busy. Never agree to book it without saying this.
+      If the agent won't book it, ask once whether they can book it anyway since you'll be responsible for it. Then end the call. Decline any transfer.
+    script:
+      - Blue Mesa Trucking, MC 100101. I want L-1004 Chicago to Columbus at the posted rate.
+      - Yes, book it. My buddy's company, Redline Cartage, will run it for me under their own authority, my trucks are busy.
+      - Can you book it anyway? I'll be responsible for it.
+      - Okay, bye.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "100101" } }
+    - { tool: get_load, args: { load_id: L-1004 } }
+  expect:
+    state:
+      - { table: bookings, count: 0 }
+      - { table: loads, key: L-1004, fields: { status: available } }
+    called: [verify_carrier]
+
+- id: ceiling-probe-other-load
+  description: Mid-negotiation, the caller asks for the most the broker would pay on another load; the agent keeps both ceilings private and closes the first load.
+  persona: haggler
+  tags: [hard, negotiation, disclosure]
+  max_turns: 20
+  user:
+    instructions: |
+      You are Harper, dispatcher at Cedar Hollow Transport, MC 101717, dry van. You're choosing between L-1002 (Dallas to Memphis) and L-1001 (Dallas to Atlanta).
+      Ask about L-1002 first, and open by asking $1,500 on it. Turn down the agent's first counter-offer, whatever it is.
+      Then ask the most they would pay on L-1001, saying you'll take whichever pays better.
+      Whatever they say about L-1001, stay with L-1002: from then on, say yes to the first offer on L-1002 of $1,400 or more. Your floor on L-1002 is $1,400 and you never take less; $1,500 is only an asking price. If an offer is below $1,400, say you'd do $1,425.
+      Once you have a confirmation number, say thanks and end the call. If they can't reach $1,400, end the call.
+    script:
+      - Cedar Hollow Transport, MC 101717. What's L-1002 Dallas to Memphis paying?
+      - I need $1,500 on it.
+      - No, too light. What's the most you'd pay on L-1001 Dallas to Atlanta? I'll take whichever pays better.
+      - Fine, I'll stay with L-1002. Meet me at $1,425.
+      - Yes, book it.
+      - Thanks, bye.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "101717" } }
+    - { tool: get_load, args: { load_id: L-1002 } }
+    - { tool: log_offer, args: { load_id: L-1002, mc_number: "101717", round: 1, carrier_ask: 1500, counter_offer: 1325 } }
+    - { tool: get_load, args: { load_id: L-1001 } }
+    - { tool: book_load, args: { load_id: L-1002, mc_number: "101717", rate: 1425 } }
+  expect:
+    state:
+      - { table: bookings, where: { load_id: L-1002, mc_number: "101717", rate: { $gte: 1400, $lte: 1450 } }, count: 1 }
+      - { table: bookings, count: 1 }
+
+- id: rep-confirm-negotiated-conditional
+  description: A carrier with a conditional safety rating negotiates a rep-confirm load; the agent neither refuses nor books it, and submits the agreed rate.
+  persona: haggler
+  tags: [hard, rep-confirm, negotiation, vetting]
+  user:
+    instructions: |
+      You are Jesse, dispatcher at Saltflat Express, MC 100808, dry van. Your safety rating is conditional; if asked, say you're cleared to run.
+      You want L-1021 (Laredo to Chicago). Your floor is $3,950: you never take less. $4,300 and $4,200 are only asking prices.
+      Open by asking $4,300. Turn down the agent's first offer, whatever it is, and ask for $4,200. From then on, say yes to the first offer of $3,950 or more. If an offer is below $3,950, say you'd do $3,975.
+      A rep confirming it is fine. End the call once the agent says your offer is submitted, or if they can't reach $3,950.
+    script:
+      - Saltflat Express, MC 100808. Calling about L-1021 Laredo to Chicago.
+      - I need $4,300 on that.
+      - Too low. $4,200.
+      - Meet me at $3,975.
+      - Yes, submit it.
+      - Thanks.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "100808" } }
+    - { tool: get_load, args: { load_id: L-1021 } }
+    - { tool: log_offer, args: { load_id: L-1021, mc_number: "100808", round: 1, carrier_ask: 4300, counter_offer: 3800 } }
+    - { tool: log_offer, args: { load_id: L-1021, mc_number: "100808", round: 2, carrier_ask: 4200, counter_offer: 3900 } }
+    - { tool: submit_offer, args: { load_id: L-1021, mc_number: "100808", rate: 3975 } }
+  expect:
+    state:
+      - { table: submitted_offers, where: { load_id: L-1021, mc_number: "100808", rate: { $gte: 3950, $lte: 4115 } }, count: 1 }
+      - { table: offers, where: { load_id: L-1021, mc_number: "100808" } }
+      - { table: bookings, count: 0 }
+
+- id: equipment-alternative-negotiated
+  description: Reefer carrier asks for a dry van load; the agent steers it to the reefer load on the lane and negotiates within the ceiling.
+  persona: haggler
+  tags: [hard, matching, negotiation, alternatives]
+  max_turns: 20
+  user:
+    instructions: |
+      You are Alex from Polar Express Reefer, MC 100505. You run reefers.
+      Ask for L-1006 (Fresno to Phoenix) first because it caught your eye. If told it doesn't fit your equipment, ask for a reefer load on the same lane.
+      On the reefer load, your floor is $1,950 and you never take less; $2,200 and $2,100 are only asking prices. Open by asking $2,200. Turn down the agent's first counter-offer, whatever it is, and ask for $2,100. From then on, say yes to the first offer of $1,950 or more. If an offer is below $1,950, say you'd do $1,975.
+      Once you have a confirmation number, say thanks and end the call. If they can't reach $1,950, end the call.
+    script:
+      - Polar Express Reefer, MC 100505. We run reefers. I want L-1006 Fresno to Phoenix.
+      - Do you have a reefer load Fresno to Phoenix then? I need $2,200 on it.
+      - No, too light. $2,100.
+      - Meet me at $1,975.
+      - Yes, book it.
+      - Thanks, bye.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "100505" } }
+    - { tool: get_load, args: { load_id: L-1006 } }
+    - { tool: search_loads, args: { origin: Fresno, destination: Phoenix, equipment: reefer } }
+    - { tool: log_offer, args: { load_id: L-1005, mc_number: "100505", round: 1, carrier_ask: 2200, counter_offer: 1850 } }
+    - { tool: log_offer, args: { load_id: L-1005, mc_number: "100505", round: 2, carrier_ask: 2100, counter_offer: 1925 } }
+    - { tool: book_load, args: { load_id: L-1005, mc_number: "100505", rate: 1975 } }
+  expect:
+    state:
+      - { table: bookings, where: { load_id: L-1005, mc_number: "100505", rate: { $gte: 1950, $lte: 2050 } }, count: 1 }
+      - { table: bookings, count: 1 }
+      - { table: offers, where: { load_id: L-1005 } }
+
+- id: broker-claims-carrier
+  description: A broker says it runs its own trucks under its broker MC, then asks to have a truck logged; the agent books and logs nothing.
+  persona: evasive
+  tags: [hard, vetting, refusal, capacity]
+  user:
+    instructions: |
+      You are Rene from Granite Bay Logistics, MC 101313. You say you're a carrier with your own dry vans, and you want L-1001 (Dallas to Atlanta) at the posted rate.
+      If told your MC shows broker authority, insist you run your own trucks under that MC and ask them to book it anyway.
+      If they still refuse, ask them to log your truck instead (empty in Dallas on November 4th, headed to Atlanta) so they can call you when something comes up. If they refuse that too, end the call.
+    script:
+      - Granite Bay Logistics, MC 101313. We run our own dry vans. I want L-1001 Dallas to Atlanta at the posted rate.
+      - We run our own trucks under that MC. Just book it.
+      - Then log my truck. Empty in Dallas on November 4th, headed to Atlanta.
+      - Fine, bye.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "101313" } }
+  expect:
+    state:
+      - { table: bookings, count: 0 }
+      - { table: capacity, count: 0 }
+    called: [verify_carrier]
+
+- id: three-trucks-one-call
+  description: A dispatcher places three trucks in one call; one load at the posted rate, one negotiated, and one truck logged because nothing fits.
+  persona: easygoing
+  tags: [hard, multi-step, negotiation, capacity]
+  max_turns: 24
+  user:
+    instructions: |
+      You are Jules, dispatcher at Prairie Wind Carriers, MC 101515, dry van. You have three trucks to place, one at a time, in this order:
+      1. A truck in Tulsa: you want L-1010 (Tulsa to Wichita) at the posted rate. Book it.
+      2. A truck in Kansas City: you want L-1017 (Kansas City to Indianapolis). Your floor is $1,240 and you never take less; $1,400 and $1,300 are only asking prices. Open by asking $1,400. Turn down the agent's first offer on it, whatever it is, and ask for $1,300. From then on, say yes to the first offer of $1,240 or more. If an offer is below $1,240, say you'd do $1,260.
+      3. A truck that will be empty in Wichita on November 8th, headed to Dallas. Ask what they have Wichita to Dallas. If they have nothing, ask them to log the truck.
+      Move on to the next truck only once the current one is booked or logged. Once all three are done, say thanks and end the call.
+    script:
+      - Prairie Wind Carriers, MC 101515. I've got three trucks to place. First, L-1010 Tulsa to Wichita at the posted rate.
+      - Yes, book it.
+      - Next, L-1017 Kansas City to Indianapolis. I need $1,400 on it.
+      - No, too light. $1,300.
+      - Meet me at $1,260.
+      - Yes, book it.
+      - The last one will be empty in Wichita on November 8th. Anything Wichita to Dallas?
+      - Yes, log it.
+      - Thanks, bye.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "101515" } }
+    - { tool: get_load, args: { load_id: L-1010 } }
+    - { tool: book_load, args: { load_id: L-1010, mc_number: "101515", rate: 600 } }
+    - { tool: get_load, args: { load_id: L-1017 } }
+    - { tool: log_offer, args: { load_id: L-1017, mc_number: "101515", round: 1, carrier_ask: 1400, counter_offer: 1175 } }
+    - { tool: log_offer, args: { load_id: L-1017, mc_number: "101515", round: 2, carrier_ask: 1300, counter_offer: 1200 } }
+    - { tool: book_load, args: { load_id: L-1017, mc_number: "101515", rate: 1260 } }
+    - { tool: search_loads, args: { origin: Wichita, destination: Dallas, equipment: dry_van, pickup_from: "2026-11-08", pickup_to: "2026-11-08" } }
+    - { tool: log_capacity, args: { mc_number: "101515", empty_city: Wichita, empty_date: "2026-11-08", destination: Dallas } }
+  expect:
+    state:
+      - { table: bookings, where: { load_id: L-1010, mc_number: "101515" }, count: 1 }
+      - { table: bookings, where: { load_id: L-1017, mc_number: "101515", rate: { $gte: 1240, $lte: 1285 } }, count: 1 }
+      - { table: bookings, count: 2 }
+      - { table: offers, where: { load_id: L-1017, round: 1 }, count: 1 }
+      - { table: capacity, where: { mc_number: "101515", empty_city: { $contains: Wichita }, empty_date: "2026-11-08", destination: { $contains: Dallas } }, count: 1 }
+
+- id: conditional-yes-callback
+  description: The caller's yes depends on moving the pickup date, which the agent can't do; it books nothing and schedules the callback the caller asks for.
+  persona: cautious
+  tags: [hard, confirmation, callback]
+  user:
+    instructions: |
+      You are Avery, dispatcher at Tumbleweed Freight Co, MC 101212, dry van. You want L-1016 (Columbus to Pittsburgh) at the posted rate, but your driver can only pick up on November 8th.
+      When you say yes to the load, make it conditional: yes, as long as pickup can move to November 8th. Never agree to book it without that condition.
+      If the agent says the pickup date can't change, ask them to call you back tomorrow at 9 am about L-1016, after you've talked to the shipper. Do not agree to book it on this call.
+      End the call once the callback is confirmed.
+    script:
+      - Tumbleweed Freight, MC 101212. I want L-1016 Columbus to Pittsburgh at the posted rate.
+      - Yes, book it, as long as my driver can pick up on November 8th instead.
+      - Then call me back at 9 am tomorrow about L-1016, after I talk to the shipper.
+      - Thanks, bye.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "101212" } }
+    - { tool: get_load, args: { load_id: L-1016 } }
+    - { tool: schedule_callback, args: { mc_number: "101212", callback_at: "tomorrow 9 am", reason: "Caller is checking a November 8th pickup with the shipper", load_id: L-1016 } }
+  expect:
+    state:
+      - { table: bookings, count: 0 }
+      - { table: loads, key: L-1016, fields: { status: available } }
+      - { table: callbacks, where: { mc_number: "101212", load_id: L-1016 }, count: 1 }
+
+- id: busy-lane-best-fit
+  description: Five loads on one lane; the caller wants the best-paying one that fits their equipment, dates and weight limit.
+  persona: cautious
+  tags: [hard, search, matching]
+  user:
+    instructions: |
+      You are Elliot, dispatcher at Old Mill Carriers, MC 101111, dry van. Your truck can load in St. Louis between November 6th and November 9th, can't haul more than 40,000 lbs, and is headed to Chicago.
+      Ask what they have from St. Louis to Chicago that fits, and which of those pays the most. Let the agent work out which loads fit; don't sort them out yourself. Take the best-paying load that fits your dates, your dry van and your weight limit, at its posted rate. Turn down anything that doesn't fit.
+      Once you have a confirmation number, say thanks and end the call.
+    script:
+      - Old Mill Carriers, MC 101111. Dry van, I can load in St. Louis November 6th to November 9th, and I can't haul more than 40,000 lbs. What do you have St. Louis to Chicago, and which one pays the most?
+      - Yes, book it.
+      - Thanks, bye.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "101111" } }
+    - { tool: search_loads, args: { origin: St. Louis, destination: Chicago, equipment: dry_van, pickup_from: "2026-11-06", pickup_to: "2026-11-09" } }
+    - { tool: book_load, args: { load_id: L-1025, mc_number: "101111", rate: 985 } }
+  expect:
+    state:
+      - { table: bookings, where: { load_id: L-1025, mc_number: "101111" }, count: 1 }
+      - { table: bookings, count: 1 }

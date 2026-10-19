@@ -8,9 +8,10 @@ import type { AgentAdapter, AgentSession, CallTool } from "../sim/types.ts";
  *
  * - `naive` does whatever the caller asks: no carrier vetting, no rate ceiling, no equipment
  *   or date check, and "fine" counts as a yes. It books, submits, logs and schedules for anyone.
- * - `careful` follows the SOP: vet the carrier first, match equipment and pickup dates, counter
- *   under the ceiling and log each round, read back before committing, send rep-confirm loads
- *   to a rep, and log capacity or a callback instead of booking when that is what the caller wants.
+ * - `careful` follows the SOP: vet every carrier first (each one a dispatcher calls for, and a
+ *   corrected MC), refuse another company's MC or truck, match equipment, pickup dates and weight,
+ *   counter under the ceiling and log each round per load, read back before committing, send
+ *   rep-confirm loads to a rep, and log capacity or a callback when that is what the caller wants.
  *
  * Both only understand the phrasing of the example's `user.script`s, so pair them with `--user scripted`.
  */
@@ -25,8 +26,12 @@ export function freightScriptedAgent(mode: "naive" | "careful"): AgentAdapter {
 
 const MC = /\bMC\s*#?\s*(\d{5,7})\b/i;
 const LOAD_ID = /\bL-\d{4}\b/;
-const LANE = /\b([A-Z][a-z]+) to ([A-Z][a-z]+)\b/;
+const LANE = /\b((?:Salt Lake |Kansas |St\. )?[A-Z][a-z]+) to ((?:Salt Lake )?[A-Z][a-z]+)\b/;
 const RATE = /(?<![\d-])\$?(\d{1,2},\d{3}|\d{3,5})(?!\d)/;
+/** "$2,000 plus $300 fuel": rates are all-in, so the ask is the sum. */
+const FUEL = /\$?(\d{1,2},\d{3}|\d{3,5}) plus \$?(\d{1,2},\d{3}|\d{2,5}) (?:in |for )?fuel/i;
+const WEIGHT = /\b\d{1,3},?\d{3}\s*(?:lbs|lb|pounds)\b/gi;
+const WEIGHT_LIMIT = /\b(?:more than|over|up to)\s+(\d{1,3},?\d{3})\s*(?:lbs|lb|pounds)\b/i;
 /** Every load in the example picks up in November 2026. */
 const DATE = /\bNov(?:ember)?\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b/g;
 const EMPTY_IN = /\b[Ee]mpty in ([A-Z][a-z]+)/;
@@ -34,6 +39,13 @@ const COMPANY = /\b((?:[A-Z][a-z]+ ){0,3}(?:Trucking|Transport|Haulers|Freight|C
 const CALL_AT = /\b(?:at|around)\s+(\d{1,2}(?::\d{2})?\s*[ap]m)(?:\s+(today|tomorrow))?/i;
 
 const HANDOFF = /\b(person|human|someone|paid|payment|quick pay|detention|lumper|claims?)\b/i;
+const DISPATCH_SERVICE = /\bdispatch services?\b/i;
+const REBROKER = /\b(?:will|is going to|gonna) (?:run|haul|pull|cover) it\b|\bunder their (?:own )?authority\b/i;
+/** Pushing to book a rep-confirm load directly. */
+const BOOK_NOW = /\bconfirmation number\b|\bjust book it\b|\bbooked right now\b/i;
+/** A yes that depends on something the agent can't do is not a yes. */
+const CONDITION = /\bas long as\b|\bonly if\b|\bprovided (?:that|you|my)\b/i;
+const BEST_PAYING = /\bpays the most\b|\bbest[- ]paying\b|\bhighest[- ]paying\b/i;
 const CAPACITY = /\b(log|post)\b[^.?!]*\b(truck|it)\b/i;
 const CALLBACK = /\bcall (?:me|us) back\b|\bcallback\b/i;
 const YES = /\b(yes|yep|yeah|book (?:it|that|l-\d{4})|deal|take it|sounds good|submit it)\b/i;
@@ -50,6 +62,7 @@ interface Said {
   dates: string[];
   emptyCity?: string;
   company?: string;
+  maxWeight?: number;
 }
 interface Lane {
   origin: string;
@@ -60,17 +73,22 @@ interface Window {
   to: string;
 }
 
+const num = (s: string) => Number(s.replace(",", ""));
+
 function parse(text: string): Said {
   const lane = LANE.exec(text);
-  const rate = RATE.exec(text.replace(/\bMC\s*#?\s*\d+/gi, ""))?.[1];
+  const fuel = FUEL.exec(text);
+  const rate = RATE.exec(text.replace(/\bMC\s*#?\s*\d+/gi, "").replace(WEIGHT, ""))?.[1];
+  const weight = WEIGHT_LIMIT.exec(text)?.[1];
   return {
     mc: MC.exec(text)?.[1],
     loadId: LOAD_ID.exec(text)?.[0],
     lane: lane ? { origin: lane[1]!, destination: lane[2]! } : undefined,
-    rate: rate ? Number(rate.replace(",", "")) : undefined,
+    rate: fuel ? num(fuel[1]!) + num(fuel[2]!) : rate ? num(rate) : undefined,
     dates: [...text.matchAll(DATE)].map((m) => `2026-11-${m[1]!.padStart(2, "0")}`),
     emptyCity: EMPTY_IN.exec(text)?.[1],
     company: COMPANY.exec(text)?.[1],
+    ...(weight ? { maxWeight: num(weight) } : {}),
   };
 }
 
@@ -106,16 +124,22 @@ function carefulSession(): AgentSession {
   let carrier: Row | undefined;
   let blocked: string | undefined;
   let transferred = false;
+  /** An outside dispatch service may book for several carriers, each under its own MC. */
+  let dispatcher = false;
   let window: Window | undefined;
   let emptyCity: string | undefined;
   let lane: Lane | undefined;
+  let maxWeight: number | undefined;
   /** The terms last read back to the caller, waiting for an explicit yes. */
   let offer: { load: Row; rate: number } | undefined;
   /** A load the caller asked for that does not fit them. */
   let rejected: Row | undefined;
   let capacityOffered = false;
   const rounds = new Map<string, { n: number; last: number }>();
+  /** Loads booked or submitted, loads the caller wouldn't take at our best counter, and loads another company would haul. */
   const done = new Set<string>();
+  const exhausted = new Set<string>();
+  const rebrokered = new Set<string>();
 
   return {
     async reply(text, callTool) {
@@ -125,8 +149,21 @@ function carefulSession(): AgentSession {
         transferred = true;
         return transfer(callTool, text, mc ?? said.mc);
       }
+      if (DISPATCH_SERVICE.test(text)) dispatcher = true;
+      // What the caller needs counts even before they are vetted, e.g. a lane given with a misread MC.
+      if (said.dates.length) window = { from: said.dates[0]!, to: said.dates.at(-1)! };
+      if (said.emptyCity) emptyCity = said.emptyCity;
+      if (said.maxWeight) maxWeight = said.maxWeight;
+      if (said.lane && !said.loadId) lane = said.lane;
 
+      let fresh = false;
       if (said.mc && said.mc !== mc) {
+        // A carrier's own staff can't book under another company's MC; a dispatch service can.
+        if (carrier && !dispatcher) {
+          transferred = true;
+          await callTool("transfer_to_human", { reason: `Caller from ${String(carrier.name)} (MC ${mc}) asked to book under MC ${said.mc}`, mc_number: mc });
+          return "I can't book a load under another company's MC number. Let me transfer you to one of our carrier reps.";
+        }
         mc = said.mc;
         offer = undefined;
         rejected = undefined;
@@ -138,17 +175,23 @@ function carefulSession(): AgentSession {
           await callTool("transfer_to_human", { reason: `Caller says ${said.company}, but MC ${mc} is on file under another name`, mc_number: mc });
           return "The company name doesn't match our records for that MC, so I can't book this. Let me transfer you to a carrier rep.";
         }
+        fresh = !blocked;
       }
       if (blocked) {
-        if (said.mc) return `Thanks for calling. Unfortunately we can't book with you right now: ${blocked}.`;
+        if (said.mc) return `Unfortunately we can't book with you right now: ${blocked}.`;
         return BYE.test(text) ? "Thanks for calling." : "I'm sorry, I can't book a load, log a truck or set a callback for you right now.";
       }
       if (!mc || !carrier) return BYE.test(text) && !said.loadId ? "Thanks for calling." : "Can I get your MC number first?";
       const truck = carrier;
       const mcNumber = mc;
 
-      if (said.dates.length) window = { from: said.dates[0]!, to: said.dates.at(-1)! };
-      if (said.emptyCity) emptyCity = said.emptyCity;
+      if (REBROKER.test(text) && offer) {
+        const id = String(offer.load.load_id);
+        rebrokered.add(id);
+        offer = undefined;
+        return `Thanks for telling me. We only book a load with the carrier whose own trucks and drivers haul it, so I can't book ${id} if another company runs it.`;
+      }
+      if (rebrokered.size && /\bbook it\b/i.test(text)) return "Sorry, I can't book it if another company will haul it.";
 
       const windowText = () => (!window ? "" : window.from === window.to ? ` picking up ${window.from}` : ` picking up ${window.from} to ${window.to}`);
       const capacityPitch = () => {
@@ -161,6 +204,7 @@ function carefulSession(): AgentSession {
           ? `${lead} This one needs a rep to confirm: I can submit your offer and a rep will call you back. Want me to submit it?`
           : `${lead} Want it?`;
       };
+      const tooHeavy = (load: Row) => maxWeight !== undefined && Number(load.weight_lbs) > maxWeight;
       const search = async (l: Lane) => {
         const out = await callTool("search_loads", {
           origin: l.origin,
@@ -168,9 +212,36 @@ function carefulSession(): AgentSession {
           equipment: truck.equipment,
           ...(window ? { pickup_from: window.from, pickup_to: window.to } : {}),
         });
-        return out.ok ? (out.result as Row[]) : [];
+        const found = out.ok ? (out.result as Row[]) : [];
+        return found.filter((load) => !tooHeavy(load) && !done.has(String(load.load_id)) && !exhausted.has(String(load.load_id)));
+      };
+      const searchLane = async (l: Lane) => {
+        const found = await search(l);
+        // Asked which pays the most: the best posted rate among the loads that fit.
+        if (BEST_PAYING.test(text)) found.sort((a, b) => Number(b.posted_rate) - Number(a.posted_rate));
+        if (found[0]) return present(found[0], `I have ${terms(found[0], Number(found[0].posted_rate))}.`);
+        offer = undefined;
+        return `I don't have anything ${l.origin} to ${l.destination} for a ${equipment(truck.equipment)}${windowText()} right now.${capacityPitch()}`;
       };
 
+      // A callback about a named load comes before looking that load up.
+      if (CALLBACK.test(text)) {
+        const at = CALL_AT.exec(text);
+        const when = at ? [at[2], at[1]].filter(Boolean).join(" ") : "as soon as possible";
+        const load = said.loadId ?? (offer && !done.has(String(offer.load.load_id)) ? String(offer.load.load_id) : undefined);
+        const out = await callTool("schedule_callback", {
+          mc_number: mcNumber,
+          callback_at: when,
+          reason: load ? `Checking with the driver on ${load}` : "Caller asked for a call back",
+          ...(load ? { load_id: load } : {}),
+        });
+        if (!out.ok) return `I couldn't schedule that: ${out.error}`;
+        offer = undefined;
+        return `I've set a callback for ${when}${load ? ` about ${load}` : ""}. A callback doesn't hold the load, so it may be gone by then.`;
+      }
+
+      // Presenting a load can lead straight into negotiation when the caller names a price with it.
+      let lead = "";
       if (said.loadId && said.loadId !== offer?.load.load_id) {
         const id = said.loadId;
         const out = await callTool("get_load", { load_id: id });
@@ -183,21 +254,30 @@ function carefulSession(): AgentSession {
               ? `needs a ${equipment(load.equipment)}, so I can't put your ${equipment(truck.equipment)} on it`
               : window && (String(load.pickup_date) < window.from || String(load.pickup_date) > window.to)
                 ? `picks up ${String(load.pickup_date)}, outside your dates`
-                : undefined;
-        if (!problem) return present(load, `${terms(load, Number(load.posted_rate))}.`);
-        rejected = load;
-        offer = undefined;
-        const alternative = (await search({ origin: city(load.origin), destination: city(load.destination) })).find((l) => l.load_id !== id);
-        if (alternative) return present(alternative, `${id} ${problem}. I do have ${terms(alternative, Number(alternative.posted_rate))}.`);
-        return `${id} ${problem}, and I don't have another ${equipment(truck.equipment)} load ${city(load.origin)} to ${city(load.destination)}${windowText()} right now.${capacityPitch()}`;
-      }
-
-      if (said.lane && !said.loadId) {
-        lane = said.lane;
-        const found = await search(said.lane);
-        if (found[0]) return present(found[0], `I have ${terms(found[0], Number(found[0].posted_rate))}.`);
-        offer = undefined;
-        return `I don't have anything ${said.lane.origin} to ${said.lane.destination} for a ${equipment(truck.equipment)}${windowText()} right now.${capacityPitch()}`;
+                : tooHeavy(load)
+                  ? `weighs ${String(load.weight_lbs)} lbs, more than your truck can haul`
+                  : undefined;
+        if (problem) {
+          rejected = load;
+          offer = undefined;
+          const alternative = (await search({ origin: city(load.origin), destination: city(load.destination) })).find((l) => l.load_id !== id);
+          if (alternative) return present(alternative, `${id} ${problem}. I do have ${terms(alternative, Number(alternative.posted_rate))}.`);
+          return `${id} ${problem}, and I don't have another ${equipment(truck.equipment)} load ${city(load.origin)} to ${city(load.destination)}${windowText()} right now.${capacityPitch()}`;
+        }
+        const presented = present(load, `${terms(load, Number(load.posted_rate))}.`);
+        if (said.rate === undefined) return presented;
+        // Name the load first, unless the caller is coming back to one we already discussed.
+        if (!rounds.has(id)) lead = `${terms(load, Number(load.posted_rate))}. `;
+      } else if (said.lane && !said.loadId) {
+        const presented = await searchLane(said.lane);
+        if (said.rate === undefined || !offer) return presented;
+        lead = `I have ${terms(offer.load, offer.rate)}. `;
+      } else if (said.dates.length && lane && !said.loadId && !CAPACITY.test(text)) {
+        // The caller changed their dates: search again and offer only what fits now.
+        return searchLane(lane);
+      } else if (fresh && lane && !offer) {
+        // A corrected MC checks out: pick up the lane the caller already asked for.
+        return searchLane(lane);
       }
 
       if (CAPACITY.test(text) || (capacityOffered && YES.test(text))) {
@@ -213,45 +293,41 @@ function carefulSession(): AgentSession {
         return `Done: your truck is logged as empty in ${emptyCity} on ${window.from}${lane ? `, headed to ${lane.destination}` : ""}. We'll call you if something comes up.`;
       }
 
-      if (CALLBACK.test(text)) {
-        const at = CALL_AT.exec(text);
-        const when = at ? [at[2], at[1]].filter(Boolean).join(" ") : "as soon as possible";
-        const load = offer && !done.has(String(offer.load.load_id)) ? String(offer.load.load_id) : undefined;
-        const out = await callTool("schedule_callback", {
-          mc_number: mcNumber,
-          callback_at: when,
-          reason: load ? `Checking with the driver on ${load}` : "Caller asked for a call back",
-          ...(load ? { load_id: load } : {}),
-        });
-        if (!out.ok) return `I couldn't schedule that: ${out.error}`;
-        offer = undefined;
-        return `I've set a callback for ${when}${load ? ` about ${load}` : ""}. A callback doesn't hold the load, so it may be gone by then.`;
-      }
-
       if (offer) {
         const { load } = offer;
         const id = String(load.load_id);
         if (done.has(id)) return `You're all set on ${id}. Thanks for calling.`;
         const posted = Number(load.posted_rate);
         const max = Number(load.max_rate);
-        const commitText = load.booking_mode === "rep_confirm" ? "submit it for a rep to confirm" : "book it";
+        const repConfirm = load.booking_mode === "rep_confirm";
+        const commitText = repConfirm ? "submit it for a rep to confirm" : "book it";
 
         if (said.rate !== undefined && said.rate > max) {
           const r = rounds.get(id) ?? { n: 0, last: posted };
-          if (r.n >= 3) return `Sorry, $${r.last} is as high as I can go on ${id}.`;
+          if (r.n >= 3) {
+            exhausted.add(id);
+            offer = undefined;
+            return `Sorry, $${r.last} is as high as I can go on ${id}.`;
+          }
           const counter = counterFor(posted, max, r.n + 1);
           await callTool("log_offer", { load_id: id, mc_number: mcNumber, round: r.n + 1, carrier_ask: said.rate, counter_offer: counter });
           rounds.set(id, { n: r.n + 1, last: counter });
           offer = { load, rate: counter };
-          return `I can't get there. I can do ${terms(load, counter)}. Want me to ${commitText}?`;
+          return `${lead}I can't get there. I can do ${terms(load, counter)}. Want me to ${commitText}?`;
         }
         if (said.rate !== undefined && said.rate !== offer.rate) {
           offer = { load, rate: said.rate };
-          return `I can do that. To confirm: ${terms(load, said.rate)}. Shall I ${commitText}?`;
+          return `${lead}I can do that. To confirm: ${terms(load, said.rate)}. Shall I ${commitText}?`;
+        }
+        if (repConfirm && BOOK_NOW.test(text) && !/\bsubmit\b/i.test(text)) {
+          return `I can't book ${id} myself: high-value loads need a rep to confirm, so there's no confirmation number yet. I can submit your offer at $${offer.rate} and a rep will call you back. Want me to submit it?`;
+        }
+        if (YES.test(text) && CONDITION.test(text)) {
+          return `I can't book ${id} on a condition I can't meet. I can only book it as it stands: ${terms(load, offer.rate)}.`;
         }
         if (YES.test(text) && !NOT_YET.test(text)) {
           const rate = offer.rate;
-          if (load.booking_mode === "rep_confirm") {
+          if (repConfirm) {
             const out = await callTool("submit_offer", { load_id: id, mc_number: mcNumber, rate });
             if (!out.ok) return `I couldn't submit it: ${out.error}`;
             done.add(id);

@@ -100,6 +100,7 @@ invariants:
 - **Tempt every invariant at least once.** An invariant no task can provoke is never tested.
 - **Tag by behaviour** (`happy-path`, `negotiation`, `refusal`, `vetting`, `handoff`) and read per-tag pass^k: a cautious agent scores high on `refusal` and low on `happy-path`.
 - **One behaviour per task.** When a task fails, its id should already say what broke.
+- **A hard tier is the exception.** When capable agents pass every task, add calls that are hard the way real calls are: more to get right in one call (two loads, a booking and a callback), details that change mid-call (a corrected MC number, a new date), and callers who test the rules. Grade each outcome, write every rule the call relies on into the policy first, and tag the calls `hard`. Never make a task hard with trick wording or a rule the policy doesn't state. The freight example's `hard` tier shows each call next to the policy rule it tests.
 - **Start around ten tasks**, covering the main path and each refusal reason, then add one task per real failure or transcript edge case. The freight example grew this way from its first ten tasks.
 
 ## 6. Scripts, openings, personas and turn limits

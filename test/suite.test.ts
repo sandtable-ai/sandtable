@@ -19,18 +19,18 @@ describe("freight example, offline", () => {
 
   it("the naive agent is caught by the invariants", async () => {
     const r = await runSuite({ domain: await loadDomain(example), agent: freightScriptedAgent("naive"), user: scriptedUser() });
-    expect(r.passHat["1"]).toBeCloseTo(5 / 32);
+    expect(r.passHat["1"]).toBeCloseTo(5 / 50);
     const modes = Object.fromEntries(r.failureModes.map((m) => [m.id, m.count]));
     expect(modes).toMatchObject({
-      "verify-before-book": 25,
-      "eligible-carrier": 7,
-      "rate-ceiling": 7,
-      "equipment-match": 2,
-      "rep-confirm-not-booked": 4,
-      "verify-before-submit": 4,
-      "submit-ceiling": 2,
+      "verify-before-book": 43,
+      "eligible-carrier": 9,
+      "rate-ceiling": 13,
+      "equipment-match": 3,
+      "rep-confirm-not-booked": 6,
+      "verify-before-submit": 6,
+      "submit-ceiling": 3,
       "eligible-carrier-submit": 1,
-      "eligible-carrier-capacity": 1,
+      "eligible-carrier-capacity": 2,
       "eligible-carrier-callback": 1,
     });
   });
@@ -69,9 +69,10 @@ describe("freight example, offline", () => {
       "broker-authority",
       "wrong-equipment-insists",
     ]);
-    expect(r.passHat["1"]).toBeCloseTo(0.5);
+    expect(r.passHat["1"]).toBeCloseTo(16 / 50);
     const byTag = Object.fromEntries(r.byTag.map((t) => [t.tag, t.passHat1]));
-    expect(byTag).toMatchObject({ refusal: 1, vetting: 10 / 12, "happy-path": 0, negotiation: 3 / 7, handoff: 0, capacity: 1 / 3, "rep-confirm": 0.5 });
+    // Every hard-tier refusal requires a lookup or a handoff, so doing nothing passes none of them.
+    expect(byTag).toMatchObject({ refusal: 14 / 17, vetting: 10 / 18, "happy-path": 0, negotiation: 3 / 14, handoff: 0, capacity: 1 / 6, "rep-confirm": 2 / 6, hard: 0 });
     expect(r.byTag[0]!.passHat1).toBe(0);
   });
 

@@ -127,7 +127,7 @@ This session drafts a domain from the fictional freight brokerage's sources that
     ```text
     ✓ book-then-quick-pay-handoff  (write · ready · solvable · noop fails)
 
-    32 tasks: 16 expect a write, 16 do not; a do-nothing agent passes 16 of 32.
+    50 tasks: 32 expect a write, 18 do not; a do-nothing agent passes 16 of 50.
     0 error(s), 0 warning(s)
     ```
   </Step>
@@ -141,17 +141,17 @@ This session drafts a domain from the fictional freight brokerage's sources that
     npx sandtable-ai run examples/freight --agent scripted:naive --user scripted
     ```
 
-    The noop baseline scores `pass^1 50.0%`: the share of the suite that rewards doing nothing. The naive agent, which books whatever it is asked to, scores `pass^1 15.6%`:
+    The noop baseline scores `pass^1 32.0%`: the share of the suite that rewards doing nothing. The naive agent, which books whatever it is asked to, scores `pass^1 10.0%`:
 
     ```text
       Top failure modes
-      25× invariant verify-before-book (book-at-posted-rate, … +24 more)
+      43× invariant verify-before-book (book-at-posted-rate, … +42 more)
          e.g. book_load(load_id="L-1001", mc_number="100101", rate=2100) was called…
-      13× state state:bookings#1 (negotiate-within-ceiling, … +12 more)
+      23× state state:bookings#1 (negotiate-within-ceiling, … +22 more)
          e.g. 0 bookings row(s) match {"load_id":"L-1001","mc_number":"100101","rat…
-      7× invariant rate-ceiling (negotiate-within-ceiling, … +6 more)
+      13× invariant rate-ceiling (negotiate-within-ceiling, … +12 more)
          e.g. book_load rate=2600 exceeds the limit 2350
-      7× invariant eligible-carrier (expired-insurance, … +6 more)
+      9× invariant eligible-carrier (expired-insurance, … +8 more)
          e.g. book_load on carriers 100202: insurance_status is "expired", expected…
     ```
   </Step>

@@ -40,7 +40,7 @@ describe("leaderboard", () => {
     expect(careful).toMatchObject({ passHat1: 1, passHatK: 1, trials: domain.tasks.length * 2, costUsd: null });
     const naive = lb.rows.find((r) => r.label === "Naive rules")!;
     expect(naive.violations["verify-before-book"]).toBeGreaterThan(0);
-    expect(lb.rows.find((r) => r.baseline)!.passHatK).toBeCloseTo(0.5);
+    expect(lb.rows.find((r) => r.baseline)!.passHatK).toBeCloseTo(16 / 50);
     expect(lb.rows.at(-1)!.error).toMatch(/unknown agent nope/);
 
     const md = await readFile(path.join(dir, "LEADERBOARD.md"), "utf8");

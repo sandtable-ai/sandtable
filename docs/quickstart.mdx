@@ -55,7 +55,7 @@ In about five minutes: an offline demo with no API key, the same example with Cl
     sandtable demo
     ```
 
-    Two rule-based agents replay 32 scripted carrier calls against a fictional freight brokerage. The **naive** agent books whatever it is asked to and scores pass^1 15.6% (5 of 32), with its rule breaks grouped under "Top failure modes". The **careful** agent verifies carriers, respects the rate ceiling and hands off when it should, and scores 100%.
+    Two rule-based agents replay 50 scripted carrier calls against a fictional freight brokerage. The **naive** agent books whatever it is asked to and scores pass^1 10.0% (5 of 50), with its rule breaks grouped under "Top failure modes". The **careful** agent verifies carriers, respects the rate ceiling and hands off when it should, and scores 100%.
 
     Each run writes `results.json` and `report.html` under `.sandtable/runs/` and opens the first report in your browser. Pass `--no-open` to skip that.
   </Step>
@@ -155,7 +155,7 @@ In about five minutes: an offline demo with no API key, the same example with Cl
     sandtable run examples/freight --agent http://localhost:8787/step --user scripted
     ```
 
-    It scores pass^1 50%: exactly what the [noop baseline](/concepts/baselines) scores, because it never books anything and only passes the tasks where the right outcome is to do nothing. That floor is the first number to know about any suite.
+    It scores pass^1 32%: exactly what the [noop baseline](/concepts/baselines) scores, because it never books anything and only passes the tasks where the right outcome is to do nothing. That floor is the first number to know about any suite.
 
     `examples/freight` works from any directory: when there is no such folder where you run the command, sandtable uses the copy bundled with the package and prints its path.
   </Step>

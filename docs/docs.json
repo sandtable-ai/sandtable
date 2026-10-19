@@ -45,10 +45,10 @@
       "og:locale": "en_US",
       "og:image": "https://sandtable.dev/images/og.png",
       "og:image:type": "image/png",
-      "og:image:alt": "sandtable: rehearse your AI agent on a simulated copy of your customer's world. On the same 32 scripted freight calls, a naive agent scores pass^1 15.6%, with 25 calls breaking verify-before-book, 7 rate-ceiling and 7 eligible-carrier, and a careful agent scores 100%.",
+      "og:image:alt": "sandtable: rehearse your AI agent on a simulated copy of your customer's world. On the same 50 scripted freight calls, a naive agent scores pass^1 10.0%, with 43 calls breaking verify-before-book, 13 rate-ceiling and 9 eligible-carrier, and a careful agent scores 100%.",
       "twitter:card": "summary_large_image",
       "twitter:image": "https://sandtable.dev/images/og.png",
-      "twitter:image:alt": "sandtable: rehearse your AI agent on a simulated copy of your customer's world. On the same 32 scripted freight calls, a naive agent scores pass^1 15.6%, with 25 calls breaking verify-before-book, 7 rate-ceiling and 7 eligible-carrier, and a careful agent scores 100%."
+      "twitter:image:alt": "sandtable: rehearse your AI agent on a simulated copy of your customer's world. On the same 50 scripted freight calls, a naive agent scores pass^1 10.0%, with 43 calls breaking verify-before-book, 13 rate-ceiling and 9 eligible-carrier, and a careful agent scores 100%."
     },
     "organization": {
       "id": "https://sandtable.dev/#organization",
