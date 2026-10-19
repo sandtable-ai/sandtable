@@ -1,0 +1,94 @@
+<!doctype html>
+<!--
+  Source of assets/trial.png and assets/trial-dark.png: how one trial runs and is graded.
+  Render both: node assets/render.mjs trial   (light and dark, 2x, transparent background)
+
+  What it claims, and where that lives in the code:
+    - a simulated caller talks to the agent; the agent's tool calls hit stateful mock tables (src/run, src/world)
+    - invariants are checked on every tool call; a violation is recorded, the call still runs (src/run/tools.ts)
+    - each trial is graded on the agent's messages (never_disclose), the violations, the end state and the tool log,
+      with no model in the loop (src/grade); pass^k counts a task only if all k trials pass
+  Layout: 8 px grid, one accent (brand #B4532A in light, #F0A374 in dark) on the invariant check.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>How a sandtable trial runs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Fira+Sans:wght@400;600&display=block" rel="stylesheet">
+<style>
+:root{--ink:#1E1A16;--muted:#6B6156;--fill:#F6F1E8;--rule:#DDD3C4;--accent:#B4532A;--accent-fill:#FBEFE7}
+@media (prefers-color-scheme:dark){:root{--ink:#E9E3D8;--muted:#A39886;--fill:#1F1C18;--rule:#3A342D;--accent:#F0A374;--accent-fill:#2A1E17}}
+*{margin:0;padding:0}
+html,body{background:transparent}
+figure{display:block;width:832px}
+svg{display:block;font-family:"Fira Sans",sans-serif;-webkit-font-smoothing:antialiased}
+.box{fill:var(--fill);stroke:var(--rule);stroke-width:1.5}
+.title{fill:var(--ink);font-size:16px;font-weight:600}
+.detail{fill:var(--muted);font-size:14px}
+.label{fill:var(--muted);font-size:13px}
+.wire{stroke:var(--ink);stroke-width:1.5;fill:none}
+.head{fill:var(--ink)}
+.check{fill:var(--accent-fill);stroke:var(--accent);stroke-width:1.5}
+.check-text{fill:var(--accent);font-size:14px;font-weight:600}
+.tap{stroke:var(--accent);stroke-width:1.5;stroke-dasharray:4 4;fill:none}
+.tap-head{fill:var(--accent)}
+.mono{font-family:"Fira Code",monospace;font-variant-ligatures:none}
+</style>
+</head>
+<body>
+<figure>
+<svg viewBox="0 0 832 248" width="832" height="248" role="img" aria-label="One sandtable trial. A simulated caller talks to your agent. The agent's tool calls run against stateful mock tables, and every call is checked against the domain's invariants. The trial is graded on the agent's messages, the rule violations, the end state of the tables and the tool log, with no judge model. pass^k counts a task only if all k trials pass.">
+  <defs>
+    <marker id="a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 8 4 0 8Z" class="head"/></marker>
+    <marker id="t" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 8 4 0 8Z" class="tap-head"/></marker>
+  </defs>
+
+  <!-- Row 1: the conversation and the tool loop -->
+  <rect class="box" x="8.75" y="8.75" width="174.5" height="86.5" rx="8"/>
+  <text class="title" x="24" y="40">Simulated caller</text>
+  <text class="detail" x="24" y="64">persona, hidden goal</text>
+  <text class="detail" x="24" y="84">a model or a script</text>
+
+  <rect class="box" x="304.75" y="8.75" width="174.5" height="86.5" rx="8"/>
+  <text class="title" x="320" y="40">Your agent</text>
+  <text class="detail" x="320" y="64">HTTP endpoint, module</text>
+  <text class="detail" x="320" y="84">or any model</text>
+
+  <rect class="box" x="648.75" y="8.75" width="174.5" height="86.5" rx="8"/>
+  <text class="title" x="664" y="40">Mock tools</text>
+  <text class="detail" x="664" y="64">stateful tables, a fresh</text>
+  <text class="detail" x="664" y="84">copy for every trial</text>
+
+  <!-- caller <-> agent: response on top, request below -->
+  <line class="wire" x1="296" y1="40" x2="192" y2="40" marker-end="url(#a)"/>
+  <text class="label" x="244" y="32" text-anchor="middle">replies</text>
+  <line class="wire" x1="192" y1="64" x2="296" y2="64" marker-end="url(#a)"/>
+  <text class="label" x="244" y="84" text-anchor="middle">says</text>
+
+  <!-- agent <-> tools; the invariant check sits on the call, which still goes through -->
+  <line class="wire" x1="640" y1="40" x2="488" y2="40" marker-end="url(#a)"/>
+  <text class="label" x="564" y="32" text-anchor="middle">result</text>
+  <line class="wire" x1="488" y1="64" x2="640" y2="64" marker-end="url(#a)"/>
+  <text class="label" x="488" y="88">tool call</text>
+  <rect class="check" x="520.75" y="52.75" width="94.5" height="22.5" rx="11.25"/>
+  <text class="check-text" x="568" y="69" text-anchor="middle">invariants</text>
+
+  <!-- Row 2: what the grade reads -->
+  <line class="wire" x1="392" y1="96" x2="392" y2="168" marker-end="url(#a)"/>
+  <text class="label" x="384" y="136" text-anchor="end">messages</text>
+  <line class="tap" x1="568" y1="76" x2="568" y2="168" marker-end="url(#t)"/>
+  <text class="label" x="560" y="136" text-anchor="end">violations</text>
+  <line class="wire" x1="736" y1="96" x2="736" y2="168" marker-end="url(#a)"/>
+  <text class="label" x="728" y="136" text-anchor="end">end state, tool log</text>
+
+  <rect class="box" x="8.75" y="176.75" width="814.5" height="62.5" rx="8"/>
+  <text class="title" x="24" y="208">Grade each trial</text>
+  <text class="detail" x="24" y="228">deterministic, no judge model</text>
+  <text class="title mono" x="808" y="208" text-anchor="end">pass^k</text>
+  <text class="detail" x="808" y="228" text-anchor="end">a task counts only if all k trials pass</text>
+</svg>
+</figure>
+</body>
+</html>

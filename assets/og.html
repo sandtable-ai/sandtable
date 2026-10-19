@@ -1,60 +1,83 @@
 <!doctype html>
-<!-- Source of assets/og.png, the GitHub social preview (1280×640). The numbers are the offline demo's. -->
+<!--
+  Source of the social preview, in two native sizes (no scaling or padding):
+    assets/og.png         1280x640  GitHub's social preview
+    docs/images/og.png    1200x630  the docs og:image (Mintlify always declares 1200x630)
+  Render both: node assets/render.mjs og
+
+  Every number is from the offline run on examples/freight (rule-based agents, scripted callers):
+    node src/cli.ts run examples/freight --agent scripted:naive   --user scripted   # 5/32, pass^1 15.6%
+    node src/cli.ts run examples/freight --agent scripted:careful --user scripted   # 32/32, pass^1 100%
+  data-calls lists the tasks in tasks.yaml order, 1 = passed. The violation counts are the top
+  three invariant failure modes of the naive run. If the example changes, update them from a new run.
+
+  Layout: 8 px grid; margins 80 px at 1280 wide, 64 px at 1200; one accent (brand #B4532A, and
+  #9C3F20 for small text, 5.9:1 on the background).
+-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <title>sandtable social preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Fira+Sans:wght@400;500;600&display=block" rel="stylesheet">
 <style>
-*{box-sizing:border-box;margin:0}
-html,body{width:1280px;height:640px;overflow:hidden}
-body{background:#141413;color:#ecebe7;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;padding:72px 80px;display:grid;grid-template-columns:1fr 452px;gap:56px;align-items:center}
-.brand{display:flex;align-items:center;gap:18px;margin-bottom:40px}
-.brand svg{width:72px;height:72px}
-.brand span{font-size:44px;font-weight:650;letter-spacing:-1px}
-h1{font-size:46px;line-height:1.14;font-weight:650;letter-spacing:-1px;margin-bottom:26px}
-h1 em{font-style:normal;color:#F0A374}
-p{font-size:23px;line-height:1.45;color:#b4b2ab}
-.cmd{margin-top:36px;font:22px ui-monospace,"SF Mono",Menlo,monospace;color:#ecebe7;background:#1f1e1c;border:1px solid #33322f;border-radius:10px;padding:12px 18px;display:inline-block}
-.cmd b{color:#9c9a94;font-weight:400}
-.runs{display:flex;flex-direction:column;gap:18px}
-.run{background:#1d1d1b;border:1px solid #33322f;border-radius:14px;padding:22px 24px;font:17px/1.55 ui-monospace,"SF Mono",Menlo,monospace}
-.run .head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;font-family:ui-sans-serif,system-ui,sans-serif}
-.run .who{font-size:18px;color:#9c9a94}
-.run .score{font-size:40px;font-weight:700;font-variant-numeric:tabular-nums}
-.run .score small{font-size:16px;font-weight:500;color:#9c9a94;margin-right:6px;font-family:ui-monospace,"SF Mono",Menlo,monospace}
-.bad{color:#ff6b5e}.ok{color:#4cc38a}
-.dim{color:#9c9a94}
+:root{--paper:#F6F1E8;--ink:#1E1A16;--muted:#6B6156;--rule:#DDD3C4;--accent:#B4532A;--accent-text:#9C3F20}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100vw;height:100vh;overflow:hidden}
+body{background:var(--paper);color:var(--ink);font-family:"Fira Sans",sans-serif;font-kerning:normal;-webkit-font-smoothing:antialiased;padding:80px;display:flex;flex-direction:column}
+.mono{font-family:"Fira Code",monospace;font-variant-ligatures:none}
+
+header{display:flex;justify-content:space-between;align-items:baseline;height:40px;line-height:40px}
+.mark{font-size:36px;font-weight:600;letter-spacing:-.01em}
+.cmd{font-size:24px;color:var(--muted)}
+
+h1{margin-top:40px;font-size:60px;line-height:72px;font-weight:600;letter-spacing:-.02em;max-width:1040px}
+
+.runs{margin-top:auto;display:grid;grid-template-columns:216px 760px 144px;align-items:baseline;row-gap:0}
+.runs > *{line-height:48px}
+.cap{font-size:24px;color:var(--muted);line-height:32px;padding-bottom:8px;border-bottom:2px solid var(--rule);margin-bottom:8px}
+.cap.r{text-align:right}
+.who{font-size:28px}
+.pct{font-size:40px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.pct.bad{color:var(--accent-text)}
+.cells{display:flex;gap:8px}
+.cells i{display:inline-block;width:16px;height:16px;background:var(--ink)}
+.cells i.f{background:var(--accent)}
+.why{grid-column:2 / 4;font-size:24px;line-height:32px;color:var(--muted);margin-bottom:8px}
+.why{white-space:nowrap}.why span + span{margin-left:32px}.why b{font-weight:500;color:var(--accent-text)}
+@media (max-width:1200px){
+  body{padding:64px}
+  .runs{grid-template-columns:176px 760px 136px}
+  .who{font-size:26px}
+  .pct{font-size:36px}
+}
 </style>
 </head>
 <body>
-<main>
-  <div class="brand">
-    <svg viewBox="1 1 30 30" aria-hidden="true">
-      <path d="M2 14 16 21 16 25 2 18Z" fill="#C4914A"/>
-      <path d="M16 21 30 14 30 18 16 25Z" fill="#A9772F"/>
-      <path d="M16 7 30 14 16 21 2 14Z" fill="#E9C98B" stroke="#8A5F22" stroke-width=".8" stroke-linejoin="round"/>
-      <path d="M20.67 9.33 6.67 16.33M25.33 11.67 11.33 18.67M11.33 9.33 25.33 16.33M6.67 11.67 20.67 18.67" stroke="#8A5F22" stroke-width=".7" stroke-opacity=".55" fill="none"/>
-      <path d="M11.33 10.5 16 12.83 16 16.33 11.33 14Z" fill="#B84E29"/>
-      <path d="M16 12.83 20.67 10.5 20.67 14 16 16.33Z" fill="#9C3F20"/>
-      <path d="M16 8.17 20.67 10.5 16 12.83 11.33 10.5Z" fill="#E0703F"/>
-    </svg>
-    <span>sandtable</span>
-  </div>
-  <h1>Rehearse your AI agent on a <em>sand table</em> of your customer's world.</h1>
-  <p>Simulated callers, stateful mock tools and business rules checked on every tool call. Graded on what the agent did, with no judge model.</p>
-  <div class="cmd"><b>$</b> npx sandtable-ai demo</div>
-</main>
-<aside class="runs">
-  <div class="run">
-    <div class="head"><span class="who">naive agent · 32 calls</span><span class="score bad"><small>pass^1</small> 15.6%</span></div>
-    <div><span class="bad">25×</span> verify-before-book</div>
-    <div><span class="bad">&nbsp;7×</span> rate-ceiling</div>
-    <div><span class="bad">&nbsp;7×</span> eligible-carrier <span class="dim">expired insurance</span></div>
-  </div>
-  <div class="run">
-    <div class="head"><span class="who">careful agent · 32 calls</span><span class="score ok"><small>pass^1</small> 100%</span></div>
-    <div class="dim">verifies, holds the ceiling, hands off</div>
-  </div>
-</aside>
+<header>
+  <span class="mark">sandtable</span>
+  <span class="cmd mono">npx sandtable-ai demo</span>
+</header>
+<h1>Rehearse your AI agent on a simulated copy of your customer’s world.</h1>
+<section class="runs">
+  <span class="cap">freight desk</span>
+  <span class="cap">32 scripted calls, graded on every tool call</span>
+  <span class="cap r mono">pass^1</span>
+
+  <span class="who">naive agent</span>
+  <span class="cells" data-calls="00000000110000000110000010000000"></span>
+  <span class="pct bad">15.6%</span>
+  <span class="why mono"><span><b>25×</b> verify-before-book</span><span><b>7×</b> rate-ceiling</span><span><b>7×</b> eligible-carrier</span></span>
+
+  <span class="who">careful agent</span>
+  <span class="cells" data-calls="11111111111111111111111111111111"></span>
+  <span class="pct">100%</span>
+</section>
+<script>
+for (const el of document.querySelectorAll("[data-calls]")) {
+  el.innerHTML = [...el.dataset.calls].map((c) => (c === "1" ? "<i></i>" : '<i class="f"></i>')).join("");
+}
+</script>
 </body>
 </html>

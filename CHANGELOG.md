@@ -32,6 +32,7 @@ First public release.
   - terminal summary, `results.json` (with the run's `runId`), and a self-contained HTML report with transcripts, tokens, estimated cost and turn latency. Each line of the summary's top failure modes fits an 80-column terminal: it names the first tasks that hit the failure and counts the rest (`… +24 more`), and long examples end in `…`. The full lists stay in `results.json` and the report ([#79](https://github.com/sandtable-ai/sandtable/issues/79))
   - `--fail-under` CI gate; `run --open` opens the report
   - `--prices <file>` adds verified prices for models sandtable doesn't price itself; `scripts/bedrock-prices.mjs` resolves Bedrock prices from the AWS Pricing API
+  - the HTML report's trial view shows rule ids in their own case on the tool call that broke them, hangs each check's detail under its rule id, and wraps long tool arguments, results and record changes between fields instead of running past the card ([#70](https://github.com/sandtable-ai/sandtable/issues/70))
 - **Claude Code plugin**: this repository is a plugin marketplace (`/plugin marketplace add sandtable-ai/sandtable`). Its skills teach a coding agent to draft and review a domain, write tasks, run it and attribute failures; a `failure-triager` subagent reads failing trials. Not part of the npm package.
 - **Python launcher**: `uvx sandtable-ai` or `pip install sandtable-ai` installs a `sandtable` command that runs the matching CLI release (Node.js 20+ required).
 - **Examples**:

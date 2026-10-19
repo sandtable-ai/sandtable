@@ -29,12 +29,16 @@ tr:last-child td{border-bottom:0}
 .ok{background:var(--ok)}.bad{background:var(--bad)}
 .okt{color:var(--ok)}.badt{color:var(--bad)}
 .chip{display:inline-block;background:var(--chip);border-radius:6px;padding:1px 7px;font-size:12px;margin:2px 4px 2px 0}
-.trial{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-top:16px}
-.ev{border-radius:8px;padding:8px 12px;margin:6px 0;white-space:pre-wrap;word-break:break-word}
-.ev small{display:block;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em}
-.user{background:var(--user)}.agent{background:var(--agent)}.tool{background:var(--tool);font:12px/1.45 ui-monospace,Menlo,monospace}
-.viol{color:var(--bad);font-weight:600}
-code{font:12px ui-monospace,Menlo,monospace}
+.trial{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 16px 8px;margin-top:16px;overflow-wrap:anywhere}
+.trial h2{margin:24px 0 8px}
+.check{display:grid;grid-template-columns:16px 1fr;column-gap:8px;margin:4px 0}
+.change{font:13px/20px ui-monospace,"SF Mono",Menlo,Consolas,monospace;margin:4px 0}.change span{color:var(--muted)}
+.ev{border-radius:8px;padding:8px 12px;margin:8px 0;white-space:pre-wrap}
+.ev small{display:block;color:var(--muted);font:12px/16px ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;margin-bottom:4px}
+.ev small b{font-weight:600;text-transform:uppercase;letter-spacing:.04em}.ev small code{font-size:1em}
+.user{background:var(--user)}.agent{background:var(--agent)}.tool{background:var(--tool);font:13px/20px ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.viol{color:var(--bad);font-weight:600}.viol code{font-weight:600}
+code{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.867em}
 .wrap{overflow-x:auto}
 .explain{color:var(--muted);font-size:13px;max-width:760px;margin:10px 0 0}
 footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--line)}
@@ -64,6 +68,8 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"
 const pct = (x) => Number.isNaN(x) || x === null ? "n/a" : (x * 100).toFixed(1) + "%";
 const ms = (v) => v === null || v === undefined ? "n/a" : v < 1000 ? v + "ms" : (v / 1000).toFixed(1) + "s";
 const usd = (v) => v === null || v === undefined ? "n/a" : v > 0 && v < 0.01 ? "<$0.01" : "$" + v.toFixed(2);
+// JSON with a space after each comma and colon, so long rows wrap between fields, not inside values.
+const json = (v) => v === undefined ? "" : JSON.stringify(v, null, 1).replace(/\\n\\s*/g, " ");
 const calls = (u) => u ? [u.agent, u.user].flatMap((g) => Object.values(g || {})).reduce((n, x) => n + x.calls, 0) : 0;
 $("domain").textContent = R.domain;
 $("meta").textContent = "agent " + R.agent + " · user " + R.user + " · k=" + R.k + " · " + R.startedAt + " · " + (R.durationMs / 1000).toFixed(1) + "s";
@@ -97,15 +103,15 @@ function show(ti, i) {
   const t = R.tasks[ti], tr = t.trials[i];
   const evs = tr.events.map((e) => {
     if (e.type === "tool") {
-      const v = e.violations.length ? ' <span class="viol">violates ' + e.violations.map(esc).join(", ") + "</span>" : "";
-      const out = e.ok ? JSON.stringify(e.result) : "ERROR " + e.error;
-      return '<div class="ev tool"><small>tool #' + e.index + v + "</small>" + esc(e.name) + "(" + esc(JSON.stringify(e.args)) + ")\\n→ " + esc(out) + "</div>";
+      const v = e.violations.length ? ' · <span class="viol">violates ' + e.violations.map((id) => "<code>" + esc(id) + "</code>").join(", ") + "</span>" : "";
+      const out = e.ok ? json(e.result) : "ERROR " + e.error;
+      return '<div class="ev tool"><small><b>tool</b> #' + e.index + v + "</small>" + esc(e.name) + "(" + esc(json(e.args)) + ")\\n→ " + esc(out) + "</div>";
     }
     const lat = e.type === "agent" && e.latencyMs !== undefined ? " · " + ms(e.latencyMs) : "";
-    return '<div class="ev ' + e.type + '"><small>' + e.type + lat + "</small>" + esc(e.text) + "</div>";
+    return '<div class="ev ' + e.type + '"><small><b>' + e.type + "</b>" + lat + "</small>" + esc(e.text) + "</div>";
   }).join("");
-  const checks = tr.checks.map((c) => '<div><span class="' + (c.passed ? "okt" : "badt") + '">' + (c.passed ? "✓" : "✗") + "</span> <code>" + esc(c.id) + "</code> " + esc(c.detail) + "</div>").join("");
-  const changes = tr.changes.length ? tr.changes.map((c) => "<div><code>" + c.kind + " " + esc(c.table) + " " + esc(c.key) + "</code> " + esc(JSON.stringify(c.after ?? c.before)) + "</div>").join("") : "<div class='meta'>No writes.</div>";
+  const checks = tr.checks.map((c) => '<div class="check"><span class="' + (c.passed ? "okt" : "badt") + '">' + (c.passed ? "✓" : "✗") + "</span><div><code>" + esc(c.id) + "</code> " + esc(c.detail) + "</div></div>").join("");
+  const changes = tr.changes.length ? tr.changes.map((c) => '<div class="change">' + c.kind + " " + esc(c.table) + " " + esc(c.key) + " <span>" + esc(json(c.after ?? c.before)) + "</span></div>").join("") : "<div class='meta'>No writes.</div>";
   $("detail").innerHTML = '<div class="trial"><h2 style="margin-top:0">' + esc(t.id) + " · trial " + (i + 1) + " · " +
     (tr.passed ? '<span class="okt">passed</span>' : '<span class="badt">failed</span>') + '</h2><div class="meta">ended: ' + tr.endReason + " · " + tr.turns + " turns · " + tr.durationMs + "ms" + (calls(tr.usage) ? " · " + usd(tr.usage.costUsd) : "") + (tr.error ? " · " + esc(tr.error) : "") +
     "</div><h2>Checks</h2>" + checks + "<h2>World changes</h2>" + changes + "<h2>Transcript</h2>" + evs + "</div>";

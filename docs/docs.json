@@ -45,10 +45,10 @@
       "og:locale": "en_US",
       "og:image": "https://sandtable.dev/images/og.png",
       "og:image:type": "image/png",
-      "og:image:alt": "sandtable: rehearse your AI agent on a sand table of your customer's world. In the offline demo, a naive agent scores pass^1 15.6% on 32 calls and a careful agent scores 100%.",
+      "og:image:alt": "sandtable: rehearse your AI agent on a simulated copy of your customer's world. On the same 32 scripted freight calls, a naive agent scores pass^1 15.6%, with 25 verify-before-book, 7 rate-ceiling and 7 eligible-carrier violations, and a careful agent scores 100%.",
       "twitter:card": "summary_large_image",
       "twitter:image": "https://sandtable.dev/images/og.png",
-      "twitter:image:alt": "sandtable: rehearse your AI agent on a sand table of your customer's world. In the offline demo, a naive agent scores pass^1 15.6% on 32 calls and a careful agent scores 100%."
+      "twitter:image:alt": "sandtable: rehearse your AI agent on a simulated copy of your customer's world. On the same 32 scripted freight calls, a naive agent scores pass^1 15.6%, with 25 verify-before-book, 7 rate-ceiling and 7 eligible-carrier violations, and a careful agent scores 100%."
     },
     "organization": {
       "id": "https://sandtable.dev/#organization",
