@@ -14,7 +14,7 @@ Simulated callers talk to your agent, its tool calls hit stateful mocks of the c
 
 On a fictional freight brokerage's carrier-sales desk, an agent that books whatever it is asked to passes 5 of 32 calls. sandtable names the rule it broke on each failing tool call: 25 bookings without vetting the carrier, 7 above the load's rate ceiling, 7 for carriers that may not be booked. An agent that follows the desk's SOP passes all 32. Same callers, same records, same result on every run.
 
-![sandtable demo: a naive agent fails 27 of 32 scripted carrier calls with the rule it broke on each, a careful agent passes all 32](assets/demo.gif)
+![sandtable demo: the naive agent's failing task table and its top failure modes, then the careful agent passing every call](assets/demo.gif)
 
 ## Try it in 10 seconds
 
@@ -37,7 +37,7 @@ Three failures from the freight example, and why a judge reading the transcript 
 
 Every failing trial in the HTML report shows the checks, the changes to the records, and the transcript with the offending tool call marked:
 
-![The HTML report on a failing trial: the book_load call is marked as violating verify-before-book and eligible-carrier](assets/report.png)
+![The HTML report on a failing trial of the naive agent, with the offending tool call marked](assets/report.png)
 
 ## From your customer's docs to a red/green report
 
