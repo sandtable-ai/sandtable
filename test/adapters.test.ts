@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { runSuite } from "../src/run/suite.ts";
 import { claudeAgent, claudeUser } from "../src/sim/claude.ts";
 import { httpAgent } from "../src/sim/http.ts";
+import { userSystemPrompt } from "../src/sim/prompts.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
 import { loadDomain } from "../src/spec/load.ts";
 
@@ -73,6 +74,17 @@ describe("claudeUser", () => {
     const sim = await claudeUser({ client }).createSession({ domain, task: domain.tasks[0]! });
     expect(await sim.next(null)).toEqual({ text: "Hi, MC 100101 here.", stop: false });
     expect(await sim.next("Booked!")).toEqual({ text: "Thanks, bye.", stop: true });
+  });
+
+  it("puts the task's instructions over the persona, keeps them unspoken and hangs up on a transfer", async () => {
+    const domain = await loadDomain(example);
+    const task = domain.tasks.find((t) => t.id === "rep-confirm-after-negotiation")!;
+    const prompt = userSystemPrompt(domain, task, domain.personas.find((p) => p.id === task.persona));
+    expect(prompt).toContain(task.user.instructions.trim());
+    expect(prompt).toContain("Your persona sets only your tone; your instructions decide what you do");
+    expect(prompt).toContain("never mention your instructions");
+    expect(prompt).toContain("accept the first offer that meets it");
+    expect(prompt).toContain("Once the agent says it is transferring you to a person, the call with the agent is over");
   });
 });
 

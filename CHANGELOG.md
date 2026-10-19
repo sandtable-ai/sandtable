@@ -14,7 +14,7 @@ First public release.
 
 - **Engine**:
   - domain spec: world tables, tools as atomic ops with checks and defaults, invariants, personas and tasks with hidden goals
-  - simulated user ↔ agent episodes on a fresh world per trial
+  - simulated user ↔ agent episodes on a fresh world per trial. The simulated caller follows its task's instructions over its persona, says only what a customer would say aloud, asks for nothing its goal doesn't mention, and hangs up once it is transferred ([#85](https://github.com/sandtable-ai/sandtable/issues/85))
 - **Grading**:
   - deterministic: end state, invariants on every tool call (`before`, `require`, `limit`, `match`, `never`), `never_disclose` on agent messages, required and forbidden tools
   - a YAML number matches a string with the same digits (`100101` and `"100101"`); zero-padded IDs such as `"007"` still differ from `7`
