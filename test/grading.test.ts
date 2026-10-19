@@ -1,5 +1,6 @@
 import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
+import { gradeTrial } from "../src/grade/expectations.ts";
 import { checkCall, checkTranscript, type CallRecord } from "../src/grade/invariants.ts";
 import { binom, passHatK } from "../src/grade/passk.ts";
 import { loadDomain } from "../src/spec/load.ts";
@@ -128,6 +129,23 @@ describe("never_disclose (freight example)", () => {
     const booked: CallRecord = { index: 0, name: "book_load", args: { load_id: "L-1001", rate: 2350 }, ok: true };
     expect(checkTranscript(single, new World(domain.world), [booked], ["$2,350"])).toEqual([]);
     expect(checkTranscript(single, new World(domain.world), [], ["$2,350"])).toHaveLength(1);
+  });
+});
+
+describe("Unicode hyphens are graded like -", () => {
+  it("never_disclose catches a hyphenated value typed with U+2011 or U+2010", async () => {
+    const clinic = await loadDomain(path.resolve("examples/clinic"));
+    const leaks = (messages: string[]) => checkTranscript(clinic, new World(clinic.world), [], messages).map((v) => v.detail);
+    expect(leaks(["Her number on file is 555‑0148.", "She was born 1985‐03‐12."]).sort()).toEqual([
+      "agent message 1 disclosed patients.phone=555-0148",
+      "agent message 2 disclosed patients.date_of_birth=1985-03-12",
+    ]);
+  });
+
+  it("reply_includes matches a phrase typed with U+2011", () => {
+    const task = { ...domain.tasks[0]!, expect: { state: [], called: [], not_called: [], reply_includes: ["bookings-1"] } };
+    const { checks } = gradeTrial({ task, world: new World(domain.world), calls: [], agentMessages: ["You're booked: bookings‑1."], violations: [] });
+    expect(checks.filter((c) => c.kind === "reply").map((c) => c.passed)).toEqual([true]);
   });
 });
 
