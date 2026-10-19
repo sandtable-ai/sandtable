@@ -1,0 +1,147 @@
+---
+title: "Rehearse an agent built with a framework"
+description: "Worked examples for agents built with the Vercel AI SDK, the OpenAI Agents SDK, the Claude Agent SDK, Pipecat, LiveKit Agents and a plain HTTP service."
+---
+
+If your agent is built with a framework, keep the framework and its tool loop. Only the tools change: in a rehearsal, each tool call goes to sandtable's simulated world instead of the customer's systems, where it is checked against the invariants and graded.
+
+The repository has a worked example for six frameworks under [`examples/frameworks/`](https://github.com/sandtable-ai/sandtable/tree/main/examples/frameworks). Each one is a one-file adapter with a README, its own dependencies, and an offline check that runs in CI without model calls or API keys.
+
+| Framework | Language | Integration | Example |
+|---|---|---|---|
+| Vercel AI SDK | TypeScript | module agent | [`vercel-ai-sdk`](https://github.com/sandtable-ai/sandtable/tree/main/examples/frameworks/vercel-ai-sdk) |
+| OpenAI Agents SDK | TypeScript | module agent | [`openai-agents`](https://github.com/sandtable-ai/sandtable/tree/main/examples/frameworks/openai-agents) |
+| Claude Agent SDK | TypeScript | module agent | [`claude-agent-sdk`](https://github.com/sandtable-ai/sandtable/tree/main/examples/frameworks/claude-agent-sdk) |
+| Pipecat | Python | HTTP step protocol | [`pipecat`](https://github.com/sandtable-ai/sandtable/tree/main/examples/frameworks/pipecat) |
+| LiveKit Agents | Python | HTTP step protocol | [`livekit-agents`](https://github.com/sandtable-ai/sandtable/tree/main/examples/frameworks/livekit-agents) |
+| Plain HTTP service | Python | HTTP step protocol | [`http-service`](https://github.com/sandtable-ai/sandtable/tree/main/examples/frameworks/http-service) |
+
+## Two ways in
+
+### A module agent: JavaScript and TypeScript
+
+The adapter is a [JS or TS module](/guides/bring-your-agent#your-agent-as-a-js-or-ts-module) that default-exports an `AgentAdapter`. sandtable passes `createSession` its default system prompt and the domain's tools as JSON schemas, and passes each `reply` a `callTool` function. `callTool` is a plain async function, so the framework's tool can call it directly:
+
+```ts
+async reply(userMessage, callTool) {
+  // Build the framework's tools from `tools`, each one's handler ending in:
+  //   const outcome = await callTool(name, input);   // { ok, result } or { ok: false, error }
+  // then run the framework's loop on the session's history plus userMessage, and return its reply.
+}
+```
+
+Keep the history per session, in the adapter or in the framework's own session object: sandtable opens one session per trial, and several trials run at once.
+
+```bash
+sandtable run ./my-domain --agent ./agent.ts -k 4
+```
+
+### The HTTP step protocol: any language
+
+A service in any language can speak the [HTTP step protocol](/reference/http-protocol): sandtable POSTs a user message, the service answers with a reply or with tool calls, and sandtable POSTs the results of those calls back.
+
+Most frameworks run the tool loop in-process and expect a tool function to return a value. The Pipecat and LiveKit Agents adapters bridge the two by suspending the framework's tool call: the tool function waits, the pending call goes back to sandtable as `tool_calls`, and when sandtable posts `tool_results`, the waiting call returns the result and the framework's loop carries on until it replies or calls another tool.
+
+```text
+sandtable → { session_id, message }        the service starts the framework's turn
+          ← { tool_calls: [...] }          the framework called a tool; the call waits
+          → { session_id, tool_results }   the waiting call returns sandtable's result
+          ← { reply: "..." }               the framework finished the turn
+```
+
+Key all state on `session_id`. The service is not told when a trial ends.
+
+```bash
+sandtable run ./my-domain --agent http://localhost:8787/step -k 4
+```
+
+## Vercel AI SDK
+
+The adapter wraps a `ToolLoopAgent`. Each domain tool becomes a `dynamicTool` with the tool's JSON schema, and a failed call throws, so the AI SDK hands the error to the model as a tool error:
+
+```ts
+dynamicTool({
+  description: t.description,
+  inputSchema: jsonSchema(t.input_schema as JSONSchema7),
+  execute: async (input) => {
+    const outcome = await callTool(t.name, input);
+    if (!outcome.ok) throw new Error(outcome.error);
+    return outcome.result;
+  },
+});
+```
+
+The session keeps a `ModelMessage[]` history and appends each turn's `responseMessages`. The offline check drives the adapter with the AI SDK's `MockLanguageModelV4` and runs a freight task end to end with the scripted caller. [Example and README](https://github.com/sandtable-ai/sandtable/tree/main/examples/frameworks/vercel-ai-sdk).
+
+## OpenAI Agents SDK
+
+The adapter wraps an `Agent` and a `Runner`. Each domain tool becomes a function tool with the tool's JSON schema as its `parameters`:
+
+```ts
+tool({
+  name: t.name,
+  description: t.description,
+  parameters: t.input_schema,
+  execute: async (input) => {
+    const outcome = await callTool(t.name, input);
+    return outcome.ok ? outcome.result : { error: outcome.error };
+  },
+});
+```
+
+- Strict mode, the SDK's default, works with sandtable's schemas: the SDK sends optional parameters as nullable and drops the nulls before `execute`.
+- Return a failed call's error as output. A thrown error reaches the model only as the SDK's generic error message.
+- The session passes the Runner's `result.history` back in as the next turn's input.
+
+The offline check drives the adapter with the SDK's `ScriptedModel` and runs a freight task end to end with the scripted caller. [Example and README](https://github.com/sandtable-ai/sandtable/tree/main/examples/frameworks/openai-agents).
+
+## Claude Agent SDK
+
+The adapter runs one `query()` per session in streaming input mode, so the SDK keeps the conversation, and serves the domain's tools from an in-process MCP server whose handlers call `callTool`. Claude Code's built-in tools are turned off, so the only tools the agent has are the simulated world's:
+
+```ts
+query({
+  prompt: userTurns, // an async iterable: one message per sandtable turn
+  options: {
+    systemPrompt: system,
+    tools: [], // no Bash, file, web or subagent tools
+    mcpServers: { sandtable: server }, // the domain's tools; each handler calls callTool
+    allowedTools: ["mcp__sandtable__*"],
+    permissionMode: "dontAsk",
+    settingSources: [], // ignore the machine's Claude Code settings and CLAUDE.md
+    persistSession: false,
+  },
+});
+```
+
+The SDK runs its loop inside a Claude Code process that needs a model, so the offline check covers less here: it typechecks and imports the adapter, and calls the MCP server's tools from an MCP client to check that they run in the simulated world. [Example and README](https://github.com/sandtable-ai/sandtable/tree/main/examples/frameworks/claude-agent-sdk).
+
+## Pipecat
+
+Pipecat is a voice framework. sandtable rehearses the LLM-and-tools layer as text: what the agent says and which tools it calls. It does not rehearse audio, turn-taking or latency. The example serves the HTTP step protocol from Python and suspends Pipecat's tool calls until sandtable posts the results. [Example and README](https://github.com/sandtable-ai/sandtable/tree/main/examples/frameworks/pipecat).
+
+## LiveKit Agents
+
+LiveKit Agents is a voice framework too, and the same limits apply: sandtable rehearses the LLM-and-tools layer as text, not audio, turn-taking or latency. The example serves the HTTP step protocol from Python and suspends the agent's tool calls until sandtable posts the results. [Example and README](https://github.com/sandtable-ai/sandtable/tree/main/examples/frameworks/livekit-agents).
+
+## Plain HTTP service
+
+A framework-free Python service on the Anthropic Messages API: it keeps each session's messages, returns Claude's `tool_use` blocks as `tool_calls`, and sends sandtable's results back to Claude as `tool_result` blocks. Start here if your agent is your own loop. [Example and README](https://github.com/sandtable-ai/sandtable/tree/main/examples/frameworks/http-service).
+
+## Run the offline checks
+
+The TypeScript examples import `sandtable-ai` from the repository until the first release, so build the root first. They need Node 22.18 or later.
+
+```bash
+npm ci && npm run build
+cd examples/frameworks/vercel-ai-sdk
+npm ci && npm run check
+```
+
+The Python examples run with [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv run --directory examples/frameworks/pipecat python -m pytest -q
+```
+
+Each README says what its check covers. None of them calls a model; a live run needs your API keys.

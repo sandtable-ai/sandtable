@@ -20,6 +20,8 @@ The agent under test is whatever answers the simulated user. Whichever adapter y
 
 The model adapters (`claude`, `bedrock:`, `openai:`) all receive the same default system prompt (the domain description and policy) and the same tools, so their scores compare. Your own agent receives that prompt too and may ignore it.
 
+If your agent is built with a framework, such as the Vercel AI SDK, the OpenAI Agents SDK, the Claude Agent SDK, Pipecat or LiveKit Agents, start from a worked example: see [Rehearse an agent built with a framework](/guides/frameworks).
+
 <Tabs>
   <Tab title="Claude">
     ```bash
