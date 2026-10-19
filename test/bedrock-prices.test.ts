@@ -48,6 +48,12 @@ const USAGE_TYPES: Record<string, number> = {
   "EU-Qwen3Next-80B-A3B-input-tokens-flex": 0.00009,
   "EU-Qwen3Next-80B-A3B-output-tokens-flex": 0.00071,
   "EU-zai.glm5-mantle-input-tokens-standard": 0.0012,
+  "EU-zai.glm-4.7-mantle-input-tokens-standard": 0.00072,
+  "EU-zai.glm-4.7-mantle-output-tokens-standard": 0.00264,
+  "EU-zai.glm-4.7-flash-mantle-input-tokens-standard": 0.00008,
+  "EU-zai.glm-4.7-flash-mantle-output-tokens-standard": 0.00048,
+  "EU-nvidia.nemotron-nano-9b-v2-mantle-input-tokens-standard": 0.00007,
+  "EU-nvidia.nemotron-nano-9b-v2-mantle-output-tokens-standard": 0.00027,
   "EU-zai.glm5-mantle-output-tokens-standard": 0.00384,
   "EU-example.tiny-model-input-tokens-flex": 0.0001,
   "EU-example.tiny-model-output-tokens-flex": 0.0004,
@@ -69,6 +75,13 @@ const MODELS = [
   "global.zai.glm-5.3",
   "global.openai.gpt-5.5",
   "example.tiny-model-v1:0",
+  // Each a prefix of a listed model's name: never priced from that model.
+  "global.xai.grok-4",
+  "moonshotai.kimi-k2",
+  "amazon.nova-2",
+  "zai.glm-4",
+  "zai.glm-4.7",
+  "nvidia.nemotron-nano-9b-v2",
 ];
 
 let out: PricesFile;
@@ -114,7 +127,20 @@ describe("scripts/bedrock-prices.mjs", () => {
 
   it("does not read another model or version as the one asked for", () => {
     expect(out.prices["amazon.nova-lite-v1:0"]!.usageTypes).toEqual({ input: "EU-NovaLite-input-tokens", output: "EU-NovaLite-output-tokens" });
-    expect(out.unresolved["global.zai.glm-5.3"]).toBe("no eu-west-1 usage type names glm-5.3: the Pricing API doesn't list this model here");
+    expect(out.unresolved["global.zai.glm-5.3"]).toBe("no eu-west-1 usage type names glm-5.3");
+  });
+
+  it("never prices a model from another model's or version's usage types", () => {
+    // A wrong price is worse than none: grok-4 is not grok-4.6, kimi-k2 is not kimi-k2.5,
+    // nova-2 could be Nova 2 Lite or Pro, and glm-4.7 is not glm-4.7-flash.
+    for (const model of ["global.xai.grok-4", "moonshotai.kimi-k2", "amazon.nova-2", "zai.glm-4"]) expect(out.prices[model], model).toBeUndefined();
+    expect(out.unresolved["global.xai.grok-4"]).toBe("no eu-west-1 usage type names grok-4");
+    expect(out.prices["zai.glm-4.7"]!.usageTypes).toEqual({
+      input: "EU-zai.glm-4.7-mantle-input-tokens-standard",
+      output: "EU-zai.glm-4.7-mantle-output-tokens-standard",
+    });
+    // A name that ends in -v2 is the model's name, not Bedrock's -v1:0 version suffix.
+    expect(out.prices["nvidia.nemotron-nano-9b-v2"]!.usageTypes.input).toBe("EU-nvidia.nemotron-nano-9b-v2-mantle-input-tokens-standard");
   });
 
   it("resolves the models it resolved before to the same usage types", () => {
@@ -142,7 +168,7 @@ describe("scripts/bedrock-prices.mjs", () => {
   });
 
   it("says why a model has no price", () => {
-    expect(out.unresolved["global.openai.gpt-5.5"]).toBe("no eu-west-1 usage type names gpt-5.5: the Pricing API doesn't list this model here");
+    expect(out.unresolved["global.openai.gpt-5.5"]).toBe("no eu-west-1 usage type names gpt-5.5");
     expect(out.unresolved["example.tiny-model-v1:0"]).toBe(
       "2 usage type(s) name tiny-model (e.g. EU-example.tiny-model-input-tokens-flex), but none is a standard on-demand input token price",
     );

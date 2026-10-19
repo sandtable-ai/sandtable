@@ -45,7 +45,8 @@ for (const s of JSON.parse(raw).PriceList) {
 function core(modelId) {
   const noGeo = modelId.replace(/^(global|us|eu|apac|jp|au)\./, "");
   const noProvider = noGeo.includes(".") ? noGeo.slice(noGeo.indexOf(".") + 1) : noGeo;
-  return noProvider.replace(/-v\d+(:\d+)?$/, "").replace(/-\d+:\d+$/, "").toLowerCase();
+  // Bedrock's version suffix is `-v1:0` or `-1:0`. A name that ends in `-v2` without a colon keeps it (nemotron-nano-9b-v2).
+  return noProvider.replace(/-v\d+:\d+$/, "").replace(/-\d+:\d+$/, "").toLowerCase();
 }
 
 /**
@@ -62,10 +63,17 @@ function words(s) {
     .filter(Boolean);
 }
 
-/** The usage type names the model: the model's words appear in it, in order and next to each other. */
+/** Words that follow a model's name in a usage type: what the price is for, never more of a name or a version. */
+const AFTER_NAME = new Set(["mantle", "instruct", "it", "text", "input", "output", "cache"]);
+
+/**
+ * The usage type names the model: the model's words appear in it, in order and next to each other,
+ * followed by a word from AFTER_NAME. So grok-4 doesn't name grok-4.6, nova-2 doesn't name Nova2.0Lite
+ * and glm-4.7 doesn't name glm-4.7-flash. A false match is worse than no price.
+ */
 function names(type, key) {
   const t = words(type);
-  return t.some((_, i) => key.every((w, j) => t[i + j] === w));
+  return t.some((_, i) => key.every((w, j) => t[i + j] === w) && AFTER_NAME.has(t[i + key.length]));
 }
 
 function pick(types, kind, global) {
@@ -93,7 +101,7 @@ for (const model of models) {
   if (!input || !output) {
     unresolved[model] = types.length
       ? `${types.length} usage type(s) name ${key} (e.g. ${types[0]}), but none is a standard on-demand ${input ? "output" : "input"} token price`
-      : `no ${region} usage type names ${key}: the Pricing API doesn't list this model here`;
+      : `no ${region} usage type names ${key}`;
     continue;
   }
   const cacheRead = pick(types, "cache-read", global);
