@@ -144,7 +144,7 @@ export function validateDomain(d: Domain): string[] {
  */
 function undetectable(d: Domain, table: string, field: string): string | undefined {
   const values = (d.world.tables[table]?.rows ?? []).map((r) => r[field]).filter((v) => v !== undefined && v !== null);
-  const fix = "protect a field that holds numbers or longer text, or make the rule a soft rule";
+  const fix = "protect a field that holds numbers or longer text, or remove the invariant and keep the rule as a comment";
   if (values.some((v) => typeof v === "boolean")) {
     return `it holds booleans, and only numbers and strings of 3 or more characters can be found in what the agent says; ${fix}`;
   }
