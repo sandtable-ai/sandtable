@@ -1,0 +1,14 @@
+# Groups the pull-request list that `gh release create --generate-notes` appends below the
+# CHANGELOG section. Label each PR with its issue's type: label.
+changelog:
+  exclude:
+    labels: [no-changelog]
+  categories:
+    - title: Features
+      labels: [type:feature]
+    - title: Fixes
+      labels: [type:bug]
+    - title: Documentation
+      labels: [type:docs]
+    - title: Other changes
+      labels: ["*"]

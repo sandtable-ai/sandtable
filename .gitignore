@@ -9,5 +9,7 @@ coverage/
 # Private planning notes and raw research: never published
 notes/
 
-# Agent worktrees
+# Agent worktrees and personal agent settings (shared ones live in AGENTS.md and .claude/settings.json)
 .claude/worktrees/
+.claude/settings.local.json
+CLAUDE.local.md
