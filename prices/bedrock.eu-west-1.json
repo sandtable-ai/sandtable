@@ -1,7 +1,7 @@
 {
   "region": "eu-west-1",
   "source": "AWS Pricing API (AmazonBedrock, on-demand)",
-  "generatedAt": "2026-10-18T21:04:08.692Z",
+  "generatedAt": "2026-10-19T23:03:33.355Z",
   "prices": {
     "openai.gpt-oss-120b-1:0": {
       "input": 0.18,
@@ -45,12 +45,23 @@
         "input": "EU-qwen.qwen3-next-80b-a3b-instruct-mantle-input-tokens-standard",
         "output": "EU-qwen.qwen3-next-80b-a3b-instruct-mantle-output-tokens-standard"
       }
+    },
+    "global.amazon.nova-2-lite-v1:0": {
+      "input": 0.34,
+      "output": 2.87,
+      "cacheRead": 0.085,
+      "cacheWrite": 0,
+      "usageTypes": {
+        "input": "EU-Nova2.0Lite-input-tokens-cross-region-global",
+        "output": "EU-Nova2.0Lite-output-tokens-cross-region-global",
+        "cacheRead": "EU-Nova2.0Lite-cache-read-input-token-count-cross-region-global",
+        "cacheWrite": "EU-Nova2.0Lite-cache-write-input-token-count-cross-region-global"
+      }
     }
   },
-  "unresolved": [
-    "global.openai.gpt-6.1-sol",
-    "global.openai.gpt-5.5",
-    "global.zai.glm-5.3",
-    "global.amazon.nova-2-lite-v1:0"
-  ]
+  "unresolved": {
+    "global.openai.gpt-6.1-sol": "no eu-west-1 usage type names gpt-6.1-sol",
+    "global.openai.gpt-5.5": "no eu-west-1 usage type names gpt-5.5",
+    "global.zai.glm-5.3": "no eu-west-1 usage type names glm-5.3"
+  }
 }
