@@ -121,7 +121,7 @@ export function checkTranscript(
     if (!("never_disclose" in inv)) continue;
     const { table, field, unless } = inv.never_disclose;
     const allowed = new Set(
-      unless ? calls.filter((c) => c.ok && c.name === unless.tool).map((c) => String(c.args[unless.arg])) : [],
+      [unless ?? []].flat().flatMap((u) => calls.filter((c) => c.ok && c.name === u.tool).map((c) => String(c.args[u.arg]))),
     );
     const values = new Set<string>();
     for (const row of world.list(table)) {

@@ -17,6 +17,7 @@ First public release.
   - simulated user ↔ agent episodes on a fresh world per trial. The simulated caller follows its task's instructions over its persona, says only what a customer would say aloud, asks for nothing its goal doesn't mention, and hangs up once it is transferred ([#85](https://github.com/sandtable-ai/sandtable/issues/85))
 - **Grading**:
   - deterministic: end state, invariants on every tool call (`before`, `require`, `limit`, `match`, `never`), `never_disclose` on agent messages, required and forbidden tools
+  - `never_disclose.unless` takes one exception or a list of them. The freight example uses a list so that a rep-confirm offer agreed at exactly `max_rate` can be read back and submitted, as the booked rate already could ([#86](https://github.com/sandtable-ai/sandtable/issues/86))
   - a YAML number matches a string with the same digits (`100101` and `"100101"`); zero-padded IDs such as `"007"` still differ from `7`
   - pass^k, failure-mode clustering, per-tag scores
 - **`sandtable init`**: drafts a domain from an OpenAPI spec (deterministic), an SOP (invariants that quote their source) and call transcripts (tasks, personas and fictional seed rows, PII scrubbed locally). Everything stays `review: pending` until accepted.

@@ -100,6 +100,19 @@ describe("never_disclose (freight example)", () => {
     expect(leaks(["Booked at $2,350."], [booked])).toEqual([]);
     expect(leaks(["L-1002 tops out at 1450."], [booked])).toEqual(["agent message 1 disclosed loads.max_rate=1450"]);
   });
+
+  it("allows the rate submitted for a rep on a rep-confirm load", () => {
+    const submitted: CallRecord = { index: 1, name: "submit_offer", args: { load_id: "L-1014", mc_number: "101010", rate: 3565 }, ok: true };
+    expect(leaks(["To confirm: L-1014 at $3,565 all-in?", "Submitted at $3,565."], [submitted])).toEqual([]);
+    expect(leaks(["Submitted at $3,565."], [{ ...submitted, ok: false }])).toEqual(["agent message 1 disclosed loads.max_rate=3565"]);
+  });
+
+  it("still accepts a single exception", () => {
+    const single = { ...domain, invariants: [{ id: "x", description: "x", never_disclose: { table: "loads", field: "max_rate", unless: { tool: "book_load", arg: "rate" } } }] };
+    const booked: CallRecord = { index: 0, name: "book_load", args: { load_id: "L-1001", rate: 2350 }, ok: true };
+    expect(checkTranscript(single, new World(domain.world), [booked], ["$2,350"])).toEqual([]);
+    expect(checkTranscript(single, new World(domain.world), [], ["$2,350"])).toHaveLength(1);
+  });
 });
 
 describe("pass^k", () => {

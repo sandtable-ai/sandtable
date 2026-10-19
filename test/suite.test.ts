@@ -167,6 +167,13 @@ describe("domain validation", () => {
     ]);
   });
 
+  it("checks every tool and argument in a never_disclose exception list", async () => {
+    const d = await loadDomain(example);
+    const unless = [{ tool: "book_load", arg: "rate" }, { tool: "submit_offer", arg: "price" }, { tool: "hold_load", arg: "rate" }];
+    const broken = { ...d, invariants: [{ id: "x", description: "x", never_disclose: { table: "loads", field: "max_rate", unless } }] };
+    expect(validateDomain(broken)).toEqual(['invariants.x: tool "submit_offer" has no param "price"', 'invariants.x: unknown tool "hold_load"']);
+  });
+
   it("rejects a missing file with a clear error", async () => {
     await expect(loadDomain(path.resolve("examples/does-not-exist"))).rejects.toThrow(/no sandtable.yaml found at .*does-not-exist/);
     expect(DomainError).toBeDefined();
