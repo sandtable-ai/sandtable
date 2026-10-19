@@ -25,7 +25,7 @@ The SOP and transcript steps call Claude. They have been verified in live runs o
     sandtable init --openapi path/to/openapi.yaml -o sandtable
     sandtable validate sandtable
     ```
-    Writes `sandtable/sandtable.yaml`, a placeholder `policy.md` and an empty `tasks.yaml`. It refuses to overwrite existing files unless you pass `--force`.
+    Writes `sandtable/sandtable.yaml`, a placeholder `policy.md` and an empty `tasks.yaml`. It refuses to overwrite existing files unless you pass `--force`. It reads OpenAPI 3.x, in YAML or JSON. It writes nothing for a Swagger 2.0 spec (convert it to OpenAPI 3 first) or for a spec it can't draft a single tool from.
   </Step>
   <Step title="Add invariants from the SOP">
     ```bash

@@ -19,7 +19,7 @@ import { DEFAULT_OPENAI_BASE_URL, openaiCompatAgent, openaiCompatUser, type Open
 import { scriptedUser } from "./sim/scripted.ts";
 import type { AgentAdapter, UserSimulator } from "./sim/types.ts";
 import { appendRows, appendToDomainList } from "./init/merge.ts";
-import { draftFromOpenApi } from "./init/openapi.ts";
+import { draftFromOpenApi, openApiProblem } from "./init/openapi.ts";
 import { draftInvariantsFromSop, knownFields } from "./init/sop.ts";
 import { draftTasksFromTranscripts } from "./init/transcripts.ts";
 import { DOMAIN_FILE, POLICY_PLACEHOLDER, renderDraft, TASKS_PLACEHOLDER, writeDraft } from "./init/render.ts";
@@ -190,7 +190,12 @@ withProviderFlags(program
     let fields: Record<string, string[]> = {};
     if (o.openapi) {
       const spec = YAML.parse(await readFile(o.openapi, "utf8")) as Record<string, unknown>;
+      const problem = openApiProblem(spec);
+      if (problem) throw new Error(`${o.openapi} ${problem}. Nothing was written.`);
       const draft = draftFromOpenApi(spec);
+      if (draft.tools.length === 0) {
+        throw new Error([`${o.openapi}: no operation could be drafted into a tool, so nothing was written.`, ...draft.warnings.map((w) => `  ! ${w}`)].join("\n"));
+      }
       fields = Object.fromEntries(Object.entries(draft.tables).map(([n, t]) => [n, t.fields]));
       const files = {
         [DOMAIN_FILE]: renderDraft(draft, path.basename(o.openapi)),
