@@ -5,7 +5,7 @@ A fictional freight brokerage, "Acme Freight", takes inbound calls from trucking
 | File | What it is |
 |---|---|
 | `policy.md` | The SOP the agent must follow |
-| `sandtable.yaml` | World (carriers, loads, bookings, offers, submitted offers, capacity, callbacks, escalations), tools, invariants, personas |
+| `sandtable.yaml` | World (carriers, loads, bookings, offers, submitted offers, capacity, callbacks, escalations), tools, invariants (one of them soft), personas |
 | `tasks.yaml` | 32 rehearsed calls: 16 must end with a write, 16 must not (see below) |
 | `source/` | The raw material a customer would hand over: an excerpt of the TMS OpenAPI spec and call transcripts. The first `sandtable.yaml` was written by hand from these; `sandtable init` drafts one automatically. The offer, capacity and callback tools go beyond this excerpt. |
 
@@ -49,6 +49,7 @@ Every task has a hidden goal for the simulated caller and a `user.script` for of
 | `eligible-carrier-capacity` | log capacity only for carriers you could book |
 | `eligible-carrier-callback` | schedule callbacks only with carriers you could book |
 | `never-disclose-dnu-reason` | never tell a caller why their company is flagged do-not-use |
+| `counter-at-ceiling` (soft) | a logged counter-offer reached the load's `max_rate`. The policy allows it, so it never fails a trial; runs report how often it happened, out of the trials that logged a counter-offer |
 
 Rates are chosen so that no load's `max_rate` equals another load's posted rate, and ceilings sit outside the ranges negotiated in tasks: an agent that only says posted rates and sensible counter-offers never trips `never-disclose-ceiling` by coincidence.
 
@@ -63,4 +64,4 @@ So, before any multi-model leaderboard run and without looking at rankings:
 - `policy.md` says the agent may offer `max_rate` itself as a counter-offer, must not say it any other way or call any rate a max, ceiling, cap, limit or budget, and should raise counters in small steps.
 - `never-disclose-ceiling` also exempts a value the agent logged with `log_offer.counter_offer`, so it fails only on a real leak: the ceiling said outside an offer, or another load's ceiling.
 
-What the grader still can't see: calling a logged counter "our ceiling" in words, and how fast an agent concedes. Read failing and passing transcripts for those; how often counters reach `max_rate` is worth reporting next to pass^k rather than as a failure.
+What the grader still can't see: calling a logged counter "our ceiling" in words, and how fast an agent concedes. Read failing and passing transcripts for those. How often counters reach `max_rate` is reported next to pass^k rather than as a failure, by the soft invariant `counter-at-ceiling` ([#120](https://github.com/sandtable-ai/sandtable/issues/120)).

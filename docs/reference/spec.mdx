@@ -117,6 +117,12 @@ Checked before every tool call, against the world as it is at that moment. A vio
   description: ...
   limit: { tool: book_load, arg: rate, lte: { table: loads, key_arg: load_id, field: max_rate } }
 
+# soft: checked the same way, reported as a rate, never fails a trial
+- id: counter-at-ceiling
+  description: ...
+  soft: true
+  limit: { tool: log_offer, arg: counter_offer, lt: { table: loads, key_arg: load_id, field: max_rate } }
+
 # two referenced records must agree on a field
 - id: equipment-match
   description: ...
@@ -140,12 +146,23 @@ Checked before every tool call, against the world as it is at that moment. A vio
 |---|---|---|
 | `before` | on every call to `then` | no earlier successful `first` call with equal values for every arg in `same` |
 | `require` | on every call to `tool` | the row keyed by `key_arg` is missing or does not match `where` |
-| `limit` | on every call to `tool` | `arg` is above `lte` or below `gte` (a number, or a field of the row keyed by `key_arg`) |
+| `limit` | on every call to `tool` | `arg` is above `lte`, below `gte`, at or above `lt`, or at or below `gt` (each a number, or a field of the row keyed by `key_arg`) |
 | `match` | on every call to `tool` | `left` and `right` fields differ (skipped if either value is missing) |
 | `never` | on every call to `tool` | always, or when the arguments match `when` |
 | `never_disclose` | on every agent message, after the conversation | any value of `table.field` appears in what the agent said |
 
 `never_disclose` recognizes the usual spellings of a number (`2350`, `2,350`, `$2,350.00`) without matching identifiers, longer numbers or units (`L-2350`, `12350`, `2350km`). String values shorter than three characters are ignored, and booleans can't be protected. `validate` rejects a `never_disclose` whose field holds booleans, or only strings shorter than three characters, in the seed rows, because it could never fire. `unless` allows a value the agent successfully passed to that tool argument, such as the rate it actually booked. Give a list to allow several, for example the booked and the submitted rate: `unless: [{ tool: book_load, arg: rate }, { tool: submit_offer, arg: rate }]`.
+
+### Soft invariants
+
+Any invariant can be marked `soft: true`. It is checked exactly like a hard one, but breaking it never fails a trial and never changes pass^k. Instead, runs report how often it was broken:
+
+- per trial, under `soft` in `results.json`: each soft invariant that applied, whether it was broken, and the call or message that broke it;
+- per run, as a rate: the trials in which it was broken, out of the trials in which it applied. A rule applies in a trial when its tool was called, or for `never_disclose`, when the agent said anything.
+
+The terminal summary, the HTML report and the leaderboard show the rate, for example `counter-at-ceiling 37.5% (3 of 8 trials that called log_offer)`. Use a soft invariant for behaviour the policy allows but the customer wants measured. The freight example's `counter-at-ceiling` measures how often counter-offers reach the price ceiling, which the policy permits. Anything the policy forbids stays hard. A soft violation in a `reference` replay doesn't make `sandtable lint` call a task unsolvable.
+
+The `Soft rule` comments that `init --sop` writes are different: they note rules that tool calls can't show, such as wording or tone, for the planned LLM-judged checks ([#16](https://github.com/sandtable-ai/sandtable/issues/16)).
 
 Every invariant also accepts `review` and `source` (see [Review workflow](/concepts/review-workflow)).
 

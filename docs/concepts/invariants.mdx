@@ -36,6 +36,17 @@ The six kinds:
 
 The [spec](/reference/spec#invariants) has the exact syntax.
 
+### Soft invariants: measure what the policy allows
+
+Some behaviour is allowed but worth measuring. The freight policy lets the agent offer a load's `max_rate` as a counter-offer, but an agent that always concedes to the ceiling leaves margin on the table. Mark such a rule `soft: true`: it is checked like any other, but never fails a trial. Runs report how often it was broken, out of the trials where it applied:
+
+```text
+  Soft rules (reported, never fail a trial)
+  counter-at-ceiling   37.5%  3 of 8 trials that called log_offer
+```
+
+Two agents with the same pass^k can differ here. Keep a rule hard whenever the policy forbids the behaviour.
+
 ## Expectations: what success looks like
 
 Expectations belong to one task and describe the outcome its conversation should reach:

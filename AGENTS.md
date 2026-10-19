@@ -62,7 +62,7 @@ Ask before running anything that calls a model, because it needs keys and costs 
 
 ## Rules
 
-- Grading stays deterministic. Pass and fail come only from the end state, invariants, required and forbidden tools, and `never_disclose`. Never put a model call in `src/grade/` or `lint`. LLM-judged checks, when they land, will be a separate soft score.
+- Grading stays deterministic. Pass and fail come only from the end state, invariants, required and forbidden tools, and `never_disclose`. Never put a model call in `src/grade/` or `lint`. LLM-judged checks, when they land, will be a separate judged score.
 - No network in tests. For SDK-based adapters, use the fake client in `test/adapters.test.ts`. For HTTP adapters, stub `fetch` as in `test/openai-compat.test.ts`. A test that needs an API key is a bug.
 - Use fictional data only. Examples, docs, tests, fixtures and changelog entries use invented companies, people, IDs and procedures, never a real company, customer or anything from a customer's documents.
 - Maintainers' clones run a pre-commit hook that scans for private names. Never bypass it with `--no-verify`. If it blocks, replace the name with a fictional one.

@@ -98,7 +98,7 @@ export function validateDomain(d: Domain): string[] {
     } else if ("limit" in inv) {
       tool(inv.limit.tool, where);
       arg(inv.limit.tool, inv.limit.arg, where);
-      for (const ref of [inv.limit.lte, inv.limit.gte]) {
+      for (const ref of [inv.limit.lte, inv.limit.gte, inv.limit.lt, inv.limit.gt]) {
         if (ref && typeof ref === "object") {
           table(ref.table, where);
           arg(inv.limit.tool, ref.key_arg, where);

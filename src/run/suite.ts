@@ -1,4 +1,5 @@
 import type { CheckKind } from "../grade/expectations.ts";
+import { invariantTool } from "../grade/invariants.ts";
 import { passHatK } from "../grade/passk.ts";
 import { pendingReview, type PendingItem } from "../spec/load.ts";
 import type { Domain } from "../spec/schema.ts";
@@ -23,6 +24,27 @@ export interface FailureMode {
   example: string;
 }
 
+/**
+ * How often a soft invariant was broken across the run. Soft invariants never fail a trial;
+ * this is the number to read instead, e.g. how often counter-offers reached the price ceiling.
+ */
+export interface SoftScore {
+  id: string;
+  description: string;
+  /** The tool whose calls it checks; absent for never_disclose, which checks what the agent says. */
+  tool?: string;
+  /** Trials in which it applied: its tool was called, or for never_disclose, the agent spoke. */
+  applied: number;
+  /** Trials in which it was broken at least once. */
+  broken: number;
+  /** broken / applied; null when it never applied. */
+  rate: number | null;
+  /** Tasks with at least one trial that broke it. */
+  tasks: string[];
+  /** The first violation's detail. */
+  example?: string;
+}
+
 export interface SuiteResult {
   version: 1;
   /** Unique per run; prefixes agent session ids (`<runId>/<task-id>#<trial>`). */
@@ -39,6 +61,8 @@ export interface SuiteResult {
   failureModes: FailureMode[];
   /** pass^1 and pass^k per task tag ("untagged" for tasks without tags). */
   byTag: TagScore[];
+  /** One entry per soft invariant in the domain, in spec order. Empty when there are none. */
+  soft: SoftScore[];
   usage: Usage;
   /** Drafted items not yet accepted; while non-empty, results are provisional. */
   pendingReview: PendingItem[];
@@ -106,6 +130,7 @@ export async function runSuite(opts: SuiteOptions): Promise<SuiteResult> {
     passHat,
     failureModes: failureModes(results),
     byTag: tagScores(summaries, k),
+    soft: softScores(domain, results),
     usage: sumUsage(results.map((r) => r.usage)),
     pendingReview: pendingReview(domain),
     latency: { agentTurnP50Ms: percentile(turnLatencies, 50), agentTurnP95Ms: percentile(turnLatencies, 95) },
@@ -120,6 +145,27 @@ export function everyTrialFailed(result: SuiteResult): string | undefined {
   const trials = result.tasks.flatMap((t) => t.trials);
   if (trials.length === 0 || !trials.every((t) => t.endReason === "error")) return undefined;
   return trials[0]!.error ?? "unknown error";
+}
+
+function softScores(domain: Domain, results: TrialResult[]): SoftScore[] {
+  return domain.invariants
+    .filter((inv) => inv.soft)
+    .map((inv) => {
+      const checks = results.flatMap((r) => (r.soft ?? []).filter((c) => c.id === inv.id).map((c) => ({ task: r.taskId, ...c })));
+      const broken = checks.filter((c) => c.broken);
+      const tool = invariantTool(inv);
+      const example = broken[0]?.violations[0]?.detail;
+      return {
+        id: inv.id,
+        description: inv.description,
+        ...(tool ? { tool } : {}),
+        applied: checks.length,
+        broken: broken.length,
+        rate: checks.length ? broken.length / checks.length : null,
+        tasks: [...new Set(broken.map((c) => c.task))],
+        ...(example ? { example } : {}),
+      };
+    });
 }
 
 function tagScores(summaries: TaskSummary[], k: number): TagScore[] {

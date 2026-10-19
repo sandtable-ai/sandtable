@@ -138,7 +138,7 @@ Each one quotes the SOP in `source.quote`. For each:
    - `never_disclose`: should a legitimately agreed value be allowed through `unless`?
 4. **The data supports it.** Every field it reads must be in the seed rows, or the rule silently never fires.
 
-`Soft rule` comments are rules about wording, tone or read-backs that tool calls cannot show. Keep them as notes for the engineer; they are not graded.
+`Soft rule` comments are rules about wording, tone or read-backs that tool calls cannot show. Keep them as notes for the engineer; they are not graded, and they are not `soft: true` invariants, which tool calls do check.
 
 ## Drafted tasks
 

@@ -84,7 +84,8 @@ function lintTask(domain: Domain, task: Task, changeable: Set<string>, writers: 
       const out = runner.call(c.tool, c.args);
       if (!out.ok) errors.push(`reference[${i}] ${c.tool} failed: ${out.error}`);
     });
-    const violations = [...runner.violations, ...checkTranscript(domain, world, runner.calls, [])];
+    // Soft invariants never fail a trial, so they never make a task unsolvable either.
+    const violations = [...runner.violations, ...checkTranscript(domain, world, runner.calls, []).filter((v) => !v.soft)];
     const graded = gradeTrial({ task, world, calls: runner.calls, agentMessages: [], violations });
     const failing = graded.checks.filter((c) => !c.passed && c.kind !== "reply");
     for (const c of failing) errors.push(`reference does not pass: ${c.id}: ${c.detail}`);

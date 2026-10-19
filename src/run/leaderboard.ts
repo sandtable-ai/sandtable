@@ -38,6 +38,8 @@ export interface LeaderboardRow {
   violations: Record<string, number>;
   /** Most common failed check across trials. */
   topFailure?: string;
+  /** Soft invariants: how often each was broken, in the trials where it applied. Never part of the score. */
+  soft: Record<string, { applied: number; broken: number; rate: number | null }>;
   /** Agent and simulated caller together. */
   costUsd: number | null;
   costPerTrialUsd: number | null;
@@ -131,6 +133,7 @@ function errorRow(entry: LeaderboardEntry, error: string): LeaderboardRow {
     tasks: 0,
     trials: 0,
     violations: {},
+    soft: {},
     costUsd: null,
     costPerTrialUsd: null,
     agentCostPerTrialUsd: null,
@@ -156,6 +159,7 @@ export function toRow(entry: LeaderboardEntry, r: SuiteResult, baseline = false)
     trials,
     violations,
     ...(r.failureModes[0] ? { topFailure: `${r.failureModes[0].id} (${r.failureModes[0].count}×)` } : {}),
+    soft: Object.fromEntries((r.soft ?? []).map((x) => [x.id, { applied: x.applied, broken: x.broken, rate: x.rate }])),
     costUsd: hasUsage ? cost : null,
     costPerTrialUsd: hasUsage && cost !== null && trials ? cost / trials : null,
     agentCostPerTrialUsd: (() => {
@@ -264,13 +268,23 @@ const passCells = (r: LeaderboardRow, k: number) => (k === 1 ? [pct(r.passHat1)]
 const howOften = (k: number) => (k === 1 ? "once" : `${k} times`);
 const passMeaning = (k: number) => (k === 1 ? "pass^1 is the share of tasks that passed." : `pass^${k} is the share of tasks where all ${k} trials passed.`);
 const COST_NOTE = "Cost / trial counts the agent's model only; leaderboard.json also has the cost with the simulated caller.";
+const SOFT_NOTE = "Soft rules never fail a trial: each shows how often the model broke it, in the trials where it applied.";
+/** Whether any row reports a soft invariant, so the table needs its column. */
+const hasSoft = (l: LeaderboardResult) => l.rows.some((r) => Object.keys(r.soft ?? {}).length > 0);
+/** e.g. "counter-at-ceiling 37.5% (3/8)". */
+export function softCell(r: LeaderboardRow): string {
+  return Object.entries(r.soft ?? {})
+    .map(([id, x]) => `${id} ${x.rate === null ? "n/a" : `${pct(x.rate)} (${x.broken}/${x.applied})`}`)
+    .join("; ");
+}
 
 export function renderLeaderboardMarkdown(l: LeaderboardResult): string {
-  const heads = ["#", "Model", ...passHeads(l.k), "Rule violations", "Top failure", "Cost / trial", "p95 turn"];
+  const soft = hasSoft(l);
+  const heads = ["#", "Model", ...passHeads(l.k), "Rule violations", "Top failure", ...(soft ? ["Soft rules"] : []), "Cost / trial", "p95 turn"];
   const lines = [
     `# Leaderboard: ${l.domain}`,
     "",
-    `Each model plays the agent on every task ${howOften(l.k)}, against the same simulated callers (${l.user}). ${passMeaning(l.k)} Grading is deterministic: end state, rules checked on every tool call and message, required and forbidden tools. ${COST_NOTE}`,
+    `Each model plays the agent on every task ${howOften(l.k)}, against the same simulated callers (${l.user}). ${passMeaning(l.k)} Grading is deterministic: end state, rules checked on every tool call and message, required and forbidden tools. ${soft ? `${SOFT_NOTE} ` : ""}${COST_NOTE}`,
     "",
     `| ${heads.join(" | ")} |`,
     `|${heads.map(() => "---").join("|")}|`,
@@ -280,8 +294,8 @@ export function renderLeaderboardMarkdown(l: LeaderboardResult): string {
     const place = r.baseline || r.error ? "" : String(++rank);
     const model = r.baseline ? `_${r.label}_` : r.label;
     const cells = r.error
-      ? [place, model, "error", ...passHeads(l.k).slice(1).map(() => ""), "", r.error.replace(/\|/g, "/").slice(0, 80), "", ""]
-      : [place, model, ...passCells(r, l.k), String(totalViolations(r)), r.topFailure ?? "", usd(r.agentCostPerTrialUsd), secs(r.agentTurnP95Ms)];
+      ? [place, model, "error", ...passHeads(l.k).slice(1).map(() => ""), "", r.error.replace(/\|/g, "/").slice(0, 80), ...(soft ? [""] : []), "", ""]
+      : [place, model, ...passCells(r, l.k), String(totalViolations(r)), r.topFailure ?? "", ...(soft ? [softCell(r)] : []), usd(r.agentCostPerTrialUsd), secs(r.agentTurnP95Ms)];
     lines.push(`| ${cells.join(" | ")} |`);
   }
   lines.push("", `Generated ${l.generatedAt} with [sandtable](https://github.com/sandtable-ai/sandtable). Per-model reports and trajectories are in the folders next to this file.`, "");
@@ -290,12 +304,13 @@ export function renderLeaderboardMarkdown(l: LeaderboardResult): string {
 
 export function renderLeaderboardHtml(l: LeaderboardResult): string {
   const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+  const soft = hasSoft(l);
   const body = l.rows
     .map((r) => {
       const link = r.baseline ? esc(r.label) : `<a href="./${slugify(r.label)}/report.html">${esc(r.label)}</a>`;
-      if (r.error) return `<tr><td>${link}</td><td colspan="${passHeads(l.k).length + 4}" class="err">${esc(r.error)}</td></tr>`;
+      if (r.error) return `<tr><td>${link}</td><td colspan="${passHeads(l.k).length + (soft ? 5 : 4)}" class="err">${esc(r.error)}</td></tr>`;
       const pass = passCells(r, l.k).map((c, i, all) => (i === all.length - 1 ? `<td><b>${c}</b></td>` : `<td>${c}</td>`)).join("");
-      return `<tr${r.baseline ? ' class="base"' : ""}><td>${link}</td>${pass}<td>${totalViolations(r)}</td><td>${esc(r.topFailure ?? "")}</td><td>${usd(r.agentCostPerTrialUsd)}</td><td>${secs(r.agentTurnP95Ms)}</td></tr>`;
+      return `<tr${r.baseline ? ' class="base"' : ""}><td>${link}</td>${pass}<td>${totalViolations(r)}</td><td>${esc(r.topFailure ?? "")}</td>${soft ? `<td>${esc(softCell(r))}</td>` : ""}<td>${usd(r.agentCostPerTrialUsd)}</td><td>${secs(r.agentTurnP95Ms)}</td></tr>`;
     })
     .join("\n");
   return `<!doctype html>
@@ -312,8 +327,8 @@ th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);font-
 th{font-size:12px;color:var(--muted)}tr.base td{color:var(--muted);font-style:italic}.err{color:var(--bad)}a{color:inherit}
 </style></head><body><main>
 <h1>Leaderboard: ${esc(l.domain)}</h1>
-<p>Each model plays the agent on every task ${howOften(l.k)} against the same simulated callers (${esc(l.user)}). ${passMeaning(l.k).replace(/^(pass\^\d+)/, "<b>$1</b>")} Grading is deterministic: end state, rules checked on every tool call and message, required and forbidden tools. ${COST_NOTE} Click a model for its full report and trajectories.</p>
-<div class="wrap"><table><thead><tr><th>Model</th>${passHeads(l.k).map((h) => `<th>${h}</th>`).join("")}<th>Rule violations</th><th>Top failure</th><th>Cost / trial</th><th>p95 turn</th></tr></thead>
+<p>Each model plays the agent on every task ${howOften(l.k)} against the same simulated callers (${esc(l.user)}). ${passMeaning(l.k).replace(/^(pass\^\d+)/, "<b>$1</b>")} Grading is deterministic: end state, rules checked on every tool call and message, required and forbidden tools. ${soft ? `${SOFT_NOTE} ` : ""}${COST_NOTE} Click a model for its full report and trajectories.</p>
+<div class="wrap"><table><thead><tr><th>Model</th>${passHeads(l.k).map((h) => `<th>${h}</th>`).join("")}<th>Rule violations</th><th>Top failure</th>${soft ? "<th>Soft rules</th>" : ""}<th>Cost / trial</th><th>p95 turn</th></tr></thead>
 <tbody>
 ${body}
 </tbody></table></div>

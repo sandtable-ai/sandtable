@@ -1,4 +1,4 @@
-import type { SuiteResult } from "../run/suite.ts";
+import type { SoftScore, SuiteResult } from "../run/suite.ts";
 import { totalTokens, type UsageByModel } from "../run/usage.ts";
 
 const useColor = process.stdout.isTTY && !process.env.NO_COLOR;
@@ -49,6 +49,12 @@ function tokens(label: string, group: UsageByModel): string | undefined {
   return `${label} ${models}: ${t.calls} calls, ${k(t.input)} in, ${k(t.output)} out, ${k(t.cacheRead)} cache read, ${k(t.cacheWrite)} cache write`;
 }
 
+/** "37.5%  3 of 8 trials that called log_offer", or why there is no rate yet. */
+export function softLine(x: SoftScore): string {
+  if (x.rate === null) return dim(x.tool ? `no rate: no trial called ${x.tool}` : "no rate: the agent never spoke");
+  return `${formatPercent(x.rate).padStart(6)}  ${dim(`${x.broken} of ${x.applied} ${x.tool ? `trials that called ${x.tool}` : "trials"}`)}`;
+}
+
 export function renderTerminal(r: SuiteResult): string {
   const lines: string[] = [];
   lines.push(bold(`sandtable · ${r.domain}`) + dim(` · agent ${r.agent} · user ${r.user} · k=${r.k}`));
@@ -84,6 +90,14 @@ export function renderTerminal(r: SuiteResult): string {
       const kCol = r.k > 1 ? `   pass^${r.k} ${formatPercent(t.passHatK).padStart(6)}` : "";
       lines.push(`  ${t.tag.padEnd(tw)}  ${dim(`${t.tasks} task${t.tasks === 1 ? "" : "s"}`.padEnd(8))}  pass^1 ${formatPercent(t.passHat1).padStart(6)}${kCol}`);
     }
+  }
+
+  const soft = r.soft ?? [];
+  if (soft.length) {
+    lines.push("");
+    lines.push(bold("  Soft rules") + dim(" (reported, never fail a trial)"));
+    const sw = Math.max(...soft.map((x) => x.id.length));
+    for (const x of soft) lines.push(`  ${x.id.padEnd(sw)}  ${softLine(x)}`);
   }
 
   if (r.failureModes.length) {

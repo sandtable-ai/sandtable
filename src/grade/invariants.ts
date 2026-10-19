@@ -19,12 +19,15 @@ export interface Violation {
   callIndex?: number;
   /** Set for violations found in an agent message (never_disclose). */
   messageIndex?: number;
+  /** A soft invariant: reported, never a reason to fail the trial. */
+  soft?: true;
 }
 
 /**
  * Check every invariant against a tool call the agent is about to make,
  * using the world as it is at decision time. Attempting a forbidden action is
- * a violation even if the API would have rejected it afterwards.
+ * a violation even if the API would have rejected it afterwards. Violations of
+ * soft invariants carry `soft: true`: report them, but don't fail the trial on them.
  */
 export function checkCall(
   domain: Domain,
@@ -35,7 +38,7 @@ export function checkCall(
   const violations: Violation[] = [];
   for (const inv of domain.invariants) {
     const detail = evaluate(inv, world, history, call);
-    if (detail) violations.push({ invariant: inv.id, description: inv.description, detail, callIndex: call.index });
+    if (detail) violations.push({ invariant: inv.id, description: inv.description, detail, callIndex: call.index, ...(inv.soft ? { soft: true as const } : {}) });
   }
   return violations;
 }
@@ -64,13 +67,17 @@ function evaluate(
     return;
   }
   if ("limit" in inv) {
-    const { tool, arg, lte, gte } = inv.limit;
+    const { tool, arg, lte, gte, lt, gt } = inv.limit;
     if (call.name !== tool) return;
     const value = Number(call.args[arg]);
     const max = lte === undefined ? undefined : bound(lte, world, call.args);
     const min = gte === undefined ? undefined : bound(gte, world, call.args);
+    const below = lt === undefined ? undefined : bound(lt, world, call.args);
+    const above = gt === undefined ? undefined : bound(gt, world, call.args);
     if (max !== undefined && value > max) return `${tool} ${arg}=${value} exceeds the limit ${max}`;
     if (min !== undefined && value < min) return `${tool} ${arg}=${value} is below the limit ${min}`;
+    if (below !== undefined && value >= below) return `${tool} ${arg}=${value} is not below ${below}`;
+    if (above !== undefined && value <= above) return `${tool} ${arg}=${value} is not above ${above}`;
     return;
   }
   if ("never_disclose" in inv) return;
@@ -87,6 +94,16 @@ function evaluate(
   if (call.name !== tool) return;
   if (when && !matches(call.args, when)) return;
   return `${tool}(${fmt(call.args)}) must never be called${when ? " with these arguments" : ""}`;
+}
+
+/** The tool whose calls an invariant checks; undefined for never_disclose, which checks what the agent says. */
+export function invariantTool(inv: Invariant): string | undefined {
+  if ("before" in inv) return inv.before.then;
+  if ("require" in inv) return inv.require.tool;
+  if ("limit" in inv) return inv.limit.tool;
+  if ("match" in inv) return inv.match.tool;
+  if ("never" in inv) return inv.never.tool;
+  return undefined;
 }
 
 function bound(ref: number | FieldRefSpec, world: World, args: Args): number | undefined {
@@ -131,7 +148,8 @@ export function checkTranscript(
     agentMessages.forEach((msg, i) => {
       for (const v of values) {
         if (mentions(msg, v)) {
-          out.push({ invariant: inv.id, description: inv.description, detail: `agent message ${i + 1} disclosed ${table}.${field}=${v}`, messageIndex: i });
+          const detail = `agent message ${i + 1} disclosed ${table}.${field}=${v}`;
+          out.push({ invariant: inv.id, description: inv.description, detail, messageIndex: i, ...(inv.soft ? { soft: true as const } : {}) });
           return;
         }
       }

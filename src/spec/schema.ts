@@ -72,7 +72,17 @@ export const ToolSpec = z
 /** Points at a field of the record keyed by one of the call's arguments, e.g. loads[load_id].max_rate. */
 export const FieldRef = z.object({ table: z.string(), key_arg: z.string(), field: z.string() }).strict();
 
-const invariantBase = { id: z.string(), description: z.string(), review: Review, source: Source };
+const invariantBase = {
+  id: z.string(),
+  description: z.string(),
+  /**
+   * A soft invariant is checked like any other, but breaking it never fails the trial: runs report
+   * how often it was broken, e.g. how often an agent conceded all the way to a price ceiling.
+   */
+  soft: z.boolean().optional(),
+  review: Review,
+  source: Source,
+};
 
 /** `then` may only be called after a successful `first` call with the same values for `same` args. */
 const BeforeInvariant = z
@@ -92,7 +102,7 @@ const RequireInvariant = z
   })
   .strict();
 
-/** Numeric bounds on an argument, either constants or another record's field. */
+/** Numeric bounds on an argument, either constants or another record's field. `lt` and `gt` are strict. */
 const LimitInvariant = z
   .object({
     ...invariantBase,
@@ -102,6 +112,8 @@ const LimitInvariant = z
         arg: z.string(),
         lte: z.union([z.number(), FieldRef]).optional(),
         gte: z.union([z.number(), FieldRef]).optional(),
+        lt: z.union([z.number(), FieldRef]).optional(),
+        gt: z.union([z.number(), FieldRef]).optional(),
       })
       .strict(),
   })

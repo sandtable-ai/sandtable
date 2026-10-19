@@ -185,7 +185,8 @@ tools:
       - respond: { status: transferred, message: "The caller is being transferred to a human rep." }
     returns: 1
 
-# Rules checked on every tool call, in every task. One violation fails the trial.
+# Rules checked on every tool call, in every task. One violation fails the trial, except for a
+# `soft: true` rule, which is only reported.
 invariants:
   - id: verify-before-book
     description: A carrier must be looked up with verify_carrier before it is booked.
@@ -237,6 +238,13 @@ invariants:
   - id: three-rounds-max
     description: At most three counter-offers per load.
     limit: { tool: log_offer, arg: round, lte: 3 }
+
+  # Soft: allowed by the policy, so it never fails a trial. Runs report how often an agent's
+  # counter-offers reach the ceiling, a measure of how much margin it concedes.
+  - id: counter-at-ceiling
+    description: A logged counter-offer reached the load's max_rate (allowed; reported as a concession rate).
+    soft: true
+    limit: { tool: log_offer, arg: counter_offer, lt: { table: loads, key_arg: load_id, field: max_rate } }
 
   - id: verify-before-submit
     description: Vet the carrier before submitting an offer for a rep.
