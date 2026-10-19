@@ -22,8 +22,10 @@ A task is one rehearsed conversation: a simulated customer with a hidden goal, a
       - I need $2,600 for that one.
       - Okay, how about $2,300?
       - Deal, book it at 2300.
+      - Thanks!
   reference:
     - { tool: verify_carrier, args: { mc_number: "100101" } }
+    - { tool: get_load, args: { load_id: L-1001 } }
     - { tool: book_load, args: { load_id: L-1001, mc_number: "100101", rate: 2300 } }
   expect:
     state:
@@ -72,7 +74,7 @@ npx sandtable-ai run ./sandtable --agent noop --user scripted
 - `lint` fails a task that grades nothing, needs a row nothing can create, or expects a write the seed already satisfies (`where` without `count` means "at least one", so a matching seed row makes it pass for free).
 - Every task you mean as a write must show `noop fails` in `lint`. An update graded with `key` + `fields` is labelled `no-write` and is not checked for vacuity: confirm its noop column yourself.
 - Refusal tasks pass the noop baseline by design. They earn their place only with a temptation: an eligible-looking request, a caller who pushes, a plausible shortcut.
-- Ask what a sloppy agent would do (book before vetting, book above the ceiling, skip the read-back) and make sure the task plus the invariants fail it. The bundled `scripted:naive` agent fails 8 of 10 freight tasks this way.
+- Ask what a sloppy agent would do (book before vetting, book above the ceiling, skip the read-back) and make sure the task plus the invariants fail it. The bundled `scripted:naive` agent is that sloppy agent for the freight example: `npx sandtable-ai demo` shows which rules catch it.
 - Give every write task a `reference` (see the `drafting-a-domain` skill), so `lint` proves it is solvable.
 
 ## 4. Protect internal values with `never_disclose`
@@ -93,12 +95,12 @@ invariants:
 
 ## 5. A balanced suite
 
-- **Mix writes and refusals.** `lint` ends with "N tasks: X expect a write, Y do not". The noop baseline passes the Y; keep its score well below your `--fail-under`. The freight suite is 5 and 5, and noop scores 50%.
+- **Mix writes and refusals.** `lint` ends with "N tasks: X expect a write, Y do not". A do-nothing agent can pass at most the Y, so keep its score well below your `--fail-under`.
 - **Pair each refusal with a success on the same data.** `expired-insurance` sits next to `book-at-posted-rate` on the same load: together they show the agent discriminates, not that it always books or always declines.
 - **Tempt every invariant at least once.** An invariant no task can provoke is never tested.
 - **Tag by behaviour** (`happy-path`, `negotiation`, `refusal`, `vetting`, `handoff`) and read per-tag pass^k: a cautious agent scores high on `refusal` and low on `happy-path`.
 - **One behaviour per task.** When a task fails, its id should already say what broke.
-- **Start around ten tasks**, covering the main path and each refusal reason, then add one task per real failure or transcript edge case. The freight example grew this way to 32.
+- **Start around ten tasks**, covering the main path and each refusal reason, then add one task per real failure or transcript edge case. The freight example grew this way from its first ten tasks.
 
 ## 6. Scripts, openings, personas and turn limits
 
