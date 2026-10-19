@@ -28,6 +28,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - run: uv build python --out-dir python/dist
       - run: uv run --isolated --with python/dist/*.whl python -c "import sandtable_ai.cli"
+      - run: uv run --isolated --with pytest --with python/dist/*.whl pytest -q python/tests
       # `uvx sandtable-ai` needs an executable named after the package, next to `sandtable`.
       - run: unzip -p python/dist/*.whl "*.dist-info/entry_points.txt" | grep -q "^sandtable-ai = sandtable_ai.cli:main"
 
