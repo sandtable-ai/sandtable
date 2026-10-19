@@ -1,0 +1,60 @@
+<!doctype html>
+<!-- Source of assets/og.png, the GitHub social preview (1280×640). The numbers are the offline demo's. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>sandtable social preview</title>
+<style>
+*{box-sizing:border-box;margin:0}
+html,body{width:1280px;height:640px;overflow:hidden}
+body{background:#141413;color:#ecebe7;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;padding:72px 80px;display:grid;grid-template-columns:1fr 452px;gap:56px;align-items:center}
+.brand{display:flex;align-items:center;gap:18px;margin-bottom:40px}
+.brand svg{width:72px;height:72px}
+.brand span{font-size:44px;font-weight:650;letter-spacing:-1px}
+h1{font-size:46px;line-height:1.14;font-weight:650;letter-spacing:-1px;margin-bottom:26px}
+h1 em{font-style:normal;color:#F0A374}
+p{font-size:23px;line-height:1.45;color:#b4b2ab}
+.cmd{margin-top:36px;font:22px ui-monospace,"SF Mono",Menlo,monospace;color:#ecebe7;background:#1f1e1c;border:1px solid #33322f;border-radius:10px;padding:12px 18px;display:inline-block}
+.cmd b{color:#9c9a94;font-weight:400}
+.runs{display:flex;flex-direction:column;gap:18px}
+.run{background:#1d1d1b;border:1px solid #33322f;border-radius:14px;padding:22px 24px;font:17px/1.55 ui-monospace,"SF Mono",Menlo,monospace}
+.run .head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;font-family:ui-sans-serif,system-ui,sans-serif}
+.run .who{font-size:18px;color:#9c9a94}
+.run .score{font-size:40px;font-weight:700;font-variant-numeric:tabular-nums}
+.run .score small{font-size:16px;font-weight:500;color:#9c9a94;margin-right:6px;font-family:ui-monospace,"SF Mono",Menlo,monospace}
+.bad{color:#ff6b5e}.ok{color:#4cc38a}
+.dim{color:#9c9a94}
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">
+    <svg viewBox="1 1 30 30" aria-hidden="true">
+      <path d="M2 14 16 21 16 25 2 18Z" fill="#C4914A"/>
+      <path d="M16 21 30 14 30 18 16 25Z" fill="#A9772F"/>
+      <path d="M16 7 30 14 16 21 2 14Z" fill="#E9C98B" stroke="#8A5F22" stroke-width=".8" stroke-linejoin="round"/>
+      <path d="M20.67 9.33 6.67 16.33M25.33 11.67 11.33 18.67M11.33 9.33 25.33 16.33M6.67 11.67 20.67 18.67" stroke="#8A5F22" stroke-width=".7" stroke-opacity=".55" fill="none"/>
+      <path d="M11.33 10.5 16 12.83 16 16.33 11.33 14Z" fill="#B84E29"/>
+      <path d="M16 12.83 20.67 10.5 20.67 14 16 16.33Z" fill="#9C3F20"/>
+      <path d="M16 8.17 20.67 10.5 16 12.83 11.33 10.5Z" fill="#E0703F"/>
+    </svg>
+    <span>sandtable</span>
+  </div>
+  <h1>Rehearse your AI agent on a <em>sand table</em> of your customer's world.</h1>
+  <p>Simulated callers, stateful mock tools and business rules checked on every tool call. Graded on what the agent did, with no judge model.</p>
+  <div class="cmd"><b>$</b> npx sandtable-ai demo</div>
+</main>
+<aside class="runs">
+  <div class="run">
+    <div class="head"><span class="who">naive agent · 32 calls</span><span class="score bad"><small>pass^1</small> 15.6%</span></div>
+    <div><span class="bad">25×</span> verify-before-book</div>
+    <div><span class="bad">&nbsp;7×</span> rate-ceiling</div>
+    <div><span class="bad">&nbsp;7×</span> eligible-carrier <span class="dim">expired insurance</span></div>
+  </div>
+  <div class="run">
+    <div class="head"><span class="who">careful agent · 32 calls</span><span class="score ok"><small>pass^1</small> 100%</span></div>
+    <div class="dim">verifies, holds the ceiling, hands off</div>
+  </div>
+</aside>
+</body>
+</html>
