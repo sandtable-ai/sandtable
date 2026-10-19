@@ -162,6 +162,8 @@ Any invariant can be marked `soft: true`. It is checked exactly like a hard one,
 
 The terminal summary, the HTML report and the leaderboard show the rate, for example `counter-at-ceiling 37.5% (3 of 8 trials that called log_offer)`. Use a soft invariant for behaviour the policy allows but the customer wants measured. The freight example's `counter-at-ceiling` measures how often counter-offers reach the price ceiling, which the policy permits. Anything the policy forbids stays hard. A soft violation in a `reference` replay doesn't make `sandtable lint` call a task unsolvable.
 
+The `Soft rule` comments that `init --sop` writes are different: they note rules that tool calls can't show, such as wording or tone, for the planned LLM-judged checks ([#16](https://github.com/sandtable-ai/sandtable/issues/16)).
+
 Every invariant also accepts `review` and `source` (see [Review workflow](/concepts/review-workflow)).
 
 ## personas and tasks

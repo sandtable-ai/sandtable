@@ -32,7 +32,7 @@ Issues and milestones on GitHub are the source of truth; this page is the overvi
 - [ ] Fault profiles (#15)
 
 ## Later
-Soft checks (#16), voice transport and timing metrics (#17, #43), exports to other harness formats (#18), negotiation invariants (#36), simulation clock (#38), outcome grading (#39), business metrics (#40), persona × condition matrix (#41), multi-session tasks (#42), Python agents in-process (#44).
+LLM-judged checks (#16), voice transport and timing metrics (#17, #43), exports to other harness formats (#18), negotiation invariants (#36), simulation clock (#38), outcome grading (#39), business metrics (#40), persona × condition matrix (#41), multi-session tasks (#42), Python agents in-process (#44).
 
 ## Good first issues
 `$regex` in where clauses (#20), `--tag` filter (#21).

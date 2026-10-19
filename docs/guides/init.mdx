@@ -95,7 +95,7 @@ Claude reads the SOP alongside the domain's tools, params, tables and known fiel
 - Every invariant must **quote** the SOP. A quote that does not appear verbatim gets a warning.
 - Proposals that reference an unknown tool, param, table or field, or that are incomplete, are **dropped**, and the reason is printed.
 - Survivors are appended to the domain (existing comments are kept) with `review: pending` and `source: { file, quote }`.
-- Rules that cannot be checked from tool calls and records (wording, tone, read-backs) are written as **soft rule** comments, for the planned soft-checks feature ([#16](https://github.com/sandtable-ai/sandtable/issues/16)).
+- Rules that cannot be checked from tool calls and records (wording, tone, read-backs) are written as **soft rule** comments, for the planned LLM-judged checks ([#16](https://github.com/sandtable-ai/sandtable/issues/16)). They are notes, not `soft: true` invariants.
 
 The SOP also becomes `policy.md` when the domain still has the placeholder. Pass `--model` to choose the drafting model (default `claude-opus-5-5`).
 

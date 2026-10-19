@@ -76,4 +76,4 @@ Knowing the edges helps you read a score:
 - **One session per task.** There is no memory across calls and no simulated clock ([#38](https://github.com/sandtable-ai/sandtable/issues/38), [#42](https://github.com/sandtable-ai/sandtable/issues/42)).
 - **Scalar tool params, no deletes.** Tools take strings, numbers, integers and booleans, and can read, list, create and update rows.
 - **The simulated user is a model.** It can drift from its goal or end a call early. Scripted users (`--user scripted`) are deterministic but do not react to what the agent says. Read failing trajectories before blaming the agent.
-- **Hard checks only.** Tone, empathy and wording are not graded. Soft, judged scores are planned as a separate score ([#16](https://github.com/sandtable-ai/sandtable/issues/16)).
+- **Hard checks only.** Tone, empathy and wording are not graded. LLM-judged scores are planned as a separate score ([#16](https://github.com/sandtable-ai/sandtable/issues/16)).
