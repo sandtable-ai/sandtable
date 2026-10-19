@@ -47,6 +47,7 @@ First public release.
 
 ### Fixed
 
+- **Grading**: `never_disclose` no longer reads an ID typed with a Unicode hyphen as a protected number. gpt-oss writes `L‑1015` with U+2011, which failed the freight example's `never-disclose-ceiling` because another load's `max_rate` is 1015. U+2010 and U+2011 now join an identifier as `-` does, and en and em dashes still end a number ([#132](https://github.com/sandtable-ai/sandtable/issues/132)).
 - `examples/freight`: offering `max_rate` as a logged counter-offer is no longer graded as disclosing it. The policy says so, and `never-disclose-ceiling` exempts `log_offer.counter_offer`; the README's design note explains why. Saying the ceiling any other way still fails ([#118](https://github.com/sandtable-ai/sandtable/issues/118)).
 - `sandtable lint` ends with how many tasks a do-nothing agent passes, for example `a do-nothing agent passes 9 of 25` on the clinic example. It used to say the noop baseline passes every task that expects no write, which is false when a refusal must also look something up ([#100](https://github.com/sandtable-ai/sandtable/issues/100)).
 - **Error messages** for the setup problems a new user hits first say what to do ([#96](https://github.com/sandtable-ai/sandtable/issues/96)):

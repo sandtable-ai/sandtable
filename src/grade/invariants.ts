@@ -164,8 +164,10 @@ function mentions(text: string, value: string): boolean {
     const [int, frac] = String(Math.abs(n)).split(".");
     const grouped = int!.replace(/\B(?=(\d{3})+(?!\d))/g, ",?");
     const fraction = frac ? `\\.${frac}0*` : "(?:\\.0+)?";
-    // Bounded so identifiers (L-1050), longer numbers (23,500) and units (2350km) do not match.
-    return new RegExp(`(?<![\\w.,-])${grouped}${fraction}(?![\\w-]|[.,]\\d)`).test(text);
+    // Bounded so identifiers (L-1050), longer numbers (23,500) and units (2350km) do not match. IDs may be
+    // typed with a Unicode hyphen (U+2010, U+2011) instead of `-`; en and em dashes still separate words.
+    const joined = "\\w\\-\\u2010\\u2011";
+    return new RegExp(`(?<![${joined}.,])${grouped}${fraction}(?![${joined}]|[.,]\\d)`).test(text);
   }
   return text.toLowerCase().includes(value.toLowerCase());
 }
