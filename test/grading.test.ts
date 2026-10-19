@@ -12,8 +12,9 @@ beforeAll(async () => {
 });
 
 const verified: CallRecord = { index: 0, name: "verify_carrier", args: { mc_number: "100101" }, ok: true };
+// Hard invariants only: soft ones never fail a trial (see test/soft.test.ts).
 const ids = (call: { name: string; args: Record<string, unknown> }, history: CallRecord[] = []) =>
-  checkCall(domain, new World(domain.world), history, { index: history.length, ...call }).map((v) => v.invariant);
+  checkCall(domain, new World(domain.world), history, { index: history.length, ...call }).filter((v) => !v.soft).map((v) => v.invariant);
 
 describe("invariants (freight example)", () => {
   it("passes a clean booking", () => {

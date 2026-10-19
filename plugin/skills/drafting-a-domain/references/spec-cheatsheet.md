@@ -89,7 +89,7 @@ invariants:
     description: Only book carriers with valid insurance and no do-not-use flag.
     require: { tool: book_load, table: carriers, key_arg: mc_number, where: { insurance_status: valid, do_not_use: false } }
 
-  - id: rate-ceiling                   # numeric bound: a constant or another record's field (lte and/or gte)
+  - id: rate-ceiling                   # numeric bound: a constant or another record's field (lte, gte; strict lt, gt)
     description: Never book above the load's max_rate.
     limit: { tool: book_load, arg: rate, lte: { table: loads, key_arg: load_id, field: max_rate } }
 
@@ -109,9 +109,16 @@ invariants:
     never_disclose: { table: loads, field: max_rate, unless: { tool: book_load, arg: rate } }
     review: pending
     source: { file: sop.md, quote: "Never tell the caller the max_rate or that a ceiling exists." }
+
+  - id: counter-at-ceiling             # soft: reported as a rate, never fails a trial
+    description: A counter-offer reached the load's max_rate (allowed, but worth measuring).
+    soft: true
+    limit: { tool: log_offer, arg: counter_offer, lt: { table: loads, key_arg: load_id, field: max_rate } }
 ```
 
 `never_disclose` matches numbers in common spellings (`2350`, `2,350`, `$2,350.00`) and strings of 3 or more characters, across every row of the table. `unless` allows a value the agent passed successfully to that tool; a list (`unless: [{ tool: book_load, arg: rate }, { tool: submit_offer, arg: rate }]`) allows several. Booleans cannot be protected: `validate` rejects a `never_disclose` whose seeded values are booleans or all shorter than 3 characters, and `init --sop` drops such a draft with a warning.
+
+`soft: true` works on every kind. A soft invariant is checked the same way, but breaking it never fails a trial: runs report how often it was broken, in the trials where it applied (its tool was called; for `never_disclose`, the agent spoke). Use it for behaviour the SOP allows but the customer wants measured, such as conceding all the way to a price ceiling. Anything the SOP forbids stays hard.
 
 ## Tasks and expectations
 

@@ -2,7 +2,7 @@ export * from "./spec/schema.ts";
 export { loadDomain, validateDomain, pendingReview, DomainError, DOMAIN_FILE, type PendingItem } from "./spec/load.ts";
 export { World, diffSnapshots, type Change, type Snapshot } from "./world/store.ts";
 export { executeTool, coerceArgs, toolSchema, type ToolOutcome, type ToolSchema } from "./world/tools.ts";
-export { checkCall, type CallRecord, type Violation } from "./grade/invariants.ts";
+export { checkCall, invariantTool, type CallRecord, type Violation } from "./grade/invariants.ts";
 export { gradeTrial, type CheckResult, type CheckKind } from "./grade/expectations.ts";
 export { passHatK, binom } from "./grade/passk.ts";
 export { lintDomain, type LintReport, type TaskLint } from "./grade/lint.ts";
@@ -20,7 +20,7 @@ export { bedrockConverseAgent, type BedrockConverseOptions } from "./sim/bedrock
 export { noopAgent } from "./sim/noop.ts";
 export { scriptedUser } from "./sim/scripted.ts";
 export { agentSystemPrompt, userSystemPrompt, STOP_TOKEN } from "./sim/prompts.ts";
-export { runEpisode, type TrialResult, type TrajectoryEvent, type EndReason } from "./run/episode.ts";
-export { runSuite, type SuiteOptions, type SuiteResult, type TaskSummary, type FailureMode } from "./run/suite.ts";
+export { runEpisode, type TrialResult, type TrajectoryEvent, type EndReason, type SoftCheck } from "./run/episode.ts";
+export { runSuite, type SuiteOptions, type SuiteResult, type TaskSummary, type FailureMode, type SoftScore } from "./run/suite.ts";
 export { renderTerminal } from "./report/terminal.ts";
 export { renderHtml } from "./report/html.ts";

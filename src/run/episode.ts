@@ -1,5 +1,5 @@
 import { gradeTrial, type CheckResult } from "../grade/expectations.ts";
-import { checkTranscript, type Violation } from "../grade/invariants.ts";
+import { checkTranscript, invariantTool, type CallRecord, type Violation } from "../grade/invariants.ts";
 import type { Domain, Task } from "../spec/schema.ts";
 import { agentSystemPrompt } from "../sim/prompts.ts";
 import type { AgentAdapter, CallTool, UserSimulator } from "../sim/types.ts";
@@ -11,16 +11,40 @@ import { costOf, recordInto, type Usage } from "./usage.ts";
 export type TrajectoryEvent =
   | { type: "user"; text: string }
   | { type: "agent"; text: string; latencyMs: number }
-  | { type: "tool"; index: number; name: string; args: unknown; ok: boolean; result?: unknown; error?: string; violations: string[] };
+  | {
+      type: "tool";
+      index: number;
+      name: string;
+      args: unknown;
+      ok: boolean;
+      result?: unknown;
+      error?: string;
+      /** Hard invariants this call broke. */
+      violations: string[];
+      /** Soft invariants this call broke; present only when there are some. */
+      soft?: string[];
+    };
 
 export type EndReason = "user_stop" | "max_turns" | "error";
+
+/** A soft invariant that applied in a trial, and whether the agent broke it. Never affects `passed`. */
+export interface SoftCheck {
+  id: string;
+  /** Broken at least once in this trial. */
+  broken: boolean;
+  /** Each time it was broken, with the call or message that broke it. */
+  violations: Violation[];
+}
 
 export interface TrialResult {
   taskId: string;
   trial: number;
   passed: boolean;
   checks: CheckResult[];
+  /** Hard invariant violations: any one fails the trial. */
   violations: Violation[];
+  /** Soft invariants that applied (their tool was called; for never_disclose, the agent spoke). */
+  soft: SoftCheck[];
   events: TrajectoryEvent[];
   changes: Change[];
   endReason: EndReason;
@@ -47,9 +71,11 @@ export async function runEpisode(input: {
   const events: TrajectoryEvent[] = [];
   const agentMessages: string[] = [];
   const usage: Usage = { agent: {}, user: {}, costUsd: 0 };
-  const runner = createToolRunner(domain, world, (e) =>
-    events.push({ type: "tool", index: e.index, name: e.name, args: e.args, ...e.outcome, violations: e.violations.map((v) => v.invariant) }),
-  );
+  const runner = createToolRunner(domain, world, (e) => {
+    const soft = e.violations.filter((v) => v.soft).map((v) => v.invariant);
+    const hard = e.violations.filter((v) => !v.soft).map((v) => v.invariant);
+    events.push({ type: "tool", index: e.index, name: e.name, args: e.args, ...e.outcome, violations: hard, ...(soft.length ? { soft } : {}) });
+  });
   const callTool: CallTool = async (name, rawArgs) => runner.call(name, rawArgs);
 
   const persona = domain.personas.find((p) => p.id === task.persona);
@@ -97,7 +123,9 @@ export async function runEpisode(input: {
   }
 
   const keys = Object.fromEntries(Object.keys(domain.world.tables).map((t) => [t, world.keyOf(t)]));
-  const violations: Violation[] = [...runner.violations, ...checkTranscript(domain, world, runner.calls, agentMessages)];
+  const said = checkTranscript(domain, world, runner.calls, agentMessages);
+  const violations: Violation[] = [...runner.violations, ...said.filter((v) => !v.soft)];
+  const soft = softChecks(domain, runner.calls, agentMessages.length, [...runner.soft, ...said.filter((v) => v.soft)]);
   const { passed, checks } = gradeTrial({ task, world, calls: runner.calls, agentMessages, violations, error });
   usage.costUsd = costOf(usage.agent, usage.user);
   return {
@@ -106,6 +134,7 @@ export async function runEpisode(input: {
     passed,
     checks,
     violations,
+    soft,
     events,
     changes: diffSnapshots(initial, world.snapshot(), keys),
     endReason,
@@ -114,4 +143,16 @@ export async function runEpisode(input: {
     usage,
     ...(error ? { error } : {}),
   };
+}
+
+/** One entry per soft invariant that applied in the trial: its tool was called, or for never_disclose, the agent spoke. */
+export function softChecks(domain: Domain, calls: readonly CallRecord[], agentMessages: number, found: readonly Violation[]): SoftCheck[] {
+  return domain.invariants
+    .filter((inv) => inv.soft)
+    .flatMap((inv) => {
+      const tool = invariantTool(inv);
+      const applied = tool === undefined ? agentMessages > 0 : calls.some((c) => c.name === tool);
+      const violations = found.filter((v) => v.invariant === inv.id);
+      return applied || violations.length ? [{ id: inv.id, broken: violations.length > 0, violations }] : [];
+    });
 }

@@ -19,6 +19,8 @@ SuiteResult
   passHat                      { "1": 0.95, "2": 0.9 }: pass^1 .. pass^k, as fractions
   byTag[]                      { tag, tasks, passHat1, passHatK }; "untagged" for tasks without tags
   failureModes[]               { id, kind, count, tasks[], example }: failed checks clustered, most frequent first
+  soft[]                       { id, description, tool?, applied, broken, rate, tasks[], example? }: one per soft
+                               invariant; rate = broken / applied trials (null if it never applied). Never a failure
   pendingReview[]              { kind, id, source? }: non-empty means the run is provisional
   usage                        { agent: {<model>: tokens}, user: {<model>: tokens}, costUsd }: costUsd is null when a
                                model has no known price (Claude, or passed with --prices)
@@ -31,11 +33,12 @@ SuiteResult
       error?                   set when endReason is "error"
       turns, durationMs, usage
       checks[]                 { id, kind, passed, detail }
-      violations[]             { invariant, description, detail, callIndex? | messageIndex? }
+      violations[]             { invariant, description, detail, callIndex? | messageIndex? }: hard ones only
+      soft[]                   { id, broken, violations[] }: soft invariants that applied in this trial
       events[]                 the transcript, in order:
                                  { type: "user", text }
                                  { type: "agent", text, latencyMs }
-                                 { type: "tool", index, name, args, ok, result? | error?, violations[] }
+                                 { type: "tool", index, name, args, ok, result? | error?, violations[], soft? }
       changes[]                { table, key, kind: "insert" | "update", before?, after? }: the world diff
 ```
 
@@ -100,6 +103,13 @@ What one trial changed in the world:
 
 ```bash
 jq '.tasks[] | select(.id == "expired-insurance") | .trials[0].changes[] | {kind, table, key, after}' "$R"
+```
+
+Soft invariants (`soft: true`): how often each was broken, and in which trials. They never fail a trial, so read them next to pass^k, not as failures:
+
+```bash
+jq -r '.soft[] | "\(.id): \(.broken) of \(.applied) trials \(if .rate == null then "" else "(\(.rate * 100 | round)%)" end)"' "$R"
+jq -r '.tasks[].trials[] | .taskId as $t | .trial as $n | .soft[] | select(.broken) | "\($t)#\($n) \(.id): \(.violations[0].detail)"' "$R"
 ```
 
 Trials that ran out of turns or crashed:

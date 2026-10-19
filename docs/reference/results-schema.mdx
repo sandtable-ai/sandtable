@@ -28,6 +28,7 @@ The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`
 | `passHat` | object | pass^j for every j from 1 to k, keyed `"1"`, `"2"`, …, as fractions from 0 to 1 |
 | `failureModes` | `FailureMode[]` | failed checks clustered across trials, most frequent first |
 | `byTag` | `TagScore[]` | scores per task tag (`untagged` for tasks without tags), weakest first |
+| `soft` | `SoftScore[]` | one entry per soft invariant in the domain, in spec order; empty when there are none |
 | `usage` | `Usage` | tokens and estimated cost, summed over trials |
 | `pendingReview` | `PendingItem[]` | drafted items not yet accepted; while non-empty, the run is provisional |
 | `latency` | object | `agentTurnP50Ms` and `agentTurnP95Ms`: time the agent took per user turn, tool calls included (`null` with no turns) |
@@ -61,6 +62,21 @@ The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`
 | `passHat1` | number | pass^1 over those tasks |
 | `passHatK` | number | pass^k over those tasks |
 
+### SoftScore
+
+How often a soft invariant (`soft: true`) was broken. Soft invariants never fail a trial or change pass^k.
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | invariant id |
+| `description` | string | invariant description |
+| `tool` | string | the tool whose calls it checks; absent for `never_disclose`, which checks what the agent says |
+| `applied` | number | trials in which it applied: its tool was called, or for `never_disclose`, the agent spoke |
+| `broken` | number | trials in which it was broken at least once |
+| `rate` | number or `null` | `broken / applied`, from 0 to 1; `null` when it never applied |
+| `tasks` | string[] | tasks with at least one trial that broke it |
+| `example` | string | the detail of the first violation, when there is one |
+
 ### PendingItem
 
 | Field | Type | Description |
@@ -77,7 +93,8 @@ The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`
 | `trial` | number | trial number, from 0 |
 | `passed` | boolean | true only if every check passed |
 | `checks` | `CheckResult[]` | every check, passed or failed |
-| `violations` | `Violation[]` | invariant violations |
+| `violations` | `Violation[]` | hard invariant violations; any one fails the trial |
+| `soft` | `SoftCheck[]` | each soft invariant that applied in this trial, and whether it was broken |
 | `events` | `TrajectoryEvent[]` | the conversation and tool calls, in order |
 | `changes` | `Change[]` | the difference between the world's seed and its final state |
 | `endReason` | string | `user_stop`, `max_turns` or `error` |
@@ -104,6 +121,15 @@ The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`
 | `detail` | string | what happened |
 | `callIndex` | number | for tool-call violations: the index of the call |
 | `messageIndex` | number | for `never_disclose`: the index of the agent message |
+| `soft` | `true` | present on a soft invariant's violation |
+
+### SoftCheck
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | the soft invariant's id |
+| `broken` | boolean | broken at least once in this trial |
+| `violations` | `Violation[]` | each time it was broken, with the call or message |
 
 ### TrajectoryEvent
 
@@ -116,7 +142,7 @@ One of:
   "ok": true, "result": { }, "violations": [] }   // or "ok": false with "error"
 ```
 
-A tool event's `violations` lists the ids of invariants that call violated.
+A tool event's `violations` lists the ids of hard invariants that call violated. When it also broke soft invariants, `soft` lists their ids.
 
 ### Change
 
@@ -155,4 +181,7 @@ jq -r '.tasks[] | .id as $t | .trials[] | select(.passed | not)
 
 # failure modes, most frequent first
 jq -r '.failureModes[] | "\(.count)x \(.kind) \(.id)"' results.json
+
+# soft invariants: how often each was broken
+jq -r '.soft[] | "\(.id): \(.broken) of \(.applied) trials"' results.json
 ```

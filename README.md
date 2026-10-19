@@ -152,7 +152,7 @@ A `failure-triager` subagent reads the failing trials of a large run outside the
 4. **Tasks.** A simulated caller with a persona and a hidden goal, plus the end state that counts as success.
 5. **Grading.** A trial passes only if the end state matches, the required tools ran, the forbidden ones didn't, no invariant was violated, and no protected value appeared in what the agent said.
 
-More: [how it works](https://sandtable.dev/how-it-works). The bundled examples are [`examples/freight`](https://github.com/sandtable-ai/sandtable/tree/main/examples/freight) (32 tasks, 16 invariants) and [`examples/clinic`](https://github.com/sandtable-ai/sandtable/tree/main/examples/clinic) (a clinic front desk, 25 tasks, 12 invariants). Both run offline.
+More: [how it works](https://sandtable.dev/how-it-works). The bundled examples are [`examples/freight`](https://github.com/sandtable-ai/sandtable/tree/main/examples/freight) (32 tasks, 17 invariants) and [`examples/clinic`](https://github.com/sandtable-ai/sandtable/tree/main/examples/clinic) (a clinic front desk, 25 tasks, 12 invariants). Both run offline.
 
 ## How it compares
 

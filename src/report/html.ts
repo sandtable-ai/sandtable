@@ -37,7 +37,7 @@ tr:last-child td{border-bottom:0}
 .ev small{display:block;color:var(--muted);font:12px/16px ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;margin-bottom:4px}
 .ev small b{font-weight:600;text-transform:uppercase;letter-spacing:.04em}.ev small code{font-size:1em}
 .user{background:var(--user)}.agent{background:var(--agent)}.tool{background:var(--tool);font:13px/20px ui-monospace,"SF Mono",Menlo,Consolas,monospace}
-.viol{color:var(--bad);font-weight:600}.viol code{font-weight:600}
+.viol{color:var(--bad);font-weight:600}.viol code{font-weight:600}.softv{color:var(--muted);font-weight:600}
 code{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.867em}
 .wrap{overflow-x:auto}
 .explain{color:var(--muted);font-size:13px;max-width:760px;margin:10px 0 0}
@@ -56,6 +56,7 @@ a{color:inherit}
 <h2>Tasks</h2>
 <div class="wrap"><table><thead><tr><th>Task</th><th>Trials</th><th>Pass</th><th>Failed checks</th></tr></thead><tbody id="tasks"></tbody></table></div>
 <div id="tags"></div>
+<div id="soft"></div>
 <h2>Failure modes</h2>
 <div class="wrap"><table><thead><tr><th>Count</th><th>Check</th><th>Tasks</th><th>Example</th></tr></thead><tbody id="modes"></tbody></table></div>
 <div id="detail"></div>
@@ -95,6 +96,14 @@ if (R.byTag && R.byTag.length > 1) {
     R.byTag.map((t) => "<tr><td><span class='chip'>" + esc(t.tag) + "</span></td><td>" + t.tasks + "</td><td>" + pct(t.passHat1) + "</td>" + (R.k > 1 ? "<td>" + pct(t.passHatK) + "</td>" : "") + "</tr>").join("") +
     "</tbody></table></div>";
 }
+if (R.soft && R.soft.length) {
+  const rate = (x) => x.rate === null ? "n/a" : pct(x.rate);
+  const scope = (x) => x.tool ? "trials that called <code>" + esc(x.tool) + "</code>" : "trials";
+  $("soft").innerHTML = "<h2>Soft rules</h2><p class='explain' style='margin-top:0'>Checked on every call like the other rules, but breaking one never fails a trial. The rate is the share of trials where the rule applied and the agent broke it.</p><div class='wrap'><table><thead><tr><th>Rule</th><th>Rate</th><th>Broken in</th><th>Tasks</th><th>Example</th></tr></thead><tbody>" +
+    R.soft.map((x) => "<tr><td><code>" + esc(x.id) + "</code><div class='meta'>" + esc(x.description) + "</div></td><td>" + rate(x) + "</td><td>" + x.broken + " of " + x.applied + " " + scope(x) + "</td><td>" +
+      x.tasks.map((t) => '<span class="chip">' + esc(t) + "</span>").join("") + "</td><td>" + esc(x.example || "") + "</td></tr>").join("") +
+    "</tbody></table></div>";
+}
 $("modes").innerHTML = R.failureModes.length ? R.failureModes.map((m) =>
   "<tr><td class='badt'>" + m.count + "×</td><td><code>" + esc(m.id) + "</code><div class='meta'>" + esc(m.kind) + "</div></td><td>" +
   m.tasks.map((t) => '<span class="chip">' + esc(t) + "</span>").join("") + "</td><td>" + esc(m.example) + "</td></tr>").join("")
@@ -103,14 +112,16 @@ function show(ti, i) {
   const t = R.tasks[ti], tr = t.trials[i];
   const evs = tr.events.map((e) => {
     if (e.type === "tool") {
-      const v = e.violations.length ? ' · <span class="viol">violates ' + e.violations.map((id) => "<code>" + esc(id) + "</code>").join(", ") + "</span>" : "";
+      const v = (e.violations.length ? ' · <span class="viol">violates ' + e.violations.map((id) => "<code>" + esc(id) + "</code>").join(", ") + "</span>" : "") +
+        (e.soft && e.soft.length ? ' · <span class="softv">soft ' + e.soft.map((id) => "<code>" + esc(id) + "</code>").join(", ") + "</span>" : "");
       const out = e.ok ? json(e.result) : "ERROR " + e.error;
       return '<div class="ev tool"><small><b>tool</b> #' + e.index + v + "</small>" + esc(e.name) + "(" + esc(json(e.args)) + ")\\n→ " + esc(out) + "</div>";
     }
     const lat = e.type === "agent" && e.latencyMs !== undefined ? " · " + ms(e.latencyMs) : "";
     return '<div class="ev ' + e.type + '"><small><b>' + e.type + "</b>" + lat + "</small>" + esc(e.text) + "</div>";
   }).join("");
-  const checks = tr.checks.map((c) => '<div class="check"><span class="' + (c.passed ? "okt" : "badt") + '">' + (c.passed ? "✓" : "✗") + "</span><div><code>" + esc(c.id) + "</code> " + esc(c.detail) + "</div></div>").join("");
+  const checks = tr.checks.map((c) => '<div class="check"><span class="' + (c.passed ? "okt" : "badt") + '">' + (c.passed ? "✓" : "✗") + "</span><div><code>" + esc(c.id) + "</code> " + esc(c.detail) + "</div></div>").join("") +
+    (tr.soft || []).map((c) => '<div class="check"><span class="meta">' + (c.broken ? "~" : "·") + "</span><div><code>" + esc(c.id) + "</code> <span class='meta'>soft:</span> " + esc(c.broken ? c.violations.map((v) => v.detail).join("; ") : "not broken") + "</div></div>").join("");
   const changes = tr.changes.length ? tr.changes.map((c) => '<div class="change">' + c.kind + " " + esc(c.table) + " " + esc(c.key) + " <span>" + esc(json(c.after ?? c.before)) + "</span></div>").join("") : "<div class='meta'>No writes.</div>";
   $("detail").innerHTML = '<div class="trial"><h2 style="margin-top:0">' + esc(t.id) + " · trial " + (i + 1) + " · " +
     (tr.passed ? '<span class="okt">passed</span>' : '<span class="badt">failed</span>') + '</h2><div class="meta">ended: ' + tr.endReason + " · " + tr.turns + " turns · " + tr.durationMs + "ms" + (calls(tr.usage) ? " · " + usd(tr.usage.costUsd) : "") + (tr.error ? " · " + esc(tr.error) : "") +
