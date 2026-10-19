@@ -25,6 +25,23 @@ export function formatMs(ms: number | null): string {
 
 const k = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
 
+// Failure-mode lines fit a classic 80-column terminal. results.json and the HTML report keep the
+// full task lists and examples.
+const WIDTH = 80;
+
+/** `(a, b, … +N more)`: as many items as fit in `budget` columns, in order, then a count of the rest. */
+export function fitList(items: string[], budget: number): string {
+  const all = `(${items.join(", ")})`;
+  if (all.length <= budget) return all;
+  for (let n = items.length - 1; n >= 1; n--) {
+    const s = `(${items.slice(0, n).join(", ")}, … +${items.length - n} more)`;
+    if (s.length <= budget) return s;
+  }
+  return `(${items.length} tasks)`;
+}
+
+const clip = (s: string, width: number) => (s.length <= width ? s : `${s.slice(0, width - 1)}…`);
+
 function tokens(label: string, group: UsageByModel): string | undefined {
   const t = totalTokens(group);
   if (t.calls === 0) return undefined;
@@ -73,8 +90,9 @@ export function renderTerminal(r: SuiteResult): string {
     lines.push("");
     lines.push(bold("  Top failure modes"));
     for (const m of r.failureModes.slice(0, 8)) {
-      lines.push(`  ${red(`${m.count}×`)} ${m.kind} ${bold(m.id)} ${dim(`(${m.tasks.join(", ")})`)}`);
-      lines.push(dim(`     e.g. ${m.example}`));
+      const head = `  ${m.count}× ${m.kind} ${m.id} `;
+      lines.push(`  ${red(`${m.count}×`)} ${m.kind} ${bold(m.id)} ${dim(fitList(m.tasks, WIDTH - head.length))}`);
+      lines.push(dim(clip(`     e.g. ${m.example}`, WIDTH)));
     }
   }
   return lines.join("\n");

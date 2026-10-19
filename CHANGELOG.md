@@ -29,7 +29,7 @@ First public release.
   - HTTP step protocol, keyed by a `session_id` of `<run-id>/<task-id>#<trial>` that no other run reuses; JS/TS module agents; `noop` baseline; scripted user
   - the Claude, Bedrock and OpenAI-compatible adapters retry rate limits, server errors and network errors with backoff, so a long run doesn't lose trials to throttling
 - **Reports**:
-  - terminal summary, `results.json` (with the run's `runId`), and a self-contained HTML report with transcripts, tokens, estimated cost and turn latency
+  - terminal summary, `results.json` (with the run's `runId`), and a self-contained HTML report with transcripts, tokens, estimated cost and turn latency. Each line of the summary's top failure modes fits an 80-column terminal: it names the first tasks that hit the failure and counts the rest (`… +24 more`), and long examples end in `…`. The full lists stay in `results.json` and the report ([#79](https://github.com/sandtable-ai/sandtable/issues/79))
   - `--fail-under` CI gate; `run --open` opens the report
   - `--prices <file>` adds verified prices for models sandtable doesn't price itself; `scripts/bedrock-prices.mjs` resolves Bedrock prices from the AWS Pricing API
 - **Claude Code plugin**: this repository is a plugin marketplace (`/plugin marketplace add sandtable-ai/sandtable`). Its skills teach a coding agent to draft and review a domain, write tasks, run it and attribute failures; a `failure-triager` subagent reads failing trials. Not part of the npm package.
