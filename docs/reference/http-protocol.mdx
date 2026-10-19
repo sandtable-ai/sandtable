@@ -1,6 +1,8 @@
 ---
-title: "HTTP agent protocol"
-description: "How sandtable talks to an agent that runs as a service: one POST per step, a reply or tool calls back."
+title: "HTTP agent protocol: test an agent that runs as a service"
+sidebarTitle: "HTTP agent protocol"
+description: "How sandtable talks to an agent that runs as a service, in any language: one POST per step, answered with a reply to the user or tool calls to run."
+keywords: ["HTTP API", "step protocol", "session_id", "agent as a service", "any language", "Python agent"]
 ---
 
 `--agent https://your-agent/step` rehearses any agent that runs as a service, in any language. sandtable sends one POST per step, and the agent answers with either its reply to the user or tool calls for sandtable to run against the simulated world. The agent keeps its own conversation state, keyed by `session_id`.

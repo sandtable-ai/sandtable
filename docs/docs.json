@@ -36,15 +36,41 @@
   "search": {
     "prompt": "Search the sandtable docs"
   },
+  "seo": {
+    "indexing": "navigable",
+    "metatags": {
+      "canonical": "https://sandtable.dev",
+      "og:site_name": "sandtable",
+      "og:type": "website",
+      "og:locale": "en_US",
+      "og:image": "https://sandtable.dev/images/og.png",
+      "og:image:type": "image/png",
+      "og:image:alt": "sandtable: rehearse your AI agent on a sand table of your customer's world. In the offline demo, a naive agent scores pass^1 15.6% on 32 calls and a careful agent scores 100%.",
+      "twitter:card": "summary_large_image",
+      "twitter:image": "https://sandtable.dev/images/og.png",
+      "twitter:image:alt": "sandtable: rehearse your AI agent on a sand table of your customer's world. In the offline demo, a naive agent scores pass^1 15.6% on 32 calls and a careful agent scores 100%."
+    },
+    "organization": {
+      "id": "https://sandtable.dev/#organization",
+      "name": "sandtable",
+      "url": "https://sandtable.dev",
+      "sameAs": [
+        "https://github.com/sandtable-ai",
+        "https://www.npmjs.com/package/sandtable-ai",
+        "https://pypi.org/project/sandtable-ai/"
+      ]
+    }
+  },
   "contextual": {
-    "options": ["copy", "view", "chatgpt", "claude", "mcp", "cursor", "vscode"]
+    "options": ["copy", "view", "chatgpt", "claude", "perplexity", "mcp", "add-mcp", "cursor", "vscode"]
   },
   "markdown": {
     "instructions": [
       "sandtable is an early-alpha, open-source CLI (TypeScript, MIT): https://github.com/sandtable-ai/sandtable. If a flag here disagrees with `sandtable <command> --help`, trust the help output.",
       "Grading is deterministic: pass/fail comes from the world's end state, invariants and the tool-call log, never from an LLM judge.",
       "To draft a domain for a user, read /guides/init and /reference/spec, then run `sandtable validate`, `sandtable lint` and `sandtable review` before any model-backed run. Keep all example data fictional.",
-      "Every page is available as Markdown by appending .md to its URL; /llms-full.txt contains the whole site."
+      "In Claude Code, the sandtable plugin teaches these steps as skills: `/plugin marketplace add sandtable-ai/sandtable`, then `/plugin install sandtable@sandtable`.",
+      "Every page is available as Markdown by appending .md to its URL. /llms.txt lists every page, /llms-full.txt contains the whole site, and https://sandtable.dev/mcp is a search MCP server for these docs."
     ]
   },
   "navigation": {
