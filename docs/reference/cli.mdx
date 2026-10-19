@@ -150,14 +150,17 @@ models:
 | `-m, --models <file>` | YAML file: `{ user?, k?, models: [{ label, agent }] }`; `agent` takes the same specs as `run --agent` |
 | `-u, --user <spec>` | simulated user for every model; overrides the models file. Default: `claude` |
 | `-k, --trials <n>` | trials per task; overrides the models file. Default: `4` |
+| `-t, --tasks <ids>` | comma-separated task ids to run, for every model and the baseline. Default: all tasks |
 | `-c, --concurrency <n>` | episodes in parallel per model. Default: `4` |
 | `--openai-base-url <url>` | OpenAI-compatible endpoint for `openai:<model>` entries |
 | `-o, --out <dir>` | output directory. Default: `leaderboard/<domain name>` |
-| `--no-resume` | rerun models even when their results already exist |
+| `--no-resume` | rerun models even when matching results already exist |
 | `--prices <file>` | extra model prices for the cost column |
 | `--provider`, `--region`, `--aws-profile` | see [provider options](#provider-options) |
 
-Each model's full `results.json` and `report.html` go in their own folder. `leaderboard.json`, `LEADERBOARD.md` and `leaderboard.html` rank them by pass^k, with pass^1, rule violations, the top failure, cost per trial and p95 turn latency. Models whose results already exist are reused, so an interrupted or paid run resumes rather than repeating work. Keep the caller fixed and disclose which model plays it, since it may favour its own family.
+Each model's full `results.json` and `report.html` go in their own folder. `leaderboard.json`, `LEADERBOARD.md` and `leaderboard.html` rank them by pass^k, with pass^1, rule violations, the top failure, cost per trial and p95 turn latency. Cost per trial counts the agent's model only, since every model faces the same caller; `leaderboard.json` also has the total with the caller (`costUsd`, `costPerTrialUsd`). The do-nothing baseline is always added, so a `noop` entry in the models file is skipped.
+
+A model's existing results are reused when they match the run: the same domain, k, simulated caller and tasks, with no crashed trial. An interrupted or paid run then resumes instead of repeating work. Otherwise the model runs again, and the output says why (for example `they are for k=1, not k=4`). A model with crashed trials (expired credentials, throttling that outlasted the retries) shows as an error instead of a score, and the next run retries it. Keep the caller fixed and disclose which model plays it, since it may favour its own family.
 
 ## demo
 
