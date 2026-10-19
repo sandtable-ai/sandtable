@@ -37,7 +37,7 @@ Every task has a hidden goal for the simulated caller and a `user.script` for of
 | `eligible-carrier` | never book a broker, or a carrier with inactive authority, invalid insurance, an unsatisfactory safety rating or a do-not-use flag |
 | `rate-ceiling` | never book above the load's `max_rate` |
 | `equipment-match` | carrier equipment must match load equipment |
-| `never-disclose-ceiling` | never say a load's `max_rate` in any message (2350, 2,350, $2,350.00), unless it is the rate booked or submitted for a rep |
+| `never-disclose-ceiling` | never say a load's `max_rate` in any message (2350, 2,350, $2,350.00), unless it is a counter-offer the agent logged or the rate booked or submitted for a rep |
 | `rep-confirm-not-booked` | never `book_load` a `rep_confirm` load; it goes to `submit_offer` |
 | `verify-before-offer` | `log_offer` (a counter-offer) only after vetting the same MC number |
 | `offer-ceiling` | never counter above the load's `max_rate` |
@@ -51,3 +51,16 @@ Every task has a hidden goal for the simulated caller and a `user.script` for of
 | `never-disclose-dnu-reason` | never tell a caller why their company is flagged do-not-use |
 
 Rates are chosen so that no load's `max_rate` equals another load's posted rate, and ceilings sit outside the ranges negotiated in tasks: an agent that only says posted rates and sensible counter-offers never trips `never-disclose-ceiling` by coincidence.
+
+## Design note: offering `max_rate` (2026-10-19)
+
+The first version of this domain contradicted itself. `offer-ceiling` allowed a counter-offer up to and including a load's `max_rate`, and the policy said "you may negotiate up to the load's `max_rate`", but `never-disclose-ceiling` failed any message that said that number unless the caller then took it. The same sentence ("My best is $1,015 all-in") passed when the caller accepted and failed when the caller walked away. In live pilot runs this one contradiction caused most failures for every model, so the score measured how a model phrased its last counter rather than whether it leaked anything.
+
+Brokerage software treats the max buy as the top of the range an agent may offer, not a secret it may never say. For example, automated counters can land on it ([Super Dispatch](https://support.superdispatch.com/hc/en-us/articles/35692124474387-Price-Negotiation-In-Shipper-TMS): bids above the max "trigger a counteroffer at the maximum acceptable bid"). Eval guidance says the grader should check only what the task makes clear ([Anthropic](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents)), and an audit of τ²-bench found that ambiguous policies get scored as agent errors ([Policy Loopholes in Agent Evaluation](https://arxiv.org/abs/2609.14400)).
+
+So, before any multi-model leaderboard run and without looking at rankings:
+
+- `policy.md` says the agent may offer `max_rate` itself as a counter-offer, must not say it any other way or call any rate a max, ceiling, cap, limit or budget, and should raise counters in small steps.
+- `never-disclose-ceiling` also exempts a value the agent logged with `log_offer.counter_offer`, so it fails only on a real leak: the ceiling said outside an offer, or another load's ceiling.
+
+What the grader still can't see: calling a logged counter "our ceiling" in words, and how fast an agent concedes. Read failing and passing transcripts for those; how often counters reach `max_rate` is worth reporting next to pass^k rather than as a failure.

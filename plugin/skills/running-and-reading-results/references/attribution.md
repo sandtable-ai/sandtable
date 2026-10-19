@@ -64,7 +64,7 @@ These follow runs of the bundled, fictional freight domain: the first live runs 
 
 **The caller invented a need.** The user asked for a pickup address and a text confirmation, neither in its instructions. The agent correctly handed off to a human, and the task, which forbade any handoff, failed. Two owners: the **simulated user** (it went beyond its goal) and the **task spec** (it forbade a handoff the SOP allows after a booking). Fix: tighten the instructions, and grade the booking itself instead of forbidding the handoff.
 
-**The agent leaked the ceiling.** In `walk-away-above-ceiling`, a firm caller refused every offer, and in one of two trials the agent said "the best I can do is $1,450", which is the load's `max_rate`. `never-disclose-ceiling` failed. The user behaved; the SOP says never reveal `max_rate`. Owner: **agent**. Fix: the agent's negotiation instructions (offer in steps below the ceiling, never quote it). Leave the task alone: pass^2 below pass^1 is the reliability gap it exists to show.
+**The agent leaked the ceiling.** In `walk-away-above-ceiling`, a firm caller refused every offer, and in one of two trials the agent said "I can't go past $1,450 on this one" without logging that as a counter-offer. $1,450 is the load's `max_rate`, so `never-disclose-ceiling` failed. Offering the ceiling as a logged counter is allowed; stating it as a limit is not. The user behaved. Owner: **agent**. Fix: the agent's negotiation instructions (log every counter with `log_offer`, raise it in small steps, never call a rate the limit).
 
 **The agent booked before vetting.** `book_load` came before any `verify_carrier`, and `verify-before-book` failed with "book_load(...) was called without a prior successful verify_carrier for the same mc_number". Owner: **agent**. Fix: make verification the first step in its prompt or code.
 
@@ -76,7 +76,7 @@ Give the engineer one table, most frequent root cause first:
 
 | Task#trial | Owner | Evidence | Proposed fix |
 |---|---|---|---|
-| walk-away-above-ceiling#1 | agent | AGENT: "the best I can do is $1,450" (never-disclose-ceiling) | negotiation step in the agent prompt: never state the ceiling |
+| walk-away-above-ceiling#1 | agent | AGENT: "I can't go past $1,450 on this one", not a logged counter (never-disclose-ceiling) | negotiation step in the agent prompt: log every counter, never state a rate as the limit |
 | negotiate-within-ceiling#0 | simulated user | USER accepted and hung up in one turn, before any booking | add "once you have a confirmation number, end the call" to `user.instructions` |
 
 Then the counts per owner, and what you will rerun to confirm each fix.
