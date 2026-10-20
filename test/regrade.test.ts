@@ -172,7 +172,7 @@ describe("regrade", () => {
     expect(await readFile(file, "utf8")).toBe(JSON.stringify(run));
   });
 
-  it.skipIf(!process.features.typescript)("sandtable regrade with another domain's --domain points at the flag, not at a rerun", async () => {
+  it.skipIf(!process.features.typescript)("sandtable regrade with another domain's --domain points at the flag, and at the name for a renamed domain", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-regrade-"));
     const run = await stored(await loadDomain(example), "careful");
     const file = path.join(dir, "results.json");
@@ -185,8 +185,21 @@ describe("regrade", () => {
     expect(stderr).toContain(`can't regrade ${file}: it is a run of freight-carrier-sales, not clinic-front-desk, so --domain ${clinic} is likely not the domain the run used.`);
     // How to tell which domain the run used: results.json names it, as its sandtable.yaml does.
     expect(stderr).toContain("name: freight-carrier-sales");
-    expect(stderr).not.toContain("sandtable run");
+    expect(stderr).toContain("If you renamed the domain since the run, restore its `name:` or rerun it with `sandtable run`.");
     expect(await readFile(file, "utf8")).toBe(JSON.stringify(run));
+
+    // The run's own domain, renamed since: the same refusal, and restoring the name is enough.
+    const domainDir = path.join(dir, "freight");
+    await cp(example, domainDir, { recursive: true });
+    const spec = path.join(domainDir, "sandtable.yaml");
+    const yaml = await readFile(spec, "utf8");
+    await writeFile(spec, yaml.replace("name: freight-carrier-sales\n", "name: freight-desk\n"));
+    const renamed = await promisify(execFile)(process.execPath, [cli, "regrade", file, "--domain", domainDir]).catch((e: { code: number; stderr: string }) => e);
+    expect(renamed).toMatchObject({ code: 1 });
+    expect((renamed as { stderr: string }).stderr).toContain("it is a run of freight-carrier-sales, not freight-desk");
+    expect((renamed as { stderr: string }).stderr).toContain("If you renamed the domain since the run, restore its `name:`");
+    await writeFile(spec, yaml);
+    await promisify(execFile)(process.execPath, [cli, "regrade", file, "--domain", domainDir, "--no-html"]);
   });
 
   it.skipIf(!process.features.typescript)("sandtable regrade --help shows that --domain is required", async () => {

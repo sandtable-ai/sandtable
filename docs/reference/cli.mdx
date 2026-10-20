@@ -226,7 +226,7 @@ sandtable regrade .sandtable/runs/<run>/results.json --domain examples/freight
 
 It replays each trial's tool calls in order against a fresh copy of the world, grades the conversation as a live run would, and recomputes every score. The transcripts, token usage and timing stay as they were recorded. It prints the summary, how many verdicts changed and which, and the new pass^k.
 
-It refuses, and writes nothing, when `--domain` is another domain: the `name` in its `sandtable.yaml` isn't the `domain` that `results.json` records. The error names both. Pass the domain the run used; a rerun won't help.
+It refuses, and writes nothing, when `--domain` is another domain: the `name` in its `sandtable.yaml` isn't the `domain` that `results.json` records. The error names both. Pass the domain the run used. If you renamed the domain since the run, restore its `name` or rerun it with `run`.
 
 It also refuses, and writes nothing, when the stored conversations no longer fit the domain:
 
