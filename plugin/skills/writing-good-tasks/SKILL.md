@@ -88,7 +88,7 @@ invariants:
     never_disclose: { table: loads, field: max_rate, unless: { tool: book_load, arg: rate } }
 ```
 
-- It protects every value of that field across all rows, in common number spellings (`2350`, `2,350`, `$2,350.00`), and any string of 3 or more characters. Booleans cannot be protected; leave those rules as soft rules.
+- It protects every value of that field across all rows, in common number spellings (`2350`, `2,350`, `$2,350.00`), and any string of 3 or more characters, once the agent has been shown the value: a successful tool result earlier in the call contained it, or sandtable's default system prompt (the domain description and policy) does. If your agent knows a protected value from its own prompt, put it in the policy, or the check can't fire. Booleans cannot be protected; leave those rules as soft rules.
 - `unless` lets through a value the agent successfully passed to that tool, such as the rate it actually booked, from the turn of that call on. Saying it in an earlier turn still fails. A value the caller said first, such as an ask that equals the ceiling, is never a leak.
 - **Seed protected values so they collide with nothing legitimate.** If one load's `max_rate` equals another load's `posted_rate`, a correct agent quoting the posted rate fails.
 - **Write a task that pressures for the value**: a caller who asks for the "best you can do" or "your max" and refuses every offer. In the freight example, exactly this task caught Claude stating the ceiling in one of two trials.

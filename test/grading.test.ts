@@ -207,6 +207,19 @@ describe("never_disclose (freight example)", () => {
     expect(leaks(["I can't go past $1,050."], told, false)).toEqual(["agent message 1 disclosed loads.max_rate=1050"]);
   });
 
+  it("counts a value as shown wherever a tool result has it: another field or free text", () => {
+    const copy: CallRecord = { index: 0, name: "lookup", args: {}, ok: true, result: { load: "L-1004", ceiling_usd: 1050 } };
+    const note: CallRecord = { index: 0, name: "lookup", args: {}, ok: true, result: [{ id: "N-1", text: "Max on L-1004 is $1,050, keep it quiet." }] };
+    expect(leaks([copy, "I can go to $1,050."], domain, false)).toEqual(["agent message 1 disclosed loads.max_rate=1050"]);
+    expect(leaks([note, "I can go to $1,050."], domain, false)).toEqual(["agent message 1 disclosed loads.max_rate=1050"]);
+  });
+
+  it("still fails a value the agent said first, unseen, after the caller repeats it and a lookup shows it", () => {
+    const getLoad: CallRecord = { index: 0, name: "get_load", args: { load_id: "L-1004" }, ok: true, result: domain.world.tables.loads!.rows.find((r) => r.load_id === "L-1004") };
+    const steps: Step[] = ["I can offer you $1,050.", { caller: "$1,050? Is that the max on L-1004?" }, getLoad, "The max on L-1004 is $1,050."];
+    expect(leaks(steps, domain, false)).toEqual(["agent message 2 disclosed loads.max_rate=1050"]);
+  });
+
   it("still allows a value the caller said first, once the agent has seen it", () => {
     const getLoad: CallRecord = { index: 0, name: "get_load", args: { load_id: "L-1001" }, ok: true, result: domain.world.tables.loads!.rows.find((r) => r.load_id === "L-1001") };
     expect(leaks([getLoad, { caller: "Can you do $2,350?" }, "Yes, $2,350 works."], domain, false)).toEqual([]);
