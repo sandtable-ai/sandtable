@@ -29,6 +29,8 @@ tasks: ./tasks.yaml                 # any top-level value that is a relative .md
 ## Templates and where clauses
 
 - `"$arg"` becomes the call's argument value, keeping its type. `"${arg}"` interpolates inside a longer string.
+- An argument's name is a letter or `_`, then letters, digits or `_`. Other strings stay literal, even with a leading `$` (`"$5"`, `"$/hr"`, `"$@type"`), but a whole `"$USD"` is a reference.
+- `validate` fails when a tool's `ops` or `checks` refer to a param the tool doesn't have.
 - A condition whose argument was not passed (an optional param) is dropped, so it filters nothing.
 - A plain value in `where`, `fields` or `when` means equality. An object of operators means all must hold:
 

@@ -4,13 +4,26 @@ export type Args = Record<string, unknown>;
 const WHOLE_REF = /^\$([a-zA-Z_]\w*)$/;
 const INLINE_REF = /\$\{([a-zA-Z_]\w*)\}/g;
 
+/**
+ * Read a string as a template: when the whole string is "$name", the result is `lookup(name)`;
+ * otherwise each "${name}" inside it is replaced by `lookup(name)`'s text. A name is a letter or _,
+ * then letters, digits or _, and anything else stays literal: "$5", "$$", "$/hr", "$USD/kg", "$@type".
+ * resolve() and `validate` both read strings through this, so they agree on what a reference is.
+ */
+export function substitute(value: string, lookup: (name: string, ref: string) => unknown): unknown {
+  const whole = WHOLE_REF.exec(value);
+  if (whole) return lookup(whole[1]!, value);
+  return value.replace(INLINE_REF, (ref, name: string) => String(lookup(name, ref) ?? ""));
+}
+
+/** Whether "$name" refers to a param called `name`, rather than being literal text. */
+export function isParamName(name: string): boolean {
+  return WHOLE_REF.test(`$${name}`);
+}
+
 /** Replace "$arg" with the argument value and "${arg}" with its string form, recursively. */
 export function resolve(value: unknown, args: Args): unknown {
-  if (typeof value === "string") {
-    const whole = WHOLE_REF.exec(value);
-    if (whole) return args[whole[1]!];
-    return value.replace(INLINE_REF, (_, name: string) => String(args[name] ?? ""));
-  }
+  if (typeof value === "string") return substitute(value, (name) => (Object.hasOwn(args, name) ? args[name] : undefined));
   if (Array.isArray(value)) return value.map((v) => resolve(v, args));
   if (isPlainObject(value)) {
     return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, resolve(v, args)]));

@@ -4,6 +4,7 @@ import YAML from "yaml";
 import { z } from "zod";
 import { mentions, protectedValues } from "../grade/invariants.ts";
 import { agentSystemPrompt } from "../sim/prompts.ts";
+import { substitute } from "../world/match.ts";
 import { DomainSpec, type Domain, type Tool } from "./schema.ts";
 
 export const DOMAIN_FILE = "sandtable.yaml";
@@ -79,9 +80,8 @@ export function validateDomain(d: Domain): string[] {
       if (name) table(name, `tools.${t.name}.ops[${i}]`);
     });
     const unresolved = (value: unknown, where: string) => {
-      for (const { text, name } of references(value)) {
-        if (!PARAM_NAME.test(name)) problems.push(`${where}: "${text}" never resolves: "${name}" is not a param name (a letter or _, then letters, digits or _)`);
-        else if (!(name in t.params)) problems.push(`${where}: "${text}" never resolves: tool "${t.name}" has no param "${name}"`);
+      for (const { ref, name } of references(value)) {
+        if (!Object.hasOwn(t.params, name)) problems.push(`${where}: "${ref}" never resolves: tool "${t.name}" has no param "${name}"`);
       }
     };
     t.checks.forEach((c, i) => unresolved(c, `tools.${t.name}.checks[${i}]`));
@@ -152,19 +152,12 @@ export function validateDomain(d: Domain): string[] {
  * the transcript check looks only for numbers and strings of 3 or more characters. A table
  * without seed rows, or rows without the field, can't be judged (tools may create the values).
  */
-/** The names a `$name` or `${name}` reference can resolve to, as in `resolve()` (src/world/match.ts). */
-const PARAM_NAME = /^[a-zA-Z_]\w*$/;
-
-/**
- * The `$name` and `${name}` references in a tool's op or check, which resolve to the call's arguments.
- * A whole string that is `$` and a name is one; a price such as "$5" or "$-5.50" is not.
- */
-function references(value: unknown): { text: string; name: string }[] {
+/** Every argument reference in a tool's op or check, read exactly as resolve() reads it at run time. */
+function references(value: unknown): { ref: string; name: string }[] {
   if (typeof value === "string") {
-    const inline = [...value.matchAll(/\$\{([^}]*)\}/g)].map((m) => ({ text: m[0], name: m[1]! }));
-    if (inline.length) return inline;
-    const whole = /^\$(?![-+.,]?\d)(\S+)$/.exec(value);
-    return whole ? [{ text: value, name: whole[1]! }] : [];
+    const found: { ref: string; name: string }[] = [];
+    substitute(value, (name, ref) => found.push({ ref, name }));
+    return found;
   }
   if (Array.isArray(value)) return value.flatMap(references);
   if (value && typeof value === "object") return Object.values(value).flatMap(references);

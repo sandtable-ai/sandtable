@@ -31,6 +31,8 @@ Inside tool `ops`, `checks`, invariant `where` clauses and task assertions:
 
 - `"$arg"` is replaced by the tool call's argument value, keeping its type.
 - `"${arg}"` interpolates inside a longer string: `"Load ${load_id} is not available"`.
+- An argument's name is a letter or `_`, then letters, digits or `_`. Any other string is literal text, even when it starts with `$`: `"$5"`, `"$$"`, `"$/hr"`, `"$USD/kg"`, `"$@type"`. A whole string such as `"$USD"` is a reference.
+- In a tool's `ops` and `checks`, every reference must name one of the tool's params, or `sandtable validate` fails with `never resolves: tool "get_load" has no param "loadId"`. It would be empty at run time.
 - A condition whose argument was not passed (an optional param) is dropped, so it filters nothing.
 
 ## Where clauses

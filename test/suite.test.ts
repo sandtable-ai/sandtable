@@ -180,23 +180,21 @@ describe("domain validation", () => {
     expect(validateDomain(broken)).toEqual(['invariants.x: tool "submit_offer" has no param "price"', 'invariants.x: unknown tool "hold_load"']);
   });
 
-  it("rejects a $ reference in a tool that resolves to none of its params", async () => {
+  it("checks the references resolve() reads in a tool, and only those", async () => {
     const d = await loadDomain(example);
     const getLoad = d.tools.find((t) => t.name === "get_load")!;
-    const broken = {
-      ...d,
-      tools: [
-        ...d.tools.filter((t) => t !== getLoad),
-        {
-          ...getLoad,
-          checks: [{ table: "loads", key: "$@id", error: "load ${load} not found, ${load_id} is fine" }],
-          ops: [{ get: "loads", key: "$loadId" }, { list: "loads", where: { load_id: "$load_id", max_rate: { $lte: "$5" } } }],
-        },
-      ],
-    };
+    const withGetLoad = (changes: object) => ({ ...d, tools: [...d.tools.filter((t) => t !== getLoad), { ...getLoad, ...changes }] });
+    // Literal text at run time, so there is nothing to resolve.
+    const where = { load_id: "$load_id", price_range: "$$", tier: "$$$", unit: "$/hr", per: "$USD/kg", currency: "$€", rate: "$5", kind: "$@id", note: "${} or $ {x}" };
+    expect(validateDomain(withGetLoad({ ops: [{ list: "loads", where }] }))).toEqual([]);
+    const broken = withGetLoad({
+      checks: [{ table: "loads", key: "$constructor", error: "load ${load} not found, ${load_id} is fine, ${toString} is not" }],
+      ops: [{ get: "loads", key: "$loadId" }],
+    });
     expect(validateDomain(broken)).toEqual([
-      'tools.get_load.checks[0]: "$@id" never resolves: "@id" is not a param name (a letter or _, then letters, digits or _)',
+      'tools.get_load.checks[0]: "$constructor" never resolves: tool "get_load" has no param "constructor"',
       'tools.get_load.checks[0]: "${load}" never resolves: tool "get_load" has no param "load"',
+      'tools.get_load.checks[0]: "${toString}" never resolves: tool "get_load" has no param "toString"',
       'tools.get_load.ops[0]: "$loadId" never resolves: tool "get_load" has no param "loadId"',
     ]);
   });

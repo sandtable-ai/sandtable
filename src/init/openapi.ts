@@ -4,6 +4,8 @@
  * conditions, seed data) becomes a review note instead of a guess.
  */
 
+import { isParamName } from "../world/match.ts";
+
 type Json = Record<string, unknown>;
 
 export interface DraftParam {
@@ -123,19 +125,8 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
       notes: [],
     };
 
-    // Each spec param and body field gets a tool param whose name a `$name` reference resolves.
-    const paramOf = new Map<string, string>();
-    const addParam = (name: string, param: DraftParam, replace = false) => {
-      const known = paramOf.get(name);
-      if (known && replace) tool.params[known] = param;
-      if (known) return;
-      const safe = uniqueParamName(name, tool.params);
-      paramOf.set(name, safe);
-      tool.params[safe] = param;
-    };
-    const ref = (name: string) => `$${paramOf.get(name)}`;
-
-    const filters: Json = {};
+    // The tool's inputs by their name in the spec: path and query params, then body fields.
+    const inputs = new Map<string, { param: DraftParam; loc: string }>();
     for (const p of o.params) {
       const name = String(p.name);
       const loc = String(p.in);
@@ -149,16 +140,10 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
         warnings.push(`${where}: parameter "${name}" is not a scalar; skipped`);
         continue;
       }
-      addParam(name, param, true); // an operation's own parameter overrides the path's
-      if (loc === "path" && o.parents.includes(name)) filters[name] = ref(name);
-      if (loc === "query") filters[name] = param.type === "string" && !param.enum ? { $contains: ref(name) } : ref(name);
+      inputs.set(name, { param, loc }); // an operation's own parameter overrides the path's
     }
     // A path parameter the spec forgot to declare is still a required argument.
-    for (const name of pathParams(o.path)) {
-      if (paramOf.has(name)) continue;
-      addParam(name, { type: "string", required: true });
-      if (o.parents.includes(name)) filters[name] = ref(name);
-    }
+    for (const name of pathParams(o.path)) if (!inputs.has(name)) inputs.set(name, { param: { type: "string", required: true }, loc: "path" });
 
     const bodyFields: string[] = [];
     const body = requestSchema(o.op, deref);
@@ -170,9 +155,21 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
           warnings.push(`${where}: body field "${name}" is not a scalar; skipped`);
           continue;
         }
-        addParam(name, param);
+        if (!inputs.has(name)) inputs.set(name, { param, loc: "body" });
         bodyFields.push(name);
       }
+    }
+
+    const renames: string[] = [];
+    const paramOf = paramNames([...inputs.keys()], (name, param, taken) => {
+      renames.push(`${where}: "${name}" is param "${param}", since "${taken}" is another field's param`);
+    });
+    const ref = (name: string) => `$${paramOf.get(name)}`;
+    const filters: Json = {};
+    for (const [name, { param, loc }] of inputs) {
+      tool.params[paramOf.get(name)!] = param;
+      if (loc === "path" && o.parents.includes(name)) filters[name] = ref(name);
+      if (loc === "query") filters[name] = param.type === "string" && !param.enum ? { $contains: ref(name) } : ref(name);
     }
 
     const keyRef = o.itemKey ? ref(o.itemKey) : undefined;
@@ -193,6 +190,7 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
       names.delete(tool.name);
       continue;
     }
+    warnings.push(...renames);
 
     if (o.method !== "get") {
       for (const [name, safe] of paramOf) {
@@ -254,22 +252,27 @@ function classify(segments: string[], item: Json): { table: string; itemKey?: st
   }
 }
 
-/** The names a `$name` reference can resolve to (see `resolve()` in src/world/match.ts). */
-const PARAM_NAME = /^[a-zA-Z_]\w*$/;
-
 /**
- * `name` as a tool param name that `$name` resolves to, and that no param in `taken` has yet:
- * `@type` becomes `at_type` and `pickup-window` becomes `pickup_window`.
+ * A tool param name for each name in the spec, one that a `$name` reference resolves (see
+ * `substitute()` in src/world/match.ts). Names that already qualify keep themselves, and are
+ * claimed first. Each other name is rewritten (`@type` becomes `at_type`, `pickup-window`
+ * becomes `pickup_window`), with `_2`, `_3`… and a call to `onSuffix` when that name is taken.
  */
-function uniqueParamName(name: string, taken: Record<string, unknown>): string {
-  let base = name;
-  if (!PARAM_NAME.test(base)) {
-    base = base.replace(/^@/, "at_").replace(/\W+/g, "_").replace(/_+$/, "") || "param";
+function paramNames(names: string[], onSuffix: (name: string, param: string, taken: string) => void): Map<string, string> {
+  const paramOf = new Map<string, string>();
+  for (const name of names) if (isParamName(name)) paramOf.set(name, name);
+  const taken = new Set(paramOf.values());
+  for (const name of names) {
+    if (paramOf.has(name)) continue;
+    let base = name.replace(/^@/, "at_").replace(/\W+/g, "_").replace(/_+$/, "") || "param";
     if (/^\d/.test(base)) base = `_${base}`;
+    let param = base;
+    for (let i = 2; taken.has(param); i++) param = `${base}_${i}`;
+    if (param !== base) onSuffix(name, param, base);
+    paramOf.set(name, param);
+    taken.add(param);
   }
-  let safe = base;
-  for (let i = 2; safe in taken; i++) safe = `${base}_${i}`;
-  return safe;
+  return paramOf;
 }
 
 function pathParams(path: string): string[] {

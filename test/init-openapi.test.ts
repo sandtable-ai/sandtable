@@ -247,6 +247,22 @@ describe("init from OpenAPI: names that aren't identifiers", () => {
     expect(byName.update_job!.ops).toEqual([{ update: "jobs", key: "$job_id", set: { "@type": "$at_type" } }]);
   });
 
+  it("keeps names that already work, and warns when a rewritten name takes a suffix", () => {
+    const properties = Object.fromEntries(["@type", "at_type", "a-b", "a_b", "a.b", "constructor", "toString"].map((f) => [f, str]));
+    const body = { content: { "application/json": { schema: { type: "object", properties } } } };
+    const d = draftFromOpenApi({ ...spec, paths: { "/parcels": { post: { operationId: "createParcel", requestBody: body, responses: { "201": { description: "ok" } } } } } });
+    const create = d.tools[0]!;
+    expect(create.ops).toEqual([
+      { create: "parcels", values: { "@type": "$at_type_2", at_type: "$at_type", "a-b": "$a_b_2", a_b: "$a_b", "a.b": "$a_b_3", constructor: "$constructor", toString: "$toString" } },
+    ]);
+    expect(Object.keys(create.params)).toEqual(["at_type_2", "at_type", "a_b_2", "a_b", "a_b_3", "constructor", "toString"]);
+    expect(d.warnings).toEqual([
+      'POST /parcels: "@type" is param "at_type_2", since "at_type" is another field\'s param',
+      'POST /parcels: "a-b" is param "a_b_2", since "a_b" is another field\'s param',
+      'POST /parcels: "a.b" is param "a_b_3", since "a_b" is another field\'s param',
+    ]);
+  });
+
   it("writes a draft that validates", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-init-"));
     await writeDraft(dir, { [DOMAIN_FILE]: renderDraft(draftFromOpenApi(spec), "openapi.yaml"), "policy.md": POLICY_PLACEHOLDER, "tasks.yaml": TASKS_PLACEHOLDER });
