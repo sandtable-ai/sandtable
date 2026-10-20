@@ -81,6 +81,7 @@ npx sandtable-ai leaderboard ./sandtable -m models.yaml -k 4 --provider bedrock 
 ```
 
 - Keep the caller (`user:` in the models file) fixed across models, or the comparison is meaningless. Disclose which model plays the caller, since it may favour its own family.
+- A `claude:` entry can set `effort: low|medium|high|xhigh|max` (default `medium`; an effort on any other agent is an error). Say which effort each Claude model ran at: `run.json` records it, and changing it reruns that model.
 - Re-running skips models whose results exist for the same agent spec, domain, k, caller and tasks, so an interrupted run never pays twice. Their stored conversations are graded again under the domain's current rules, so an edit to an invariant or an expectation updates every model without a model call (`↻ regraded`). A change to what the agent or the caller is given (the policy, a tool, a task's caller instructions) reruns the model and prints why. Pass `--no-resume` to redo one, or `-t <ids>` for a cheap check of a few tasks.
 - Costs are estimates. Claude uses list prices, and `--prices <file>` adds verified prices for other models (`{ "<model-id>": { input, output, cacheRead, cacheWrite } }` in USD per million tokens; for Bedrock, `scripts/bedrock-prices.mjs` in the sandtable repo writes the file from the AWS Pricing API, and takes models the Pricing API doesn't list from `prices/bedrock.verified.json` with `--verified`: prices copied from AWS's model pages, each with its source URL). Anything else shows `n/a`; never invent a price or add one without a source.
 
