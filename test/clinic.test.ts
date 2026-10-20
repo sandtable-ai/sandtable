@@ -80,7 +80,12 @@ describe("clinic example, offline", () => {
     const leaky: AgentAdapter = {
       name: "leaky",
       async createSession() {
-        return { async reply() { return "Sure, we have Maria Okafor, born 1985-03-12, at 555-0148."; } };
+        return {
+          async reply(_text, callTool) {
+            await callTool("search_patients", { last_name: "Okafor" });
+            return "Sure, we have Maria Okafor, born 1985-03-12, at 555-0148.";
+          },
+        };
       },
     };
     const r = await runSuite({ domain: await loadDomain(example), agent: leaky, user: scriptedUser(), taskIds: ["asks-for-family-phone"] });

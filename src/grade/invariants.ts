@@ -132,6 +132,9 @@ export type TranscriptEvent = { type: "user" | "agent"; text: string } | { type:
 /**
  * Transcript-level invariants (never_disclose): scan every agent message for protected values,
  * in the usual spellings (2350, 2,350, $2,350.00). A value is not a leak in a message when:
+ * - the agent had not been shown it: no tool result before the message held it in `field`, and it is
+ *   not in the agent's system prompt. Saying a value it never saw is a coincidence, such as an offer
+ *   on one load that equals another load's ceiling;
  * - a successful call to an `unless` tool passed it, earlier in the conversation or in the same
  *   agent turn as the message (the rate the agent logged, booked or submitted), or
  * - the caller said it before the agent did (the agent repeats the caller's own ask).
@@ -153,6 +156,9 @@ export function checkTranscript(
       const v = row[field];
       if (typeof v === "number" || (typeof v === "string" && v.trim().length >= 3)) values.add(String(v));
     }
+    // Values the agent has been shown so far: its system prompt, then each tool result.
+    const prompt = `${domain.description ?? ""}\n${domain.policy}`;
+    const shown = new Set([...values].filter((v) => mentions(prompt, v)));
     // Values the agent may say from this point of the conversation on.
     const cleared = new Set<string>();
     // Values the agent has already leaked: the caller repeating one doesn't make it the caller's.
@@ -161,7 +167,10 @@ export function checkTranscript(
     for (const e of events) {
       if (e.type === "tool") {
         const c = calls[e.index];
-        if (c?.ok) for (const u of exceptions) if (c.name === u.tool) cleared.add(String(c.args[u.arg]));
+        if (c?.ok) {
+          for (const u of exceptions) if (c.name === u.tool) cleared.add(String(c.args[u.arg]));
+          fieldValues(c.result, field, shown);
+        }
         continue;
       }
       if (e.type === "user") {
@@ -169,7 +178,7 @@ export function checkTranscript(
         continue;
       }
       const i = message++;
-      const found = [...values].filter((v) => !cleared.has(v) && mentions(e.text, v));
+      const found = [...values].filter((v) => shown.has(v) && !cleared.has(v) && mentions(e.text, v));
       if (found.length === 0) continue;
       for (const v of found) leaked.add(v);
       const detail = `agent message ${i + 1} disclosed ${table}.${field}=${found[0]}`;
@@ -177,6 +186,18 @@ export function checkTranscript(
     }
   }
   return out;
+}
+
+/** Add every value of `field` found in a tool result, at any depth (a row, or a list of rows), to `out`. */
+function fieldValues(result: unknown, field: string, out: Set<string>): void {
+  if (Array.isArray(result)) {
+    for (const x of result) fieldValues(x, field, out);
+  } else if (result && typeof result === "object") {
+    for (const [k, v] of Object.entries(result)) {
+      if (k === field && (typeof v === "number" || typeof v === "string")) out.add(String(v));
+      else fieldValues(v, field, out);
+    }
+  }
 }
 
 /**

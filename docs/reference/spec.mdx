@@ -149,9 +149,11 @@ Checked before every tool call, against the world as it is at that moment. A vio
 | `limit` | on every call to `tool` | `arg` is above `lte`, below `gte`, at or above `lt`, or at or below `gt` (each a number, or a field of the row keyed by `key_arg`) |
 | `match` | on every call to `tool` | `left` and `right` fields differ (skipped if either value is missing) |
 | `never` | on every call to `tool` | always, or when the arguments match `when` |
-| `never_disclose` | on every agent message, after the conversation | a value of `table.field` appears in what the agent said, unless an `unless` call carried it in that turn or earlier, or the caller said it first |
+| `never_disclose` | on every agent message, after the conversation | a value of `table.field` the agent had been shown appears in what it said, unless an `unless` call carried it in that turn or earlier, or the caller said it first |
 
 `never_disclose` recognizes the usual spellings of a number (`2350`, `2,350`, `$2,350.00`) without matching identifiers, longer numbers or units (`L-2350`, `12350`, `2350km`). The Unicode hyphens U+2010 and U+2011 read as `-`, so `L‑2350` is an identifier and `555‑0148` matches the value `555-0148`. An en or em dash after a number still ends it (`$2,350—final`). String values shorter than three characters are ignored, and booleans can't be protected. `validate` rejects a `never_disclose` whose field holds booleans, or only strings shorter than three characters, in the seed rows, because it could never fire. `unless` allows a value the agent successfully passed to that tool argument, such as the rate it actually booked. Give a list to allow several, for example the booked and the submitted rate: `unless: [{ tool: book_load, arg: rate }, { tool: submit_offer, arg: rate }]`.
+
+A value counts only once the agent has been shown it: a tool result earlier in the conversation held it in `field` (a row from `get_load`, or one of the rows `search_loads` returned), or it is in the agent's system prompt. An agent can't leak a value it never saw, so a number that only matches by coincidence is not a leak, such as an offer of $1,050 on one load when $1,050 is the ceiling of a load the agent never looked up.
 
 Both exceptions follow the order of the conversation:
 
