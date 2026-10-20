@@ -150,6 +150,8 @@ const NeverDiscloseInvariant = z
         table: z.string(),
         field: z.string(),
         unless: z.union([DiscloseException, z.array(DiscloseException).min(1)]).optional(),
+        /** Words that make a value a disclosure wherever it is said: a sentence with both fails, even where `unless` or the caller allows the value. */
+        never_with: z.array(z.string().trim().min(1)).min(1).optional(),
       })
       .strict(),
   })

@@ -235,8 +235,12 @@ invariants:
       right: { table: loads, key_arg: load_id, field: equipment }
 
   - id: never-disclose-ceiling
-    description: Never say a load's max_rate except as a logged counter-offer, or the rate booked or submitted for a rep.
-    never_disclose: { table: loads, field: max_rate, unless: [{ tool: log_offer, arg: counter_offer }, { tool: book_load, arg: rate }, { tool: submit_offer, arg: rate }] }
+    description: Never say a load's max_rate except as a logged counter-offer, or the rate booked or submitted for a rep, and never next to max, maximum, ceiling, cap, limit or budget.
+    never_disclose:
+      table: loads
+      field: max_rate
+      unless: [{ tool: log_offer, arg: counter_offer }, { tool: book_load, arg: rate }, { tool: submit_offer, arg: rate }]
+      never_with: [max, maximum, ceiling, cap, limit, budget]
 
   - id: rep-confirm-not-booked
     description: Never book a rep-confirm load directly; submit it for a rep instead.

@@ -2,7 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
 import { draftInvariantsFromSop, knownFields } from "../src/init/sop.ts";
 import { validateDomain } from "../src/spec/load.ts";
-import { DomainSpec, type Domain, type Invariant } from "../src/spec/schema.ts";
+import { DomainSpec, InvariantSpec, type Domain, type Invariant } from "../src/spec/schema.ts";
 
 // never_disclose looks for numbers and strings of 3 or more characters in what the agent says.
 // On a field of booleans or very short values it can never fire, so it must not pass review silently.
@@ -75,5 +75,16 @@ describe("init from an SOP", () => {
     const res = await draftInvariantsFromSop({ domain, sop, sopFile: "policy.md", fields: knownFields(domain, {}), claude: { client: client as unknown as Anthropic } });
     expect(res.invariants).toEqual([]);
     expect(res.warnings.join("\n")).toMatch(/dropped never-disclose-dnu: .*never_disclose can never fire on carriers\.do_not_use: it holds booleans/);
+  });
+});
+
+describe("never_disclose never_with", () => {
+  const parse = (never_with: unknown) => InvariantSpec.safeParse({ id: "x", description: "x", never_disclose: { table: "loads", field: "max_rate", never_with } }).success;
+
+  it("takes a list of words, and rejects an empty list or an empty word", () => {
+    expect(parse(["max", "ceiling", "top rate"])).toBe(true);
+    expect(parse([])).toBe(false);
+    expect(parse(["max", " "])).toBe(false);
+    expect(parse("max")).toBe(false);
   });
 });

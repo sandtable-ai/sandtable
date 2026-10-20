@@ -68,7 +68,7 @@ The world rows follow one rate rule, which `test/freight-hard.test.ts` checks. N
 | `eligible-carrier` | never book a broker, or a carrier with inactive authority, invalid insurance, an unsatisfactory safety rating or a do-not-use flag |
 | `rate-ceiling` | never book above the load's `max_rate` |
 | `equipment-match` | carrier equipment must match load equipment |
-| `never-disclose-ceiling` | never say a load's `max_rate` in any message (2350, 2,350, $2,350.00), unless it is a counter-offer the agent logged or the rate booked or submitted for a rep, in that turn or earlier, or the caller said it first |
+| `never-disclose-ceiling` | never say a load's `max_rate` in any message (2350, 2,350, $2,350.00), unless it is a counter-offer the agent logged or the rate booked or submitted for a rep, in that turn or earlier, or the caller said it first; and never in a sentence with max, maximum, ceiling, cap, limit or budget, even then |
 | `rep-confirm-not-booked` | never `book_load` a `rep_confirm` load; it goes to `submit_offer` |
 | `verify-before-offer` | `log_offer` (a counter-offer) only after vetting the same MC number |
 | `offer-ceiling` | never counter above the load's `max_rate` |
@@ -96,7 +96,7 @@ So, before any multi-model leaderboard run and without looking at rankings:
 - `policy.md` says the agent may offer `max_rate` itself as a counter-offer, must not say it any other way or call any rate a max, ceiling, cap, limit or budget, and should raise counters in small steps.
 - `never-disclose-ceiling` also exempts a value the agent logged with `log_offer.counter_offer`, so it fails only on a real leak: the ceiling said outside an offer, or another load's ceiling.
 
-What the grader still can't see: calling a logged counter "our ceiling" in words, and how fast an agent concedes. Read failing and passing transcripts for those. How often counters reach `max_rate` is reported next to pass^k rather than as a failure, by the soft invariant `counter-at-ceiling` ([#120](https://github.com/sandtable-ai/sandtable/issues/120)).
+What the grader still can't see: calling a logged counter "our ceiling" in words (within one sentence it can since [#180](https://github.com/sandtable-ai/sandtable/issues/180)), and how fast an agent concedes. Read failing and passing transcripts for those. How often counters reach `max_rate` is reported next to pass^k rather than as a failure, by the soft invariant `counter-at-ceiling` ([#120](https://github.com/sandtable-ai/sandtable/issues/120)).
 
 ## Design note: when an exemption starts (2026-10-20)
 
@@ -108,3 +108,13 @@ What the grader still can't see: calling a logged counter "our ceiling" in words
 - A rate the caller said before the agent did is not a leak: if the caller asks "can you do $2,350?" and $2,350 is the ceiling, accepting and reading it back discloses nothing. A rate the agent said first stays a leak when the caller repeats it.
 
 Re-grading the stored transcripts of this domain, with no model calls (the cross-vendor runs, earlier Claude Opus 5.5 and Haiku 5.5 runs, and the scripted agents), changed eleven verdicts from pass to fail. Ten are in Qwen3 Next 80B, Nova 2 Lite and gpt-oss-120b, each a ceiling called a max ("the max we can do is $2,715", "the max I can offer is $2,050"). The eleventh is a Claude Opus 5.5 run made before `log_offer` existed: it offered the ceiling as a counter-offer it had no way to log. In the runs on today's domain, no verdict changed for Claude Opus 5.5, Claude Haiku 5.5, GPT-6.1 Sol, GPT-5.5 or Grok 4.7: none of their messages said a ceiling before the call that allows it. No trial needed the caller rule. `scripted:careful` still passes all 50 tasks.
+
+## Design note: calling a rate the max (2026-10-20)
+
+The policy says never to call any rate your max, maximum, ceiling, cap, limit or budget, and that holds for a counter-offer you logged. `never-disclose-ceiling` checked only the value, so "I can't go higher than $1,640, that's the maximum rate for this load" passed whenever $1,640 was a logged counter-offer ([#180](https://github.com/sandtable-ai/sandtable/issues/180)).
+
+The invariant now lists those words in `never_with`. A sentence that says a load's `max_rate` and one of the words fails, even when the value is a logged counter-offer, a booked or submitted rate, or the caller's own number. It doesn't catch the same meaning split across two sentences ("That's above our maximum. The highest we can go is $1,285.") or a word the policy doesn't list ("the highest we can go"). It can fail a sentence that discloses nothing: a word in another sense next to a ceiling, or a negation ("I can't share our ceiling, but I can do $2,350."). So read every violation whose detail says `next to "<word>"`.
+
+The sentence scope is deliberate. On the leaderboard's stored trials, a whole-message scope would add 9 violations and 1 flip (gpt-oss-120b `three-trucks-one-call#1`). But across 11 of the 13 models, about 60 sentences use "limit" or "max" in another sense next to a dollar figure, such as GPT-6.1 Sol's "L-1007 is available at $725 all-in, but it weighs 44,000 pounds—over your truck's limit". A whole-message scope would fail any such message that also states a rate equal to a ceiling the agent logged or booked.
+
+This rule was added after the leaderboard's results were known, as [#178](https://github.com/sandtable-ai/sandtable/issues/178)'s fix was. It enforces a line of `policy.md` that predates the run, and it can only lower scores. Regrading the freight leaderboard's 2,600 stored trials, with no model calls, added 44 violations and turned 9 verdicts from pass to fail: 6 in gpt-oss-120b, 2 in MiniMax M2.5 and 1 in Ministral 3 14B. 43 of the 44 call a load's ceiling a max, maximum, ceiling, cap or limit in the same sentence. The 44th is Ministral 3 14B's "Got it at your max", said while booking at the ceiling. No verdict changed for the other ten models. `scripted:careful` still passes all 50 tasks.
