@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
@@ -120,7 +121,23 @@ export interface LeaderboardResult {
   generatedAt: string;
   /** The sandtable that graded and ranked the rows; each model's run.json says what ran its trials. */
   sandtable?: RunInfo["sandtable"];
+  /** The `--prices` file the costs use, if one was passed. The built-in Claude prices are pinned by the commit. */
+  prices?: PricesFile;
   rows: LeaderboardRow[];
+}
+
+/** A prices file as a board records it: where it is, and a hash of its bytes. */
+export interface PricesFile {
+  /** Relative to the working directory when the file is inside it, else only its name, so no home path is published. */
+  file: string;
+  sha256: string;
+}
+
+export function pricesFile(file: string, bytes: Uint8Array | string, cwd = process.cwd()): PricesFile {
+  const abs = path.resolve(cwd, file);
+  const rel = path.relative(cwd, abs);
+  const inside = rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
+  return { file: (inside ? rel : path.basename(abs)).split(path.sep).join("/"), sha256: createHash("sha256").update(bytes).digest("hex") };
 }
 
 export interface LeaderboardOptions {
@@ -138,6 +155,8 @@ export interface LeaderboardOptions {
   resume?: boolean;
   /** Written to each model's run.json when its trials run, and the `sandtable` part to leaderboard.json. */
   runInfo?: RunInfo;
+  /** The `--prices` file the costs use: recorded in leaderboard.json. */
+  prices?: PricesFile;
   /** `note` says why stored results were not reused, or why an entry was skipped. */
   onEntry?: (label: string, status: "cached" | "regraded" | "ran" | "failed" | "skipped", note?: string) => void;
 }
@@ -224,7 +243,8 @@ export function toRow(entry: LeaderboardEntry, r: SuiteResult, baseline = false)
   const violations: Record<string, number> = {};
   for (const m of r.failureModes) if (m.kind === "invariant") violations[m.id] = m.count;
   const trials = r.tasks.reduce((n, t) => n + t.trials.length, 0);
-  const cost = r.usage.costUsd;
+  // Priced now, not as stored: every cost column of a reused row follows the prices this board records.
+  const cost = costOf(r.usage.agent, r.usage.user);
   const hasUsage = totalTokens(r.usage.agent).calls + totalTokens(r.usage.user).calls > 0;
   return {
     label: entry.label,
@@ -353,6 +373,7 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
     k,
     generatedAt: new Date().toISOString(),
     ...(opts.runInfo ? { sandtable: opts.runInfo.sandtable } : {}),
+    ...(opts.prices ? { prices: opts.prices } : {}),
     rows,
   };
   await writeFile(path.join(outDir, "leaderboard.json"), JSON.stringify(result, null, 2));

@@ -1,11 +1,12 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { freightScriptedAgent } from "../src/demo/freight-agents.ts";
-import { bedrockRegion, bedrockUse, ModelsFile, runLeaderboard } from "../src/run/leaderboard.ts";
+import { bedrockRegion, bedrockUse, ModelsFile, pricesFile, runLeaderboard } from "../src/run/leaderboard.ts";
 import { costOf, priceKey, registerPrices } from "../src/run/usage.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
 import type { AgentAdapter } from "../src/sim/types.ts";
@@ -265,6 +266,50 @@ describe("leaderboard provenance", () => {
     expect(await readFile(path.join(dir, "leaderboard.html"), "utf8")).toContain("sandtable</a> 9.9.9 (commit abc1234).");
   });
 
+  it("records the prices file the costs use in leaderboard.json, by path and sha256, and nothing without one", async () => {
+    const file = "prices/bedrock.eu-west-1.json";
+    const bytes = await readFile(file);
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    const prices = pricesFile(file, bytes);
+    expect(prices).toEqual({ file, sha256 });
+    expect(sha256).toMatch(/^[0-9a-f]{64}$/);
+    // An absolute path is recorded relative to the working directory, or as the file's name outside it: never a home path.
+    expect(pricesFile(path.resolve(file), bytes)).toEqual({ file, sha256 });
+    expect(pricesFile("/home/dana/private/my-prices.json", bytes, "/srv/board")).toEqual({ file: "my-prices.json", sha256 });
+    expect(pricesFile("../elsewhere/p.json", bytes, "/srv/board")).toEqual({ file: "p.json", sha256 });
+    const domain = await loadDomain(example);
+    const board = async (extra: object) => {
+      const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+      await runLeaderboard({ domain, entries: [{ label: "Careful rules", agent: "scripted:careful" }], user: scriptedUser(), k: 1, taskIds: ["no-mc-number"], outDir: dir, resolveAgent: async () => freightScriptedAgent("careful"), ...extra });
+      return JSON.parse(await readFile(path.join(dir, "leaderboard.json"), "utf8"));
+    };
+    expect((await board({ prices })).prices).toEqual(prices);
+    expect(await board({})).not.toHaveProperty("prices");
+  });
+
+  it("prices a reused row with the prices the board records, not the ones it was stored with", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const domain = await loadDomain(example);
+    // An agent that spends a million input tokens of a made-up model per turn, priced below.
+    const spender: AgentAdapter = {
+      name: "spender",
+      async createSession(ctx) {
+        return { async reply() { ctx.recordUsage?.("lb-test-model", { input: 1_000_000 }); return "Bye."; } };
+      },
+    };
+    const price = (input: number) => registerPrices({ "lb-test-model": { input, output: 0, cacheRead: 0, cacheWrite: 0 } });
+    const run = async (resolveAgent: () => Promise<AgentAdapter>) =>
+      (await runLeaderboard({ domain, entries: [{ label: "Spender", agent: "scripted:spender" }], user: scriptedUser(), k: 1, taskIds: ["no-mc-number"], outDir: dir, resolveAgent })).rows.find((r) => r.label === "Spender")!;
+    price(1);
+    const first = await run(async () => spender);
+    price(3);
+    const reused = await run(async () => { throw new Error("should not call the agent"); });
+    expect(reused.error).toBeUndefined();
+    expect(reused.costUsd).toBeCloseTo(first.costUsd! * 3);
+    expect(reused.costPerTrialUsd).toBeCloseTo(first.costPerTrialUsd! * 3);
+    expect(reused.agentCostPerTrialUsd).toBeCloseTo(first.agentCostPerTrialUsd! * 3);
+  });
+
   it("knows which specs run Claude and which calls go to Bedrock", () => {
     expect(bedrockUse(["claude:global.anthropic.claude-sonnet-5-5", "bedrock:global.openai.gpt-6-luna"], "bedrock")).toEqual({ claude: true, bedrock: true });
     expect(bedrockUse(["claude", "scripted:careful"], "anthropic")).toEqual({ claude: true, bedrock: false });
@@ -291,12 +336,16 @@ describe("leaderboard provenance", () => {
     }
   });
 
-  it.skipIf(!process.features.typescript)("sandtable leaderboard records the commit of the sandtable clone it runs from", async () => {
+  it.skipIf(!process.features.typescript)("sandtable leaderboard records the commit of the sandtable clone it runs from, and its --prices file", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
     const models = path.join(dir, "models.yaml");
     await writeFile(models, "models:\n  - { label: Careful rules, agent: scripted:careful }\n");
     const run = (...args: string[]) => promisify(execFile)(args[0]!, args.slice(1), { cwd: dir });
-    await run(process.execPath, path.resolve("src/cli.ts"), "leaderboard", example, "-m", models, "-u", "scripted", "-k", "1", "-t", "no-mc-number", "-o", dir, "--provider", "bedrock", "--region", "eu-west-1");
+    // An absolute --prices path inside the working directory is recorded relative to it.
+    const prices = path.join(dir, "prices", "board.json");
+    await mkdir(path.dirname(prices));
+    await writeFile(prices, await readFile("prices/bedrock.eu-west-1.json"));
+    await run(process.execPath, path.resolve("src/cli.ts"), "leaderboard", example, "-m", models, "-u", "scripted", "-k", "1", "-t", "no-mc-number", "-o", dir, "--provider", "bedrock", "--region", "eu-west-1", "--prices", prices);
     const head = (await promisify(execFile)("git", ["rev-parse", "HEAD"])).stdout.trim();
     const info = JSON.parse(await readFile(path.join(dir, "careful-rules", "run.json"), "utf8"));
     expect(info).toMatchObject({ sandtable: { commit: head } });
@@ -304,6 +353,8 @@ describe("leaderboard provenance", () => {
     // Nothing here ran Claude or called Bedrock, so neither the provider nor a region is recorded.
     expect(info).not.toHaveProperty("provider");
     expect(info).not.toHaveProperty("region");
+    const sha256 = createHash("sha256").update(await readFile(prices)).digest("hex");
+    expect(JSON.parse(await readFile(path.join(dir, "leaderboard.json"), "utf8")).prices).toEqual({ file: "prices/board.json", sha256 });
   });
 });
 
