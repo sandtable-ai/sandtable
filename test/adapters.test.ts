@@ -108,6 +108,22 @@ describe("claudeAgent", () => {
     expect(messages[2]!.content).toMatchObject([{ type: "tool_result", tool_use_id: "t1" }, { type: "text", text: "Hello?" }]);
   });
 
+  it("counts a reply cut off at max_tokens in the recorded usage", async () => {
+    const { client } = fakeClient([
+      { stop_reason: "max_tokens", content: [{ type: "text", text: "Let me" }], usage: { input_tokens: 10, output_tokens: 16000 } },
+      { stop_reason: "end_turn", content: [{ type: "text", text: "Hi." }], usage: { input_tokens: 12, output_tokens: 3 } },
+    ]);
+    const domain = await loadDomain(example);
+    const usage: unknown[] = [];
+    const session = await claudeAgent({ client, model: "claude-haiku-5-5" }).createSession({ domain, system: "s", tools: [], sessionId: "x", recordUsage: (_m, u) => usage.push(u) });
+    expect(await session.reply("hello", async () => ({ ok: true }))).toBe("Let me");
+    await session.reply("hello?", async () => ({ ok: true }));
+    expect(usage).toEqual([
+      { input: 10, output: 16000, cacheRead: 0, cacheWrite: 0, maxTokensStops: 1 },
+      { input: 12, output: 3, cacheRead: 0, cacheWrite: 0 },
+    ]);
+  });
+
   it("records usage under the model Claude reports on the Anthropic API, and under the requested profile on Bedrock", async () => {
     const domain = await loadDomain(example);
     const recordedAs = async (opts: { provider?: "bedrock"; model: string }) => {
