@@ -51,6 +51,8 @@ export interface LeaderboardEntry {
 export interface LeaderboardRow {
   label: string;
   agent: string;
+  /** The reasoning effort a Claude agent ran at; absent for other agents. */
+  effort?: Effort;
   baseline: boolean;
   passHat1: number;
   passHatK: number;
@@ -181,6 +183,12 @@ function runKey(entry: LeaderboardEntry): RunKey {
   return { agent: entry.agent, ...(isClaude(entry.agent) ? { effort: entry.effort ?? DEFAULT_AGENT_EFFORT } : {}) };
 }
 
+/** A row's `effort`: the one its run key records, which stored results must match to be reused. */
+function effortOf(entry: LeaderboardEntry): { effort?: Effort } {
+  const { effort } = runKey(entry);
+  return effort ? { effort } : {};
+}
+
 /** Why results run under `had` cannot stand in for `want`. Without a run.json, nothing says what they ran. */
 export function changedRunKey(had: RunKey | undefined, want: RunKey): string | undefined {
   if (!had) return "they have no run.json, so their agent spec can't be checked";
@@ -195,6 +203,7 @@ function errorRow(entry: LeaderboardEntry, error: string): LeaderboardRow {
   return {
     label: entry.label,
     agent: entry.agent,
+    ...effortOf(entry),
     baseline: false,
     passHat1: Number.NaN,
     passHatK: Number.NaN,
@@ -220,6 +229,7 @@ export function toRow(entry: LeaderboardEntry, r: SuiteResult, baseline = false)
   return {
     label: entry.label,
     agent: entry.agent,
+    ...effortOf(entry),
     baseline,
     passHat1: r.passHat["1"] ?? Number.NaN,
     passHatK: r.passHat[String(r.k)] ?? Number.NaN,
@@ -354,6 +364,8 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
 const pct = (x: number) => (Number.isNaN(x) ? "n/a" : `${(x * 100).toFixed(1)}%`);
 const usd = (x: number | null) => (x === null ? "n/a" : x < 0.01 ? `$${x.toFixed(4)}` : `$${x.toFixed(3)}`);
 const secs = (ms: number | null) => (ms === null ? "n/a" : `${(ms / 1000).toFixed(1)}s`);
+/** A model's name, and for a Claude agent the effort it ran at: "Claude Sonnet 5.5 (effort high)". */
+const modelName = (r: LeaderboardRow) => (r.effort ? `${r.label} (effort ${r.effort})` : r.label);
 const totalViolations = (r: LeaderboardRow) => Object.values(r.violations).reduce((a, b) => a + b, 0);
 /** pass^1, plus pass^k when k > 1. */
 const passHeads = (k: number) => (k === 1 ? ["pass^1"] : ["pass^1", `pass^${k}`]);
@@ -385,7 +397,7 @@ export function renderLeaderboardMarkdown(l: LeaderboardResult): string {
   let rank = 0;
   for (const r of l.rows) {
     const place = r.baseline || r.error ? "" : String(++rank);
-    const model = r.baseline ? `_${r.label}_` : r.label;
+    const model = r.baseline ? `_${r.label}_` : modelName(r);
     const cells = r.error
       ? [place, model, "error", ...passHeads(l.k).slice(1).map(() => ""), "", r.error.replace(/\|/g, "/").slice(0, 80), ...(soft ? [""] : []), "", ""]
       : [place, model, ...passCells(r, l.k), String(totalViolations(r)), r.topFailure ?? "", ...(soft ? [softCell(r)] : []), usd(r.agentCostPerTrialUsd), secs(r.agentTurnP95Ms)];
@@ -400,7 +412,8 @@ export function renderLeaderboardHtml(l: LeaderboardResult): string {
   const soft = hasSoft(l);
   const body = l.rows
     .map((r) => {
-      const link = r.baseline ? esc(r.label) : `<a href="./${slugify(r.label)}/report.html">${esc(r.label)}</a>`;
+      const effort = r.effort ? ` <span class="effort">effort ${esc(r.effort)}</span>` : "";
+      const link = r.baseline ? esc(r.label) : `<a href="./${slugify(r.label)}/report.html">${esc(r.label)}</a>${effort}`;
       if (r.error) return `<tr><td>${link}</td><td colspan="${passHeads(l.k).length + (soft ? 5 : 4)}" class="err">${esc(r.error)}</td></tr>`;
       const pass = passCells(r, l.k).map((c, i, all) => (i === all.length - 1 ? `<td><b>${c}</b></td>` : `<td>${c}</td>`)).join("");
       return `<tr${r.baseline ? ' class="base"' : ""}><td>${link}</td>${pass}<td>${totalViolations(r)}</td><td>${esc(r.topFailure ?? "")}</td>${soft ? `<td>${esc(softCell(r))}</td>` : ""}<td>${usd(r.agentCostPerTrialUsd)}</td><td>${secs(r.agentTurnP95Ms)}</td></tr>`;
@@ -417,7 +430,7 @@ main{max-width:1040px;margin:0 auto;padding:32px 16px 64px}h1{font-size:22px;mar
 p{color:var(--muted);max-width:780px}.wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line)}
 th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
-th{font-size:12px;color:var(--muted)}tr.base td{color:var(--muted);font-style:italic}.err{color:var(--bad)}a{color:inherit}
+th{font-size:12px;color:var(--muted)}tr.base td{color:var(--muted);font-style:italic}.err{color:var(--bad)}a{color:inherit}.effort{color:var(--muted);font-size:12px;white-space:nowrap}
 </style></head><body><main>
 <h1>Leaderboard: ${esc(l.domain)}</h1>
 <p>Each model plays the agent on every task ${howOften(l.k)} against the same simulated callers (${esc(l.user)}). ${passMeaning(l.k).replace(/^(pass\^\d+)/, "<b>$1</b>")} Grading is deterministic: end state, rules checked on every tool call and message, required and forbidden tools. ${soft ? `${SOFT_NOTE} ` : ""}${COST_NOTE} Click a model for its full report and trajectories.</p>
