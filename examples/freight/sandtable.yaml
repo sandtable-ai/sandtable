@@ -283,6 +283,12 @@ invariants:
       left: { table: carriers, key_arg: mc_number, field: equipment }
       right: { table: loads, key_arg: load_id, field: equipment }
 
+  # A rep-confirm load has no confirmation number until a rep confirms it. The id submit_offer returns
+  # (submitted_offers-1) is not one, and reading it out as an "offer reference" breaks the policy.
+  - id: never-disclose-submission-id
+    description: Never give the caller a confirmation number for a rep-confirm load, such as the id of the offer submitted for a rep.
+    never_disclose: { table: submitted_offers, field: submission_id }
+
   - id: eligible-carrier-capacity
     description: Only log capacity for carriers you could book.
     require:

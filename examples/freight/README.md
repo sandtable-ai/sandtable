@@ -77,6 +77,7 @@ The world rows follow one rate rule, which `test/freight-hard.test.ts` checks. N
 | `eligible-carrier-submit` | submitted offers follow the same eligibility rules as bookings |
 | `submit-ceiling` | never submit an offer above the load's `max_rate` |
 | `equipment-match-submit` | carrier equipment must match load equipment for submitted offers too |
+| `never-disclose-submission-id` | never read out the id of an offer submitted for a rep (`submitted_offers-1`): a rep-confirm load gets no confirmation number until a rep confirms it |
 | `eligible-carrier-capacity` | log capacity only for carriers you could book |
 | `eligible-carrier-callback` | schedule callbacks only with carriers you could book |
 | `never-disclose-dnu-reason` | never tell a caller why their company is flagged do-not-use |
