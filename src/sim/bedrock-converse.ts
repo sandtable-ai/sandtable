@@ -10,6 +10,7 @@ interface ConverseBlock {
   text?: string;
   toolUse?: { toolUseId: string; name: string; input: unknown };
   toolResult?: { toolUseId: string; content: { text: string }[]; status?: "success" | "error" };
+  cachePoint?: { type: "default" };
 }
 
 interface ConverseMessage {
@@ -72,6 +73,30 @@ const textOf = (content: ConverseBlock[]) =>
 const unclosedReasoning = (res: ConverseResponse) => res.stopReason !== "tool_use" && textOf(res.output?.message?.content ?? []).includes("<reasoning>");
 
 /**
+ * Where a model accepts Converse cache points. Every other model rejects the whole request when one
+ * is present, so they get none; some of them (OpenAI GPT, Grok) cache on their own, which shows up in
+ * the usage either way.
+ * - Claude: after the system prompt, after the tools, and on the newest message.
+ * - Nova: after the system prompt, and on the newest message that holds only text. Nova rejects one
+ *   in the tool list or next to a toolUse or toolResult block.
+ */
+type CacheStyle = { tools: boolean; onlyText: boolean };
+
+export function cacheStyle(modelId: string): CacheStyle | undefined {
+  if (/(?:^|[./])anthropic\.claude-/.test(modelId)) return { tools: true, onlyText: false };
+  if (/(?:^|[./])amazon\.nova-/.test(modelId)) return { tools: false, onlyText: true };
+  return undefined;
+}
+
+const CACHE_POINT: ConverseBlock = { cachePoint: { type: "default" } };
+
+/** The conversation with a cache point on the newest message that may hold one; the stored conversation is not changed. */
+function withCachePoint(messages: ConverseMessage[], style: CacheStyle): ConverseMessage[] {
+  const at = messages.findLastIndex((m) => !style.onlyText || m.content.every((b) => b.text !== undefined));
+  return at < 0 ? messages : messages.map((m, i) => (i === at ? { ...m, content: [...m.content, CACHE_POINT] } : m));
+}
+
+/**
  * Agent adapter for any tool-capable model on Amazon Bedrock through the Converse API
  * (OpenAI GPT and gpt-oss, Grok, Kimi, GLM, Qwen, Mistral, Nova, ...).
  */
@@ -81,9 +106,11 @@ export function bedrockConverseAgent(opts: BedrockConverseOptions): AgentAdapter
     name: `bedrock:${opts.modelId}`,
     async createSession(ctx) {
       const { client, command } = await makeClient(opts);
-      const toolConfig = ctx.tools.length
-        ? { tools: ctx.tools.map((t) => ({ toolSpec: { name: t.name, description: t.description, inputSchema: { json: t.input_schema } } })) }
-        : undefined;
+      const cache = cacheStyle(opts.modelId);
+      const tools: unknown[] = ctx.tools.map((t) => ({ toolSpec: { name: t.name, description: t.description, inputSchema: { json: t.input_schema } } }));
+      if (cache?.tools && tools.length) tools.push(CACHE_POINT);
+      const toolConfig = tools.length ? { tools } : undefined;
+      const system: ConverseBlock[] = cache ? [{ text: ctx.system }, CACHE_POINT] : [{ text: ctx.system }];
       // Append-only conversation in Converse's block format.
       const messages: ConverseMessage[] = [];
 
@@ -94,8 +121,8 @@ export function bedrockConverseAgent(opts: BedrockConverseOptions): AgentAdapter
             const res = await client.send(
               command({
                 modelId: opts.modelId,
-                system: [{ text: ctx.system }],
-                messages,
+                system,
+                messages: cache ? withCachePoint(messages, cache) : messages,
                 ...(toolConfig ? { toolConfig } : {}),
                 inferenceConfig: { maxTokens: opts.maxTokens ?? 4096 },
               }),

@@ -1,13 +1,18 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { runSuite } from "../src/run/suite.ts";
-import { bedrockConverseAgent, type ConverseClient } from "../src/sim/bedrock-converse.ts";
+import { bedrockConverseAgent, cacheStyle, type ConverseClient } from "../src/sim/bedrock-converse.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
 import { loadDomain } from "../src/spec/load.ts";
 
 const example = path.resolve("examples/freight");
 
-type Req = { modelId: string; messages: Array<{ role: string; content: Array<Record<string, unknown>> }>; toolConfig?: { tools: unknown[] } };
+type Req = {
+  modelId: string;
+  system: Array<Record<string, unknown>>;
+  messages: Array<{ role: string; content: Array<Record<string, unknown>> }>;
+  toolConfig?: { tools: unknown[] };
+};
 
 /** Replays canned Converse responses and records each request. */
 function stub(responses: Array<Record<string, unknown>>) {
@@ -61,6 +66,75 @@ describe("bedrockConverseAgent", () => {
     expect(last[2]).toMatchObject({ role: "user", content: [{ toolResult: { toolUseId: "t1", status: "success" } }] });
     expect(usage).toHaveLength(3);
     expect(usage[0]).toEqual(["global.openai.gpt-5.5", { input: 100, output: 10, cacheRead: 0, cacheWrite: 0 }]);
+  });
+
+  describe("prompt caching", () => {
+    const CP = { cachePoint: { type: "default" } };
+    const cachePoints = (m: Req["messages"]) => m.flatMap((msg, i) => msg.content.filter((b) => "cachePoint" in b).map(() => i));
+    // Turn 1 calls a tool, then answers; turn 2 answers directly.
+    const conversation = async (modelId: string) => {
+      const { client, requests } = stub([toolUse("t1", "verify_carrier", { mc_number: "100101" }), say("You're verified."), say("Bye.")]);
+      const domain = await loadDomain(example);
+      const session = await bedrockConverseAgent({ modelId, client }).createSession({
+        domain,
+        system: "policy",
+        tools: domain.tools.map((t) => ({ name: t.name, description: t.description, input_schema: { type: "object", properties: {}, required: [], additionalProperties: false } })),
+        sessionId: "x",
+      });
+      const ok = async () => ({ ok: true, result: {} }) as const;
+      await session.reply("MC 100101", ok);
+      await session.reply("thanks", ok);
+      return { requests, toolCount: domain.tools.length };
+    };
+
+    it("sends no cache point to a model that rejects them", async () => {
+      const { requests } = await conversation("global.openai.gpt-6.1-sol");
+      expect(JSON.stringify(requests)).not.toContain("cachePoint");
+      expect(requests[0]!.system).toEqual([{ text: "policy" }]);
+    });
+
+    it("caches Claude's system prompt, tools and newest message", async () => {
+      const { requests, toolCount } = await conversation("eu.anthropic.claude-haiku-5-5");
+      expect(requests[0]!.system).toEqual([{ text: "policy" }, CP]);
+      expect(requests[0]!.toolConfig!.tools).toHaveLength(toolCount + 1);
+      expect(requests[0]!.toolConfig!.tools.at(-1)).toEqual(CP);
+      // One breakpoint, on the newest message, including a tool result.
+      expect(requests.map((r) => cachePoints(r.messages))).toEqual([[0], [2], [4]]);
+      expect(requests[1]!.messages[2]!.content.at(-1)).toEqual(CP);
+    });
+
+    it("caches Nova's system prompt and newest text-only message, never the tools or tool blocks", async () => {
+      const { requests, toolCount } = await conversation("global.amazon.nova-2-lite-v1:0");
+      expect(requests[0]!.system).toEqual([{ text: "policy" }, CP]);
+      expect(requests[0]!.toolConfig!.tools).toHaveLength(toolCount);
+      // Request 2 ends with a toolUse and a toolResult message, so the breakpoint stays on the user's text.
+      expect(requests.map((r) => cachePoints(r.messages))).toEqual([[0], [0], [4]]);
+    });
+
+    it("only adds cache points: without them, the requests match those of a model that takes none", async () => {
+      const withoutCachePoints = (r: Req) =>
+        JSON.parse(JSON.stringify({ ...r, modelId: undefined }, (_, v) => (Array.isArray(v) ? v.filter((b) => !(b && typeof b === "object" && "cachePoint" in b)) : v)));
+      const plain = (await conversation("global.openai.gpt-6.1-sol")).requests.map(withoutCachePoints);
+      for (const id of ["eu.anthropic.claude-haiku-5-5", "global.amazon.nova-2-lite-v1:0"]) {
+        expect((await conversation(id)).requests.map(withoutCachePoints), id).toEqual(plain);
+      }
+    });
+
+    it("recognises the models that accept cache points by model ID, profile or ARN", () => {
+      for (const id of [
+        "anthropic.claude-haiku-5-5",
+        "eu.anthropic.claude-opus-5-5",
+        "global.anthropic.claude-sonnet-5-5",
+        "arn:aws:bedrock:eu-west-1:111122223333:inference-profile/eu.anthropic.claude-haiku-5-5",
+        "amazon.nova-pro-v1:0",
+        "global.amazon.nova-2-lite-v1:0",
+      ]) {
+        expect(cacheStyle(id), id).toBeDefined();
+      }
+      for (const id of ["global.openai.gpt-6.1-sol", "global.moonshotai.kimi-k3", "qwen.qwen3-next-80b-a3b", "mistral.ministral-3-14b-instruct"]) {
+        expect(cacheStyle(id), id).toBeUndefined();
+      }
+    });
   });
 
   it("reports filtered output instead of an empty reply", async () => {
