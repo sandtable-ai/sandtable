@@ -51,12 +51,24 @@ export interface LeaderboardRow {
   error?: string;
 }
 
+/** What produced a run, beyond the domain, caller, k and models: recorded in run.json and leaderboard.json. */
+export interface RunInfo {
+  /** sandtable's version, and the git commit it ran from (with `dirty` for uncommitted changes) when it ran from its own clone. */
+  sandtable: { version: string; commit?: string; dirty?: boolean };
+  /** Where Claude ran: anthropic or bedrock. */
+  provider?: string;
+  /** The AWS region Bedrock was called in. */
+  region?: string;
+}
+
 export interface LeaderboardResult {
   version: 1;
   domain: string;
   user: string;
   k: number;
   generatedAt: string;
+  /** The sandtable that graded and ranked the rows; each model's run.json says what ran its trials. */
+  sandtable?: RunInfo["sandtable"];
   rows: LeaderboardRow[];
 }
 
@@ -72,6 +84,8 @@ export interface LeaderboardOptions {
   taskIds?: string[];
   /** Reuse an entry's results.json when it exists and matches this run (default true). */
   resume?: boolean;
+  /** Written to each model's run.json when its trials run, and the `sandtable` part to leaderboard.json. */
+  runInfo?: RunInfo;
   /** `note` says why stored results were not reused, or why an entry was skipped. */
   onEntry?: (label: string, status: "cached" | "regraded" | "ran" | "failed" | "skipped", note?: string) => void;
 }
@@ -223,7 +237,7 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
         result = await runSuite({ domain, agent, user, k, taskIds, concurrency: opts.concurrency ?? 4 });
         await mkdir(dir, { recursive: true });
         await writeFileAtomic(file, JSON.stringify(result, null, 2));
-        await writeFileAtomic(keyFile, JSON.stringify(key, null, 2));
+        await writeFileAtomic(keyFile, JSON.stringify({ ...key, ...opts.runInfo }, null, 2));
         await writeFileAtomic(path.join(dir, "report.html"), renderHtml(result));
         fresh = true;
       } catch (err) {
@@ -258,7 +272,15 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
   // Errored rows (NaN) sort last; a 0% model still ranks above them.
   const score = (x: number) => (Number.isNaN(x) ? -1 : x);
   rows.sort((a, b) => score(b.passHatK) - score(a.passHatK) || score(b.passHat1) - score(a.passHat1));
-  const result: LeaderboardResult = { version: 1, domain: domain.name, user: user.name, k, generatedAt: new Date().toISOString(), rows };
+  const result: LeaderboardResult = {
+    version: 1,
+    domain: domain.name,
+    user: user.name,
+    k,
+    generatedAt: new Date().toISOString(),
+    ...(opts.runInfo ? { sandtable: opts.runInfo.sandtable } : {}),
+    rows,
+  };
   await writeFile(path.join(outDir, "leaderboard.json"), JSON.stringify(result, null, 2));
   await writeFile(path.join(outDir, "LEADERBOARD.md"), renderLeaderboardMarkdown(result));
   await writeFile(path.join(outDir, "leaderboard.html"), renderLeaderboardHtml(result));

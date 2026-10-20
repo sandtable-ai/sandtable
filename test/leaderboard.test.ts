@@ -1,6 +1,8 @@
+import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { freightScriptedAgent } from "../src/demo/freight-agents.ts";
 import { ModelsFile, runLeaderboard } from "../src/run/leaderboard.ts";
@@ -245,5 +247,28 @@ describe("leaderboard/models.yaml", () => {
     for (const spec of [cfg.user!, ...cfg.models.map((m) => m.agent)]) {
       expect(costOf({ [usageKey(spec)]: { calls: 1, input: 1, output: 1, cacheRead: 1, cacheWrite: 1 } }), spec).not.toBeNull();
     }
+  });
+});
+
+describe("leaderboard provenance", () => {
+  it("records what ran each model in run.json, and the sandtable that ranked them in leaderboard.json", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const domain = await loadDomain(example);
+    const runInfo = { sandtable: { version: "9.9.9", commit: "abc123", dirty: false }, provider: "bedrock", region: "eu-west-1" };
+    await runLeaderboard({ domain, entries: [{ label: "Careful rules", agent: "scripted:careful" }], user: scriptedUser(), k: 1, taskIds: ["no-mc-number"], outDir: dir, runInfo, resolveAgent: async () => freightScriptedAgent("careful") });
+    expect(JSON.parse(await readFile(path.join(dir, "careful-rules", "run.json"), "utf8"))).toMatchObject({ agent: "scripted:careful", ...runInfo });
+    expect(JSON.parse(await readFile(path.join(dir, "leaderboard.json"), "utf8")).sandtable).toEqual(runInfo.sandtable);
+  });
+
+  it.skipIf(!process.features.typescript)("sandtable leaderboard records the commit of the sandtable clone it runs from", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const models = path.join(dir, "models.yaml");
+    await writeFile(models, "models:\n  - { label: Careful rules, agent: scripted:careful }\n");
+    const run = (...args: string[]) => promisify(execFile)(args[0]!, args.slice(1), { cwd: dir });
+    await run(process.execPath, path.resolve("src/cli.ts"), "leaderboard", example, "-m", models, "-u", "scripted", "-k", "1", "-t", "no-mc-number", "-o", dir, "--provider", "bedrock", "--region", "eu-west-1");
+    const head = (await promisify(execFile)("git", ["rev-parse", "HEAD"])).stdout.trim();
+    const info = JSON.parse(await readFile(path.join(dir, "careful-rules", "run.json"), "utf8"));
+    expect(info).toMatchObject({ sandtable: { commit: head }, provider: "bedrock", region: "eu-west-1" });
+    expect(typeof info.sandtable.dirty).toBe("boolean");
   });
 });

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -27,7 +27,7 @@ import { draftTasksFromTranscripts } from "./init/transcripts.ts";
 import { DOMAIN_FILE, POLICY_PLACEHOLDER, renderDraft, TASKS_PLACEHOLDER, writeDraft } from "./init/render.ts";
 import { DomainError, loadDomain, pendingReview } from "./spec/load.ts";
 import { lintDomain } from "./grade/lint.ts";
-import { ModelsFile, renderLeaderboardMarkdown, runLeaderboard } from "./run/leaderboard.ts";
+import { ModelsFile, renderLeaderboardMarkdown, runLeaderboard, type RunInfo } from "./run/leaderboard.ts";
 import { z } from "zod";
 import YAML from "yaml";
 
@@ -194,6 +194,21 @@ function defaultOut(label: string): string {
 
 // package.json sits one level above both src/cli.ts and dist/cli.js, and ships in the npm package.
 const { version } = createRequire(import.meta.url)("../package.json") as { version: string };
+
+/**
+ * The commit sandtable runs from, when it runs from its own git clone. An npm install inside someone's
+ * repository is not a clone of sandtable, so its commit is never recorded.
+ */
+function sandtableCommit(): { commit?: string; dirty?: boolean } {
+  const root = fileURLToPath(new URL("..", import.meta.url));
+  const git = (...args: string[]) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  try {
+    if (path.resolve(git("rev-parse", "--show-toplevel")) !== path.resolve(root)) return {};
+    return { commit: git("rev-parse", "HEAD"), dirty: git("status", "--porcelain", "--untracked-files=no") !== "" };
+  } catch {
+    return {};
+  }
+}
 
 const program = new Command()
   .name("sandtable")
@@ -396,7 +411,14 @@ withProviderFlags(program
     const out = o.out ?? path.join("leaderboard", domain.name);
     const taskIds = o.tasks?.split(",").map((s) => s.trim()).filter(Boolean);
     const tasks = taskIds?.length ? taskIds.length : domain.tasks.length;
+    const region = o.region ?? process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION;
+    const runInfo: RunInfo = {
+      sandtable: { version, ...sandtableCommit() },
+      provider: o.provider ?? process.env.SANDTABLE_PROVIDER ?? "anthropic",
+      ...(region ? { region } : {}),
+    };
     console.log(`Leaderboard: ${cfg.models.length} model(s) on ${domain.name} (${tasks} tasks, k=${k}, caller ${user.name})\n`);
+    if (runInfo.sandtable.dirty) console.log("  ! the sandtable checkout has uncommitted changes: run.json records the commit, not them\n");
     const mark = { cached: "↺ cached  ", regraded: "↻ regraded", ran: "✓ ran     ", failed: "✗ failed  ", skipped: "- skipped " } as const;
     const result = await runLeaderboard({
       domain,
@@ -407,6 +429,7 @@ withProviderFlags(program
       outDir: out,
       concurrency: o.concurrency,
       resume: o.resume,
+      runInfo,
       resolveAgent: (spec) => resolveAgent(spec, p, o.openaiBaseUrl),
       onEntry: (label, status, note) => console.log(`  ${mark[status]}  ${label}${note ? `  (${note})` : ""}`),
     });
