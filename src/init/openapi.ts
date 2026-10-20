@@ -123,6 +123,18 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
       notes: [],
     };
 
+    // Each spec param and body field gets a tool param whose name a `$name` reference resolves.
+    const paramOf = new Map<string, string>();
+    const addParam = (name: string, param: DraftParam, replace = false) => {
+      const known = paramOf.get(name);
+      if (known && replace) tool.params[known] = param;
+      if (known) return;
+      const safe = uniqueParamName(name, tool.params);
+      paramOf.set(name, safe);
+      tool.params[safe] = param;
+    };
+    const ref = (name: string) => `$${paramOf.get(name)}`;
+
     const filters: Json = {};
     for (const p of o.params) {
       const name = String(p.name);
@@ -137,9 +149,15 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
         warnings.push(`${where}: parameter "${name}" is not a scalar; skipped`);
         continue;
       }
-      tool.params[name] = param;
-      if (loc === "path" && o.parents.includes(name)) filters[name] = `$${name}`;
-      if (loc === "query") filters[name] = param.type === "string" && !param.enum ? { $contains: `$${name}` } : `$${name}`;
+      addParam(name, param, true); // an operation's own parameter overrides the path's
+      if (loc === "path" && o.parents.includes(name)) filters[name] = ref(name);
+      if (loc === "query") filters[name] = param.type === "string" && !param.enum ? { $contains: ref(name) } : ref(name);
+    }
+    // A path parameter the spec forgot to declare is still a required argument.
+    for (const name of pathParams(o.path)) {
+      if (paramOf.has(name)) continue;
+      addParam(name, { type: "string", required: true });
+      if (o.parents.includes(name)) filters[name] = ref(name);
     }
 
     const bodyFields: string[] = [];
@@ -152,13 +170,13 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
           warnings.push(`${where}: body field "${name}" is not a scalar; skipped`);
           continue;
         }
-        tool.params[name] ??= param;
+        addParam(name, param);
         bodyFields.push(name);
       }
     }
 
-    const keyRef = o.itemKey ? `$${o.itemKey}` : undefined;
-    const values = Object.fromEntries([...o.parents, ...bodyFields].map((f) => [f, `$${f}`]));
+    const keyRef = o.itemKey ? ref(o.itemKey) : undefined;
+    const values = Object.fromEntries([...o.parents, ...bodyFields].map((f) => [f, ref(f)]));
     if (o.action) {
       tool.ops.push({ get: o.table, key: keyRef! });
       tool.notes.push(`"${o.action}" is an action on ${o.table}: replace or extend the get op with update/create ops that model its effect.`);
@@ -169,7 +187,7 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
     } else if (o.method === "post" && !o.itemKey) {
       tool.ops.push({ create: o.table, values });
     } else if ((o.method === "put" || o.method === "patch") && o.itemKey) {
-      tool.ops.push({ update: o.table, key: keyRef!, set: Object.fromEntries(bodyFields.map((f) => [f, `$${f}`])) });
+      tool.ops.push({ update: o.table, key: keyRef!, set: Object.fromEntries(bodyFields.map((f) => [f, ref(f)])) });
     } else {
       warnings.push(`${where}: ${o.method.toUpperCase()} is not supported by the draft; skipped`);
       names.delete(tool.name);
@@ -177,9 +195,9 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
     }
 
     if (o.method !== "get") {
-      for (const name of Object.keys(tool.params)) {
+      for (const [name, safe] of paramOf) {
         const owner = keyOwners.get(name);
-        if (owner && owner !== o.table) tool.checks.push({ table: owner, key: `$${name}`, error: `${owner} \${${name}} not found` });
+        if (owner && owner !== o.table) tool.checks.push({ table: owner, key: `$${safe}`, error: `${owner} \${${safe}} not found` });
       }
     }
     for (const [code, raw] of Object.entries((o.op.responses ?? {}) as Json)) {
@@ -234,6 +252,28 @@ function classify(segments: string[], item: Json): { table: string; itemKey?: st
   function paramsBefore(segs: string[], end: number): string[] {
     return segs.slice(0, end).filter(isParam).map(strip);
   }
+}
+
+/** The names a `$name` reference can resolve to (see `resolve()` in src/world/match.ts). */
+const PARAM_NAME = /^[a-zA-Z_]\w*$/;
+
+/**
+ * `name` as a tool param name that `$name` resolves to, and that no param in `taken` has yet:
+ * `@type` becomes `at_type` and `pickup-window` becomes `pickup_window`.
+ */
+function uniqueParamName(name: string, taken: Record<string, unknown>): string {
+  let base = name;
+  if (!PARAM_NAME.test(base)) {
+    base = base.replace(/^@/, "at_").replace(/\W+/g, "_").replace(/_+$/, "") || "param";
+    if (/^\d/.test(base)) base = `_${base}`;
+  }
+  let safe = base;
+  for (let i = 2; safe in taken; i++) safe = `${base}_${i}`;
+  return safe;
+}
+
+function pathParams(path: string): string[] {
+  return [...path.matchAll(/\{([^}]+)\}/g)].map((m) => m[1]!);
 }
 
 function toParam(schema: Json, deref: (x: unknown) => unknown, required: boolean, description?: unknown): DraftParam | undefined {

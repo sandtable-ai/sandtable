@@ -180,6 +180,27 @@ describe("domain validation", () => {
     expect(validateDomain(broken)).toEqual(['invariants.x: tool "submit_offer" has no param "price"', 'invariants.x: unknown tool "hold_load"']);
   });
 
+  it("rejects a $ reference in a tool that resolves to none of its params", async () => {
+    const d = await loadDomain(example);
+    const getLoad = d.tools.find((t) => t.name === "get_load")!;
+    const broken = {
+      ...d,
+      tools: [
+        ...d.tools.filter((t) => t !== getLoad),
+        {
+          ...getLoad,
+          checks: [{ table: "loads", key: "$@id", error: "load ${load} not found, ${load_id} is fine" }],
+          ops: [{ get: "loads", key: "$loadId" }, { list: "loads", where: { load_id: "$load_id", max_rate: { $lte: "$5" } } }],
+        },
+      ],
+    };
+    expect(validateDomain(broken)).toEqual([
+      'tools.get_load.checks[0]: "$@id" never resolves: "@id" is not a param name (a letter or _, then letters, digits or _)',
+      'tools.get_load.checks[0]: "${load}" never resolves: tool "get_load" has no param "load"',
+      'tools.get_load.ops[0]: "$loadId" never resolves: tool "get_load" has no param "loadId"',
+    ]);
+  });
+
   it("rejects a missing file with a clear error", async () => {
     await expect(loadDomain(path.resolve("examples/does-not-exist"))).rejects.toThrow(/no sandtable.yaml found at .*does-not-exist/);
     expect(DomainError).toBeDefined();

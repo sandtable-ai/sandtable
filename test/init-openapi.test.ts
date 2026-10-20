@@ -205,6 +205,55 @@ describe("init from OpenAPI: allOf-composed schemas", () => {
   });
 });
 
+describe("init from OpenAPI: names that aren't identifiers", () => {
+  // A fictional courier whose fields follow a JSON-LD style (`@type`) and kebab-case.
+  const str = { type: "string" };
+  const spec = {
+    openapi: "3.0.3",
+    info: { title: "Brindle Couriers" },
+    paths: {
+      "/couriers/{courier-id}": { get: { parameters: [{ name: "courier-id", in: "path", required: true, schema: str }], responses: { "200": { description: "ok" } } } },
+      "/couriers/{courier-id}/jobs": {
+        parameters: [{ name: "courier-id", in: "path", required: true, schema: str }],
+        get: { operationId: "listJobs", parameters: [{ name: "created-after", in: "query", schema: str }], responses: { "200": { description: "ok" } } },
+        post: {
+          operationId: "createJob",
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: { allOf: [{ type: "object", required: ["@type"], properties: { "@type": str, "@baseType": str } }, { type: "object", properties: { "pickup-window": str, note: str } }] },
+              },
+            },
+          },
+          responses: { "201": { description: "created" } },
+        },
+      },
+      // The path parameter is not declared, as hand-written specs sometimes leave it.
+      "/jobs/{job_id}": { patch: { operationId: "updateJob", requestBody: { content: { "application/json": { schema: { type: "object", properties: { "@type": str } } } } }, responses: { "200": { description: "ok" } } } },
+    },
+  };
+
+  it("gives such fields params with identifier names and maps them back in the ops", () => {
+    const byName = Object.fromEntries(draftFromOpenApi(spec).tools.map((t) => [t.name, t]));
+    const create = byName.create_job!;
+    expect(Object.keys(create.params)).toEqual(["courier_id", "at_type", "at_baseType", "pickup_window", "note"]);
+    expect(create.params.at_type).toMatchObject({ type: "string", required: true });
+    expect(create.ops).toEqual([
+      { create: "jobs", values: { "courier-id": "$courier_id", "@type": "$at_type", "@baseType": "$at_baseType", "pickup-window": "$pickup_window", note: "$note" } },
+    ]);
+    expect(create.checks).toEqual([{ table: "couriers", key: "$courier_id", error: "couriers ${courier_id} not found" }]);
+    expect(byName.list_jobs!.ops).toEqual([{ list: "jobs", where: { "courier-id": "$courier_id", "created-after": { $contains: "$created_after" } } }]);
+    expect(byName.update_job!.params).toEqual({ job_id: { type: "string", required: true }, at_type: { type: "string", required: false } });
+    expect(byName.update_job!.ops).toEqual([{ update: "jobs", key: "$job_id", set: { "@type": "$at_type" } }]);
+  });
+
+  it("writes a draft that validates", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-init-"));
+    await writeDraft(dir, { [DOMAIN_FILE]: renderDraft(draftFromOpenApi(spec), "openapi.yaml"), "policy.md": POLICY_PLACEHOLDER, "tasks.yaml": TASKS_PLACEHOLDER });
+    expect((await loadDomain(dir)).tools.map((t) => t.name)).toEqual(["get_couriers", "list_jobs", "create_job", "update_job"]);
+  });
+});
+
 describe("init from OpenAPI: what it refuses", () => {
   it("accepts an OpenAPI 3.x document with paths", async () => {
     expect(openApiProblem(await freightSpec())).toBeUndefined();
