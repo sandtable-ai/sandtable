@@ -175,11 +175,16 @@ export function requestBase(opts: ClaudeOptions, defaultEffort: Effort) {
   };
 }
 
-function report(ctx: { recordUsage?: UsageRecorder }, fallbackModel: string, response: Anthropic.Beta.BetaMessage) {
+/**
+ * Usage is recorded under the model that served the call. On the Anthropic API that is the model Claude reports,
+ * since a refusal fallback can serve another. On Bedrock it is the requested ID, whose profile (global., eu.)
+ * sets the price, while Claude reports a bare model name.
+ */
+function report(ctx: { recordUsage?: UsageRecorder }, requested: string, response: Anthropic.Beta.BetaMessage, bedrock: boolean) {
   const u = response.usage;
   const cut = response.stop_reason === "max_tokens";
   if (!u && !cut) return;
-  ctx.recordUsage?.(response.model ?? fallbackModel, {
+  ctx.recordUsage?.(bedrock && !requested.startsWith("arn:") ? requested : (response.model ?? requested), {
     input: u?.input_tokens ?? 0,
     output: u?.output_tokens ?? 0,
     cacheRead: u?.cache_read_input_tokens ?? 0,
@@ -223,7 +228,7 @@ export function claudeAgent(opts: ClaudeAgentOptions = {}): AgentAdapter {
           else messages.push({ role: "user", content: said });
           for (let round = 0; round < maxRounds; round++) {
             const response = await client.beta.messages.create({ ...base, system: ctx.system, tools, messages });
-            report(ctx, base.model, response);
+            report(ctx, base.model, response, providerOf(opts) === "bedrock");
             messages.push({ role: "assistant", content: response.content });
 
             if (response.stop_reason === "pause_turn") continue;
@@ -282,7 +287,7 @@ export function claudeUser(opts: ClaudeOptions = {}): UserSimulator {
           opened = true;
           if (agentMessage !== null) messages.push({ role: "user", content: agentMessage || "(silence)" });
           const response = await client.beta.messages.create({ ...base, system, messages });
-          report(ctx, base.model, response);
+          report(ctx, base.model, response, providerOf(opts) === "bedrock");
           messages.push({ role: "assistant", content: response.content });
           if (response.stop_reason === "refusal") return { text: "", stop: true };
           const raw = textOf(response.content);

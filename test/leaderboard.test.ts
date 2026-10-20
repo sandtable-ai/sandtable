@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { freightScriptedAgent } from "../src/demo/freight-agents.ts";
 import { bedrockRegion, bedrockUse, ModelsFile, pricesFile, runLeaderboard, type RunInfo } from "../src/run/leaderboard.ts";
-import { costOf, priceKey, registerPrices } from "../src/run/usage.ts";
+import { costOf, registerPrices } from "../src/run/usage.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
 import type { AgentAdapter } from "../src/sim/types.ts";
 import { loadDomain } from "../src/spec/load.ts";
@@ -273,8 +273,8 @@ describe("leaderboard/models.yaml", () => {
     const effort = (label: string) => cfg.models.find((m) => m.label === label)!.effort;
     expect([effort("Claude Fable 5.1"), effort("Claude Sonnet 5.5"), effort("Claude Opus 5.5"), effort("Claude Haiku 5.5")]).toEqual(["high", "high", undefined, undefined]);
     registerPrices(JSON.parse(await readFile("prices/bedrock.eu-west-1.json", "utf8")));
-    // A claude: agent records usage under the model name Claude reports; a bedrock: agent under its model ID.
-    const usageKey = (spec: string) => (spec.startsWith("claude:") ? priceKey(spec.slice("claude:".length)) : spec.slice("bedrock:".length));
+    // On Bedrock, claude: and bedrock: agents both record usage under the model ID they request.
+    const usageKey = (spec: string) => spec.slice(spec.indexOf(":") + 1);
     for (const spec of [cfg.user!, ...cfg.models.map((m) => m.agent)]) {
       expect(costOf({ [usageKey(spec)]: { calls: 1, input: 1, output: 1, cacheRead: 1, cacheWrite: 1 } }), spec).not.toBeNull();
     }

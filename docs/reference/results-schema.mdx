@@ -172,6 +172,8 @@ Tokens are grouped by role and model. `input` excludes cache reads and writes, f
 
 `costUsd` is an estimate at list prices from `PRICES` in `src/run/usage.ts`, which holds verified prices for Claude models, plus any prices passed with `--prices`. If any model in the run has no known price, `costUsd` is `null` and reports show `n/a`.
 
+Claude's usage is keyed by the model that served it. On the Anthropic API, that is the model Claude reports, which a refusal fallback can change. On Bedrock, it is the requested ID, such as `global.anthropic.claude-opus-5-5` or `eu.anthropic.claude-opus-5-5`. A geo cross-region profile (`eu.`, `us.`, `apac.` …) is priced at 1.1× the built-in price, since "Regional and multi-region endpoints include a 10% premium over global endpoints" for Claude 4.5 models and later ([Anthropic pricing](https://platform.claude.com/docs/en/about-claude/pricing)). A `global.` profile and the Anthropic API pay the built-in price. A price passed with `--prices` for the exact ID is used as is. Runs from before keyed Bedrock Claude usage by the bare model name, so they're priced as global.
+
 ## Recipes
 
 ```bash
