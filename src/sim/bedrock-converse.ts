@@ -70,6 +70,11 @@ const textOf = (content: ConverseBlock[]) =>
     .join("")
     .replace(REASONING, "");
 
+/** The result for a tool call that was not run because the reply that made it was cut off or filtered. */
+const notRun = (toolUseId: string): ConverseBlock => ({
+  toolResult: { toolUseId, content: [{ text: JSON.stringify({ error: "not run: the reply that made this call was cut off" }) }], status: "error" },
+});
+
 /** A reply whose reasoning was never closed: the reasoning and the answer can't be told apart. */
 const unclosedReasoning = (res: ConverseResponse) => res.stopReason !== "tool_use" && textOf(res.output?.message?.content ?? []).includes("<reasoning>");
 
@@ -120,10 +125,16 @@ export function bedrockConverseAgent(opts: BedrockConverseOptions): AgentAdapter
       const system: ConverseBlock[] = cache ? [{ text: ctx.system }, CACHE_POINT] : [{ text: ctx.system }];
       // Append-only conversation in Converse's block format.
       const messages: ConverseMessage[] = [];
+      // Converse rejects two user messages in a row: one that follows a user message not yet sent joins it.
+      const pushUser = (content: ConverseBlock[]) => {
+        const last = messages.at(-1);
+        if (last?.role === "user") last.content.push(...content);
+        else messages.push({ role: "user", content });
+      };
 
       return {
         async reply(userMessage, callTool) {
-          messages.push({ role: "user", content: [{ text: userMessage || "(silence)" }] });
+          pushUser([{ text: userMessage || "(silence)" }]);
           const request = async () => {
             const res = await client.send(
               command({
@@ -152,9 +163,13 @@ export function bedrockConverseAgent(opts: BedrockConverseOptions): AgentAdapter
             const message = res.output?.message ?? { role: "assistant" as const, content: [] };
             messages.push({ role: "assistant", content: message.content });
             const text = textOf(message.content).trim();
-            if (res.stopReason === "guardrail_intervened" || res.stopReason === "content_filtered") return "[agent output was filtered]";
+            const filtered = res.stopReason === "guardrail_intervened" || res.stopReason === "content_filtered";
             const uses = message.content.filter((b) => b.toolUse).map((b) => b.toolUse!);
-            if (res.stopReason !== "tool_use" || uses.length === 0) return text;
+            // A tool call runs whatever the stop reason says: Grok 4.7 sometimes ends a turn with one under end_turn.
+            // A call in a reply cut off at maxTokens or filtered is not run, but it still gets a result, or the next request fails.
+            if (uses.length > 0 && (filtered || res.stopReason === "max_tokens")) pushUser(uses.map((use) => notRun(use.toolUseId)));
+            if (filtered) return "[agent output was filtered]";
+            if (uses.length === 0 || res.stopReason === "max_tokens") return text;
 
             const results: ConverseBlock[] = [];
             for (const use of uses) {
@@ -167,7 +182,7 @@ export function bedrockConverseAgent(opts: BedrockConverseOptions): AgentAdapter
                 },
               });
             }
-            messages.push({ role: "user", content: results });
+            pushUser(results);
           }
           return "[agent exceeded its tool-call budget for this turn]";
         },

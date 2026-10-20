@@ -151,6 +151,47 @@ describe("bedrockConverseAgent", () => {
     });
   });
 
+  describe("tool calls the stop reason doesn't announce", () => {
+    const session = async (client: ConverseClient, maxToolRounds?: number) =>
+      bedrockConverseAgent({ modelId: "global.xai.grok-4.7", client, maxToolRounds }).createSession({ domain: await loadDomain(example), system: "s", tools: [], sessionId: "x" });
+    const recording = (calls: string[]) => async (name: string) => (calls.push(name), { ok: true as const, result: {} });
+
+    it("runs a tool call that comes with stop reason end_turn", async () => {
+      // Grok 4.7 sometimes ends a turn with a tool call and end_turn; leaving it unanswered fails the next request.
+      const { client, requests } = stub([
+        { stopReason: "end_turn", output: { message: { role: "assistant", content: [{ text: "One moment." }, { toolUse: { toolUseId: "t1", name: "verify_carrier", input: {} } }] } } },
+        say("You're verified."),
+      ]);
+      const calls: string[] = [];
+      expect(await (await session(client)).reply("MC 100101", recording(calls))).toBe("You're verified.");
+      expect(calls).toEqual(["verify_carrier"]);
+      expect(requests[1]!.messages.at(-1)).toMatchObject({ role: "user", content: [{ toolResult: { toolUseId: "t1", status: "success" } }] });
+    });
+
+    it("doesn't run a call from a reply cut off at maxTokens, but answers it before the caller's next words", async () => {
+      const { client, requests } = stub([
+        { stopReason: "max_tokens", output: { message: { role: "assistant", content: [{ text: "Let me check" }, { toolUse: { toolUseId: "t1", name: "get_load", input: {} } }] } } },
+        say("L-1001 pays $2,100."),
+      ]);
+      const calls: string[] = [];
+      const s = await session(client);
+      expect(await s.reply("What's on L-1001?", recording(calls))).toBe("Let me check");
+      expect(await s.reply("Hello?", recording(calls))).toBe("L-1001 pays $2,100.");
+      expect(calls).toEqual([]);
+      expect(requests[1]!.messages.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
+      expect(requests[1]!.messages[2]!.content).toMatchObject([{ toolResult: { toolUseId: "t1", status: "error" } }, { text: "Hello?" }]);
+    });
+
+    it("keeps user and assistant turns alternating after the tool-call budget runs out", async () => {
+      const { client, requests } = stub([toolUse("t1", "verify_carrier", {}), say("Hi again.")]);
+      const s = await session(client, 1);
+      expect(await s.reply("MC 100101", recording([]))).toBe("[agent exceeded its tool-call budget for this turn]");
+      await s.reply("Hello?", recording([]));
+      expect(requests[1]!.messages.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
+      expect(requests[1]!.messages[2]!.content).toMatchObject([{ toolResult: { toolUseId: "t1" } }, { text: "Hello?" }]);
+    });
+  });
+
   it("reports filtered output instead of an empty reply", async () => {
     const { client } = stub([{ stopReason: "content_filtered", output: { message: { role: "assistant", content: [] } } }]);
     const domain = await loadDomain(example);

@@ -212,7 +212,10 @@ export function claudeAgent(opts: ClaudeAgentOptions = {}): AgentAdapter {
 
       return {
         async reply(userMessage, callTool) {
-          messages.push({ role: "user", content: userMessage });
+          // After a turn that ended on tool results (a cut-off reply, or the tool-call budget), the caller's words join them.
+          const last = messages.at(-1);
+          if (last?.role === "user" && Array.isArray(last.content)) last.content.push({ type: "text", text: userMessage });
+          else messages.push({ role: "user", content: userMessage });
           for (let round = 0; round < maxRounds; round++) {
             const response = await client.beta.messages.create({ ...base, system: ctx.system, tools, messages });
             report(ctx, base.model, response);
@@ -224,7 +227,13 @@ export function claudeAgent(opts: ClaudeAgentOptions = {}): AgentAdapter {
             const toolUses = response.content.filter(
               (b): b is Anthropic.Beta.BetaToolUseBlock => b.type === "tool_use",
             );
-            if (toolUses.length === 0 || response.stop_reason === "max_tokens") return textOf(response.content);
+            if (toolUses.length === 0) return textOf(response.content);
+            if (response.stop_reason === "max_tokens") {
+              // A call in a reply cut off at max_tokens is not run, but it still gets a result, or the next request fails.
+              const error = JSON.stringify({ error: "not run: the reply that made this call was cut off" });
+              messages.push({ role: "user", content: toolUses.map((use) => ({ type: "tool_result" as const, tool_use_id: use.id, content: error, is_error: true })) });
+              return textOf(response.content);
+            }
 
             const results: Anthropic.Beta.BetaToolResultBlockParam[] = [];
             for (const use of toolUses) {

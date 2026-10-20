@@ -55,6 +55,25 @@ describe("claudeAgent", () => {
     expect(second.messages.at(-1)).toMatchObject({ role: "user", content: [{ type: "tool_result", tool_use_id: "t1" }] });
   });
 
+  it("doesn't run a tool call from a reply cut off at max_tokens, but answers it before the caller's next words", async () => {
+    const { client, requests } = fakeClient([
+      { stop_reason: "max_tokens", content: [{ type: "text", text: "Let me check" }, { type: "tool_use", id: "t1", name: "get_load", input: {} }] },
+      { stop_reason: "end_turn", content: [{ type: "text", text: "L-1001 pays $2,100." }] },
+    ]);
+    const session = await claudeAgent({ client }).createSession({ domain: await loadDomain(example), system: "s", tools: [], sessionId: "x" });
+    const calls: string[] = [];
+    const callTool = async (name: string) => (calls.push(name), { ok: true as const, result: {} });
+    expect(await session.reply("What's on L-1001?", callTool)).toBe("Let me check");
+    expect(await session.reply("Hello?", callTool)).toBe("L-1001 pays $2,100.");
+    expect(calls).toEqual([]);
+    const messages = (requests[1] as { messages: Array<{ role: string; content: unknown }> }).messages;
+    expect(messages.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
+    expect(messages[2]!.content).toMatchObject([
+      { type: "tool_result", tool_use_id: "t1", is_error: true },
+      { type: "text", text: "Hello?" },
+    ]);
+  });
+
   it("does not request fallbacks for models without them", async () => {
     const { client, requests } = fakeClient([{ stop_reason: "end_turn", content: [{ type: "text", text: "hi" }] }]);
     const domain = await loadDomain(example);
