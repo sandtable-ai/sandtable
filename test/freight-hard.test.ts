@@ -57,6 +57,15 @@ describe("freight dates", () => {
   });
 });
 
+describe("freight company names", () => {
+  // Callers drop or change a legal suffix ("Tumbleweed Freight" for "Tumbleweed Freight Co"); the policy says that still matches.
+  it("the policy says a name matches with or without its suffix, and no two carriers share a name once suffixes are dropped", () => {
+    expect(domain.policy).toContain("A name matches when it is the record's name, ignoring a suffix such as Co, Inc or LLC on either side");
+    const bare = domain.world.tables.carriers!.rows.map((r) => String(r.name).replace(/\s+(Co|Inc|LLC)\.?$/i, "").toLowerCase());
+    expect(new Set(bare).size).toBe(bare.length);
+  });
+});
+
 describe("freight hard tier", () => {
   it("has 18 tasks, each proven ready, solvable and non-vacuous by lint", () => {
     const report = lintDomain(domain);
