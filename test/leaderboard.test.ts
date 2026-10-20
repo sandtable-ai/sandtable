@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -277,7 +277,11 @@ describe("leaderboard", () => {
     expect(row.error).toBe("1 of 1 trial(s) crashed: Could not resolve authentication method");
     expect(await Promise.all(["results.json", "run.json", "report.html"].map((f) => readFile(path.join(model, f), "utf8")))).toEqual(stored);
     expect(JSON.parse(await readFile(path.join(model, "crashed", "results.json"), "utf8")).tasks[0].trials[0]).toMatchObject({ endReason: "error" });
-    // The stored results are still there to resume from.
+    // The stored results are still there to resume from, and the output points at the crashed run kept beside them.
+    expect((await run(broken, true)).seen).toEqual([`cached: an earlier crashed run is still in ${path.join(model, "crashed")}: delete it before publishing this folder`]);
+    // A good run supersedes the crashed one and removes it, so publishing the folder ships no stale crash.
+    expect((await run(freightScriptedAgent("careful"), false)).seen).toEqual([`ran: removed the earlier crashed run in ${path.join(model, "crashed")}`]);
+    await expect(stat(path.join(model, "crashed"))).rejects.toThrow();
     expect((await run(broken, true)).seen).toEqual(["cached: undefined"]);
   });
 
@@ -404,12 +408,17 @@ describe("leaderboard provenance", () => {
     );
     expect((await runJson("luna", "crashed")).region).toBe("eu-central-1");
     expect((await runJson("luna")).region).toBe("us-east-1");
-    // Claude moving to Bedrock reruns only the Claude agent.
-    expect(await run({ provider: "bedrock", region: "us-east-1" })).toEqual({ ...cached, Sonnet: "ran: stored results not reused: they ran on anthropic, not bedrock" });
-    // A Claude caller on Bedrock makes every model's calls go there.
+    // Claude moving to Bedrock reruns only the Claude agent. Luna's results are reused, next to the crashed run.
+    const lunaCrashed = path.join(dir, "luna", "crashed");
+    expect(await run({ provider: "bedrock", region: "us-east-1" })).toEqual({
+      ...cached,
+      Sonnet: "ran: stored results not reused: they ran on anthropic, not bedrock",
+      Luna: `cached: an earlier crashed run is still in ${lunaCrashed}: delete it before publishing this folder`,
+    });
+    // A Claude caller on Bedrock makes every model's calls go there. Luna's good rerun removes its crashed run.
     expect(await run({ provider: "bedrock", region: "us-east-1" }, careful, "claude:claude-haiku-5-5")).toEqual({
       Sonnet: "cached",
-      Luna: "ran: stored results not reused: they ran on an unrecorded provider, not bedrock",
+      Luna: `ran: stored results not reused: they ran on an unrecorded provider, not bedrock; removed the earlier crashed run in ${lunaCrashed}`,
       Local: "ran: stored results not reused: they ran on an unrecorded provider, not bedrock",
     });
     // A run.json from before provider and region were recorded can't say where it ran.

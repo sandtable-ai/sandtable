@@ -60,6 +60,7 @@ First public release.
 
 ### Fixed
 
+- **Leaderboard**: a model's next run without a crash removes the `crashed/` folder an earlier crashed rerun left beside its results, so publishing the model's folder no longer ships a stale crashed run. While stored results are reused next to one, the output says where it is ([#192](https://github.com/sandtable-ai/sandtable/issues/192)).
 - **Leaderboard**: a do-nothing baseline whose trials crashed shows as an error row, as a model does, instead of a 0% floor the board ranks against. The baseline runs under the board's caller when a task has no script, so an expired key or throttling could crash it ([#193](https://github.com/sandtable-ai/sandtable/issues/193)).
 - `sandtable leaderboard` no longer overwrites a model's stored results with a rerun whose trials crashed, for example after a resume without `--provider bedrock` or without credentials. The crashed run goes to a `crashed/` folder in the model's folder, the stored results stay, and the next run retries the model ([#188](https://github.com/sandtable-ai/sandtable/issues/188)).
 - `sandtable leaderboard` reuses a model's stored results only when its `run.json` records the same provider and Bedrock region as the current run. Results from `--provider anthropic` are no longer reused for a `--provider bedrock` board, or from one region for another, and a `run.json` from before either was recorded runs again. The output says why (`they ran in eu-west-1, not us-east-1`) ([#158](https://github.com/sandtable-ai/sandtable/issues/158)).

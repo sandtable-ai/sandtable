@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { renderHtml } from "../report/html.ts";
@@ -346,6 +346,8 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
     const dir = path.join(outDir, slugify(entry.label));
     const file = path.join(dir, "results.json");
     const keyFile = path.join(dir, "run.json");
+    // A crashed rerun is kept here, beside the stored results, until the model next runs without a crash.
+    const crashedDir = path.join(dir, "crashed");
     const key = runKey(entry);
     const where = opts.runInfo ? entryWhere(opts.runInfo, entry.agent, opts.userSpec) : undefined;
     const info = opts.runInfo ? { sandtable: opts.runInfo.sandtable, ...where } : {};
@@ -369,13 +371,16 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
           stale = err.message;
         }
       }
-      if (result && JSON.stringify(result) === JSON.stringify(stored)) opts.onEntry?.(entry.label, "cached");
+      // Reused results keep an earlier crashed run beside them: say so, since publishing the folder would ship it.
+      const leftover = result && (await exists(crashedDir)) ? `an earlier crashed run is still in ${crashedDir}: delete it before publishing this folder` : undefined;
+      if (result && JSON.stringify(result) === JSON.stringify(stored)) opts.onEntry?.(entry.label, "cached", leftover);
       else if (result) {
         // The current rules grade the stored conversations differently: rewrite their files. These hold the
         // only copy of paid conversations, so a write is never left half done.
         await writeFileAtomic(file, JSON.stringify(result, null, 2));
         await writeFileAtomic(path.join(dir, "report.html"), renderHtml(result));
-        opts.onEntry?.(entry.label, "regraded", `${changedVerdicts(stored, result).length} verdict(s) changed under the current rules`);
+        const changed = `${changedVerdicts(stored, result).length} verdict(s) changed under the current rules`;
+        opts.onEntry?.(entry.label, "regraded", leftover ? `${changed}; ${leftover}` : changed);
       }
     }
     if (!result) {
@@ -397,7 +402,6 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
       let note = fresh && stale ? `${message}; stored results not reused: ${stale}` : message;
       if (fresh) {
         // The stored files may be the only copy of paid conversations: a crashed rerun goes beside them, never over them.
-        const crashedDir = path.join(dir, "crashed");
         await writeRun(crashedDir, result, { ...key, ...info });
         note += `; the crashed run is in ${crashedDir}${(await exists(file)) ? ", and the stored results are kept" : ""}`;
       }
@@ -405,8 +409,19 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
       rows.push(errorRow(entry, message));
       continue;
     }
-    if (fresh) await writeRun(dir, result, { ...key, ...info });
-    if (fresh) opts.onEntry?.(entry.label, "ran", stale && `stored results not reused: ${stale}`);
+    if (fresh) {
+      await writeRun(dir, result, { ...key, ...info });
+      // A good run supersedes an earlier crashed one, which would otherwise be published with these results.
+      // A folder that can't be removed (a locked file on Windows) is reported, never fatal: this model's run is saved.
+      const removal = !(await exists(crashedDir))
+        ? undefined
+        : await rm(crashedDir, { recursive: true, force: true, maxRetries: 3 }).then(
+            () => `removed the earlier crashed run in ${crashedDir}`,
+            (err: Error) => `could not remove the earlier crashed run in ${crashedDir}: ${err.message}`,
+          );
+      const notes = [stale && `stored results not reused: ${stale}`, removal].filter(Boolean);
+      opts.onEntry?.(entry.label, "ran", notes.length ? notes.join("; ") : undefined);
+    }
     rows.push(toRow(entry, result));
   }
 
