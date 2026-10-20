@@ -55,9 +55,9 @@ export interface SuiteResult {
   user: string;
   k: number;
   /**
-   * A hash of what the agent and the simulated user were given for these tasks: the prompts, the tools,
-   * the seed records and each task's caller instructions. `sandtable regrade` re-scores a run only while
-   * it is unchanged. Absent in results written before regrade existed.
+   * A hash of what the agent and the simulated user were given for these tasks: the agent's prompt and tool
+   * schemas, and each task's caller prompt, opening and turn limit (and script, for the scripted user).
+   * `sandtable regrade` re-scores a run only while it is unchanged. Absent in results from before regrade.
    */
   inputs?: string;
   startedAt: string;
@@ -123,7 +123,7 @@ export async function runSuite(opts: SuiteOptions): Promise<SuiteResult> {
     agent: agent.name,
     user: user.name,
     k,
-    inputs: inputsFingerprint(domain, tasks.map((t) => t.id)),
+    inputs: inputsFingerprint(domain, tasks.map((t) => t.id), user.name),
     startedAt,
     durationMs: Math.round(performance.now() - started),
     ...summarize(domain, tasks, results, k),

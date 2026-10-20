@@ -1,10 +1,12 @@
 import { execFile } from "node:child_process";
-import { cp, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { freightScriptedAgent } from "../src/demo/freight-agents.ts";
+import { inputsFingerprint } from "../src/run/inputs.ts";
+import { writeFileAtomic } from "../src/run/write.ts";
 import { regradeSuite, RegradeError } from "../src/run/regrade.ts";
 import { runSuite, type SuiteResult } from "../src/run/suite.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
@@ -71,21 +73,46 @@ describe("regrade", () => {
     expect(trial.checks.find((c) => c.kind === "reply")).toMatchObject({ passed: false, detail: 'agent never said "have a great haul"' });
   });
 
-  it("refuses when the agent or the caller would see something else now", async () => {
+  it("refuses when the agent or the caller would be given something else now", async () => {
     const domain = await loadDomain(example);
     const run = await stored(domain, "careful");
+    const first = (edit: (t: Domain["tasks"][number]) => Domain["tasks"][number]): Domain => ({ ...domain, tasks: domain.tasks.map((t, i) => (i === 0 ? edit(t) : t)) });
     const cases: [string, Domain][] = [
       ["policy", { ...domain, policy: `${domain.policy}\n- Always upsell.` }],
-      ["seed records", { ...domain, world: { tables: { ...domain.world.tables, loads: { ...domain.world.tables.loads!, rows: domain.world.tables.loads!.rows.slice(1) } } } }],
       ["tool description", { ...domain, tools: domain.tools.map((t) => (t.name === "get_load" ? { ...t, description: "Look up a load." } : t)) }],
-      ["caller instructions", { ...domain, tasks: domain.tasks.map((t, i) => (i === 0 ? { ...t, user: { ...t.user, instructions: "Ask for a discount." } } : t)) }],
+      ["caller instructions", first((t) => ({ ...t, user: { ...t.user, instructions: "Ask for a discount." } }))],
+      // Only in the caller's prompt: the agent never sees a persona.
+      ["persona description", { ...domain, personas: domain.personas.map((p) => (p.id === domain.tasks[0]!.persona ? { ...p, description: "Rude and in a hurry." } : p)) }],
+      ["opening line", first((t) => ({ ...t, user: { ...t.user, opening: "Hello?" } }))],
+      ["task turn limit", first((t) => ({ ...t, max_turns: 3 }))],
+      ["domain turn limit", { ...domain, max_turns: domain.max_turns + 1 }],
+      // The scripted caller reads its script, so for a scripted run the script is an input.
+      ["script", first((t) => ({ ...t, user: { ...t.user, script: ["Hi."] } }))],
     ];
     for (const [what, edited] of cases) {
-      expect(() => regradeSuite(edited, run), what).toThrow(/would see something else now/);
+      expect(() => regradeSuite(edited, run), what).toThrow(/would be given something else now/);
     }
-    // A task added since the run is not part of it, so it doesn't block the regrade.
-    const added: Domain = { ...domain, tasks: [...domain.tasks, { ...domain.tasks[0]!, id: "new-task" }] };
+  });
+
+  it("leaves seed records and tool behaviour to replay, and a script out of the hash for an LLM caller", async () => {
+    const domain = await loadDomain(example);
+    const run = await stored(domain, "careful");
+    // A seed record the agent saw through a tool result: replay notices.
+    const fewerLoads: Domain = { ...domain, world: { tables: { ...domain.world.tables, loads: { ...domain.world.tables.loads!, rows: domain.world.tables.loads!.rows.slice(1) } } } };
+    expect(() => regradeSuite(fewerLoads, run)).toThrow(/now returns something other than what the agent saw/);
+    // A task and seed record added since the run, which no stored call reads: the regrade goes ahead.
+    const carriers = domain.world.tables.carriers!;
+    const added: Domain = {
+      ...domain,
+      world: { tables: { ...domain.world.tables, carriers: { ...carriers, rows: [...carriers.rows, { ...carriers.rows[0]!, mc_number: "109876", name: "Added Later Freight" }] } } },
+      tasks: [...domain.tasks, { ...domain.tasks[0]!, id: "new-task" }],
+    };
     expect(regradeSuite(added, run).tasks).toHaveLength(run.tasks.length);
+    // An LLM caller never reads `script`, so editing it doesn't change what that run was given.
+    const ids = domain.tasks.map((t) => t.id);
+    const rescripted: Domain = { ...domain, tasks: domain.tasks.map((t, i) => (i === 0 ? { ...t, user: { ...t.user, script: ["Hi."] } } : t)) };
+    expect(inputsFingerprint(rescripted, ids, "claude:claude-sonnet-5-5")).toBe(inputsFingerprint(domain, ids, "claude:claude-sonnet-5-5"));
+    expect(inputsFingerprint(rescripted, ids, "scripted")).not.toBe(inputsFingerprint(domain, ids, "scripted"));
   });
 
   it("refuses a tool call whose result is no longer what the agent saw", async () => {
@@ -94,7 +121,7 @@ describe("regrade", () => {
     const trial = run.tasks.find((t) => t.id === "book-at-posted-rate")!.trials[0]!;
     const call = trial.events.find((e) => e.type === "tool" && e.name === "verify_carrier")!;
     if (call.type === "tool") call.result = { mc_number: "100101", name: "Someone Else" };
-    expect(() => regradeSuite(domain, run)).toThrow(new RegradeError("book-at-posted-rate trial 1: tool call 1 (verify_carrier) returns something else now than what the agent saw"));
+    expect(() => regradeSuite(domain, run)).toThrow(new RegradeError("book-at-posted-rate trial 1: tool call 1 (verify_carrier) now returns something other than what the agent saw"));
   });
 
   it("refuses results of another domain, with a task that is gone, or with no inputs fingerprint", async () => {
@@ -141,7 +168,16 @@ describe("regrade", () => {
 
     const err = await promisify(execFile)(process.execPath, [cli, "regrade", file, "--domain", domainDir]).catch((e: { code: number; stderr: string }) => e);
     expect(err).toMatchObject({ code: 1 });
-    expect((err as { stderr: string }).stderr).toMatch(/^can't regrade .*results\.json: the agent or the caller would see something else now: .*Rerun it with `sandtable run` instead\./);
+    expect((err as { stderr: string }).stderr).toMatch(/^can't regrade .*results\.json: the agent or the caller would be given something else now: .*Rerun it with `sandtable run` instead\./);
     expect(await readFile(file, "utf8")).toBe(JSON.stringify(run));
+  });
+
+  it("replaces a results file whole, leaving no temporary file behind", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-write-"));
+    const file = path.join(dir, "results.json");
+    await writeFile(file, "old");
+    await writeFileAtomic(file, "new");
+    expect(await readFile(file, "utf8")).toBe("new");
+    expect(await readdir(dir)).toEqual(["results.json"]);
   });
 });

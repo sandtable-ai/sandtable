@@ -22,7 +22,7 @@ The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`
 | `agent` | string | the agent's name, such as `claude:claude-opus-5-5`, `openai:gpt-4.1-mini`, `http://localhost:8787/step` (an HTTP agent is named by its URL) |
 | `user` | string | the simulated user's name, such as `claude:claude-haiku-5-5` or `scripted` |
 | `k` | number | trials per task |
-| `inputs` | string | a hash of what the agent and the simulated user were given in these tasks: the prompts, the tools, the seed records and each task's caller instructions. [`sandtable regrade`](/reference/cli#regrade) re-scores the run only while it is unchanged. Absent in results from before regrade |
+| `inputs` | string | a hash of what the agent and the simulated user were given in these tasks: the agent's system prompt and tool schemas, and each task's caller prompt, opening line and turn limit (and script, for the scripted user). [`sandtable regrade`](/reference/cli#regrade) re-scores the run only while it is unchanged. Absent in results from before regrade |
 | `startedAt` | string | ISO 8601 start time |
 | `durationMs` | number | wall-clock duration |
 | `tasks` | `TaskSummary[]` | one entry per task, with every trial |

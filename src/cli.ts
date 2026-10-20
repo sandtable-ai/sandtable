@@ -10,7 +10,8 @@ import { freightScriptedAgent } from "./demo/freight-agents.ts";
 import { formatPercent, renderTerminal } from "./report/terminal.ts";
 import { renderHtml } from "./report/html.ts";
 import { everyTrialFailed, runSuite, type SuiteResult } from "./run/suite.ts";
-import { RegradeError, regradeSuite } from "./run/regrade.ts";
+import { changedVerdicts, RegradeError, regradeSuite } from "./run/regrade.ts";
+import { writeFileAtomic } from "./run/write.ts";
 import { claudeAgent, claudeUser, type ClaudeOptions, type Provider } from "./sim/claude.ts";
 import { registerPrices } from "./run/usage.ts";
 import { bedrockConverseAgent } from "./sim/bedrock-converse.ts";
@@ -137,8 +138,8 @@ function resolveUser(spec: string, p: ClaudeOptions = {}, openaiBaseUrl?: string
 
 async function save(result: SuiteResult, outDir: string, html: boolean): Promise<string> {
   await mkdir(outDir, { recursive: true });
-  await writeFile(path.join(outDir, "results.json"), JSON.stringify(result, null, 2));
-  if (html) await writeFile(path.join(outDir, "report.html"), renderHtml(result));
+  await writeFileAtomic(path.join(outDir, "results.json"), JSON.stringify(result, null, 2));
+  if (html) await writeFileAtomic(path.join(outDir, "report.html"), renderHtml(result));
   return outDir;
 }
 
@@ -485,14 +486,14 @@ program
       if (err instanceof RegradeError) throw new Error(`can't regrade ${resultsPath}: ${err.message}. Rerun it with \`sandtable run\` instead.`);
       throw err;
     }
-    const before = new Map(stored.tasks.flatMap((t) => t.trials.map((tr) => [`${tr.taskId}#${tr.trial}`, tr.passed] as const)));
-    const flipped = result.tasks.flatMap((t) => t.trials.filter((tr) => before.get(`${tr.taskId}#${tr.trial}`) !== tr.passed));
+    const flipped = changedVerdicts(stored, result);
     console.log(renderTerminal(result));
     const trials = result.tasks.reduce((n, t) => n + t.trials.length, 0);
     console.log(`\n  regraded ${trials} trial(s) without calling a model: ${flipped.length} verdict(s) changed`);
     for (const tr of flipped) console.log(`    ${tr.passed ? "✗ → ✓" : "✓ → ✗"}  ${tr.taskId} trial ${tr.trial + 1}`);
-    const k = String(result.k);
-    if (stored.passHat[k] !== result.passHat[k]) console.log(`  pass^${k} ${formatPercent(stored.passHat[k] ?? 0)} → ${formatPercent(result.passHat[k] ?? 0)}`);
+    for (const j of [...new Set(["1", String(result.k)])]) {
+      if (stored.passHat[j] !== result.passHat[j]) console.log(`  pass^${j} ${formatPercent(stored.passHat[j] ?? 0)} → ${formatPercent(result.passHat[j] ?? 0)}`);
+    }
     const out = await save(result, o.out ?? path.dirname(resultsPath), o.html);
     console.log(`\n  results: ${path.join(out, "results.json")}${o.html ? `\n  report:  ${path.join(out, "report.html")}` : ""}`);
   });

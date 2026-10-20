@@ -31,7 +31,7 @@ export function regradeTrial(domain: Domain, trial: TrialResult): TrialResult {
       continue;
     }
     if (outcomeOf(runner.call(e.name, e.args)) !== outcomeOf(e)) {
-      throw new RegradeError(`${trial.taskId} trial ${trial.trial + 1}: tool call ${e.index + 1} (${e.name}) returns something else now than what the agent saw`);
+      throw new RegradeError(`${trial.taskId} trial ${trial.trial + 1}: tool call ${e.index + 1} (${e.name}) now returns something other than what the agent saw`);
     }
   }
   const agentMessages = events.flatMap((e) => (e.type === "agent" ? [e.text] : []));
@@ -45,17 +45,24 @@ export function regradeTrial(domain: Domain, trial: TrialResult): TrialResult {
 
 /**
  * Why a stored run can't be re-scored under `domain`, or undefined when it can: it must be a run of this
- * domain, its tasks must still exist, and the agent and the caller must be given the same inputs now.
+ * domain, its tasks must still exist, and the agent and the caller must be given the same prompts now
+ * (seed records and tool behaviour are checked call by call, as each trial is replayed).
  */
 export function regradeBlocker(domain: Domain, stored: SuiteResult): string | undefined {
   if (stored.domain !== domain.name) return `it is a run of ${stored.domain}, not ${domain.name}`;
   const gone = stored.tasks.map((t) => t.id).filter((id) => !domain.tasks.some((t) => t.id === id));
   if (gone.length) return `${gone.length === 1 ? "task" : "tasks"} ${gone.join(", ")} ${gone.length === 1 ? "is" : "are"} no longer in the domain`;
-  if (!stored.inputs) return "it was written by an older sandtable and records no inputs fingerprint, so nothing shows the agent and the caller would see the same prompts, tools and records";
-  if (stored.inputs !== inputsFingerprint(domain, stored.tasks.map((t) => t.id))) {
-    return "the agent or the caller would see something else now: the policy, a tool, a seed record or a task's caller instructions changed since it ran";
+  if (!stored.inputs) return "it was written by an older sandtable and records no inputs fingerprint, so nothing shows the agent and the caller would be given the same prompts";
+  if (stored.inputs !== inputsFingerprint(domain, stored.tasks.map((t) => t.id), stored.user)) {
+    return "the agent or the caller would be given something else now: the policy, a tool's schema, or a task's caller prompt, opening, script or turn limit changed since it ran";
   }
   return undefined;
+}
+
+/** The trials of `after` whose verdict differs from the same trial in `before`. */
+export function changedVerdicts(before: SuiteResult, after: SuiteResult): TrialResult[] {
+  const was = new Map(before.tasks.flatMap((t) => t.trials.map((tr) => [`${tr.taskId}#${tr.trial}`, tr.passed] as const)));
+  return after.tasks.flatMap((t) => t.trials.filter((tr) => was.get(`${tr.taskId}#${tr.trial}`) !== tr.passed));
 }
 
 /**

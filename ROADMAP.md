@@ -12,6 +12,7 @@ Issues and milestones on GitHub are the source of truth; this page is the overvi
 - [x] Review workflow: `review: pending`, `sandtable review`, `validate --strict`, provisional reports (#9)
 - [x] `sandtable lint`: ready, solvable, non-vacuous, graded (#10)
 - [x] `sandtable leaderboard`: several agents on one domain under the same simulated callers, next to a do-nothing baseline
+- [x] `sandtable regrade`: re-score stored trials after editing the domain's rules, without calling a model (#32)
 - [x] Live verification of the Claude adapters, caching and init steps (#1, #3); see [docs/results.mdx](docs/results.mdx)
 - [x] Bundled examples with offline demo agents: a freight carrier-sales desk with negotiation rounds, rep-confirm offers, capacity and callbacks, and a clinic front desk (#45, #22)
 - [x] Worked examples for six agent frameworks (#52)
@@ -24,7 +25,7 @@ Issues and milestones on GitHub are the source of truth; this page is the overvi
 - [ ] Reliability verdicts: pass@k, flaky tasks, flip rate, intervals, infra errors as SKIPPED (#27)
 - [ ] Critical tasks (#28), failure attribution (#29), coverage matrix (#30)
 - [ ] Customer sign-off report: rule → evidence → reliability (#31)
-- [ ] Regrade stored trials (#32), argument matchers (#25), nested params (#26), per-task `given` overrides (#37)
+- [ ] Argument matchers (#25), nested params (#26), per-task `given` overrides (#37)
 
 ## Then: black-box and platform on-ramps (milestone v0.4)
 - [ ] Serve the world as REST, MCP and webhook tools for hosted agent platforms (#14)

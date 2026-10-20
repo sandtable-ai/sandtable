@@ -15,8 +15,8 @@ SuiteResult
   domain, agent, user          names, e.g. "freight-carrier-sales"; "claude:claude-opus-5-5", "openai:gpt-4.1-mini",
                                "bedrock:qwen.qwen3-32b-v1:0", "http://localhost:8787/step", "noop", "scripted"
   k                            trials per task
-  inputs                       hash of the prompts, tools, seed records and caller instructions the run used;
-                               `sandtable regrade` re-scores it only while they are unchanged
+  inputs                       hash of the agent's prompt and tool schemas and each task's caller prompt, opening and
+                               turn limit; `sandtable regrade` re-scores the run only while they are unchanged
   startedAt, durationMs
   passHat                      { "1": 0.95, "2": 0.9 }: pass^1 .. pass^k, as fractions
   byTag[]                      { tag, tasks, passHat1, passHatK }; "untagged" for tasks without tags

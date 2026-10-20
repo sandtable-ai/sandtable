@@ -4,25 +4,27 @@ import { agentSystemPrompt, USER_KICKOFF, userSystemPrompt } from "../sim/prompt
 import { toolSchema } from "../world/tools.ts";
 
 /**
- * A short hash of everything the agent and the simulated user are given in these tasks, as the current
- * code renders it: the agent's system prompt, each tool's schema and behaviour, the seed records, and
- * each task's caller prompt, opening, script and turn limit. Invariants and expectations are left out,
- * so editing how a trial is graded keeps the hash, while any edit that could change the conversation
- * changes it. A task id missing from the domain hashes as missing.
+ * A short hash of what the agent and the simulated user are given in these tasks, as the current code
+ * renders it: the agent's system prompt and tool schemas, and per task the caller's prompt, opening line
+ * and turn limit, plus the script when `user` is the scripted user, the only one that reads it.
+ *
+ * Invariants and expectations are left out, so editing how a trial is graded keeps the hash. Seed records
+ * and what tools do are left out too: the agent sees them only through tool results, which a regrade
+ * replays call by call. A task id missing from the domain hashes as missing.
  */
-export function inputsFingerprint(domain: Domain, taskIds: readonly string[]): string {
+export function inputsFingerprint(domain: Domain, taskIds: readonly string[], user: string): string {
   const tasks = taskIds.map((id) => {
     const task = domain.tasks.find((t) => t.id === id);
     if (!task) return { id, missing: true };
     const persona = domain.personas.find((p) => p.id === task.persona);
-    return { id, caller: userSystemPrompt(domain, task, persona), user: task.user, maxTurns: task.max_turns ?? domain.max_turns };
+    return {
+      id,
+      caller: userSystemPrompt(domain, task, persona),
+      opening: task.user.opening,
+      maxTurns: task.max_turns ?? domain.max_turns,
+      ...(user === "scripted" ? { script: task.user.script } : {}),
+    };
   });
-  const inputs = {
-    agent: agentSystemPrompt(domain),
-    tools: domain.tools.map((t) => ({ schema: toolSchema(t), checks: t.checks, ops: t.ops, returns: t.returns })),
-    world: domain.world,
-    kickoff: USER_KICKOFF,
-    tasks,
-  };
+  const inputs = { agent: agentSystemPrompt(domain), tools: domain.tools.map(toolSchema), kickoff: USER_KICKOFF, tasks };
   return createHash("sha256").update(JSON.stringify(inputs)).digest("hex").slice(0, 16);
 }
