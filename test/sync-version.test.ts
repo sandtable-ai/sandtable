@@ -41,7 +41,8 @@ describe("scripts/sync-version.mjs", () => {
   });
 
   it("syncs a release and a pre-release, then passes --check", async () => {
-    for (const [npm, pep440] of [["0.1.0", "0.1.0"], ["0.2.0-alpha.3", "0.2.0a3"], ["1.0.0-rc.1", "1.0.0rc1"]] as const) {
+    // Versions the repository never has, so each starts out of sync whatever the current version is.
+    for (const [npm, pep440] of [["98.7.6", "98.7.6"], ["98.8.0-alpha.3", "98.8.0a3"], ["99.0.0-rc.1", "99.0.0rc1"]] as const) {
       const dir = copy();
       setVersion(dir, npm);
       expect((await sync(dir, "--check")).code).toBe(1);
