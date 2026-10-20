@@ -175,11 +175,16 @@ export function requestBase(opts: ClaudeOptions, defaultEffort: Effort) {
   };
 }
 
-function report(ctx: { recordUsage?: UsageRecorder }, fallbackModel: string, response: Anthropic.Beta.BetaMessage) {
+/**
+ * Usage is recorded under the model that served the call. On the Anthropic API that is the model Claude reports,
+ * since a refusal fallback can serve another. On Bedrock it is the requested ID, whose profile (global., eu.)
+ * sets the price, while Claude reports a bare model name; an ARN names no model, so it keeps the reported name.
+ */
+function report(ctx: { recordUsage?: UsageRecorder }, requested: string, response: Anthropic.Beta.BetaMessage, bedrock: boolean) {
   const u = response.usage;
   const cut = response.stop_reason === "max_tokens";
   if (!u && !cut) return;
-  ctx.recordUsage?.(response.model ?? fallbackModel, {
+  ctx.recordUsage?.(bedrock && !requested.startsWith("arn:") ? requested : (response.model ?? requested), {
     input: u?.input_tokens ?? 0,
     output: u?.output_tokens ?? 0,
     cacheRead: u?.cache_read_input_tokens ?? 0,
@@ -200,9 +205,10 @@ function textOf(content: Anthropic.Beta.BetaContentBlock[]): string {
 /** Reference agent: Claude with the domain's tools and policy. Use it as a baseline, or swap in your own agent. */
 export function claudeAgent(opts: ClaudeAgentOptions = {}): AgentAdapter {
   const base = requestBase(opts, DEFAULT_AGENT_EFFORT);
+  const bedrock = providerOf(opts) === "bedrock";
   const maxRounds = opts.maxToolRounds ?? 12;
   return {
-    name: `${providerOf(opts) === "bedrock" ? "bedrock" : "claude"}:${base.model}`,
+    name: `${bedrock ? "bedrock" : "claude"}:${base.model}`,
     async createSession(ctx) {
       const client = await createClient(opts);
       const tools: Anthropic.Beta.BetaTool[] = ctx.tools.map((t) => ({
@@ -223,7 +229,7 @@ export function claudeAgent(opts: ClaudeAgentOptions = {}): AgentAdapter {
           else messages.push({ role: "user", content: said });
           for (let round = 0; round < maxRounds; round++) {
             const response = await client.beta.messages.create({ ...base, system: ctx.system, tools, messages });
-            report(ctx, base.model, response);
+            report(ctx, base.model, response, bedrock);
             messages.push({ role: "assistant", content: response.content });
 
             if (response.stop_reason === "pause_turn") continue;
@@ -263,8 +269,9 @@ export function claudeAgent(opts: ClaudeAgentOptions = {}): AgentAdapter {
 /** Simulated user played by Claude, with a persona and a hidden goal (tau-bench style). */
 export function claudeUser(opts: ClaudeOptions = {}): UserSimulator {
   const base = requestBase(opts, "low");
+  const bedrock = providerOf(opts) === "bedrock";
   return {
-    name: `${providerOf(opts) === "bedrock" ? "bedrock" : "claude"}:${base.model}`,
+    name: `${bedrock ? "bedrock" : "claude"}:${base.model}`,
     async createSession(ctx) {
       const client = await createClient(opts);
       const system = userSystemPrompt(ctx.domain, ctx.task, ctx.persona);
@@ -282,7 +289,7 @@ export function claudeUser(opts: ClaudeOptions = {}): UserSimulator {
           opened = true;
           if (agentMessage !== null) messages.push({ role: "user", content: agentMessage || "(silence)" });
           const response = await client.beta.messages.create({ ...base, system, messages });
-          report(ctx, base.model, response);
+          report(ctx, base.model, response, bedrock);
           messages.push({ role: "assistant", content: response.content });
           if (response.stop_reason === "refusal") return { text: "", stop: true };
           const raw = textOf(response.content);

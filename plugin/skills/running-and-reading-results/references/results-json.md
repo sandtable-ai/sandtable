@@ -27,7 +27,10 @@ SuiteResult
   usage                        { agent: {<model>: tokens}, user: {<model>: tokens}, costUsd }: costUsd is null when a
                                model has no known price (Claude, or passed with --prices). tokens = { calls, input,
                                output, cacheRead, cacheWrite, maxTokensStops? }: maxTokensStops counts replies cut off
-                               at the output-token limit, present only when there was one
+                               at the output-token limit, present only when there was one. On Bedrock, Claude usage is
+                               keyed by the requested ID (global.anthropic.…, eu.anthropic.…; a geo profile costs 1.1×),
+                               except an ARN, which keeps the bare name Claude reports at the global price; on the
+                               Anthropic API by the model Claude reports
   latency                      { agentTurnP50Ms, agentTurnP95Ms }
   tasks[]                      { id, description, tags[], passes, trials[] }
     trials[]                   sorted by trial number

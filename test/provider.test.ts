@@ -43,6 +43,7 @@ describe("providers", () => {
     expect(priceKey("us.anthropic.claude-haiku-5-5-v1:0")).toBe("claude-haiku-5-5");
     expect(priceKey("anthropic.claude-opus-5-5")).toBe("claude-opus-5-5");
     expect(priceKey("eu.anthropic.claude-sonnet-5-5")).toBe("claude-sonnet-5-5");
+    expect(priceKey("us-gov.anthropic.claude-sonnet-5-5")).toBe("claude-sonnet-5-5");
     expect(costOf({ "anthropic.claude-opus-5-5": { calls: 1, input: 1_000_000, output: 0, cacheRead: 0, cacheWrite: 0 } })).toBeCloseTo(4);
   });
 });

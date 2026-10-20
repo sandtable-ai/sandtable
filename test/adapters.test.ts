@@ -11,7 +11,7 @@ import { loadDomain } from "../src/spec/load.ts";
 const example = path.resolve("examples/freight");
 
 /** Minimal stand-in for the SDK client: replays canned responses and records requests. */
-function fakeClient(responses: Array<{ stop_reason: string; content: unknown[]; usage?: Record<string, number> }>) {
+function fakeClient(responses: Array<{ stop_reason: string; content: unknown[]; model?: string; usage?: Record<string, number> }>) {
   const requests: Record<string, unknown>[] = [];
   const client = {
     beta: {
@@ -122,6 +122,29 @@ describe("claudeAgent", () => {
       { input: 10, output: 16000, cacheRead: 0, cacheWrite: 0, maxTokensStops: 1 },
       { input: 12, output: 3, cacheRead: 0, cacheWrite: 0 },
     ]);
+  });
+
+  it("records usage under the model Claude reports on the Anthropic API, and under the requested profile on Bedrock", async () => {
+    const domain = await loadDomain(example);
+    const recordedAs = async (opts: { provider?: "bedrock"; model: string }) => {
+      const { client } = fakeClient([{ stop_reason: "end_turn", content: [{ type: "text", text: "hi" }], model: "claude-opus-5-5", usage: { input_tokens: 10, output_tokens: 2 } }]);
+      const models: string[] = [];
+      const session = await claudeAgent({ client, ...opts }).createSession({ domain, system: "s", tools: [], sessionId: "x", recordUsage: (m) => models.push(m) });
+      await session.reply("hello", async () => ({ ok: true }));
+      return models;
+    };
+    expect(await recordedAs({ model: "claude-opus-5-5" })).toEqual(["claude-opus-5-5"]);
+    // Bedrock reports the bare model name; the profile that sets the price is the one requested.
+    expect(await recordedAs({ provider: "bedrock", model: "eu.anthropic.claude-opus-5-5" })).toEqual(["eu.anthropic.claude-opus-5-5"]);
+    expect(await recordedAs({ provider: "bedrock", model: "global.anthropic.claude-opus-5-5" })).toEqual(["global.anthropic.claude-opus-5-5"]);
+    // An inference profile ARN names no model: it keeps the name Claude reports, so it can still be priced.
+    expect(await recordedAs({ provider: "bedrock", model: "arn:aws:bedrock:eu-west-1:111122223333:application-inference-profile/a1b2c3" })).toEqual(["claude-opus-5-5"]);
+    // The simulated caller records the same way.
+    const { client } = fakeClient([{ stop_reason: "end_turn", content: [{ type: "text", text: "Hi." }], model: "claude-sonnet-5-5", usage: { input_tokens: 9, output_tokens: 1 } }]);
+    const callerModels: string[] = [];
+    const sim = await claudeUser({ client, provider: "bedrock", model: "eu.anthropic.claude-sonnet-5-5" }).createSession({ domain, task: domain.tasks[0]!, recordUsage: (m) => callerModels.push(m) });
+    await sim.next(null);
+    expect(callerModels).toEqual(["eu.anthropic.claude-sonnet-5-5"]);
   });
 
   it("does not request fallbacks for models without them", async () => {

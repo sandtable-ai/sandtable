@@ -32,6 +32,32 @@ export const PRICES: Record<string, { input: number; output: number; cacheRead: 
   "claude-haiku-5-5": { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite: 0.125 },
 };
 
+/** The built-in Claude prices, all for Claude 4.5 models or later: what the geo-profile premium applies to. */
+const BUILT_IN = new Set(Object.keys(PRICES));
+
+/**
+ * Bedrock's geo cross-region profiles (eu., us., apac. …) bill Claude 4.5 models and later at 1.1× the global
+ * price: "Regional and multi-region endpoints include a 10% premium over global endpoints"
+ * (https://platform.claude.com/docs/en/about-claude/pricing). Global profiles and the Anthropic API pay the list price.
+ */
+const GEO_PROFILE_PREMIUM = 1.1;
+
+/**
+ * The price of a model ID as an adapter records it: an exact entry (from --prices) first, else the built-in
+ * price, times GEO_PROFILE_PREMIUM for a Claude geo profile such as eu.anthropic.claude-opus-5-5.
+ */
+function priceOf(model: string): (typeof PRICES)[string] | undefined {
+  const exact = PRICES[model];
+  if (exact) return exact;
+  const key = priceKey(model);
+  const base = PRICES[key];
+  if (!base) return undefined;
+  const geo = /^([a-z]{2,6}(?:-[a-z]+)?)\.anthropic\./.exec(model)?.[1];
+  if (!geo || geo === "global" || !BUILT_IN.has(key)) return base;
+  const k = GEO_PROFILE_PREMIUM;
+  return { input: base.input * k, output: base.output * k, cacheRead: base.cacheRead * k, cacheWrite: base.cacheWrite * k };
+}
+
 export function emptyUsage(): Usage {
   return { agent: {}, user: {}, costUsd: 0 };
 }
@@ -70,14 +96,14 @@ export function registerPrices(file: unknown): string[] {
 
 /** Map provider-specific IDs (anthropic.claude-…, us.anthropic.claude-…-v1:0) to the price-table key. */
 export function priceKey(model: string): string {
-  return model.replace(/^(?:[a-z]{2,6}\.)?anthropic\./, "").replace(/-v\d+(?::\d+)?$/, "");
+  return model.replace(/^(?:[a-z]{2,6}(?:-[a-z]+)?\.)?anthropic\./, "").replace(/-v\d+(?::\d+)?$/, "");
 }
 
 export function costOf(...groups: UsageByModel[]): number | null {
   let total = 0;
   for (const group of groups) {
     for (const [model, u] of Object.entries(group)) {
-      const p = PRICES[model] ?? PRICES[priceKey(model)];
+      const p = priceOf(model);
       if (!p) return null;
       total += (u.input * p.input + u.output * p.output + u.cacheRead * p.cacheRead + u.cacheWrite * p.cacheWrite) / 1e6;
     }
