@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -72,31 +72,74 @@ describe("leaderboard", () => {
     expect(again.rows[0]!.passHat1).toBe(1);
   });
 
-  it("reruns a model whose stored results are for another k, caller or task set, or have crashed trials", async () => {
+  it("never replaces stored results for other tasks, another k or caller: a quick check on the same folder runs nothing", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
     const domain = await loadDomain(example);
-    const entries = [{ label: "Careful rules", agent: "scripted:careful" }];
-    const careful = async () => freightScriptedAgent("careful");
-    const run = async (opts: { k: number; taskIds?: string[] }) => {
+    const entries = [
+      { label: "Careful rules", agent: "scripted:careful" },
+      { label: "Naive rules", agent: "scripted:naive" },
+    ];
+    const taskIds = domain.tasks.slice(0, 3).map((t) => t.id);
+    const resolved: string[] = [];
+    const run = async (opts: { k?: number; taskIds?: string[]; user?: UserSimulator; outDir?: string } = {}) => {
       const seen: string[] = [];
-      const lb = await runLeaderboard({ domain, entries, user: scriptedUser(), outDir: dir, resolveAgent: careful, onEntry: (_l, status, note) => seen.push(`${status}${note ? `: ${note}` : ""}`), ...opts });
-      return { lb, seen };
+      await runLeaderboard({ domain, entries, user: scriptedUser(), k: 2, taskIds, outDir: dir, resolveAgent: async (spec) => (resolved.push(spec), agents[spec]!()), onEntry: (label, status) => seen.push(`${label}:${status}`), ...opts });
+      return seen;
     };
-    await run({ k: 1 });
-    expect((await run({ k: 2 })).seen).toEqual(["ran: stored results not reused: they are for k=1, not k=2"]);
-    const subset = await run({ k: 2, taskIds: ["book-at-posted-rate", "no-mc-number"] });
-    expect(subset.seen).toEqual(["ran: stored results not reused: they cover different tasks"]);
-    expect(subset.lb.rows.map((r) => r.tasks)).toEqual([2, 2]);
-    expect((await run({ k: 2, taskIds: ["no-mc-number", "book-at-posted-rate"] })).seen).toEqual(["cached"]);
+    // Every file under the board's folder, with its bytes.
+    const files = async () => Promise.all((await readdir(dir, { recursive: true })).sort().map(async (f) => [f, await readFile(path.join(dir, f)).catch(() => "folder")]));
+    await run();
+    const board = await files();
+    resolved.length = 0;
+    const refusal = (reason: string) =>
+      [
+        "2 model(s) have stored results this run can't reuse, and running them would replace those results:",
+        `  - Careful rules, in ${path.join(dir, "careful-rules")} (3 task(s) at k=2): ${reason}`,
+        `  - Naive rules, in ${path.join(dir, "naive-rules")} (3 task(s) at k=2): ${reason}`,
+        "Nothing ran, and the stored results are kept: they may be the only copy of paid conversations. For a check of other tasks, another k or another caller, pass another -o. To rerun a model, delete or move its folder first; --no-resume reruns every model and replaces all their results.",
+      ].join("\n");
+    await expect(run({ k: 1, taskIds: [taskIds[0]!] })).rejects.toThrow(refusal("they are for k=2, not k=1"));
+    await expect(run({ taskIds: [taskIds[0]!] })).rejects.toThrow(refusal("they cover different tasks"));
+    await expect(run({ user: { ...scriptedUser(), name: "other-caller" } })).rejects.toThrow(refusal("the caller was scripted, not other-caller"));
+    // Refused before anything ran or was written, the board's own files included.
+    expect(resolved).toEqual([]);
+    expect(await files()).toEqual(board);
 
+    // Another -o runs the quick check apart from the board; the same tasks in another order are this board's run.
+    expect(await run({ k: 1, taskIds: [taskIds[0]!], outDir: await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-quick-")) })).toEqual(["Careful rules:ran", "Naive rules:ran"]);
+    expect(await run({ taskIds: [...taskIds].reverse() })).toEqual(["Careful rules:cached", "Naive rules:cached"]);
+
+    // A crashed trial is not a result, but the stored conversations are still kept: only that model is listed.
     const file = path.join(dir, "careful-rules", "results.json");
     const stored = JSON.parse(await readFile(file, "utf8"));
     stored.tasks[0].trials[0].endReason = "error";
     await writeFile(file, JSON.stringify(stored));
-    expect((await run({ k: 2, taskIds: ["book-at-posted-rate", "no-mc-number"] })).seen).toEqual(["ran: stored results not reused: 1 trial(s) crashed"]);
+    await expect(run()).rejects.toThrow(/^1 model\(s\) have stored results .*\n  - Careful rules, in .* \(3 task\(s\) at k=2\): 1 trial\(s\) crashed\nNothing ran/);
   });
 
-  it("reruns a model whose agent spec, or what the agent and the caller are given, changed under the same label", async () => {
+  it("refuses before it runs, regrades or writes anything for any model, when one model's stored results can't be reused", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const domain = await loadDomain(example);
+    const base = { user: scriptedUser(), k: 1, taskIds: ["book-at-posted-rate", "no-mc-number"], outDir: dir };
+    await runLeaderboard({ ...base, domain, entries: [{ label: "Kept", agent: "scripted:careful" }, { label: "Swapped", agent: "scripted:careful" }], resolveAgent: async (spec) => agents[spec]!() });
+    const files = async () => Promise.all((await readdir(dir, { recursive: true })).sort().map(async (f) => [f, await readFile(path.join(dir, f)).catch(() => "folder")]));
+    const board = await files();
+    // Under this rule "Kept" would be regraded and rewritten, and "New" has no results to reuse, so it would run.
+    const stricter = { ...domain, invariants: [...domain.invariants, { id: "no-l1001", description: "Never book L-1001.", never: { tool: "book_load", when: { load_id: "L-1001" } } }] };
+    const resolved: string[] = [];
+    const entries = [
+      { label: "Kept", agent: "scripted:careful" },
+      { label: "New", agent: "scripted:careful" },
+      { label: "Swapped", agent: "scripted:naive" },
+    ];
+    await expect(runLeaderboard({ ...base, domain: stricter, entries, resolveAgent: async (spec) => (resolved.push(spec), agents[spec]!()) })).rejects.toThrow(
+      /^1 model\(s\) have stored results .*\n  - Swapped, in .*: they are for agent scripted:careful, not scripted:naive\nNothing ran/,
+    );
+    expect(resolved).toEqual([]);
+    expect(await files()).toEqual(board);
+  });
+
+  it("never replaces stored results whose agent spec, or what the agent and the caller are given, changed under the same label", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
     const domain = await loadDomain(example);
     const taskIds = ["book-at-posted-rate", "no-mc-number"];
@@ -117,16 +160,21 @@ describe("leaderboard", () => {
     expect((await run("scripted:careful")).row.passHat1).toBe(1);
     expect((await run("scripted:careful")).seen).toEqual(["cached"]);
 
-    const swapped = await run("scripted:naive");
-    expect(swapped.seen).toEqual(["ran: stored results not reused: they are for agent scripted:careful, not scripted:naive"]);
-    expect(swapped.row.passHat1).toBeLessThan(1);
-    expect(JSON.parse(await readFile(path.join(dir, "candidate", "run.json"), "utf8"))).toMatchObject({ agent: "scripted:naive" });
-
+    const folder = path.join(dir, "candidate");
+    await expect(run("scripted:naive")).rejects.toThrow(`  - Candidate, in ${folder} (2 task(s) at k=1): they are for agent scripted:careful, not scripted:naive\n`);
     const edited = { ...domain, policy: `${domain.policy}\n\nA new rule.` };
-    expect((await run("scripted:naive", edited)).seen).toEqual([
-      "ran: stored results not reused: the agent or the caller would be given something else now: the policy, a tool's schema, or a task's caller prompt, opening, script or turn limit changed since it ran",
-    ]);
-    expect((await run("scripted:naive", edited)).seen).toEqual(["cached"]);
+    await expect(run("scripted:careful", edited)).rejects.toThrow(
+      `(2 task(s) at k=1): the agent or the caller would be given something else now: the policy, a tool's schema, or a task's caller prompt, opening, script or turn limit changed since it ran\n`,
+    );
+    expect(JSON.parse(await readFile(path.join(folder, "run.json"), "utf8"))).toMatchObject({ agent: "scripted:careful" });
+
+    // Moving the folder away reruns the model under its label and keeps the earlier results where they were moved.
+    await rename(folder, path.join(dir, "candidate-careful"));
+    const swapped = await run("scripted:naive");
+    expect(swapped.seen).toEqual(["ran"]);
+    expect(swapped.row.passHat1).toBeLessThan(1);
+    expect(JSON.parse(await readFile(path.join(folder, "run.json"), "utf8"))).toMatchObject({ agent: "scripted:naive" });
+    expect(JSON.parse(await readFile(path.join(dir, "candidate-careful", "run.json"), "utf8"))).toMatchObject({ agent: "scripted:careful" });
   });
 
   it("grades stored results again under the current rules instead of reusing their verdicts, without calling a model", async () => {
@@ -158,7 +206,7 @@ describe("leaderboard", () => {
     expect(restored.row.passHat1).toBe(1);
   });
 
-  it("reruns stored results that record no inputs fingerprint, since they can't be graded again", async () => {
+  it("keeps stored results that record no inputs fingerprint, which can't be graded again, until --no-resume replaces them", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
     const domain = await loadDomain(example);
     const base = { domain, user: scriptedUser(), k: 1, taskIds: ["no-mc-number"], outDir: dir, entries: [{ label: "Careful rules", agent: "scripted:careful" }] };
@@ -166,21 +214,24 @@ describe("leaderboard", () => {
     const file = path.join(dir, "careful-rules", "results.json");
     const { inputs: _, ...older } = JSON.parse(await readFile(file, "utf8"));
     await writeFile(file, JSON.stringify(older));
-    const seen: string[] = [];
-    await runLeaderboard({ ...base, resolveAgent: async () => freightScriptedAgent("careful"), onEntry: (_l, status, note) => seen.push(`${status}: ${note}`) });
-    expect(seen).toEqual([expect.stringMatching(/^ran: stored results not reused: it was written by an older sandtable and records no inputs fingerprint/)]);
+    await expect(runLeaderboard({ ...base, resolveAgent: async () => freightScriptedAgent("careful") })).rejects.toThrow(
+      /\(1 task\(s\) at k=1\): it was written by an older sandtable and records no inputs fingerprint/,
+    );
+    expect(JSON.parse(await readFile(file, "utf8")).inputs).toBeUndefined();
+    await runLeaderboard({ ...base, resume: false, resolveAgent: async () => freightScriptedAgent("careful") });
     expect(JSON.parse(await readFile(file, "utf8")).inputs).toMatch(/^[0-9a-f]{16}$/);
   });
 
-  it("reruns results stored without run.json, since nothing says which agent they ran", async () => {
+  it("keeps results stored without run.json, since nothing says which agent they ran, until --no-resume replaces them", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
     const domain = await loadDomain(example);
     const base = { domain, user: scriptedUser(), k: 1, taskIds: ["no-mc-number"], outDir: dir, entries: [{ label: "Careful rules", agent: "scripted:careful" }] };
     await runLeaderboard({ ...base, resolveAgent: async () => freightScriptedAgent("careful") });
     await rm(path.join(dir, "careful-rules", "run.json"));
-    const seen: string[] = [];
-    await runLeaderboard({ ...base, resolveAgent: async () => freightScriptedAgent("careful"), onEntry: (_l, status, note) => seen.push(`${status}: ${note}`) });
-    expect(seen).toEqual(["ran: stored results not reused: they have no run.json, so their agent spec can't be checked"]);
+    await expect(runLeaderboard({ ...base, resolveAgent: async () => freightScriptedAgent("careful") })).rejects.toThrow(
+      "(1 task(s) at k=1): they have no run.json, so their agent spec can't be checked\n",
+    );
+    await runLeaderboard({ ...base, resume: false, resolveAgent: async () => freightScriptedAgent("careful") });
     expect(JSON.parse(await readFile(path.join(dir, "careful-rules", "run.json"), "utf8"))).toMatchObject({ agent: "scripted:careful" });
   });
 
@@ -271,7 +322,7 @@ describe("leaderboard", () => {
     await run(freightScriptedAgent("careful"), true);
     const model = path.join(dir, "careful-rules");
     const stored = await Promise.all(["results.json", "run.json", "report.html"].map((f) => readFile(path.join(model, f), "utf8")));
-    // --no-resume forces the rerun, as a stale key would; every trial of it crashes.
+    // --no-resume forces the rerun, which is the only way past stored results; every trial of it crashes.
     const { seen, row } = await run(broken, false);
     expect(seen).toEqual([`failed: 1 of 1 trial(s) crashed: Could not resolve authentication method; the crashed run is in ${path.join(model, "crashed")}, and the stored results are kept`]);
     expect(row.error).toBe("1 of 1 trial(s) crashed: Could not resolve authentication method");
@@ -383,7 +434,7 @@ describe("leaderboard provenance", () => {
     expect(reused.agentCostPerTrialUsd).toBeCloseTo(first.agentCostPerTrialUsd! * 3);
   });
 
-  it("reruns a model only when the provider or region its own calls use changed, or its run.json doesn't say", async () => {
+  it("keeps the stored results of only the models whose own calls' provider or region changed, or whose run.json doesn't say", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
     const domain = await loadDomain(example);
     const sandtable = { version: "9.9.9", commit: "abc1234def", dirty: false };
@@ -398,12 +449,18 @@ describe("leaderboard provenance", () => {
       throw new Error("should not call the agent");
     };
     type Where = { provider?: "anthropic" | "bedrock"; region?: string };
-    const run = async (where: Where | undefined, resolveAgent: () => Promise<AgentAdapter> = careful, userSpec: string | undefined = "scripted") => {
+    const run = async (where: Where | undefined, resolveAgent: () => Promise<AgentAdapter> = careful, userSpec: string | undefined = "scripted", resume = true) => {
       const seen: Record<string, string> = {};
       const info = where ? { runInfo: { sandtable, ...where } } : {};
-      await runLeaderboard({ domain, entries, user: scriptedUser(), k: 1, taskIds: ["no-mc-number"], outDir: dir, ...info, ...(userSpec ? { userSpec } : {}), resolveAgent, onEntry: (label, status, note) => (seen[label] = `${status}${note ? `: ${note}` : ""}`) });
+      await runLeaderboard({ domain, entries, user: scriptedUser(), k: 1, taskIds: ["no-mc-number"], outDir: dir, resume, ...info, ...(userSpec ? { userSpec } : {}), resolveAgent, onEntry: (label, status, note) => (seen[label] = `${status}${note ? `: ${note}` : ""}`) });
       return seen;
     };
+    // The models a run refuses to replace, each as "<label>: <why>"; none when it runs.
+    const kept = (where: Where, userSpec = "scripted") =>
+      run(where, noModel, userSpec).then(
+        () => [],
+        (err: Error) => err.message.split("\n").filter((l) => l.startsWith("  - ")).map((l) => l.replace(/^  - (\w+), in .*? \(1 task\(s\) at k=1\): /, "$1: ")),
+      );
     const runJson = async (...parts: string[]) => JSON.parse(await readFile(path.join(dir, ...parts, "run.json"), "utf8"));
     await run({ provider: "anthropic", region: "eu-west-1" });
     // With a scripted caller, the Claude agent records its provider, the Bedrock agent its region, the OpenAI-compatible one neither.
@@ -414,32 +471,22 @@ describe("leaderboard provenance", () => {
     expect(Object.keys(await runJson("local")).sort()).toEqual(["agent", "sandtable"]);
     const cached = { Sonnet: "cached", Luna: "cached", Local: "cached" };
     expect(await run({ provider: "anthropic", region: "eu-west-1" }, noModel)).toEqual(cached);
-    // A new region reruns only the model that calls Bedrock; a failed rerun still says why it ran.
-    expect(await run({ provider: "anthropic", region: "us-east-1" }, noModel)).toEqual({ ...cached, Luna: "failed: should not call the agent; stored results not reused: they ran in eu-west-1, not us-east-1" });
-    expect(await run({ provider: "anthropic", region: "us-east-1" })).toEqual({ ...cached, Luna: "ran: stored results not reused: they ran in eu-west-1, not us-east-1" });
-    // A crashed rerun says why it ran, then where the crash went.
-    const crash: AgentAdapter = { name: "crash", createSession: async () => ({ reply: async () => { throw new Error("expired token"); } }) };
-    expect((await run({ provider: "anthropic", region: "eu-central-1" }, async () => crash)).Luna).toBe(
-      `failed: 1 of 1 trial(s) crashed: expired token; stored results not reused: they ran in us-east-1, not eu-central-1; the crashed run is in ${path.join(dir, "luna", "crashed")}, and the stored results are kept`,
-    );
-    expect((await runJson("luna", "crashed")).region).toBe("eu-central-1");
-    expect((await runJson("luna")).region).toBe("us-east-1");
-    // Claude moving to Bedrock reruns only the Claude agent. Luna's results are reused, next to the crashed run.
-    const lunaCrashed = path.join(dir, "luna", "crashed");
-    expect(await run({ provider: "bedrock", region: "us-east-1" })).toEqual({
-      ...cached,
-      Sonnet: "ran: stored results not reused: they ran on anthropic, not bedrock",
-      Luna: `cached: an earlier crashed run is still in ${lunaCrashed}: delete it before publishing this folder`,
-    });
-    // A Claude caller on Bedrock makes every model's calls go there. Luna's good rerun removes its crashed run.
-    expect(await run({ provider: "bedrock", region: "us-east-1" }, careful, "claude:claude-haiku-5-5")).toEqual({
-      Sonnet: "cached",
-      Luna: `ran: stored results not reused: they ran on an unrecorded provider, not bedrock; removed the earlier crashed run in ${lunaCrashed}`,
-      Local: "ran: stored results not reused: they ran on an unrecorded provider, not bedrock",
-    });
+    // A new region concerns only the model that calls Bedrock, and Claude moving to Bedrock only the Claude agent.
+    expect(await kept({ provider: "anthropic", region: "us-east-1" })).toEqual(["Luna: they ran in eu-west-1, not us-east-1"]);
+    expect(await kept({ provider: "bedrock", region: "eu-west-1" })).toEqual(["Sonnet: they ran on anthropic, not bedrock"]);
+    // A Claude caller on Bedrock sends every model's calls there.
+    expect(await kept({ provider: "bedrock", region: "eu-west-1" }, "claude:claude-haiku-5-5")).toEqual([
+      "Sonnet: they ran on anthropic, not bedrock",
+      "Luna: they ran on an unrecorded provider, not bedrock",
+      "Local: they ran on an unrecorded provider, not bedrock",
+    ]);
+    expect(await runJson("luna")).toMatchObject({ region: "eu-west-1" });
+    // --no-resume reruns every model and records where each one's calls went this time.
+    expect(await run({ provider: "anthropic", region: "us-east-1" }, careful, "scripted", false)).toEqual({ Sonnet: "ran", Luna: "ran", Local: "ran" });
+    expect(await runJson("luna")).toMatchObject({ region: "us-east-1" });
     // A run.json from before provider and region were recorded can't say where it ran.
     await writeFile(path.join(dir, "luna", "run.json"), JSON.stringify({ agent: "bedrock:global.openai.gpt-6-luna" }));
-    expect((await run({ provider: "bedrock", region: "us-east-1" }, careful, "claude:claude-haiku-5-5")).Luna).toBe("ran: stored results not reused: they ran on an unrecorded provider, not bedrock");
+    expect(await kept({ provider: "anthropic", region: "us-east-1" })).toEqual(["Luna: they ran in an unrecorded region, not us-east-1"]);
     // Library callers that pass no runInfo keep reusing results, as before.
     expect(await run(undefined, noModel, undefined)).toEqual(cached);
   });
@@ -571,7 +618,7 @@ describe("leaderboard effort", () => {
     expect(JSON.parse(await readFile(path.join(dir, "leaderboard.json"), "utf8")).rows.find((r: { label: string }) => r.label === "Sonnet")).toMatchObject({ effort: "high" });
   });
 
-  it("reuses a claude agent's results stored without an effort as medium, and reruns them at another effort", async () => {
+  it("reuses a claude agent's results stored without an effort as medium, and keeps them from a run at another effort", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
     const opts = await base(dir);
     await runLeaderboard({ ...opts, entries: [{ label: "Sonnet", agent: "claude:claude-sonnet-5-5" }], resolveAgent: careful });
@@ -588,10 +635,12 @@ describe("leaderboard effort", () => {
       throw new Error("should not call the agent");
     };
     expect(await run({ label: "Sonnet", agent: "claude:claude-sonnet-5-5" }, noModel)).toEqual(["cached"]);
-    expect(await run({ label: "Sonnet", agent: "claude:claude-sonnet-5-5", effort: "high" })).toEqual(["ran: stored results not reused: they ran at effort medium, not high"]);
+    await expect(run({ label: "Sonnet", agent: "claude:claude-sonnet-5-5", effort: "high" }, noModel)).rejects.toThrow("(1 task(s) at k=1): they ran at effort medium, not high\n");
+    expect(JSON.parse(await readFile(keyFile, "utf8"))).not.toHaveProperty("effort");
+    await runLeaderboard({ ...opts, entries: [{ label: "Sonnet", agent: "claude:claude-sonnet-5-5", effort: "high" }], resume: false, resolveAgent: careful });
     expect(JSON.parse(await readFile(keyFile, "utf8"))).toMatchObject({ effort: "high" });
     expect(await run({ label: "Sonnet", agent: "claude:claude-sonnet-5-5", effort: "high" }, noModel)).toEqual(["cached"]);
-    expect(await run({ label: "Sonnet", agent: "claude:claude-sonnet-5-5" })).toEqual(["ran: stored results not reused: they ran at effort high, not medium"]);
+    await expect(run({ label: "Sonnet", agent: "claude:claude-sonnet-5-5" }, noModel)).rejects.toThrow("(1 task(s) at k=1): they ran at effort high, not medium\n");
   });
 
   it("rejects an effort on any agent but claude:, in the models file and in the library", async () => {

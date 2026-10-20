@@ -151,7 +151,10 @@ export interface LeaderboardOptions {
   concurrency?: number;
   /** Run only these tasks, for every model and the baseline. Default: all. */
   taskIds?: string[];
-  /** Reuse an entry's results.json when it exists and matches this run (default true). */
+  /**
+   * Reuse an entry's results.json when it exists and matches this run (default true). Stored results that don't
+   * match stop the board before anything runs, so they are never replaced; false reruns every model and replaces them.
+   */
   resume?: boolean;
   /**
    * Written to each model's run.json when its trials run (the provider and region only where that model's calls
@@ -166,7 +169,7 @@ export interface LeaderboardOptions {
   userSpec?: string;
   /** The `--prices` file the costs use: recorded in leaderboard.json. */
   prices?: PricesFile;
-  /** Called once per entry, and for the do-nothing baseline when it fails. `note` says why stored results were not reused, why an entry was skipped, or what crashed. */
+  /** Called once per entry, and for the do-nothing baseline when it fails. `note` says why an entry was skipped, what crashed, or how many verdicts changed when stored results were graded again. */
   onEntry?: (label: string, status: "cached" | "regraded" | "ran" | "failed" | "skipped", note?: string) => void;
 }
 
@@ -312,6 +315,29 @@ export function toRow(entry: LeaderboardEntry, r: SuiteResult, baseline = false)
   };
 }
 
+/** A model's stored results, graded again under the current rules when they can stand in for this run, or why they can't. */
+type Stored = { stored: SuiteResult; result: SuiteResult; stale?: undefined } | { stored: SuiteResult; result?: undefined; stale: string };
+
+async function readStored(dir: string, key: RunKey, where: Where | undefined, domain: Domain, want: { k: number; user: string; taskIds: string[] }): Promise<Stored | undefined> {
+  const file = path.join(dir, "results.json");
+  if (!(await exists(file))) return undefined;
+  const stored = JSON.parse(await readFile(file, "utf8")) as SuiteResult;
+  const storedKey = await readFile(path.join(dir, "run.json"), "utf8").then((t) => JSON.parse(t) as RunKey & Partial<RunInfo>, () => undefined);
+  const stale =
+    changedRunKey(storedKey, key) ??
+    (storedKey && where ? changedWhere(storedKey, where) : undefined) ??
+    staleReason(stored, { domain: domain.name, ...want });
+  if (stale) return { stored, stale };
+  // Stored verdicts are never reused as they are: the stored conversations are graded again under the
+  // current rules, so every row of the board is graded by the same grader.
+  try {
+    return { stored, result: regradeSuite(domain, stored) };
+  } catch (err) {
+    if (!(err instanceof RegradeError)) throw err;
+    return { stored, stale: err.message };
+  }
+}
+
 /** A model's results.json, run.json and report.html, each written whole or not at all. */
 async function writeRun(dir: string, result: SuiteResult, info: object): Promise<void> {
   await mkdir(dir, { recursive: true });
@@ -342,6 +368,31 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
   }
   const tasks = opts.taskIds?.length ? domain.tasks.filter((t) => opts.taskIds!.includes(t.id)) : domain.tasks;
   const taskIds = tasks.map((t) => t.id);
+  const folderOf = (entry: LeaderboardEntry) => path.join(outDir, slugify(entry.label));
+  const whereOf = (entry: LeaderboardEntry) => (opts.runInfo ? entryWhere(opts.runInfo, entry.agent, opts.userSpec) : undefined);
+
+  // Stored results may be the only copy of paid conversations, so a resumed board never replaces them: when any
+  // model's can't stand in for this run (a quick check of a few tasks or another k, another agent spec, effort,
+  // provider or region, or changed inputs), nothing runs and the output says why. --no-resume replaces them all.
+  const reused = new Map<LeaderboardEntry, { stored: SuiteResult; result: SuiteResult }>();
+  if (opts.resume ?? true) {
+    const kept: string[] = [];
+    for (const entry of entries) {
+      if (entry.agent === "noop") continue;
+      const s = await readStored(folderOf(entry), runKey(entry), whereOf(entry), domain, { k, user: user.name, taskIds });
+      if (s?.stale !== undefined) kept.push(`  - ${entry.label}, in ${folderOf(entry)} (${s.stored.tasks.length} task(s) at k=${s.stored.k}): ${s.stale}`);
+      else if (s) reused.set(entry, s);
+    }
+    if (kept.length) {
+      throw new Error(
+        [
+          `${kept.length} model(s) have stored results this run can't reuse, and running them would replace those results:`,
+          ...kept,
+          "Nothing ran, and the stored results are kept: they may be the only copy of paid conversations. For a check of other tasks, another k or another caller, pass another -o. To rerun a model, delete or move its folder first; --no-resume reruns every model and replaces all their results.",
+        ].join("\n"),
+      );
+    }
+  }
   await mkdir(outDir, { recursive: true });
   const rows: LeaderboardRow[] = [];
 
@@ -350,38 +401,17 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
       opts.onEntry?.(entry.label, "skipped", "the do-nothing baseline is always included");
       continue;
     }
-    const dir = path.join(outDir, slugify(entry.label));
+    const dir = folderOf(entry);
     const file = path.join(dir, "results.json");
-    const keyFile = path.join(dir, "run.json");
     // A crashed rerun is kept here, beside the stored results, until the model next runs without a crash.
     const crashedDir = path.join(dir, "crashed");
-    const key = runKey(entry);
-    const where = opts.runInfo ? entryWhere(opts.runInfo, entry.agent, opts.userSpec) : undefined;
-    const info = opts.runInfo ? { sandtable: opts.runInfo.sandtable, ...where } : {};
-    let result: SuiteResult | undefined;
-    let stale: string | undefined;
-    let fresh = false;
-    if ((opts.resume ?? true) && (await exists(file))) {
-      const stored = JSON.parse(await readFile(file, "utf8")) as SuiteResult;
-      const storedKey = await readFile(keyFile, "utf8").then((t) => JSON.parse(t) as RunKey & Partial<RunInfo>, () => undefined);
-      stale =
-        changedRunKey(storedKey, key) ??
-        (storedKey && where ? changedWhere(storedKey, where) : undefined) ??
-        staleReason(stored, { domain: domain.name, k, user: user.name, taskIds });
-      // Stored verdicts are never reused as they are: the stored conversations are graded again under the
-      // current rules, so every row of the board is graded by the same grader.
-      if (!stale) {
-        try {
-          result = regradeSuite(domain, stored);
-        } catch (err) {
-          if (!(err instanceof RegradeError)) throw err;
-          stale = err.message;
-        }
-      }
+    const reuse = reused.get(entry);
+    if (reuse) {
+      const { stored, result } = reuse;
       // Reused results keep an earlier crashed run beside them: say so, since publishing the folder would ship it.
-      const leftover = result && (await exists(crashedDir)) ? `an earlier crashed run is still in ${crashedDir}: delete it before publishing this folder` : undefined;
-      if (result && JSON.stringify(result) === JSON.stringify(stored)) opts.onEntry?.(entry.label, "cached", leftover);
-      else if (result) {
+      const leftover = (await exists(crashedDir)) ? `an earlier crashed run is still in ${crashedDir}: delete it before publishing this folder` : undefined;
+      if (JSON.stringify(result) === JSON.stringify(stored)) opts.onEntry?.(entry.label, "cached", leftover);
+      else {
         // The current rules grade the stored conversations differently: rewrite their files. These hold the
         // only copy of paid conversations, so a write is never left half done.
         await writeFileAtomic(file, JSON.stringify(result, null, 2));
@@ -389,46 +419,42 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
         const changed = `${changedVerdicts(stored, result).length} verdict(s) changed under the current rules`;
         opts.onEntry?.(entry.label, "regraded", leftover ? `${changed}; ${leftover}` : changed);
       }
+      rows.push(toRow(entry, result));
+      continue;
     }
-    if (!result) {
-      try {
-        const agent = await opts.resolveAgent(entry.agent, entry.effort);
-        result = await runSuite({ domain, agent, user, k, taskIds, concurrency: opts.concurrency ?? 4 });
-        fresh = true;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        opts.onEntry?.(entry.label, "failed", stale ? `${message}; stored results not reused: ${stale}` : message);
-        rows.push(errorRow(entry, message));
-        continue;
-      }
+    // No stored results, or --no-resume: run the model.
+    let result: SuiteResult;
+    try {
+      const agent = await opts.resolveAgent(entry.agent, entry.effort);
+      result = await runSuite({ domain, agent, user, k, taskIds, concurrency: opts.concurrency ?? 4 });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      opts.onEntry?.(entry.label, "failed", message);
+      rows.push(errorRow(entry, message));
+      continue;
     }
+    const key = runKey(entry);
+    const info = opts.runInfo ? { sandtable: opts.runInfo.sandtable, ...whereOf(entry) } : {};
     // A crashed trial (credentials, throttling) says nothing about the model: show the row as an
     // error instead of ranking it, and let the next run retry the model.
     const message = crashOf(result);
     if (message) {
-      let note = fresh && stale ? `${message}; stored results not reused: ${stale}` : message;
-      if (fresh) {
-        // The stored files may be the only copy of paid conversations: a crashed rerun goes beside them, never over them.
-        await writeRun(crashedDir, result, { ...key, ...info });
-        note += `; the crashed run is in ${crashedDir}${(await exists(file)) ? ", and the stored results are kept" : ""}`;
-      }
-      opts.onEntry?.(entry.label, "failed", note);
+      // The stored files may be the only copy of paid conversations: a crashed rerun goes beside them, never over them.
+      await writeRun(crashedDir, result, { ...key, ...info });
+      opts.onEntry?.(entry.label, "failed", `${message}; the crashed run is in ${crashedDir}${(await exists(file)) ? ", and the stored results are kept" : ""}`);
       rows.push(errorRow(entry, message));
       continue;
     }
-    if (fresh) {
-      await writeRun(dir, result, { ...key, ...info });
-      // A good run supersedes an earlier crashed one, which would otherwise be published with these results.
-      // A folder that can't be removed (a locked file on Windows) is reported, never fatal: this model's run is saved.
-      const removal = !(await exists(crashedDir))
-        ? undefined
-        : await rm(crashedDir, { recursive: true, force: true, maxRetries: 3 }).then(
-            () => `removed the earlier crashed run in ${crashedDir}`,
-            (err: Error) => `could not remove the earlier crashed run in ${crashedDir}: ${err.message}`,
-          );
-      const notes = [stale && `stored results not reused: ${stale}`, removal].filter(Boolean);
-      opts.onEntry?.(entry.label, "ran", notes.length ? notes.join("; ") : undefined);
-    }
+    await writeRun(dir, result, { ...key, ...info });
+    // A good run supersedes an earlier crashed one, which would otherwise be published with these results.
+    // A folder that can't be removed (a locked file on Windows) is reported, never fatal: this model's run is saved.
+    const removal = !(await exists(crashedDir))
+      ? undefined
+      : await rm(crashedDir, { recursive: true, force: true, maxRetries: 3 }).then(
+          () => `removed the earlier crashed run in ${crashedDir}`,
+          (err: Error) => `could not remove the earlier crashed run in ${crashedDir}: ${err.message}`,
+        );
+    opts.onEntry?.(entry.label, "ran", removal);
     rows.push(toRow(entry, result));
   }
 
