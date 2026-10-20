@@ -237,9 +237,9 @@ describe("leaderboard", () => {
 describe("leaderboard/models.yaml", () => {
   it("parses, names each model once, and prices every model and the caller with the committed price file", async () => {
     const cfg = ModelsFile.parse(YAML.parse(await readFile("leaderboard/models.yaml", "utf8")));
-    expect(cfg).toMatchObject({ user: "claude:claude-sonnet-5-5", k: 4 });
-    expect(cfg.models).toHaveLength(15);
-    expect(new Set(cfg.models.map((m) => m.label)).size).toBe(15);
+    expect(cfg).toMatchObject({ user: "claude:global.anthropic.claude-sonnet-5-5", k: 4 });
+    expect(cfg.models).toHaveLength(14);
+    expect(new Set(cfg.models.map((m) => m.label)).size).toBe(14);
     registerPrices(JSON.parse(await readFile("prices/bedrock.eu-west-1.json", "utf8")));
     // A claude: agent records usage under the model name Claude reports; a bedrock: agent under its model ID.
     const usageKey = (spec: string) => (spec.startsWith("claude:") ? priceKey(spec.slice("claude:".length)) : spec.slice("bedrock:".length));
