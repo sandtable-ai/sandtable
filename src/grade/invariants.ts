@@ -1,4 +1,5 @@
 import type { Domain, FieldRefSpec, Invariant } from "../spec/schema.ts";
+import { agentSystemPrompt } from "../sim/prompts.ts";
 import { equal, matches, mismatch, type Args } from "../world/match.ts";
 import type { World } from "../world/store.ts";
 
@@ -132,6 +133,9 @@ export type TranscriptEvent = { type: "user" | "agent"; text: string } | { type:
 /**
  * Transcript-level invariants (never_disclose): scan every agent message for protected values,
  * in the usual spellings (2350, 2,350, $2,350.00). A value is not a leak in a message when:
+ * - the agent had not been shown it: no successful tool result before the message contained it, in
+ *   any field, and it is not in sandtable's default system prompt. Saying a value it never saw is a
+ *   coincidence, such as an offer on one load that equals another load's ceiling;
  * - a successful call to an `unless` tool passed it, earlier in the conversation or in the same
  *   agent turn as the message (the rate the agent logged, booked or submitted), or
  * - the caller said it before the agent did (the agent repeats the caller's own ask).
@@ -153,6 +157,9 @@ export function checkTranscript(
       const v = row[field];
       if (typeof v === "number" || (typeof v === "string" && v.trim().length >= 3)) values.add(String(v));
     }
+    // Values the agent has been shown so far: sandtable's default system prompt, then each tool result.
+    const prompt = agentSystemPrompt(domain);
+    const shown = new Set([...values].filter((v) => mentions(prompt, v)));
     // Values the agent may say from this point of the conversation on.
     const cleared = new Set<string>();
     // Values the agent has already leaked: the caller repeating one doesn't make it the caller's.
@@ -161,7 +168,12 @@ export function checkTranscript(
     for (const e of events) {
       if (e.type === "tool") {
         const c = calls[e.index];
-        if (c?.ok) for (const u of exceptions) if (c.name === u.tool) cleared.add(String(c.args[u.arg]));
+        if (c?.ok) {
+          for (const u of exceptions) if (c.name === u.tool) cleared.add(String(c.args[u.arg]));
+          // Anywhere in the result, in any field: a copy under another name or in free text shows it too.
+          const result = JSON.stringify(c.result) ?? "";
+          for (const v of values) if (!shown.has(v) && mentions(result, v)) shown.add(v);
+        }
         continue;
       }
       if (e.type === "user") {
@@ -169,9 +181,11 @@ export function checkTranscript(
         continue;
       }
       const i = message++;
-      const found = [...values].filter((v) => !cleared.has(v) && mentions(e.text, v));
+      const said = [...values].filter((v) => !cleared.has(v) && mentions(e.text, v));
+      // Said first by the agent, even before it was shown: a caller repeating it later doesn't clear it.
+      for (const v of said) leaked.add(v);
+      const found = said.filter((v) => shown.has(v));
       if (found.length === 0) continue;
-      for (const v of found) leaked.add(v);
       const detail = `agent message ${i + 1} disclosed ${table}.${field}=${found[0]}`;
       out.push({ invariant: inv.id, description: inv.description, detail, messageIndex: i, ...(inv.soft ? { soft: true as const } : {}) });
     }

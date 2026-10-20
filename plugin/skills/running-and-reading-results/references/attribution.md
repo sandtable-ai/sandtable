@@ -30,7 +30,7 @@ For each failing trial (see results-json.md for the queries):
 The agent attempted a forbidden call or said a protected value. Usually the **agent**. Before blaming it:
 - Is the invariant right? Reread its `source.quote`. A drafted invariant with the wrong bound or condition fails correct agents.
 - Did the user ask for the forbidden thing in a way the SOP says to refuse? Then it is still the agent: refusing is its job.
-- `never_disclose`: does the flagged value also mean something legitimate? If another row's `posted_rate` equals some load's `max_rate`, a correct agent quoting the posted rate trips it. That is a **task spec** problem: make seed values distinct.
+- `never_disclose`: does the flagged value also mean something legitimate? If another row's `posted_rate` equals some load's `max_rate`, a correct agent quoting the posted rate trips it, once a tool result in the call has shown that load. A value counts only after the agent was shown it, so a ceiling of a load it never looked up can't trip it. That is a **task spec** problem: make seed values distinct.
 
 ### `state`
 The world did not end as expected. Read `changes` and the transcript:

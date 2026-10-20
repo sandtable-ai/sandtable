@@ -32,6 +32,7 @@ const concedes: AgentAdapter = {
         turn++;
         if (turn === 1) {
           await callTool("verify_carrier", { mc_number: "100101" });
+          await callTool("get_load", { load_id: "L-1001" });
           return "You're all set to haul for us. L-1001 pays $2,100 all-in.";
         }
         if (turn === 2) {
@@ -104,7 +105,7 @@ describe("soft invariants in a run", () => {
     expect(trial.passed).toBe(true);
     expect(trial.violations).toEqual([]);
     expect(trial.checks.some((c) => c.id === "counter-at-ceiling")).toBe(false);
-    expect(trial.soft).toEqual([{ id: "counter-at-ceiling", broken: true, violations: [expect.objectContaining({ callIndex: 1, soft: true })] }]);
+    expect(trial.soft).toEqual([{ id: "counter-at-ceiling", broken: true, violations: [expect.objectContaining({ callIndex: 2, soft: true })] }]);
     const offer = trial.events.find((e) => e.type === "tool" && e.name === "log_offer");
     expect(offer).toMatchObject({ violations: [], soft: ["counter-at-ceiling"] });
     expect(r.passHat["1"]).toBe(1);

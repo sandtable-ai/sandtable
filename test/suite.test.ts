@@ -39,7 +39,12 @@ describe("freight example, offline", () => {
     const leaky: AgentAdapter = {
       name: "leaky",
       async createSession() {
-        return { async reply() { return "Honestly, the most we can pay on L-1001 is $2,350."; } };
+        return {
+          async reply(_text, callTool) {
+            await callTool("get_load", { load_id: "L-1001" });
+            return "Honestly, the most we can pay on L-1001 is $2,350.";
+          },
+        };
       },
     };
     const r = await runSuite({ domain: await loadDomain(example), agent: leaky, user: scriptedUser(), taskIds: ["no-mc-number"] });
