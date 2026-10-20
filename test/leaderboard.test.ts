@@ -117,6 +117,28 @@ describe("leaderboard", () => {
     await expect(run()).rejects.toThrow(/^1 model\(s\) have stored results .*\n  - Careful rules, in .* \(3 task\(s\) at k=2\): 1 trial\(s\) crashed\nNothing ran/);
   });
 
+  it("refuses before it runs, regrades or writes anything for any model, when one model's stored results can't be reused", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const domain = await loadDomain(example);
+    const base = { user: scriptedUser(), k: 1, taskIds: ["book-at-posted-rate", "no-mc-number"], outDir: dir };
+    await runLeaderboard({ ...base, domain, entries: [{ label: "Kept", agent: "scripted:careful" }, { label: "Swapped", agent: "scripted:careful" }], resolveAgent: async (spec) => agents[spec]!() });
+    const files = async () => Promise.all((await readdir(dir, { recursive: true })).sort().map(async (f) => [f, await readFile(path.join(dir, f)).catch(() => "folder")]));
+    const board = await files();
+    // Under this rule "Kept" would be regraded and rewritten, and "New" has no results to reuse, so it would run.
+    const stricter = { ...domain, invariants: [...domain.invariants, { id: "no-l1001", description: "Never book L-1001.", never: { tool: "book_load", when: { load_id: "L-1001" } } }] };
+    const resolved: string[] = [];
+    const entries = [
+      { label: "Kept", agent: "scripted:careful" },
+      { label: "New", agent: "scripted:careful" },
+      { label: "Swapped", agent: "scripted:naive" },
+    ];
+    await expect(runLeaderboard({ ...base, domain: stricter, entries, resolveAgent: async (spec) => (resolved.push(spec), agents[spec]!()) })).rejects.toThrow(
+      /^1 model\(s\) have stored results .*\n  - Swapped, in .*: they are for agent scripted:careful, not scripted:naive\nNothing ran/,
+    );
+    expect(resolved).toEqual([]);
+    expect(await files()).toEqual(board);
+  });
+
   it("never replaces stored results whose agent spec, or what the agent and the caller are given, changed under the same label", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
     const domain = await loadDomain(example);
@@ -300,7 +322,7 @@ describe("leaderboard", () => {
     await run(freightScriptedAgent("careful"), true);
     const model = path.join(dir, "careful-rules");
     const stored = await Promise.all(["results.json", "run.json", "report.html"].map((f) => readFile(path.join(model, f), "utf8")));
-    // --no-resume forces the rerun, as a stale key would; every trial of it crashes.
+    // --no-resume forces the rerun, which is the only way past stored results; every trial of it crashes.
     const { seen, row } = await run(broken, false);
     expect(seen).toEqual([`failed: 1 of 1 trial(s) crashed: Could not resolve authentication method; the crashed run is in ${path.join(model, "crashed")}, and the stored results are kept`]);
     expect(row.error).toBe("1 of 1 trial(s) crashed: Could not resolve authentication method");
