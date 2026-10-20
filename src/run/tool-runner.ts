@@ -41,3 +41,5 @@ export function createToolRunner(domain: Domain, world: World, onCall?: (e: Tool
 
   return { call, calls, violations, soft };
 }
+
+export type ToolRunner = ReturnType<typeof createToolRunner>;

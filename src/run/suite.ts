@@ -2,9 +2,10 @@ import type { CheckKind } from "../grade/expectations.ts";
 import { invariantTool } from "../grade/invariants.ts";
 import { passHatK } from "../grade/passk.ts";
 import { pendingReview, type PendingItem } from "../spec/load.ts";
-import type { Domain } from "../spec/schema.ts";
+import type { Domain, Task } from "../spec/schema.ts";
 import type { AgentAdapter, UserSimulator } from "../sim/types.ts";
 import { runEpisode, type TrialResult } from "./episode.ts";
+import { inputsFingerprint } from "./inputs.ts";
 import { percentile, sumUsage, type Usage } from "./usage.ts";
 
 export interface TaskSummary {
@@ -53,6 +54,12 @@ export interface SuiteResult {
   agent: string;
   user: string;
   k: number;
+  /**
+   * A hash of what the agent and the simulated user were given for these tasks: the agent's prompt and tool
+   * schemas, and each task's caller prompt, opening and turn limit (and script, for the scripted user).
+   * `sandtable regrade` re-scores a run only while it is unchanged. Absent in results from before regrade.
+   */
+  inputs?: string;
   startedAt: string;
   durationMs: number;
   tasks: TaskSummary[];
@@ -107,15 +114,7 @@ export async function runSuite(opts: SuiteOptions): Promise<SuiteResult> {
     return r;
   });
 
-  const summaries: TaskSummary[] = tasks.map((task) => {
-    const trials = results.filter((r) => r.taskId === task.id).sort((a, b) => a.trial - b.trial);
-    return { id: task.id, description: task.description, tags: task.tags, trials, passes: trials.filter((t) => t.passed).length };
-  });
-
   const turnLatencies = results.flatMap((r) => r.events.flatMap((e) => (e.type === "agent" ? [e.latencyMs] : [])));
-  const outcomes = summaries.map((s) => s.trials.map((t) => t.passed));
-  const passHat: Record<string, number> = {};
-  for (let j = 1; j <= k; j++) passHat[String(j)] = passHatK(outcomes, j);
 
   return {
     version: 1,
@@ -124,16 +123,36 @@ export async function runSuite(opts: SuiteOptions): Promise<SuiteResult> {
     agent: agent.name,
     user: user.name,
     k,
+    inputs: inputsFingerprint(domain, tasks.map((t) => t.id), user.name),
     startedAt,
     durationMs: Math.round(performance.now() - started),
+    ...summarize(domain, tasks, results, k),
+    usage: sumUsage(results.map((r) => r.usage)),
+    pendingReview: pendingReview(domain),
+    latency: { agentTurnP50Ms: percentile(turnLatencies, 50), agentTurnP95Ms: percentile(turnLatencies, 95) },
+  };
+}
+
+/** Per-task results and the scores derived from the verdicts, for a live run or a regrade. */
+export function summarize(
+  domain: Domain,
+  tasks: readonly Task[],
+  results: readonly TrialResult[],
+  k: number,
+): Pick<SuiteResult, "tasks" | "passHat" | "failureModes" | "byTag" | "soft"> {
+  const summaries: TaskSummary[] = tasks.map((task) => {
+    const trials = results.filter((r) => r.taskId === task.id).sort((a, b) => a.trial - b.trial);
+    return { id: task.id, description: task.description, tags: task.tags, trials, passes: trials.filter((t) => t.passed).length };
+  });
+  const outcomes = summaries.map((s) => s.trials.map((t) => t.passed));
+  const passHat: Record<string, number> = {};
+  for (let j = 1; j <= k; j++) passHat[String(j)] = passHatK(outcomes, j);
+  return {
     tasks: summaries,
     passHat,
     failureModes: failureModes(results),
     byTag: tagScores(summaries, k),
     soft: softScores(domain, results),
-    usage: sumUsage(results.map((r) => r.usage)),
-    pendingReview: pendingReview(domain),
-    latency: { agentTurnP50Ms: percentile(turnLatencies, 50), agentTurnP95Ms: percentile(turnLatencies, 95) },
   };
 }
 
@@ -147,7 +166,7 @@ export function everyTrialFailed(result: SuiteResult): string | undefined {
   return trials[0]!.error ?? "unknown error";
 }
 
-function softScores(domain: Domain, results: TrialResult[]): SoftScore[] {
+function softScores(domain: Domain, results: readonly TrialResult[]): SoftScore[] {
   return domain.invariants
     .filter((inv) => inv.soft)
     .map((inv) => {
@@ -182,7 +201,7 @@ function tagScores(summaries: TaskSummary[], k: number): TagScore[] {
 }
 
 /** Cluster failed checks across trials so the most common failure surfaces first. */
-function failureModes(results: TrialResult[]): FailureMode[] {
+function failureModes(results: readonly TrialResult[]): FailureMode[] {
   const modes = new Map<string, FailureMode>();
   for (const r of results) {
     const seen = new Set<string>();

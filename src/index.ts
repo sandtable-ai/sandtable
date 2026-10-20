@@ -22,5 +22,6 @@ export { scriptedUser } from "./sim/scripted.ts";
 export { agentSystemPrompt, userSystemPrompt, STOP_TOKEN } from "./sim/prompts.ts";
 export { runEpisode, type TrialResult, type TrajectoryEvent, type EndReason, type SoftCheck } from "./run/episode.ts";
 export { runSuite, type SuiteOptions, type SuiteResult, type TaskSummary, type FailureMode, type SoftScore } from "./run/suite.ts";
+export { regradeSuite, regradeTrial, RegradeError } from "./run/regrade.ts";
 export { renderTerminal } from "./report/terminal.ts";
 export { renderHtml } from "./report/html.ts";
