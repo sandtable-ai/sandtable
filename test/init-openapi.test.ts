@@ -270,6 +270,61 @@ describe("init from OpenAPI: names that aren't identifiers", () => {
   });
 });
 
+describe("init from OpenAPI: webhook listeners and subscriptions", () => {
+  // A fictional parcel carrier whose spec also documents the webhooks its clients implement.
+  const post = (extra: Record<string, unknown> = {}) => ({ ...extra, responses: { "204": { description: "received" } } });
+  const listed = (properties: Record<string, unknown>) => ({
+    get: { responses: { "200": { content: { "application/json": { schema: { type: "array", items: { type: "object", properties } } } } } } },
+  });
+  const spec = {
+    openapi: "3.1.0",
+    info: { title: "Ternwick Parcels" },
+    paths: {
+      "/parcels": {
+        ...listed({ parcel_id: { type: "string" } }),
+        post: {
+          operationId: "createParcel",
+          requestBody: { content: { "application/json": { schema: { type: "object", properties: { recipient: { type: "string" }, delivered_hook: { type: "string" } } } } } },
+          callbacks: {
+            parcelDelivered: { "{$request.body#/delivered_hook}": { post: post() } },
+            parcelLost: { $ref: "#/components/callbacks/ParcelLost" },
+          },
+          responses: { "201": { description: "created" } },
+        },
+      },
+      "/listener/parcelDelayedEvent": { post: post({ tags: ["Notification listener"] }) },
+      "/listener/parcelReturnedEvent": { post: post() },
+      "/hub": { post: post({ requestBody: { content: { "application/json": { schema: { type: "object", properties: { callback: { type: "string" }, query: { type: "string" } } } } } } }) },
+      "/hub/{id}": { get: post(), delete: post() },
+      "/event_subscriptions": { post: post({ tags: ["Events subscription"], requestBody: { content: { "application/json": { schema: { type: "object", properties: { url: { type: "string" } } } } } } }) },
+      // Real resources that only sound similar: all drafted.
+      "/hubs": listed({ hub_id: { type: "string" }, city: { type: "string" } }),
+      "/hubs/{hub_id}": { get: post() },
+      "/depots/{depot_id}/listeners": listed({ listener_id: { type: "string" } }),
+      "/subscriptions": { ...listed({ subscription_id: { type: "string" } }), post: post({ tags: ["Subscriptions"], requestBody: { content: { "application/json": { schema: { type: "object", properties: { plan: { type: "string" } } } } } } }) },
+    },
+    webhooks: { parcelOutForDelivery: { post: post() } },
+    components: { callbacks: { ParcelLost: { "https://client.example/lost": { post: post() } } } },
+  };
+
+  it("skips them with a warning that names each one", () => {
+    const d = draftFromOpenApi(spec);
+    expect(Object.keys(d.tables)).toEqual(["hubs", "listeners", "parcels", "subscriptions"]);
+    expect(d.tools.map((t) => t.name)).toEqual(["get_parcels", "create_parcel", "get_hubs", "get_hubs_2", "get_listeners", "get_subscriptions", "post_subscriptions"]);
+    const skipped = d.warnings.filter((w) => w.endsWith("; skipped"));
+    expect(skipped).toEqual([
+      'POST /parcels: callback "parcelDelivered" ({$request.body#/delivered_hook}), a request the API sends to the client; skipped',
+      'POST /parcels: callback "parcelLost" (https://client.example/lost), a request the API sends to the client; skipped',
+      '/listener/parcelDelayedEvent: a webhook listener or event subscription (tagged "Notification listener"), not a resource; skipped',
+      "/listener/parcelReturnedEvent: a webhook listener or event subscription (only POST, under /listener), not a resource; skipped",
+      "/hub: a webhook listener or event subscription (POST /hub takes a callback), not a resource; skipped",
+      "/hub/{id}: a webhook listener or event subscription (POST /hub takes a callback), not a resource; skipped",
+      '/event_subscriptions: a webhook listener or event subscription (tagged "Events subscription"), not a resource; skipped',
+      "webhooks.parcelOutForDelivery: an OpenAPI webhook, a request the API sends to the client; skipped",
+    ]);
+  });
+});
+
 describe("init from OpenAPI: what it refuses", () => {
   it("accepts an OpenAPI 3.x document with paths", async () => {
     expect(openApiProblem(await freightSpec())).toBeUndefined();

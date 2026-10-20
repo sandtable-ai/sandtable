@@ -83,6 +83,7 @@ It also leaves out several things and lists them as warnings:
 - header and cookie params
 - non-scalar fields (arrays, objects)
 - `DELETE` operations
+- webhooks, which the API sends to the client rather than serves: OpenAPI 3.1 `webhooks`, operations' `callbacks`, and the paths where a client receives events or subscribes to them. A path counts as one only when every operation on it is tagged "notification listener" or "events subscription", when it is `/listener/<event>` with only `POST`, or when it is `/hub` or `/hub/{id}` and `POST /hub` takes a `callback` field. A resource such as `/hubs` or `/subscriptions` is still drafted.
 
 Tables with no examples get a `TODO: add seed rows` comment that lists the fields seen in the spec.
 
