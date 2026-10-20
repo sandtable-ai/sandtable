@@ -6,12 +6,12 @@ import type { OpenApiDraft } from "./openapi.ts";
 
 export const POLICY_PLACEHOLDER = `# Policy
 
-TODO: paste the customer's operating procedure (SOP) here, or draft from one with \`sandtable init --sop <file>\`.
+TODO: paste the customer's operating procedure (SOP) here, or draft from one with \`npx sandtable-ai init --sop <file>\`.
 The reference agent uses this text as its system prompt.
 `;
 
 export const TASKS_PLACEHOLDER = `# TODO: add tasks (see "personas and tasks" in docs/reference/spec.mdx of the sandtable repo),
-# or draft them from call transcripts with \`sandtable init --transcripts <dir>\`.
+# or draft them from call transcripts with \`npx sandtable-ai init --transcripts <dir>\`.
 []
 `;
 
@@ -41,8 +41,8 @@ export function renderDraft(d: OpenApiDraft, source: string): string {
     tasks: "./tasks.yaml",
   });
   doc.commentBefore = [
-    ` Drafted by \`sandtable init\` from ${source}.`,
-    " Review every TODO, add seed rows and invariants, then run `sandtable validate`.",
+    ` Drafted by \`npx sandtable-ai init\` from ${source}.`,
+    " Review every TODO, add seed rows and invariants, then run `npx sandtable-ai validate`.",
   ].join("\n");
   for (const [name, t] of Object.entries(d.tables)) {
     if (t.rows.length) continue;

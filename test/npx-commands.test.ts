@@ -1,6 +1,9 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import YAML from "yaml";
+import { draftFromOpenApi } from "../src/init/openapi.ts";
+import { POLICY_PLACEHOLDER, renderDraft, TASKS_PLACEHOLDER } from "../src/init/render.ts";
 
 // npm and PyPI each have an unrelated package named `sandtable`, and npm's ships a `sandtable` bin.
 // Without a local sandtable-ai install, `npx sandtable …` fetches and runs that package (in CI,
@@ -54,5 +57,19 @@ describe("commands shown to users", () => {
         });
     }
     expect(hits, "write `npx sandtable-ai <command>`: installing sandtable-ai in a project doesn't put `sandtable` on PATH").toEqual([]);
+  });
+
+  it("in the files `init` drafts, say `npx sandtable-ai <command>` too", () => {
+    const spec = YAML.parse(readFileSync(path.join(root, "examples/freight/source/openapi.yaml"), "utf8")) as Record<string, unknown>;
+    const drafted = { "sandtable.yaml": renderDraft(draftFromOpenApi(spec), "openapi.yaml"), "policy.md": POLICY_PLACEHOLDER, "tasks.yaml": TASKS_PLACEHOLDER };
+    // Here a backticked command is one to run: the files have no code blocks.
+    const command = new RegExp(bareCommand.source.replace("`", ""));
+    const hits = Object.entries(drafted).flatMap(([file, body]) =>
+      body
+        .split("\n")
+        .filter((line) => bare.test(line) || command.test(line))
+        .map((line) => `${file}: ${line.trim()}`),
+    );
+    expect(hits, "write `npx sandtable-ai <command>` in src/init/render.ts").toEqual([]);
   });
 });
