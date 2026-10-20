@@ -3,9 +3,8 @@ import { execFileSync, spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { Command, InvalidArgumentError } from "commander";
-import { clinicScriptedAgent } from "./demo/clinic-agents.ts";
 import { freightScriptedAgent } from "./demo/freight-agents.ts";
 import { formatPercent, renderTerminal } from "./report/terminal.ts";
 import { renderHtml } from "./report/html.ts";
@@ -14,12 +13,9 @@ import { changedVerdicts, RegradeError, regradeSuite } from "./run/regrade.ts";
 import { writeFileAtomic } from "./run/write.ts";
 import { claudeAgent, claudeUser, providerOf, type ClaudeOptions, type Provider } from "./sim/claude.ts";
 import { registerPrices } from "./run/usage.ts";
-import { bedrockConverseAgent } from "./sim/bedrock-converse.ts";
-import { httpAgent } from "./sim/http.ts";
-import { noopAgent } from "./sim/noop.ts";
-import { DEFAULT_OPENAI_BASE_URL, openaiCompatAgent, openaiCompatUser, type OpenAICompatOptions } from "./sim/openai-compat.ts";
+import { DEFAULT_OPENAI_BASE_URL } from "./sim/openai-compat.ts";
 import { scriptedUser } from "./sim/scripted.ts";
-import type { AgentAdapter, UserSimulator } from "./sim/types.ts";
+import { leaderboardAgent, resolveAgent, resolveUser } from "./sim/resolve.ts";
 import { appendRows, appendToDomainList } from "./init/merge.ts";
 import { draftFromOpenApi, openApiProblem } from "./init/openapi.ts";
 import { draftInvariantsFromSop, knownFields } from "./init/sop.ts";
@@ -80,60 +76,6 @@ function withProviderFlags(cmd: Command): Command {
     .option("--provider <name>", "where Claude runs: anthropic | bedrock (default: SANDTABLE_PROVIDER or anthropic)")
     .option("--region <region>", "AWS region for --provider bedrock (default: AWS_REGION)")
     .option("--aws-profile <name>", "AWS profile for --provider bedrock (default: AWS_PROFILE)");
-}
-
-/**
- * Endpoint for an `openai:<model>` spec. The key comes from OPENAI_API_KEY, the usual convention
- * for OpenAI-compatible servers; local servers such as Ollama and vLLM need none.
- */
-function openaiEndpoint(spec: string, baseUrlFlag?: string): OpenAICompatOptions {
-  const model = spec.slice("openai:".length);
-  if (!model) throw new Error(`"${spec}" names no model: use openai:<model>, e.g. openai:gpt-4.1-mini`);
-  const baseUrl = baseUrlFlag || process.env.OPENAI_BASE_URL || DEFAULT_OPENAI_BASE_URL;
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey && baseUrl.startsWith(DEFAULT_OPENAI_BASE_URL)) {
-    throw new Error(`${spec} on ${baseUrl} needs OPENAI_API_KEY (or point --openai-base-url at another endpoint)`);
-  }
-  return { baseUrl, model, ...(apiKey ? { apiKey } : {}) };
-}
-
-async function resolveAgent(spec: string, p: ClaudeOptions = {}, openaiBaseUrl?: string): Promise<AgentAdapter> {
-  if (spec === "noop") return noopAgent();
-  if (spec === "claude") return claudeAgent(p);
-  if (spec.startsWith("claude:")) return claudeAgent({ ...p, model: spec.slice("claude:".length) });
-  if (spec.startsWith("bedrock:")) {
-    return bedrockConverseAgent({
-      modelId: spec.slice("bedrock:".length),
-      ...(p.region ? { region: p.region } : {}),
-      ...(p.awsProfile ? { awsProfile: p.awsProfile } : {}),
-    });
-  }
-  if (spec.startsWith("openai:")) return openaiCompatAgent(openaiEndpoint(spec, openaiBaseUrl));
-  if (/^https?:\/\//.test(spec)) return httpAgent(spec);
-  if (spec === "scripted:naive" || spec === "scripted:careful") return freightScriptedAgent(spec.endsWith("naive") ? "naive" : "careful");
-  if (spec === "scripted:clinic-naive" || spec === "scripted:clinic-careful") return clinicScriptedAgent(spec.endsWith("naive") ? "naive" : "careful");
-  const file = path.resolve(spec);
-  if (!(await stat(file).catch(() => undefined))) {
-    throw new Error(
-      `unknown agent "${spec}": use claude, claude:<model>, bedrock:<model-id>, openai:<model>, noop, an http(s):// URL, scripted:naive|careful|clinic-naive|clinic-careful, or the path of a JS/TS module (there is no file at ${file})`,
-    );
-  }
-  const mod = (await import(pathToFileURL(file).href).catch((err: unknown) => {
-    throw new Error(`could not load the agent module ${spec}: ${err instanceof Error ? err.message : String(err)}`);
-  })) as { default?: unknown };
-  const exported = typeof mod.default === "function" ? await (mod.default as () => unknown)() : mod.default;
-  if (!exported || typeof (exported as AgentAdapter).createSession !== "function") {
-    throw new Error(`${spec} must default-export an AgentAdapter (or a function returning one)`);
-  }
-  return exported as AgentAdapter;
-}
-
-function resolveUser(spec: string, p: ClaudeOptions = {}, openaiBaseUrl?: string): UserSimulator {
-  if (spec === "scripted") return scriptedUser();
-  if (spec === "claude") return claudeUser(p);
-  if (spec.startsWith("claude:")) return claudeUser({ ...p, model: spec.slice("claude:".length) });
-  if (spec.startsWith("openai:")) return openaiCompatUser(openaiEndpoint(spec, openaiBaseUrl));
-  throw new Error(`unknown user simulator "${spec}" (use claude, claude:<model>, openai:<model> or scripted)`);
 }
 
 async function save(result: SuiteResult, outDir: string, html: boolean): Promise<string> {
@@ -435,7 +377,7 @@ withProviderFlags(program
       concurrency: o.concurrency,
       resume: o.resume,
       runInfo,
-      resolveAgent: (spec, effort) => resolveAgent(spec, effort ? { ...p, effort } : p, o.openaiBaseUrl),
+      resolveAgent: (spec, effort) => leaderboardAgent(spec, effort, p, o.openaiBaseUrl),
       onEntry: (label, status, note) => console.log(`  ${mark[status]}  ${label}${note ? `  (${note})` : ""}`),
     });
     console.log(`\n${renderLeaderboardMarkdown(result)}`);

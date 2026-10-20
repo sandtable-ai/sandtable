@@ -63,6 +63,20 @@ describe("claudeAgent", () => {
     expect(requests[0]).not.toHaveProperty("fallbacks");
   });
 
+  it("runs a leaderboard entry's claude: agent at the entry's effort", async () => {
+    const { leaderboardAgent } = await import("../src/sim/resolve.ts");
+    const domain = await loadDomain(example);
+    const sent = async (effort?: "high") => {
+      const { client, requests } = fakeClient([{ stop_reason: "end_turn", content: [{ type: "text", text: "hi" }] }]);
+      const agent = await leaderboardAgent("claude:global.anthropic.claude-sonnet-5-5", effort, { client });
+      await (await agent.createSession({ domain, system: "s", tools: [], sessionId: "x" })).reply("hello", async () => ({ ok: true }));
+      return requests[0]!;
+    };
+    expect((await sent("high")).output_config).toEqual({ effort: "high" });
+    expect(await sent("high")).toMatchObject({ model: "global.anthropic.claude-sonnet-5-5" });
+    expect((await sent()).output_config).toEqual({ effort: "medium" });
+  });
+
   it("sends effort medium unless one is set, and the simulated user low", async () => {
     const domain = await loadDomain(example);
     const effortOf = async (effort?: "high") => {
