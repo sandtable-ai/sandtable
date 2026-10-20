@@ -3,9 +3,9 @@ import { checkTranscript, invariantTool, type CallRecord, type Violation } from 
 import type { Domain, Task } from "../spec/schema.ts";
 import { agentSystemPrompt } from "../sim/prompts.ts";
 import type { AgentAdapter, CallTool, UserSimulator } from "../sim/types.ts";
-import { diffSnapshots, World, type Change } from "../world/store.ts";
+import { diffSnapshots, World, type Change, type Snapshot } from "../world/store.ts";
 import { toolSchema } from "../world/tools.ts";
-import { createToolRunner } from "./tool-runner.ts";
+import { createToolRunner, type ToolEvent, type ToolRunner } from "./tool-runner.ts";
 import { costOf, recordInto, type Usage } from "./usage.ts";
 
 export type TrajectoryEvent =
@@ -71,11 +71,7 @@ export async function runEpisode(input: {
   const events: TrajectoryEvent[] = [];
   const agentMessages: string[] = [];
   const usage: Usage = { agent: {}, user: {}, costUsd: 0 };
-  const runner = createToolRunner(domain, world, (e) => {
-    const soft = e.violations.filter((v) => v.soft).map((v) => v.invariant);
-    const hard = e.violations.filter((v) => !v.soft).map((v) => v.invariant);
-    events.push({ type: "tool", index: e.index, name: e.name, args: e.args, ...e.outcome, violations: hard, ...(soft.length ? { soft } : {}) });
-  });
+  const runner = createToolRunner(domain, world, (e) => events.push(toolEvent(e)));
   const callTool: CallTool = async (name, rawArgs) => runner.call(name, rawArgs);
 
   const persona = domain.personas.find((p) => p.id === task.persona);
@@ -122,27 +118,53 @@ export async function runEpisode(input: {
     error = err instanceof Error ? err.message : String(err);
   }
 
-  const keys = Object.fromEntries(Object.keys(domain.world.tables).map((t) => [t, world.keyOf(t)]));
-  const said = checkTranscript(domain, world, runner.calls, events);
-  const violations: Violation[] = [...runner.violations, ...said.filter((v) => !v.soft)];
-  const soft = softChecks(domain, runner.calls, agentMessages.length, [...runner.soft, ...said.filter((v) => v.soft)]);
-  const { passed, checks } = gradeTrial({ task, world, calls: runner.calls, agentMessages, violations, error });
   usage.costUsd = costOf(usage.agent, usage.user);
   return {
     taskId: task.id,
     trial,
-    passed,
-    checks,
-    violations,
-    soft,
+    ...gradeEpisode({ domain, task, world, runner, events, agentMessages, error }),
     events,
-    changes: diffSnapshots(initial, world.snapshot(), keys),
+    changes: worldChanges(domain, initial, world),
     endReason,
     turns,
     durationMs: Math.round(performance.now() - started),
     usage,
     ...(error ? { error } : {}),
   };
+}
+
+/** A tool call as the trajectory records it, with the invariants it broke. */
+export function toolEvent(e: ToolEvent): TrajectoryEvent {
+  const soft = e.violations.filter((v) => v.soft).map((v) => v.invariant);
+  const hard = e.violations.filter((v) => !v.soft).map((v) => v.invariant);
+  return { type: "tool", index: e.index, name: e.name, args: e.args, ...e.outcome, violations: hard, ...(soft.length ? { soft } : {}) };
+}
+
+/**
+ * Grade a finished conversation: invariants on what the agent said, then the task's expectations on
+ * the end state and the tool log. Live runs and `sandtable regrade` both grade through here.
+ */
+export function gradeEpisode(input: {
+  domain: Domain;
+  task: Task;
+  world: World;
+  runner: ToolRunner;
+  events: readonly TrajectoryEvent[];
+  agentMessages: readonly string[];
+  error?: string;
+}): Pick<TrialResult, "passed" | "checks" | "violations" | "soft"> {
+  const { domain, task, world, runner, events, agentMessages, error } = input;
+  const said = checkTranscript(domain, world, runner.calls, events);
+  const violations: Violation[] = [...runner.violations, ...said.filter((v) => !v.soft)];
+  const soft = softChecks(domain, runner.calls, agentMessages.length, [...runner.soft, ...said.filter((v) => v.soft)]);
+  const { passed, checks } = gradeTrial({ task, world, calls: runner.calls, agentMessages, violations, error });
+  return { passed, checks, violations, soft };
+}
+
+/** What a trial changed in the world, row by row. */
+export function worldChanges(domain: Domain, initial: Snapshot, world: World): Change[] {
+  const keys = Object.fromEntries(Object.keys(domain.world.tables).map((t) => [t, world.keyOf(t)]));
+  return diffSnapshots(initial, world.snapshot(), keys);
 }
 
 /** One entry per soft invariant that applied in the trial: its tool was called, or for never_disclose, the agent spoke. */

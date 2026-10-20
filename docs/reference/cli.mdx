@@ -1,8 +1,8 @@
 ---
 title: "CLI reference: every sandtable command and flag"
 sidebarTitle: "CLI"
-description: "Every sandtable command and flag (init, validate, lint, review, run, leaderboard, demo and report) with provider options, environment variables and exit codes."
-keywords: ["command line", "sandtable run", "flags", "options", "environment variables", "exit codes", "leaderboard"]
+description: "Every sandtable command and flag (init, validate, lint, review, run, leaderboard, demo, report and regrade) with provider options, environment variables and exit codes."
+keywords: ["command line", "sandtable run", "flags", "options", "environment variables", "exit codes", "leaderboard", "regrade"]
 ---
 
 ```text
@@ -19,6 +19,7 @@ sandtable <command> [options]
 | [`leaderboard`](#leaderboard) | rank several agents on one domain under the same simulated users, next to a do-nothing baseline |
 | [`demo`](#demo) | rehearse the bundled freight example |
 | [`report`](#report) | re-render the HTML report for a past run |
+| [`regrade`](#regrade) | re-score a past run's stored trials under the domain's current rules, without calling a model |
 
 `sandtable --version` prints the version and `sandtable <command> --help` lists a command's options. From a clone of the repo, run `npm run sandtable -- <command>`.
 
@@ -201,6 +202,25 @@ sandtable report .sandtable/runs/<run>/results.json [-o report.html]
 | `-o, --out <file>` | output HTML path. Default: `report.html` next to `results.json` |
 
 It prints the path it wrote.
+
+## regrade
+
+Re-score a past run's stored trials after editing how the domain grades them: an invariant, an expectation or a `never_disclose` rule. No model is called, so a fixed grading rule doesn't cost a rerun.
+
+```bash
+sandtable regrade .sandtable/runs/<run>/results.json --domain examples/freight
+```
+
+| Argument / option | Description |
+|---|---|
+| `<results>` | path to a `results.json` |
+| `-d, --domain <dir>` | the domain the run used, as edited since: a directory (with `sandtable.yaml`) or the file itself |
+| `-o, --out <dir>` | output directory for `results.json` and `report.html`. Default: the results' own directory, replacing them |
+| `--no-html` | skip the HTML report |
+
+It replays each trial's tool calls in order against a fresh copy of the world, grades the conversation as a live run would, and recomputes every score. The transcripts, token usage and timing stay as they were recorded. It prints the summary, how many verdicts changed and which, and the new pass^k.
+
+It refuses, and writes nothing, when the stored conversations no longer fit the domain: when the agent or the caller would be given something else now (the policy, a tool, a seed record, a task's caller instructions or its turn limit; `results.json` keeps a hash of them as `inputs`), when a task it ran is gone, or when a tool call would now return something other than what the agent saw. Rerun those with `run`. Tasks added to the domain since the run don't block it; they are simply not in it.
 
 ## Provider options
 
