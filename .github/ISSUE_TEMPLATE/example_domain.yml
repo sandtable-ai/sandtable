@@ -1,0 +1,40 @@
+name: Example domain
+description: Propose a new fictional desk for examples/, next to freight and clinic.
+labels: ["type:feature", "area:examples"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A good example domain is a job that an agent does for a business, with rules that cost money or trust when broken. Everything in it is invented: the company, the people, the IDs and the procedures. [CONTRIBUTING.md](https://github.com/sandtable-ai/sandtable/blob/main/CONTRIBUTING.md#adding-an-example-domain) says what one needs.
+  - type: textarea
+    id: desk
+    attributes:
+      label: The desk
+      description: Who calls or writes in, what the agent can do for them, and the tools it uses.
+      placeholder: Inbound returns for a fictional furniture store. The agent looks up orders, checks the return window and books a pickup.
+    validations:
+      required: true
+  - type: textarea
+    id: rules
+    attributes:
+      label: Rules worth testing
+      description: Three to five rules an agent could break, written as invariants would check them.
+      placeholder: |
+        - never book a pickup outside the 30-day window
+        - verify the order's postcode before changing anything
+        - never say the warehouse's internal stock count
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: What it covers that the existing examples don't
+    validations:
+      required: true
+  - type: checkboxes
+    id: fictional
+    attributes:
+      label: Fictional
+      options:
+        - label: The domain is invented, and based on no real company, customer or internal document.
+          required: true

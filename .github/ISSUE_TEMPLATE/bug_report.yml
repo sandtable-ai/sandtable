@@ -1,0 +1,63 @@
+name: Bug report
+description: sandtable did something other than what its docs or help say.
+labels: ["type:bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Use fictional data only: no customer documents, real transcripts, personal data or API keys. A security problem goes in a [private report](https://github.com/sandtable-ai/sandtable/security/advisories/new), not here.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The output of `npx sandtable-ai --version`.
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you run it
+      options:
+        - npx sandtable-ai
+        - npm install (local or global)
+        - uvx or pip (Python launcher)
+        - a clone of this repo
+        - the library API
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Node.js version and OS
+      placeholder: Node 22.18, macOS 15
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command
+      description: The exact command, with its flags. For a model, say which provider and model ID.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: The output and the exit code. For a grading problem, add the trial from `results.json` or a screenshot of the report.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: And where the docs or `--help` say so, if they do.
+    validations:
+      required: true
+  - type: textarea
+    id: domain
+    attributes:
+      label: Domain
+      description: A bundled example (`examples/freight`, `examples/clinic`), or the smallest `sandtable.yaml` that shows the problem.
+      render: yaml
