@@ -378,6 +378,14 @@ describe("leaderboard/models.yaml", () => {
   });
 });
 
+describe("sandtable leaderboard --help", () => {
+  it.skipIf(!process.features.typescript)("shows that --models is required", async () => {
+    const { stdout } = await promisify(execFile)(process.execPath, [path.resolve("src/cli.ts"), "leaderboard", "--help"]);
+    expect(stdout).toContain("Usage: sandtable leaderboard <domain> -m <file> [options]");
+    expect(stdout).toMatch(/-m, --models <file>\s+\(required\) YAML file/);
+  });
+});
+
 describe("leaderboard provenance", () => {
   it("records what ran each model in run.json, and the sandtable that ranked them in leaderboard.json", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
