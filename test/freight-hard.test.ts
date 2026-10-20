@@ -47,6 +47,16 @@ describe("freight rate design", () => {
   });
 });
 
+describe("freight dates", () => {
+  // Callers give dates without a year, so the policy tells the agent what day it is.
+  it("the policy says today's date, and no record or task date is before it", () => {
+    expect(domain.policy).toContain("Today is Monday, November 2, 2026, and it is 9:00 a.m.");
+    const dates = [...JSON.stringify({ world: domain.world, tasks: domain.tasks }).matchAll(/\b20\d\d-\d\d-\d\d\b/g)].map((m) => m[0]);
+    expect(dates.length).toBeGreaterThan(20);
+    expect(dates.filter((d) => d < "2026-11-02")).toEqual([]);
+  });
+});
+
 describe("freight hard tier", () => {
   it("has 18 tasks, each proven ready, solvable and non-vacuous by lint", () => {
     const report = lintDomain(domain);
