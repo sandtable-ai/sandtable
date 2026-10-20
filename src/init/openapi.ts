@@ -45,6 +45,8 @@ export interface OpenApiDraft {
 const METHODS = ["get", "post", "put", "patch", "delete"] as const;
 const PAGINATION = new Set(["limit", "offset", "page", "per_page", "page_size", "cursor", "after", "before", "sort", "order"]);
 const SIDE_EFFECT_HINT = /\b(becomes?|marks?|sets?|tenders?|reserves?|cancels?|updates?|changes?|transitions?)\b/i;
+const LISTENER_TAG = /\b(notification listeners?|events? subscriptions?)\b/i;
+const EVENT_NAME = /^[^{}]+(Event|[_-]event)$/;
 
 /**
  * Why `spec` can't be drafted from, or undefined when it is an OpenAPI 3.x document with paths.
@@ -85,6 +87,11 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
 
   for (const [p, item] of Object.entries(paths)) {
     const segments = p.split("/").filter(Boolean);
+    const listener = listenerEvidence(segments, item, paths, deref);
+    if (listener) {
+      warnings.push(`${p}: a webhook listener or event subscription (${listener}), not a resource; skipped`);
+      continue;
+    }
     const shape = classify(segments, item);
     if (!shape) {
       warnings.push(`${p}: could not find a resource segment; skipped`);
@@ -98,10 +105,18 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
       if (!op) continue;
       const params = [...pathParams, ...((op.parameters as Json[] | undefined) ?? [])].map((x) => deref(x) as Json);
       ops.push({ path: p, method, op, ...shape, params });
+      for (const [name, callback] of Object.entries((op.callbacks ?? {}) as Json)) {
+        for (const url of Object.keys((deref(callback) ?? {}) as Json)) {
+          warnings.push(`${method.toUpperCase()} ${p}: callback "${name}" (${url}), a request the API sends to the client; skipped`);
+        }
+      }
       for (const schema of responseSchemas(op, deref)) collectFields(acc, schema, deref);
       const body = requestSchema(op, deref);
       if (body && !shape.action) collectFields(acc, body, deref, false);
     }
+  }
+  for (const name of Object.keys((spec.webhooks ?? {}) as Json)) {
+    warnings.push(`webhooks.${name}: an OpenAPI webhook, a request the API sends to the client; skipped`);
   }
 
   for (const [name, t] of tables) {
@@ -221,6 +236,41 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
     tools,
     warnings,
   };
+}
+
+/**
+ * Why the path is a webhook listener or an event subscription, or undefined when it is not one.
+ * There the client receives the API's events (`POST /listener/<event>`) or registers a URL to
+ * receive them (`POST /hub`), so they are not resources an agent acts on. A tag or a name alone
+ * is not enough, so that a resource that only sounds like one (`/hubs`, `/listener/restart`,
+ * `/events/{id}/subscriptions`) is still drafted. A path is a listener or subscription when:
+ * - every operation on it is tagged "notification listener" or "events subscription", and it
+ *   takes only POST or DELETE, or its POST takes a callback URL, or
+ * - it is `/listener/<event>`, where `<event>` is a name ending in `Event` (or `_event`), and it
+ *   takes only POST, or
+ * - it is `/hub` or `/hub/{id}`, and `POST /hub` takes a callback URL.
+ * A callback URL is a string field named `callback`.
+ */
+function listenerEvidence(segments: string[], item: Json, paths: Record<string, Json>, deref: (x: unknown) => unknown): string | undefined {
+  const methods = METHODS.filter((m) => item[m]);
+  if (methods.length === 0) return undefined;
+  const tags = methods.map((m) => (((item[m] as Json).tags ?? []) as unknown[]).map(String).find((t) => LISTENER_TAG.test(t)));
+  if (tags.every((t) => t !== undefined)) {
+    if (methods.every((m) => m === "post" || m === "delete")) return `tagged "${tags[0]}", and only POST or DELETE`;
+    if (takesCallbackUrl(item.post, deref)) return `tagged "${tags[0]}", and POST takes a callback URL`;
+  }
+  const [first, second] = segments;
+  if (segments.length === 2 && first === "listener" && EVENT_NAME.test(second!) && methods.every((m) => m === "post")) return "only POST, at /listener/<event>";
+  const isHub = first === "hub" && (segments.length === 1 || (segments.length === 2 && /^\{.+\}$/.test(second!)));
+  if (isHub && takesCallbackUrl(paths["/hub"]?.post, deref)) return "POST /hub takes a callback URL";
+  return undefined;
+}
+
+/** Whether `op` has a request body whose `callback` field is a string: the URL a client subscribes. */
+function takesCallbackUrl(op: unknown, deref: (x: unknown) => unknown): boolean {
+  if (!op || typeof op !== "object") return false;
+  const callback = ((requestSchema(op as Json, deref)?.properties ?? {}) as Json).callback;
+  return callback !== undefined && flatten(callback, deref).type === "string";
 }
 
 /** Work out which table a path addresses, and whether it is an item, a collection or an action. */
