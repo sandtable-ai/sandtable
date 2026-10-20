@@ -291,9 +291,13 @@ describe("leaderboard", () => {
       { label: "GPT 6", agent: "scripted:careful" },
       { label: "gpt-6", agent: "scripted:naive" },
     ];
+    // A failed agent only becomes an error row, so record every agent the board asks for instead of throwing.
+    const resolved: string[] = [];
     await expect(
-      runLeaderboard({ domain: await loadDomain(example), entries, user: scriptedUser(), k: 1, outDir: dir, resolveAgent: async () => { throw new Error("should not run"); } }),
+      runLeaderboard({ domain: await loadDomain(example), entries, user: scriptedUser(), k: 1, outDir: path.join(dir, "board"), resolveAgent: async (spec) => (resolved.push(spec), freightScriptedAgent("careful")) }),
     ).rejects.toThrow('"GPT 6" and "gpt-6" would share the folder gpt-6/: give one of them another label');
+    // Refused before anything ran or was written: no agent, and not even the output folder.
+    expect(resolved).toEqual([]);
     expect(await readdir(dir)).toEqual([]);
   });
 
