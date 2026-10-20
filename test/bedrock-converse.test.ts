@@ -93,11 +93,10 @@ describe("bedrockConverseAgent", () => {
       expect(requests[0]!.system).toEqual([{ text: "policy" }]);
     });
 
-    it("caches Claude's system prompt, tools and newest message", async () => {
+    it("caches Claude's system prompt, which covers the tools, and newest message", async () => {
       const { requests, toolCount } = await conversation("eu.anthropic.claude-haiku-5-5");
       expect(requests[0]!.system).toEqual([{ text: "policy" }, CP]);
-      expect(requests[0]!.toolConfig!.tools).toHaveLength(toolCount + 1);
-      expect(requests[0]!.toolConfig!.tools.at(-1)).toEqual(CP);
+      expect(requests[0]!.toolConfig!.tools).toHaveLength(toolCount);
       // One breakpoint, on the newest message, including a tool result.
       expect(requests.map((r) => cachePoints(r.messages))).toEqual([[0], [2], [4]]);
       expect(requests[1]!.messages[2]!.content.at(-1)).toEqual(CP);
@@ -125,13 +124,26 @@ describe("bedrockConverseAgent", () => {
         "anthropic.claude-haiku-5-5",
         "eu.anthropic.claude-opus-5-5",
         "global.anthropic.claude-sonnet-5-5",
+        "anthropic.claude-3-5-haiku-20241022-v1:0",
         "arn:aws:bedrock:eu-west-1:111122223333:inference-profile/eu.anthropic.claude-haiku-5-5",
+        "arn:aws:bedrock:eu-west-1::foundation-model/anthropic.claude-haiku-5-5",
         "amazon.nova-pro-v1:0",
         "global.amazon.nova-2-lite-v1:0",
       ]) {
         expect(cacheStyle(id), id).toBeDefined();
       }
-      for (const id of ["global.openai.gpt-6.1-sol", "global.moonshotai.kimi-k3", "qwen.qwen3-next-80b-a3b", "mistral.ministral-3-14b-instruct"]) {
+      for (const id of [
+        "global.openai.gpt-6.1-sol",
+        "global.moonshotai.kimi-k3",
+        "qwen.qwen3-next-80b-a3b",
+        "mistral.ministral-3-14b-instruct",
+        // Claude models from before Bedrock prompt caching take tools but reject cache points.
+        "anthropic.claude-3-haiku-20240307-v1:0",
+        "us.anthropic.claude-3-5-sonnet-20240620-v1:0",
+        "anthropic.claude-v2:1",
+        // An application inference profile ARN doesn't name its model.
+        "arn:aws:bedrock:eu-west-1:111122223333:application-inference-profile/a1b2c3d4e5f6",
+      ]) {
         expect(cacheStyle(id), id).toBeUndefined();
       }
     });

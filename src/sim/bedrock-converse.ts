@@ -75,16 +75,22 @@ const unclosedReasoning = (res: ConverseResponse) => res.stopReason !== "tool_us
 /**
  * Where a model accepts Converse cache points. Every other model rejects the whole request when one
  * is present, so they get none; some of them (OpenAI GPT, Grok) cache on their own, which shows up in
- * the usage either way.
- * - Claude: after the system prompt, after the tools, and on the newest message.
- * - Nova: after the system prompt, and on the newest message that holds only text. Nova rejects one
+ * the usage either way. Converse reads tools before the system prompt, so a point after the system
+ * prompt also caches the tools.
+ * - Claude: after the system prompt and on the newest message. Claude looks up to 20 blocks back for
+ *   the previous turn's entry, so one moving point reads the conversation so far.
+ * - Nova: after the system prompt and on the newest message that holds only text. Nova rejects one
  *   in the tool list or next to a toolUse or toolResult block.
+ * A model is recognised by its ID, so an application inference profile ARN gets no cache points.
  */
-type CacheStyle = { tools: boolean; onlyText: boolean };
+type CacheStyle = { onlyText: boolean };
+
+// Claude models from before Bedrock prompt caching: they take tools but reject cache points.
+const UNCACHED_CLAUDE = /anthropic\.claude-(?:v2|instant|3-(?:haiku|sonnet|opus)|3-5-sonnet-20240620)/;
 
 export function cacheStyle(modelId: string): CacheStyle | undefined {
-  if (/(?:^|[./])anthropic\.claude-/.test(modelId)) return { tools: true, onlyText: false };
-  if (/(?:^|[./])amazon\.nova-/.test(modelId)) return { tools: false, onlyText: true };
+  if (/(?:^|[./])anthropic\.claude-/.test(modelId) && !UNCACHED_CLAUDE.test(modelId)) return { onlyText: false };
+  if (/(?:^|[./])amazon\.nova-/.test(modelId)) return { onlyText: true };
   return undefined;
 }
 
@@ -107,9 +113,9 @@ export function bedrockConverseAgent(opts: BedrockConverseOptions): AgentAdapter
     async createSession(ctx) {
       const { client, command } = await makeClient(opts);
       const cache = cacheStyle(opts.modelId);
-      const tools: unknown[] = ctx.tools.map((t) => ({ toolSpec: { name: t.name, description: t.description, inputSchema: { json: t.input_schema } } }));
-      if (cache?.tools && tools.length) tools.push(CACHE_POINT);
-      const toolConfig = tools.length ? { tools } : undefined;
+      const toolConfig = ctx.tools.length
+        ? { tools: ctx.tools.map((t) => ({ toolSpec: { name: t.name, description: t.description, inputSchema: { json: t.input_schema } } })) }
+        : undefined;
       const system: ConverseBlock[] = cache ? [{ text: ctx.system }, CACHE_POINT] : [{ text: ctx.system }];
       // Append-only conversation in Converse's block format.
       const messages: ConverseMessage[] = [];
