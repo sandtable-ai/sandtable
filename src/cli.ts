@@ -343,7 +343,7 @@ withProviderFlags(program
   .option("-c, --concurrency <n>", "episodes in parallel per model", int, 4)
   .option("--openai-base-url <url>", "OpenAI-compatible endpoint for openai:<model> entries")
   .option("-o, --out <dir>", "output directory (default: leaderboard/<domain name>)")
-  .option("--no-resume", "rerun models even when matching results already exist")
+  .option("--no-resume", "rerun every model and replace its stored results")
   .option("--prices <file>", PRICES_HELP)
   .action(async (domainPath: string, o: { models: string; user?: string; trials?: number; tasks?: string; concurrency: number; openaiBaseUrl?: string; out?: string; resume: boolean; prices?: string } & ProviderFlags) => {
     const prices = await loadPrices(o.prices);
