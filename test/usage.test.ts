@@ -20,8 +20,12 @@ describe("usage accounting", () => {
   it("prices Claude on a Bedrock geo profile at 1.1× the global price, and an exact --prices entry as given", () => {
     const million = (model: string): UsageByModel => ({ [model]: { calls: 1, input: 1_000_000, output: 0, cacheRead: 0, cacheWrite: 0 } });
     // Opus 5.5 input is $4 per million at the global rate.
-    for (const model of ["claude-opus-5-5", "global.anthropic.claude-opus-5-5", "anthropic.claude-opus-5-5"]) expect(costOf(million(model)), model).toBeCloseTo(4);
-    for (const model of ["eu.anthropic.claude-opus-5-5", "us.anthropic.claude-opus-5-5", "apac.anthropic.claude-opus-5-5-v1:0"]) expect(costOf(million(model)), model).toBeCloseTo(4.4);
+    for (const model of ["claude-opus-5-5", "global.anthropic.claude-opus-5-5"]) expect(costOf(million(model)), model).toBeCloseTo(4);
+    for (const model of ["eu.anthropic.claude-opus-5-5", "us.anthropic.claude-opus-5-5", "apac.anthropic.claude-opus-5-5-v1:0", "us-gov.anthropic.claude-opus-5-5"]) {
+      expect(costOf(million(model)), model).toBeCloseTo(4.4);
+    }
+    // Unverified: an in-region (or Mantle) anthropic. ID keeps the built-in price, since the pricing page doesn't say how it bills.
+    expect(costOf(million("anthropic.claude-opus-5-5"))).toBeCloseTo(4);
     // Every token kind carries the premium.
     expect(costOf({ "eu.anthropic.claude-haiku-5-5": { calls: 1, input: 0, output: 1_000_000, cacheRead: 1_000_000, cacheWrite: 1_000_000 } })).toBeCloseTo((0.5 + 0.01 + 0.125) * 1.1);
     // A price registered for the exact profile ID wins, and a model the built-in table doesn't hold gets no premium.

@@ -40,19 +40,19 @@ const BUILT_IN = new Set(Object.keys(PRICES));
  * price: "Regional and multi-region endpoints include a 10% premium over global endpoints"
  * (https://platform.claude.com/docs/en/about-claude/pricing). Global profiles and the Anthropic API pay the list price.
  */
-export const GEO_PROFILE_PREMIUM = 1.1;
+const GEO_PROFILE_PREMIUM = 1.1;
 
 /**
  * The price of a model ID as an adapter records it: an exact entry (from --prices) first, else the built-in
  * price, times GEO_PROFILE_PREMIUM for a Claude geo profile such as eu.anthropic.claude-opus-5-5.
  */
-export function priceOf(model: string): (typeof PRICES)[string] | undefined {
+function priceOf(model: string): (typeof PRICES)[string] | undefined {
   const exact = PRICES[model];
   if (exact) return exact;
   const key = priceKey(model);
   const base = PRICES[key];
   if (!base) return undefined;
-  const geo = /^([a-z]{2,6})\.anthropic\./.exec(model)?.[1];
+  const geo = /^([a-z]{2,6}(?:-[a-z]+)?)\.anthropic\./.exec(model)?.[1];
   if (!geo || geo === "global" || !BUILT_IN.has(key)) return base;
   const k = GEO_PROFILE_PREMIUM;
   return { input: base.input * k, output: base.output * k, cacheRead: base.cacheRead * k, cacheWrite: base.cacheWrite * k };
@@ -96,7 +96,7 @@ export function registerPrices(file: unknown): string[] {
 
 /** Map provider-specific IDs (anthropic.claude-…, us.anthropic.claude-…-v1:0) to the price-table key. */
 export function priceKey(model: string): string {
-  return model.replace(/^(?:[a-z]{2,6}\.)?anthropic\./, "").replace(/-v\d+(?::\d+)?$/, "");
+  return model.replace(/^(?:[a-z]{2,6}(?:-[a-z]+)?\.)?anthropic\./, "").replace(/-v\d+(?::\d+)?$/, "");
 }
 
 export function costOf(...groups: UsageByModel[]): number | null {
