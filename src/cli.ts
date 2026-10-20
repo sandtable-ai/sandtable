@@ -390,6 +390,13 @@ withProviderFlags(program
     });
     console.log(`\n${renderLeaderboardMarkdown(result)}`);
     console.log(`  ${path.join(out, "leaderboard.html")}`);
+    // A board on which every model failed ranks nothing, whatever the baseline did. A board of noop
+    // entries only has no model rows: nothing failed, and the baseline it asked for ran.
+    const models = result.rows.filter((r) => !r.baseline);
+    if (models.length > 0 && models.every((r) => r.error !== undefined)) {
+      console.error(`\n✗ Every model failed, so this board ranks none of them: the ✗ failed lines above give each model's error (missing credentials or package, the wrong provider or region, throttling, an agent that isn't running).`);
+      process.exitCode = 1;
+    }
   });
 
 withProviderFlags(program
