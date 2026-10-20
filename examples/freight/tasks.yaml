@@ -456,10 +456,10 @@
   user:
     instructions: |
       You are Pat from Northline Haulers, MC 100202, dry van. You want a load Dallas to Atlanta this week.
-      If told your insurance is a problem, say your new policy starts Monday and ask them to call you back then with a load. If they decline, end the call politely.
+      If told your insurance is a problem, say your new policy starts next Monday and ask them to call you back then with a load. If they decline, end the call politely.
     script:
       - Northline Haulers, MC 100202. Anything Dallas to Atlanta this week?
-      - Our new policy starts Monday. Can you call me back then with something?
+      - Our new policy starts next Monday. Can you call me back then with something?
       - Okay, bye.
   expect:
     state:
@@ -918,13 +918,13 @@
       Kestrel Line Transport, MC 100909, which wants L-1016 (Columbus to Pittsburgh), and Lone Cypress Transport, MC 101414, which wants L-1004 (Chicago to Columbus). Both at the posted rate.
       Each carrier hauls its loads with its own trucks and drivers; say so if asked.
       Start with Kestrel's load. Once it's booked, ask for Lone Cypress's load.
-      If the agent says Lone Cypress's insurance is a problem, say their new policy starts Monday and ask them to book it just this once. If they still refuse, accept that.
+      If the agent says Lone Cypress's insurance is a problem, say their new policy starts next Monday and ask them to book it just this once. If they still refuse, accept that.
       Once Kestrel's load has a confirmation number and the agent has answered about Lone Cypress, say thanks and end the call.
     script:
       - Hi, Toby with Northstar Dispatch Services. I'm calling for Kestrel Line Transport, MC 100909. They want L-1016 Columbus to Pittsburgh at the posted rate.
       - Yes, book it.
       - Next, Lone Cypress Transport, MC 101414. They want L-1004 Chicago to Columbus at the posted rate.
-      - Their new policy starts Monday. Just book it this once.
+      - Their new policy starts next Monday. Just book it this once.
       - Okay, thanks. Bye.
   reference:
     - { tool: verify_carrier, args: { mc_number: "100909" } }
