@@ -1,0 +1,27 @@
+# The models the freight leaderboard runs. Agent specs are the same as `sandtable run --agent`.
+# The simulated caller is shared by every model so they all face the same customers.
+#
+#   sandtable leaderboard examples/freight -m leaderboard/models.yaml \
+#     --provider bedrock --region eu-west-1 --prices prices/bedrock.eu-west-1.json
+#
+# No superseded models: for a closed lab, the newest model in each current tier; for an open-weight
+# family, its largest current model. Left out: GLM 5.3 (not enabled on the account the board runs on),
+# Gemma 3 27B (never calls a tool on Bedrock) and GPT-5.5 (superseded by GPT-6.1 Sol).
+user: claude:claude-sonnet-5-5
+k: 4
+models:
+  - { label: Claude Fable 5.1, agent: "claude:global.anthropic.claude-fable-5-1" }
+  - { label: Claude Opus 5.5, agent: "claude:claude-opus-5-5" }
+  - { label: Claude Sonnet 5.5, agent: "claude:claude-sonnet-5-5" }
+  - { label: Claude Haiku 5.5, agent: "claude:claude-haiku-5-5" }
+  - { label: GPT-6 Astra, agent: "bedrock:global.openai.gpt-6-astra" }
+  - { label: GPT-6.1 Sol, agent: "bedrock:global.openai.gpt-6.1-sol" }
+  - { label: GPT-6 Luna, agent: "bedrock:global.openai.gpt-6-luna" }
+  - { label: gpt-oss-120b, agent: "bedrock:openai.gpt-oss-120b-1:0" }
+  - { label: Grok 4.7, agent: "bedrock:global.xai.grok-4.7" }
+  - { label: Kimi K3, agent: "bedrock:global.moonshotai.kimi-k3" }
+  - { label: Qwen3 Next 80B, agent: "bedrock:qwen.qwen3-next-80b-a3b" }
+  - { label: MiniMax M2.5, agent: "bedrock:minimax.minimax-m2.5" }
+  - { label: Nemotron 3 Super 120B, agent: "bedrock:nvidia.nemotron-super-3-120b" }
+  - { label: Ministral 3 14B, agent: "bedrock:mistral.ministral-3-14b-instruct" }
+  - { label: Nova 2 Lite, agent: "bedrock:global.amazon.nova-2-lite-v1:0" }
