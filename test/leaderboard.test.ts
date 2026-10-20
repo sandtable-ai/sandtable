@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -337,33 +337,60 @@ describe("leaderboard provenance", () => {
     expect(reused.agentCostPerTrialUsd).toBeCloseTo(first.agentCostPerTrialUsd! * 3);
   });
 
-  it("reruns a model whose stored results ran on another provider or region, or don't say where they ran", async () => {
+  it("reruns a model only when the provider or region its own calls use changed, or its run.json doesn't say", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
     const domain = await loadDomain(example);
     const sandtable = { version: "9.9.9", commit: "abc1234def", dirty: false };
-    const run = async (runInfo: RunInfo | undefined, resolveAgent = async () => freightScriptedAgent("careful")) => {
-      const seen: string[] = [];
-      const entries = [{ label: "Careful rules", agent: "scripted:careful" }];
-      await runLeaderboard({ domain, entries, user: scriptedUser(), k: 1, taskIds: ["no-mc-number"], outDir: dir, ...(runInfo ? { runInfo } : {}), resolveAgent, onEntry: (_l, status, note) => seen.push(`${status}${note ? `: ${note}` : ""}`) });
-      return seen;
-    };
+    // The offline careful agent plays every entry; the specs say where a real run's calls would go.
+    const entries = [
+      { label: "Sonnet", agent: "claude:claude-sonnet-5-5" },
+      { label: "Luna", agent: "bedrock:global.openai.gpt-6-luna" },
+      { label: "Local", agent: "openai:llama-4" },
+    ];
+    const careful = async () => freightScriptedAgent("careful");
     const noModel = async (): Promise<never> => {
       throw new Error("should not call the agent");
     };
-    const eu = { sandtable, provider: "bedrock" as const, region: "eu-west-1" };
-    await run(eu);
-    expect(await run(eu, noModel)).toEqual(["cached"]);
-    // Library callers that pass no runInfo keep reusing results, as before.
-    expect(await run(undefined, noModel)).toEqual(["cached"]);
-    expect(await run({ ...eu, region: "us-east-1" })).toEqual(["ran: stored results not reused: they ran in eu-west-1, not us-east-1"]);
-    expect(await run({ sandtable, provider: "anthropic" })).toEqual(["ran: stored results not reused: they ran on bedrock, not anthropic"]);
+    type Where = { provider?: "anthropic" | "bedrock"; region?: string };
+    const run = async (where: Where | undefined, resolveAgent: () => Promise<AgentAdapter> = careful, userSpec: string | undefined = "scripted") => {
+      const seen: Record<string, string> = {};
+      const info = where ? { runInfo: { sandtable, ...where } } : {};
+      await runLeaderboard({ domain, entries, user: scriptedUser(), k: 1, taskIds: ["no-mc-number"], outDir: dir, ...info, ...(userSpec ? { userSpec } : {}), resolveAgent, onEntry: (label, status, note) => (seen[label] = `${status}${note ? `: ${note}` : ""}`) });
+      return seen;
+    };
+    const runJson = async (...parts: string[]) => JSON.parse(await readFile(path.join(dir, ...parts, "run.json"), "utf8"));
+    await run({ provider: "anthropic", region: "eu-west-1" });
+    // With a scripted caller, the Claude agent records its provider, the Bedrock agent its region, the OpenAI-compatible one neither.
+    expect(await runJson("sonnet")).toMatchObject({ provider: "anthropic" });
+    expect(await runJson("sonnet")).not.toHaveProperty("region");
+    expect(await runJson("luna")).toMatchObject({ region: "eu-west-1" });
+    expect(await runJson("luna")).not.toHaveProperty("provider");
+    expect(Object.keys(await runJson("local")).sort()).toEqual(["agent", "sandtable"]);
+    const cached = { Sonnet: "cached", Luna: "cached", Local: "cached" };
+    expect(await run({ provider: "anthropic", region: "eu-west-1" }, noModel)).toEqual(cached);
+    // A new region reruns only the model that calls Bedrock; a failed rerun still says why it ran.
+    expect(await run({ provider: "anthropic", region: "us-east-1" }, noModel)).toEqual({ ...cached, Luna: "failed: should not call the agent; stored results not reused: they ran in eu-west-1, not us-east-1" });
+    expect(await run({ provider: "anthropic", region: "us-east-1" })).toEqual({ ...cached, Luna: "ran: stored results not reused: they ran in eu-west-1, not us-east-1" });
+    // A crashed rerun says why it ran, then where the crash went.
+    const crash: AgentAdapter = { name: "crash", createSession: async () => ({ reply: async () => { throw new Error("expired token"); } }) };
+    expect((await run({ provider: "anthropic", region: "eu-central-1" }, async () => crash)).Luna).toBe(
+      `failed: 1 of 1 trial(s) crashed: expired token; stored results not reused: they ran in us-east-1, not eu-central-1; the crashed run is in ${path.join(dir, "luna", "crashed")}, and the stored results are kept`,
+    );
+    expect((await runJson("luna", "crashed")).region).toBe("eu-central-1");
+    expect((await runJson("luna")).region).toBe("us-east-1");
+    // Claude moving to Bedrock reruns only the Claude agent.
+    expect(await run({ provider: "bedrock", region: "us-east-1" })).toEqual({ ...cached, Sonnet: "ran: stored results not reused: they ran on anthropic, not bedrock" });
+    // A Claude caller on Bedrock makes every model's calls go there.
+    expect(await run({ provider: "bedrock", region: "us-east-1" }, careful, "claude:claude-haiku-5-5")).toEqual({
+      Sonnet: "cached",
+      Luna: "ran: stored results not reused: they ran on an unrecorded provider, not bedrock",
+      Local: "ran: stored results not reused: they ran on an unrecorded provider, not bedrock",
+    });
     // A run.json from before provider and region were recorded can't say where it ran.
-    const keyFile = path.join(dir, "careful-rules", "run.json");
-    await writeFile(keyFile, JSON.stringify({ agent: "scripted:careful" }));
-    expect(await run(eu)).toEqual(["ran: stored results not reused: they ran on an unrecorded provider, not bedrock"]);
-    // Scripted agents and callers run nowhere: no provider or region on either side still matches.
-    await writeFile(keyFile, JSON.stringify({ agent: "scripted:careful", sandtable }));
-    expect(await run({ sandtable }, noModel)).toEqual(["cached"]);
+    await writeFile(path.join(dir, "luna", "run.json"), JSON.stringify({ agent: "bedrock:global.openai.gpt-6-luna" }));
+    expect((await run({ provider: "bedrock", region: "us-east-1" }, careful, "claude:claude-haiku-5-5")).Luna).toBe("ran: stored results not reused: they ran on an unrecorded provider, not bedrock");
+    // Library callers that pass no runInfo keep reusing results, as before.
+    expect(await run(undefined, noModel, undefined)).toEqual(cached);
   });
 
   it("knows which specs run Claude and which calls go to Bedrock", () => {
@@ -390,6 +417,39 @@ describe("leaderboard provenance", () => {
     } finally {
       process.env = saved;
     }
+  });
+
+  it.skipIf(!process.features.typescript)("sandtable leaderboard tells each model which provider its calls used from the caller's spec", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const domain = await loadDomain(example);
+    // A stored Claude row, so the CLI reuses it instead of calling Claude; the careful agent played it.
+    const claude = { label: "Claude", agent: "claude:claude-sonnet-5-5" };
+    await runLeaderboard({ domain, entries: [claude], user: scriptedUser(), k: 1, taskIds: ["no-mc-number"], outDir: dir, runInfo: { sandtable: { version: "9.9.9" }, provider: "anthropic" }, userSpec: "scripted", resolveAgent: async () => freightScriptedAgent("careful") });
+    const models = path.join(dir, "models.yaml");
+    await writeFile(models, 'models:\n  - { label: Claude, agent: "claude:claude-sonnet-5-5" }\n  - { label: Careful rules, agent: scripted:careful }\n');
+    // No key or AWS setting: a model call, if one slipped through, fails instead of costing money.
+    const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("AWS_") && k !== "ANTHROPIC_API_KEY"));
+    const args = [path.resolve("src/cli.ts"), "leaderboard", example, "-m", models, "-u", "scripted", "-k", "1", "-t", "no-mc-number", "-o", dir, "--provider", "anthropic"];
+    const { stdout } = await promisify(execFile)(process.execPath, args, { cwd: dir, env });
+    expect(stdout).toMatch(/cached\s+Claude/);
+    // With a scripted caller, the scripted agent's calls went nowhere: its run.json has no provider.
+    expect(JSON.parse(await readFile(path.join(dir, "claude", "run.json"), "utf8"))).toMatchObject({ provider: "anthropic" });
+    expect(JSON.parse(await readFile(path.join(dir, "careful-rules", "run.json"), "utf8"))).not.toHaveProperty("provider");
+  });
+
+  it.skipIf(!process.features.typescript)("sandtable leaderboard stops before running or writing anything when Bedrock is used and no region resolves", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    // An empty HOME has no ~/.aws/config, and no AWS_* variable names a region or a profile.
+    const home = await mkdtemp(path.join(os.tmpdir(), "sandtable-home-"));
+    const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("AWS_"))), HOME: home };
+    const models = path.join(dir, "models.yaml");
+    await writeFile(models, 'models:\n  - { label: Luna, agent: "bedrock:global.openai.gpt-6-luna" }\n');
+    const out = path.join(dir, "board");
+    const args = [path.resolve("src/cli.ts"), "leaderboard", example, "-m", models, "-u", "scripted", "-k", "1", "-t", "no-mc-number", "-o", out];
+    const failed = await promisify(execFile)(process.execPath, args, { cwd: dir, env }).then(() => undefined, (e: { code: number; stderr: string }) => e);
+    expect(failed?.code).toBe(1);
+    expect(failed?.stderr).toContain("no AWS region for Bedrock: pass --region, or set AWS_REGION or a region in the AWS profile");
+    await expect(readdir(out)).rejects.toThrow();
   });
 
   it.skipIf(!process.features.typescript)("sandtable leaderboard records the commit of the sandtable clone it runs from, and its --prices file", async () => {

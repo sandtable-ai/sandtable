@@ -153,8 +153,17 @@ export interface LeaderboardOptions {
   taskIds?: string[];
   /** Reuse an entry's results.json when it exists and matches this run (default true). */
   resume?: boolean;
-  /** Written to each model's run.json when its trials run, and the `sandtable` part to leaderboard.json. Stored results are reused only where their run.json has the same provider and region. */
+  /**
+   * Written to each model's run.json when its trials run (the provider and region only where that model's calls
+   * went, see `userSpec`), and the `sandtable` part to leaderboard.json. Stored results are reused only where
+   * their run.json has the provider and region the model uses now.
+   */
   runInfo?: RunInfo;
+  /**
+   * The caller's spec as given (claude:…, scripted), so each model records and compares only the provider and region
+   * its calls used. Without it, `runInfo`'s provider and region are recorded and compared for every model.
+   */
+  userSpec?: string;
   /** The `--prices` file the costs use: recorded in leaderboard.json. */
   prices?: PricesFile;
   /** `note` says why stored results were not reused, or why an entry was skipped. */
@@ -218,13 +227,26 @@ export function changedRunKey(had: RunKey | undefined, want: RunKey): string | u
   return undefined;
 }
 
+type Where = Pick<RunInfo, "provider" | "region">;
+
 /**
- * Why results that ran where `had` says can't stand in for a run where `now` says: another provider or Bedrock
- * region, or a run.json from before either was recorded. Price, routing and the served model can differ.
+ * Where an entry's calls went, out of the board's: the provider when the entry or the caller is a Claude model, and
+ * the region when either calls Bedrock. Without the caller's spec, the board's provider and region as they are.
  */
-export function changedWhere(had: Pick<RunInfo, "provider" | "region">, now: Pick<RunInfo, "provider" | "region">): string | undefined {
-  if (had.provider !== now.provider) return `they ran on ${had.provider ?? "an unrecorded provider"}, not ${now.provider ?? "none"}`;
-  if (had.region !== now.region) return `they ran in ${had.region ?? "an unrecorded region"}, not ${now.region ?? "none"}`;
+export function entryWhere(info: Where, agentSpec: string, userSpec: string | undefined): Where {
+  if (userSpec === undefined) return { ...(info.provider ? { provider: info.provider } : {}), ...(info.region ? { region: info.region } : {}) };
+  const uses = bedrockUse([userSpec, agentSpec], info.provider ?? "anthropic");
+  return { ...(uses.claude && info.provider ? { provider: info.provider } : {}), ...(uses.bedrock && info.region ? { region: info.region } : {}) };
+}
+
+/**
+ * Why results that ran where `had` says can't stand in for an entry that runs where `now` says: another provider
+ * or Bedrock region, or a run.json from before either was recorded. Only what the entry uses now is compared.
+ * Price, routing and the served model can differ.
+ */
+export function changedWhere(had: Where, now: Where): string | undefined {
+  if (now.provider !== undefined && had.provider !== now.provider) return `they ran on ${had.provider ?? "an unrecorded provider"}, not ${now.provider}`;
+  if (now.region !== undefined && had.region !== now.region) return `they ran in ${had.region ?? "an unrecorded region"}, not ${now.region}`;
   return undefined;
 }
 
@@ -317,6 +339,8 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
     const file = path.join(dir, "results.json");
     const keyFile = path.join(dir, "run.json");
     const key = runKey(entry);
+    const where = opts.runInfo ? entryWhere(opts.runInfo, entry.agent, opts.userSpec) : undefined;
+    const info = opts.runInfo ? { sandtable: opts.runInfo.sandtable, ...where } : {};
     let result: SuiteResult | undefined;
     let stale: string | undefined;
     let fresh = false;
@@ -325,7 +349,7 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
       const storedKey = await readFile(keyFile, "utf8").then((t) => JSON.parse(t) as RunKey & Partial<RunInfo>, () => undefined);
       stale =
         changedRunKey(storedKey, key) ??
-        (storedKey && opts.runInfo ? changedWhere(storedKey, opts.runInfo) : undefined) ??
+        (storedKey && where ? changedWhere(storedKey, where) : undefined) ??
         staleReason(stored, { domain: domain.name, k, user: user.name, taskIds });
       // Stored verdicts are never reused as they are: the stored conversations are graded again under the
       // current rules, so every row of the board is graded by the same grader.
@@ -352,8 +376,9 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
         result = await runSuite({ domain, agent, user, k, taskIds, concurrency: opts.concurrency ?? 4 });
         fresh = true;
       } catch (err) {
-        opts.onEntry?.(entry.label, "failed");
-        rows.push(errorRow(entry, err instanceof Error ? err.message : String(err)));
+        const message = err instanceof Error ? err.message : String(err);
+        opts.onEntry?.(entry.label, "failed", stale ? `${message}; stored results not reused: ${stale}` : message);
+        rows.push(errorRow(entry, message));
         continue;
       }
     }
@@ -363,18 +388,18 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
     if (crashes.length) {
       const trials = result.tasks.reduce((n, t) => n + t.trials.length, 0);
       const message = `${crashes.length} of ${trials} trial(s) crashed: ${crashes[0]!.error ?? "unknown error"}`;
-      let note = message;
+      let note = fresh && stale ? `${message}; stored results not reused: ${stale}` : message;
       if (fresh) {
         // The stored files may be the only copy of paid conversations: a crashed rerun goes beside them, never over them.
         const crashedDir = path.join(dir, "crashed");
-        await writeRun(crashedDir, result, { ...key, ...opts.runInfo });
+        await writeRun(crashedDir, result, { ...key, ...info });
         note += `; the crashed run is in ${crashedDir}${(await exists(file)) ? ", and the stored results are kept" : ""}`;
       }
       opts.onEntry?.(entry.label, "failed", note);
       rows.push(errorRow(entry, message));
       continue;
     }
-    if (fresh) await writeRun(dir, result, { ...key, ...opts.runInfo });
+    if (fresh) await writeRun(dir, result, { ...key, ...info });
     if (fresh) opts.onEntry?.(entry.label, "ran", stale && `stored results not reused: ${stale}`);
     rows.push(toRow(entry, result));
   }

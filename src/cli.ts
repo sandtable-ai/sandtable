@@ -355,6 +355,8 @@ withProviderFlags(program
     const flags = providerOpts(o);
     const uses = bedrockUse([userSpec, ...cfg.models.map((m) => m.agent)], providerOf(flags));
     const region = uses.bedrock ? await bedrockRegion(flags.region, flags.awsProfile) : undefined;
+    // Without one, every Bedrock model would look stale and rerun against the SDK's default region.
+    if (uses.bedrock && !region) throw new Error("no AWS region for Bedrock: pass --region, or set AWS_REGION or a region in the AWS profile");
     // With no --region or AWS_REGION, the Claude Bedrock SDK falls back to us-east-1 and the AWS SDK to the
     // profile's config. Give every adapter the one region run.json records, so it says where the calls went.
     const p: ClaudeOptions = region ? { ...flags, region } : flags;
@@ -381,6 +383,7 @@ withProviderFlags(program
       concurrency: o.concurrency,
       resume: o.resume,
       runInfo,
+      userSpec,
       ...(prices ? { prices } : {}),
       resolveAgent: (spec, effort) => leaderboardAgent(spec, effort, p, o.openaiBaseUrl),
       onEntry: (label, status, note) => console.log(`  ${mark[status]}  ${label}${note ? `  (${note})` : ""}`),
