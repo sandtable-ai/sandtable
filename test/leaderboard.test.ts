@@ -677,7 +677,7 @@ describe("sandtable leaderboard exit code", () => {
     const { code, stderr, dir } = await board("models:\n  - { label: Unknown, agent: nope }\n  - { label: Crashing, agent: ./crash-agent.mjs }\n");
     expect(code).toBe(1);
     expect(stderr).toContain("Every model failed");
-    expect(stderr).toContain("credentials, provider and region");
+    expect(stderr).toContain("the ✗ failed lines above give each model's error");
     // The board is still written, so each model's error can be read.
     const lb = JSON.parse(await readFile(path.join(dir, "board", "leaderboard.json"), "utf8")) as { rows: { label: string; baseline: boolean; error?: string }[] };
     expect(lb.rows.filter((r) => !r.baseline).map((r) => [r.label, r.error !== undefined])).toEqual([

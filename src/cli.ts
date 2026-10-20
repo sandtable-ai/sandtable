@@ -394,7 +394,7 @@ withProviderFlags(program
     // entries only has no model rows: nothing failed, and the baseline it asked for ran.
     const models = result.rows.filter((r) => !r.baseline);
     if (models.length > 0 && models.every((r) => r.error !== undefined)) {
-      console.error(`\n✗ Every model failed, so this board ranks none of them: check each model's credentials, provider and region (the ✗ failed lines above give each error).`);
+      console.error(`\n✗ Every model failed, so this board ranks none of them: the ✗ failed lines above give each model's error (missing credentials or package, the wrong provider or region, throttling, an agent that isn't running).`);
       process.exitCode = 1;
     }
   });
