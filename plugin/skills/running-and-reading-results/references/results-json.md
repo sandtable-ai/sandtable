@@ -25,7 +25,9 @@ SuiteResult
                                invariant; rate = broken / applied trials (null if it never applied). Never a failure
   pendingReview[]              { kind, id, source? }: non-empty means the run is provisional
   usage                        { agent: {<model>: tokens}, user: {<model>: tokens}, costUsd }: costUsd is null when a
-                               model has no known price (Claude, or passed with --prices)
+                               model has no known price (Claude, or passed with --prices). tokens = { calls, input,
+                               output, cacheRead, cacheWrite, maxTokensStops? }: maxTokensStops counts replies cut off
+                               at the output-token limit, present only when there was one
   latency                      { agentTurnP50Ms, agentTurnP95Ms }
   tasks[]                      { id, description, tags[], passes, trials[] }
     trials[]                   sorted by trial number

@@ -177,12 +177,15 @@ export function requestBase(opts: ClaudeOptions, defaultEffort: Effort) {
 
 function report(ctx: { recordUsage?: UsageRecorder }, fallbackModel: string, response: Anthropic.Beta.BetaMessage) {
   const u = response.usage;
-  if (!u) return;
+  const cut = response.stop_reason === "max_tokens";
+  if (!u && !cut) return;
   ctx.recordUsage?.(response.model ?? fallbackModel, {
-    input: u.input_tokens,
-    output: u.output_tokens,
-    cacheRead: u.cache_read_input_tokens ?? 0,
-    cacheWrite: u.cache_creation_input_tokens ?? 0,
+    input: u?.input_tokens ?? 0,
+    output: u?.output_tokens ?? 0,
+    cacheRead: u?.cache_read_input_tokens ?? 0,
+    cacheWrite: u?.cache_creation_input_tokens ?? 0,
+    // The reply hit max_tokens: what the agent says next may be cut off or empty.
+    ...(cut ? { maxTokensStops: 1 } : {}),
   });
 }
 

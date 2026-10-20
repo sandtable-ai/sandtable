@@ -154,12 +154,15 @@ export function bedrockConverseAgent(opts: BedrockConverseOptions): AgentAdapter
               }),
             );
             const u = res.usage;
-            if (u) {
+            const cut = res.stopReason === "max_tokens";
+            if (u || cut) {
               ctx.recordUsage?.(opts.modelId, {
-                input: u.inputTokens ?? 0,
-                output: u.outputTokens ?? 0,
-                cacheRead: u.cacheReadInputTokens ?? 0,
-                cacheWrite: u.cacheWriteInputTokens ?? 0,
+                input: u?.inputTokens ?? 0,
+                output: u?.outputTokens ?? 0,
+                cacheRead: u?.cacheReadInputTokens ?? 0,
+                cacheWrite: u?.cacheWriteInputTokens ?? 0,
+                // The reply hit maxTokens: what the agent says next may be cut off or empty.
+                ...(cut ? { maxTokensStops: 1 } : {}),
               });
             }
             return res;

@@ -5,6 +5,8 @@ export interface TokenUsage {
   output: number;
   cacheRead: number;
   cacheWrite: number;
+  /** Calls whose reply stopped at the output-token limit (`max_tokens`), so it may be cut off. Set once one has. */
+  maxTokensStops?: number;
 }
 
 export type UsageByModel = Record<string, TokenUsage>;
@@ -41,6 +43,12 @@ export function recordInto(target: UsageByModel, model: string, u: Partial<Omit<
   t.output += u.output ?? 0;
   t.cacheRead += u.cacheRead ?? 0;
   t.cacheWrite += u.cacheWrite ?? 0;
+  addStops(t, u.maxTokensStops);
+}
+
+/** Adds to `maxTokensStops`, which stays absent while no call has stopped at the limit. */
+function addStops(t: TokenUsage, n: number | undefined): void {
+  if (n) t.maxTokensStops = (t.maxTokensStops ?? 0) + n;
 }
 
 /**
@@ -88,6 +96,7 @@ export function sumUsage(items: readonly Usage[]): Usage {
         t.output += u.output;
         t.cacheRead += u.cacheRead;
         t.cacheWrite += u.cacheWrite;
+        addStops(t, u.maxTokensStops);
       }
     }
   }
@@ -103,6 +112,7 @@ export function totalTokens(group: UsageByModel): TokenUsage {
     t.output += u.output;
     t.cacheRead += u.cacheRead;
     t.cacheWrite += u.cacheWrite;
+    addStops(t, u.maxTokensStops);
   }
   return t;
 }
