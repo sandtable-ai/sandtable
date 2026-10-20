@@ -451,7 +451,10 @@ program
   .command("regrade")
   .argument("<results>", "path to a results.json")
   .description("re-score a past run's stored trials under the domain's current rules, without calling a model")
-  .requiredOption("-d, --domain <dir>", "domain directory (with sandtable.yaml) or file, as edited since the run")
+  // results.json records only the domain's name, so the domain itself is always given. Commander's help
+  // doesn't mark a required option, so the usage line and the description say it.
+  .usage("<results> -d <dir> [options]")
+  .requiredOption("-d, --domain <dir>", "(required) the domain the run used, as edited since: a directory (with sandtable.yaml) or the file itself")
   .option("-o, --out <dir>", "output directory for results.json and report.html (default: the results' own directory, replacing them)")
   .option("--no-html", "skip the HTML report")
   .action(async (resultsPath: string, o: { domain: string; out?: string; html: boolean }) => {
@@ -461,8 +464,14 @@ program
     try {
       result = regradeSuite(domain, stored);
     } catch (err) {
-      if (err instanceof RegradeError) throw new Error(`can't regrade ${resultsPath}: ${err.message}. Rerun it with \`sandtable run\` instead.`);
-      throw err;
+      if (!(err instanceof RegradeError)) throw err;
+      // A run of another domain: the fix is the --domain the run used, not a rerun.
+      if (stored.domain !== domain.name) {
+        throw new Error(
+          `can't regrade ${resultsPath}: it is a run of ${stored.domain}, not ${domain.name}, so --domain ${o.domain} is likely not the domain the run used. Pass the one whose sandtable.yaml has \`name: ${stored.domain}\`, the name results.json records as "domain".`,
+        );
+      }
+      throw new Error(`can't regrade ${resultsPath}: ${err.message}. Rerun it with \`sandtable run\` instead.`);
     }
     const flipped = changedVerdicts(stored, result);
     console.log(renderTerminal(result));

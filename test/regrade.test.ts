@@ -172,6 +172,29 @@ describe("regrade", () => {
     expect(await readFile(file, "utf8")).toBe(JSON.stringify(run));
   });
 
+  it.skipIf(!process.features.typescript)("sandtable regrade with another domain's --domain points at the flag, not at a rerun", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-regrade-"));
+    const run = await stored(await loadDomain(example), "careful");
+    const file = path.join(dir, "results.json");
+    await writeFile(file, JSON.stringify(run));
+
+    const clinic = path.resolve("examples/clinic");
+    const err = await promisify(execFile)(process.execPath, [cli, "regrade", file, "--domain", clinic]).catch((e: { code: number; stderr: string }) => e);
+    expect(err).toMatchObject({ code: 1 });
+    const { stderr } = err as { stderr: string };
+    expect(stderr).toContain(`can't regrade ${file}: it is a run of freight-carrier-sales, not clinic-front-desk, so --domain ${clinic} is likely not the domain the run used.`);
+    // How to tell which domain the run used: results.json names it, as its sandtable.yaml does.
+    expect(stderr).toContain("name: freight-carrier-sales");
+    expect(stderr).not.toContain("sandtable run");
+    expect(await readFile(file, "utf8")).toBe(JSON.stringify(run));
+  });
+
+  it.skipIf(!process.features.typescript)("sandtable regrade --help shows that --domain is required", async () => {
+    const { stdout } = await promisify(execFile)(process.execPath, [cli, "regrade", "--help"]);
+    expect(stdout).toContain("Usage: sandtable regrade <results> -d <dir> [options]");
+    expect(stdout).toMatch(/-d, --domain <dir>\s+\(required\) the domain the run used/);
+  });
+
   it("replaces a results file whole, leaving no temporary file behind", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-write-"));
     const file = path.join(dir, "results.json");
