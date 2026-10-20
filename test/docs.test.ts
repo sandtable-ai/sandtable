@@ -2,11 +2,12 @@ import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { freightScriptedAgent } from "../src/demo/freight-agents.ts";
 import { lintDomain } from "../src/grade/lint.ts";
 import { formatPercent, renderTerminal } from "../src/report/terminal.ts";
 import { runSuite, type SuiteResult } from "../src/run/suite.ts";
+import { httpAgent } from "../src/sim/http.ts";
 import { noopAgent } from "../src/sim/noop.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
 import type { AgentAdapter } from "../src/sim/types.ts";
@@ -55,20 +56,52 @@ function staleOutput(file: string, anchor: string, command: string, output: stri
     });
 }
 
+/**
+ * A fetch that answers like the quickstart's toy HTTP agent: the page's agent-server.mjs, run as the
+ * page shows it, with `createServer` handed in instead of imported. Each POST goes straight to the
+ * page's request handler, so no server listens and nothing touches the network.
+ */
+function quickstartAgentFetch(): typeof fetch {
+  const code = /^[ \t]*```js agent-server\.mjs\n([\s\S]*?)^[ \t]*```/m.exec(read("docs/quickstart.mdx"))?.[1];
+  if (!code) throw new Error("docs/quickstart.mdx has no ```js agent-server.mjs block any more (change test/docs.test.ts if the page renamed it)");
+  const imports = [...code.matchAll(/^\s*import .*$/gm)].map((m) => m[0].trim());
+  expect(imports, "the toy agent may import only createServer: the test hands it in").toEqual(['import { createServer } from "node:http";']);
+  type Handler = (req: Iterable<string>, res: { setHeader(): void; end(body: string): void }) => Promise<void>;
+  let handler: Handler | undefined;
+  new Function("createServer", code.replace(/^\s*import .*$/gm, ""))((h: Handler) => {
+    handler = h;
+    return { listen: () => {} };
+  });
+  if (!handler) throw new Error("the quickstart's toy agent no longer calls createServer(handler)");
+  const serve = handler;
+  // A handler that throws rejects the fetch, so the trial ends in an error instead of waiting for end().
+  return async (_url, init) =>
+    new Response(await new Promise<string>((end, fail) => Promise.resolve(serve([String(init?.body)], { setHeader() {}, end })).catch(fail)));
+}
+
 let freight: Domain;
 let clinic: Domain;
 let naive: SuiteResult;
 let careful: SuiteResult;
 let noop: SuiteResult;
+let toy: SuiteResult;
 
 beforeAll(async () => {
   freight = await loadDomain(path.resolve("examples/freight"));
   clinic = await loadDomain(path.resolve("examples/clinic"));
-  [naive, careful, noop] = await Promise.all([
-    run(freight, freightScriptedAgent("naive")),
-    run(freight, freightScriptedAgent("careful")),
-    run(freight, noopAgent()),
-  ]);
+  vi.stubGlobal("fetch", quickstartAgentFetch());
+  try {
+    [naive, careful, noop, toy] = await Promise.all([
+      run(freight, freightScriptedAgent("naive")),
+      run(freight, freightScriptedAgent("careful")),
+      run(freight, noopAgent()),
+      run(freight, httpAgent("http://localhost:8787/step")),
+    ]);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+  const crashed = toy.tasks.flatMap((t) => t.trials).find((t) => t.endReason === "error");
+  if (crashed) throw new Error(`the quickstart's toy agent crashed: ${crashed.error}`);
 });
 
 describe("pages that quote the bundled examples", () => {
@@ -96,8 +129,10 @@ describe("pages that quote the bundled examples", () => {
       "docs/quickstart.mdx": [
         `replay ${n} scripted carrier calls`,
         `scores pass^1 ${naive1} (${passes(naive)} of ${n})`,
-        // The toy HTTP agent never books, so it scores exactly what the noop baseline does.
-        `It scores pass^1 ${Math.round(noop.passHat["1"]! * 100)}%: exactly what the [noop baseline]`,
+        // The page's toy HTTP agent, the noop baseline, and each task the toy agent passes that noop fails.
+        `It scores pass^1 ${formatPercent(toy.passHat["1"]!)} (${passes(toy)} of ${n})`,
+        `never calls a tool, scores ${noop1} (${passes(noop)} of ${n})`,
+        ...toy.tasks.filter((t) => t.passes > noop.tasks.find((x) => x.id === t.id)!.passes).map((t) => `\`${t.id}\``),
       ],
       "docs/concepts/baselines.mdx": [
         `it scores **${Math.round(noop.passHat["1"]! * 100)}%**`,
