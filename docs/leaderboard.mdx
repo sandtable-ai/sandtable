@@ -1,0 +1,86 @@
+---
+title: "Freight leaderboard: how models do on a carrier-sales desk"
+sidebarTitle: "Leaderboard"
+description: "How the freight leaderboard was run: one fictional carrier-sales domain, 50 rehearsed calls, four trials each, the same simulated caller for every model, deterministic grading, and how to reproduce it."
+keywords: ["leaderboard", "agent benchmark", "pass^k", "Amazon Bedrock", "tool use", "simulated users", "methodology", "reproducibility"]
+---
+
+Every model on this board plays the same AI agent on a fictional freight brokerage's carrier-sales desk, against the same simulated callers, graded by the same deterministic checks. This page says how the board was run, what it measures and what it can't see. Every number on it can be traced to a stored conversation.
+
+{/* RESULTS: table (pass^1, pass^4, rule violations, top failure, soft rule, cost / trial, p95 turn), pass^1-vs-pass^4 chart, run date and cost, link to the trajectories. */}
+
+## Setup
+
+| | |
+|---|---|
+| Domain | [`examples/freight`](https://github.com/sandtable-ai/sandtable/tree/main/examples/freight) as of the run's commit ("freight v1"): 8 tables, 9 tools, 18 rules (one of them soft), 4 caller personas |
+| Tasks | 50 rehearsed inbound calls. 32 must change the world (book, submit for a rep, log, call back, transfer) and 18 must not. 18 of the 50 are a hard tier: multi-load calls, corrections mid-call, negotiation across rounds, identity and re-brokering traps |
+| Trials | k = 4 per task and model: 200 conversations per model |
+| Simulated caller | Claude Sonnet 5.5 on a global Bedrock inference profile (`claude:global.anthropic.claude-sonnet-5-5`), effort `low`, the same for every model |
+| Score | pass^4: the share of tasks where all four trials pass. pass^1 is shown next to it |
+| Baseline | a do-nothing agent that never calls a tool. It passes the 16 tasks where doing nothing is correct, and sets the floor |
+
+Each call starts from a fresh copy of the world. The caller follows hidden instructions (who it is, what it wants, its floor price, when to push back) and never sees the agent's policy. A conversation ends when the caller hangs up, or after 16 agent turns.
+
+[pass^k](/concepts/pass-k) is the share of tasks an agent gets right every time out of k tries, estimated from the trials as in τ-bench. A model that passes a task three times out of four scores on pass^1 but not on pass^4, so the gap between the two is how often its successes fail to repeat.
+
+## What's graded
+
+Grading is deterministic: no model judges another. A trial passes when every check passes and no hard rule was broken:
+
+- **End state**: the records the call should leave behind, such as one booking for this load and carrier at a rate within the agreed range, or no booking at all.
+- **Rules**, checked on every tool call against the world at that moment: vet the carrier with `verify_carrier` before booking, making a counter-offer or submitting an offer; book, submit, log capacity or schedule a callback only for an eligible carrier (active authority, valid insurance, an acceptable safety rating, not flagged do-not-use, not a broker); never book, counter or submit above the load's `max_rate`; match the carrier's equipment to the load's; never book a rep-confirm load directly; at most three counter-offer rounds per load. Attempting a forbidden call breaks the rule even when the API would have rejected it.
+- **What the agent says**: it must never say a load's `max_rate` except as a counter-offer it logged, a rate it booked or submitted for a rep, or a number the caller said first. It must never say why a carrier is flagged do-not-use, or read out the id of an offer submitted for a rep as a confirmation number.
+- **Tools that must or must not be called**, such as `transfer_to_human` when the caller's company doesn't match its MC record.
+
+The full list, with the policy line each rule enforces, is in the [freight example's README](https://github.com/sandtable-ai/sandtable/tree/main/examples/freight#what-the-invariants-catch).
+
+One rule is **soft** and never fails a trial: `counter-at-ceiling`, a logged counter-offer that reached the load's `max_rate`. The policy allows it, so the board reports it as a concession rate, out of the trials that logged a counter-offer, and keeps it out of the ranking.
+
+A trial that crashes (throttling past the retries, expired credentials) is not a result. A model with any crashed trial shows as an error row instead of a score.
+
+## Which models
+
+The models are listed in [`leaderboard/models.yaml`](https://github.com/sandtable-ai/sandtable/blob/main/leaderboard/models.yaml). The rule is no superseded models, among the models callable through the Converse API from eu-west-1: for a closed lab, the newest model in each current tier; for an open-weight family, its largest current model. That excludes models Converse can't reach from there, such as DeepSeek, Llama, Gemma 4, Mistral Large 3 and the larger Qwen3 models.
+
+Left out: GLM 5.3 (not enabled on the account the board ran on), Gemma 3 27B (never calls a tool on Bedrock), GPT-5.5 (superseded by GPT-6.1 Sol) and Kimi K3 (cost).
+
+{/* RESULTS: the models that ran, and Claude Fable 5.1's status (it needs the account's Bedrock data-retention mode set to aws_review). */}
+
+## What keeps the comparison fair
+
+- **The same prompt, byte for byte.** Every model gets the same system prompt (the domain's description and policy), the same tool schemas and the same caller. Each model's `results.json` records an `inputs` hash of exactly these, and it is identical across models.
+- **The same output budget.** 16,000 output tokens per model call for every model, reasoning included.
+- **Reasoning settings.** The Claude models run at effort `medium`, sandtable's setting for its reference agent. That is the provider default for Claude Opus 5.5 and Claude Haiku 5.5, and one level below it for Claude Sonnet 5.5 and Claude Fable 5.1, whose default is `high`. Every other model runs at its provider's default: sandtable sends no reasoning settings through Converse. No model gets a temperature or a sampling setting.
+- **Tool rounds.** Up to 12 model calls per agent turn, for every model.
+- **Routing.** Every model with a global cross-region inference profile runs on it (all Claude models, the GPT-6 models, Grok 4.7, Nova 2 Lite). The others run in eu-west-1.
+- **Prompt caching.** Each model gets the caching its provider offers through the API sandtable calls: Claude's cache breakpoints, Nova's Converse cache points, the GPT-6 models' and Grok's own caching. The others don't cache. Caching changes cost and latency, not what the model sees.
+- **Cost.** *Cost / trial* counts the agent model's tokens at list price, so it compares models. The caller's cost, the same for every model, is left out of the column and kept in `leaderboard.json` (`costUsd`, `costPerTrialUsd`). Claude prices are Anthropic's list prices, which match AWS's global-profile prices. The other prices come from the AWS Pricing API for eu-west-1, and the GPT-6 models', which the Pricing API doesn't list, from AWS's model cards ([`prices/bedrock.verified.json`](https://github.com/sandtable-ai/sandtable/blob/main/prices/bedrock.verified.json), with the source of each). These are estimates: no batch, discount or reserved pricing.
+
+## Reproduce it
+
+From a clean clone at the run's commit, with access to the models on Amazon Bedrock in eu-west-1:
+
+```bash
+git clone https://github.com/sandtable-ai/sandtable && cd sandtable
+git checkout 6ad55beb25d222445c46b95ae9084de3794924e6
+npm ci
+node src/cli.ts leaderboard examples/freight -m leaderboard/models.yaml \
+  --provider bedrock --region eu-west-1 --aws-profile <your-profile> \
+  --prices prices/bedrock.eu-west-1.json -c 8
+```
+
+Each model's folder holds its full `results.json` (every conversation, tool call, check and world change), a `report.html`, and `run.json`, which records the sandtable version, the commit, whether the checkout had uncommitted changes, the provider and the region. Running the command again reuses finished models. Their stored conversations are graded again under the current rules at no model cost ([`sandtable regrade`](/reference/cli#regrade) does the same for one run).
+
+{/* RESULTS: the run's commit if it differs, the date, the total cost, and where the published trajectories live. */}
+
+## Known limits
+
+- **One caller, and it's also a contestant.** Claude Sonnet 5.5 plays every caller, and it is also on the board. It doesn't grade anything, but it may respond differently to its own family's phrasing. A different caller model may move scores.
+- **The caller isn't perfect.** In the 300-trial canary before the run, the caller said its instructions out loud twice ("Agent said can't go higher, so ask what else on the lane"). Neither changed a verdict. Three hard-tier callers that made their task easier in the canary were fixed before the run ([#162](https://github.com/sandtable-ai/sandtable/issues/162)).
+- **Values, not meaning.** The disclosure checks match numbers in digit spellings (`2350`, `2,350`, `$2,350.00`). A ceiling spelled out in words ("twenty-three fifty") isn't caught, and confirming a caller's guess ("Yes, $2,350 is our max") or calling a logged counter-offer "our ceiling" passes. Tone, politeness and whether the agent sounds like a good broker are not graded.
+- **A made-up load is filed under the wrong rule.** An agent that books a load ID it invented fails the trial, but the violation is reported as `rep-confirm-not-booked` ([#163](https://github.com/sandtable-ai/sandtable/issues/163)). It happened in 1 of 1,009 stored trials before the run.
+- **Coincidental numbers.** An offer on one load can equal another load's ceiling. Since [#166](https://github.com/sandtable-ai/sandtable/issues/166), a value counts as disclosed only once the agent has been shown it, in a tool result or its prompt.
+{/* RESULTS: confirm the board's trials were regraded with #166 before publishing. */}
+- **A small sample.** Four trials per task is enough to separate a model that repeats its successes from one that doesn't, but not to rank close models with confidence. Confidence intervals and flaky-task verdicts are planned ([#27](https://github.com/sandtable-ai/sandtable/issues/27)).
+- **One domain, in text.** It's a single fictional carrier-sales desk in English, over text, not audio. A model's rank here says how it follows this kind of SOP with tools, not how it does everywhere.
