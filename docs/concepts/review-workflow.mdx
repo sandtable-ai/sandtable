@@ -30,7 +30,7 @@ Tools drafted from an OpenAPI spec are marked `review: pending` when they have `
 ## List what is pending
 
 ```text
-$ sandtable review ./my-domain
+$ npx sandtable-ai review ./my-domain
 - invariant rate-ceiling  (policy.md)
     "Never book a load above its max rate."
 
@@ -73,9 +73,9 @@ Runs still work while items are pending, so you can try a draft early. Their res
 `validate --strict` exits 1 while anything is pending:
 
 ```text
-$ sandtable validate ./my-domain --strict
+$ npx sandtable-ai validate ./my-domain --strict
 ✓ my-domain: 4 tables, 5 tools, 9 invariants, 2 tasks
-⚠ 1 drafted item(s) pending review (sandtable review ./my-domain)
+⚠ 1 drafted item(s) pending review (npx sandtable-ai review ./my-domain)
 ```
 
 Run it before `lint` and `run` in CI, so nothing drafted becomes a release gate without a person having accepted it. See [Use it in CI](/guides/ci).

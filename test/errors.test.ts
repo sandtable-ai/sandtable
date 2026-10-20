@@ -49,7 +49,7 @@ describe("optional packages", () => {
     const name = "sandtable-test-missing-package";
     const err = await importOptional(name, () => import(name), "--provider bedrock").catch((e: Error) => e);
     expect((err as Error).message).toContain(`--provider bedrock needs the optional package ${name}`);
-    expect((err as Error).message).toContain(`npm install --save-dev sandtable-ai ${name}`);
+    expect((err as Error).message).toContain(`npm install --save-dev sandtable-ai ${name}, then npx sandtable-ai <command>`);
     expect((err as Error).message).toContain(`npx -p sandtable-ai -p ${name} sandtable <command>`);
   });
 

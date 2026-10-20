@@ -26,28 +26,28 @@ If your agent is built with a framework, such as the Vercel AI SDK, the OpenAI A
   <Tab title="Claude">
     ```bash
     export ANTHROPIC_API_KEY=...
-    sandtable run ./my-domain --agent claude -k 4
+    npx sandtable-ai run ./my-domain --agent claude -k 4
     ```
   </Tab>
   <Tab title="Bedrock">
     ```bash
     npm install --save-dev sandtable-ai @anthropic-ai/bedrock-sdk
-    npx sandtable run ./my-domain --provider bedrock --region eu-west-1 --agent claude -k 4
+    npx sandtable-ai run ./my-domain --provider bedrock --region eu-west-1 --agent claude -k 4
     ```
   </Tab>
   <Tab title="OpenAI-compatible">
     ```bash
-    OPENAI_API_KEY=sk-... sandtable run ./my-domain --agent openai:gpt-4.1-mini -k 4
+    OPENAI_API_KEY=sk-... npx sandtable-ai run ./my-domain --agent openai:gpt-4.1-mini -k 4
     ```
   </Tab>
   <Tab title="HTTP">
     ```bash
-    sandtable run ./my-domain --agent http://localhost:8787/step -k 4
+    npx sandtable-ai run ./my-domain --agent http://localhost:8787/step -k 4
     ```
   </Tab>
   <Tab title="JS module">
     ```bash
-    sandtable run ./my-domain --agent ./my-agent.ts -k 4
+    npx sandtable-ai run ./my-domain --agent ./my-agent.ts -k 4
     ```
   </Tab>
 </Tabs>
@@ -72,7 +72,7 @@ Model-backed commands (`run`, `demo --live`, `init --sop`, `init --transcripts`)
 
 ```bash
 npm install --save-dev sandtable-ai @anthropic-ai/bedrock-sdk
-npx sandtable demo --live --provider bedrock --region eu-west-1 --aws-profile my-profile
+npx sandtable-ai demo --live --provider bedrock --region eu-west-1 --aws-profile my-profile
 ```
 
 <Note>
@@ -104,7 +104,7 @@ Full model IDs and ARNs pass through unchanged. Set `SANDTABLE_BEDROCK_CLIENT=ma
 
 ```bash
 npm install --save-dev sandtable-ai @aws-sdk/client-bedrock-runtime
-npx sandtable run ./my-domain --agent bedrock:qwen.qwen3-32b-v1:0 -k 4
+npx sandtable-ai run ./my-domain --agent bedrock:qwen.qwen3-32b-v1:0 -k 4
 ```
 
 - `<model-id>` is the Bedrock model or inference profile ID, passed through unchanged. The model must be enabled for your account in that region.
@@ -122,14 +122,14 @@ npx sandtable run ./my-domain --agent bedrock:qwen.qwen3-32b-v1:0 -k 4
 
 ```bash
 # OpenAI
-OPENAI_API_KEY=sk-... sandtable run ./my-domain --agent openai:gpt-4.1-mini -k 4
+OPENAI_API_KEY=sk-... npx sandtable-ai run ./my-domain --agent openai:gpt-4.1-mini -k 4
 
 # OpenRouter: one key for GPT, Gemini, Llama, Qwen, DeepSeek and more
-OPENAI_API_KEY=$OPENROUTER_API_KEY sandtable run ./my-domain -k 4 \
+OPENAI_API_KEY=$OPENROUTER_API_KEY npx sandtable-ai run ./my-domain -k 4 \
   --openai-base-url https://openrouter.ai/api/v1 --agent openai:google/gemini-2.5-flash
 
 # A local model on Ollama, as both agent and caller: no key needed
-sandtable run ./my-domain --openai-base-url http://localhost:11434/v1 \
+npx sandtable-ai run ./my-domain --openai-base-url http://localhost:11434/v1 \
   --agent openai:llama3.1:8b --user openai:llama3.1:8b
 ```
 
@@ -197,7 +197,7 @@ for (const model of ["openai/gpt-4.1", "google/gemini-2.5-flash", "meta-llama/ll
 If your agent runs as a service, in any language, give `--agent` its URL. sandtable sends one POST per step: a new user message, or the results of the tool calls your agent asked for. Your agent answers with a reply, or with more tool calls for sandtable to run against the simulated world.
 
 ```bash
-sandtable run ./my-domain --agent http://localhost:8787/step -k 4
+npx sandtable-ai run ./my-domain --agent http://localhost:8787/step -k 4
 ```
 
 The [quickstart](/quickstart#run-it) has a runnable toy agent in Node and Python, and the [HTTP agent protocol](/reference/http-protocol) reference has every field, the error behaviour and the limits.
@@ -234,7 +234,7 @@ export default agent;
 ```
 
 ```bash
-sandtable run ./my-domain --agent ./my-agent.ts --user scripted
+npx sandtable-ai run ./my-domain --agent ./my-agent.ts --user scripted
 ```
 
 - `callTool(name, args)` resolves to `{ ok, result?, error? }`. Invalid arguments and failed checks come back as `ok: false` with an error your agent can show the model.

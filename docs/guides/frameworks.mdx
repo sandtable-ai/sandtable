@@ -35,7 +35,7 @@ async reply(userMessage, callTool) {
 Keep the history per session, in the adapter or in the framework's own session object: sandtable opens one session per trial, and several trials run at once.
 
 ```bash
-sandtable run ./my-domain --agent ./agent.ts -k 4
+npx sandtable-ai run ./my-domain --agent ./agent.ts -k 4
 ```
 
 ### The HTTP step protocol: any language
@@ -54,7 +54,7 @@ sandtable → { session_id, message }        the service starts the framework's 
 Key all state on `session_id`. The service is not told when a trial ends.
 
 ```bash
-sandtable run ./my-domain --agent http://localhost:8787/step -k 4
+npx sandtable-ai run ./my-domain --agent http://localhost:8787/step -k 4
 ```
 
 ## Vercel AI SDK

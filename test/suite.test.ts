@@ -1,6 +1,7 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { freightScriptedAgent } from "../src/demo/freight-agents.ts";
+import { renderTerminal } from "../src/report/terminal.ts";
 import { runSuite } from "../src/run/suite.ts";
 import { noopAgent } from "../src/sim/noop.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
@@ -150,6 +151,7 @@ describe("review workflow", () => {
     ]);
     const r = await runSuite({ domain: drafted, agent: freightScriptedAgent("careful"), user: scriptedUser(), taskIds: ["no-mc-number"] });
     expect(r.pendingReview).toHaveLength(2);
+    expect(renderTerminal(r)).toContain("2 drafted item(s) pending review: results are provisional (npx sandtable-ai review <domain>)");
   });
 
   it("treats a hand-written domain as fully reviewed", async () => {

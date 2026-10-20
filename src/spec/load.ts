@@ -20,7 +20,7 @@ export async function loadDomain(target: string): Promise<Domain> {
   const file = (await isDir(target)) ? path.join(target, DOMAIN_FILE) : target;
   const dir = path.dirname(file);
   const text = await readFile(file, "utf8").catch(() => {
-    throw new DomainError(`no ${DOMAIN_FILE} found at ${target} (create one, or draft it with \`sandtable init\`)`);
+    throw new DomainError(`no ${DOMAIN_FILE} found at ${target} (create one, or draft it with \`npx sandtable-ai init\`)`);
   });
   const raw = parseYaml(text, file) as Record<string, unknown>;
   if (!raw || typeof raw !== "object") throw new DomainError(`${file} is empty or not a YAML mapping`);

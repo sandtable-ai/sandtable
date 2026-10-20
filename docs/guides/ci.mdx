@@ -46,8 +46,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx sandtable validate ./sandtable --strict
-      - run: npx sandtable lint ./sandtable
+      - run: npx sandtable-ai validate ./sandtable --strict
+      - run: npx sandtable-ai lint ./sandtable
 
   rehearse:
     needs: checks
@@ -65,7 +65,7 @@ jobs:
           sleep 3                   # or poll your agent's health endpoint
       - name: Rehearse
         run: >
-          npx sandtable run ./sandtable
+          npx sandtable-ai run ./sandtable
           --agent http://localhost:8787/step
           --user claude:claude-haiku-5-5
           -k 3 --fail-under 85
@@ -90,7 +90,7 @@ While sandtable is alpha, pin an exact version of `sandtable-ai` in `package.jso
 <Tabs>
   <Tab title="JS/TS module">
     ```yaml
-    - run: npx sandtable run ./sandtable --agent ./agent.ts -k 3 --fail-under 85
+    - run: npx sandtable-ai run ./sandtable --agent ./agent.ts -k 3 --fail-under 85
       env:
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     ```
@@ -103,14 +103,14 @@ While sandtable is alpha, pin an exact version of `sandtable-ai` in `package.jso
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         aws-region: eu-west-1
     - run: npm install --no-save @anthropic-ai/bedrock-sdk
-    - run: npx sandtable run ./sandtable --provider bedrock --agent claude -k 3 --fail-under 85
+    - run: npx sandtable-ai run ./sandtable --provider bedrock --agent claude -k 3 --fail-under 85
     ```
     `--provider bedrock` applies to the simulated user too, so no Anthropic API key is needed.
   </Tab>
   <Tab title="OpenAI-compatible">
     ```yaml
     - run: >
-        npx sandtable run ./sandtable --agent openai:gpt-4.1-mini
+        npx sandtable-ai run ./sandtable --agent openai:gpt-4.1-mini
         --user claude:claude-haiku-5-5 -k 3 --fail-under 85
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

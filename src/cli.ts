@@ -243,7 +243,7 @@ program
     for (const w of domainWarnings(d)) console.log(`⚠ ${w}`);
     const pending = pendingReview(d);
     if (pending.length) {
-      console.log(`⚠ ${pending.length} drafted item(s) pending review (sandtable review ${domainPath})`);
+      console.log(`⚠ ${pending.length} drafted item(s) pending review (${NEXT} review ${domainPath})`);
       if (o.strict) process.exitCode = 1;
     }
   });
