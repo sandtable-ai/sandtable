@@ -237,7 +237,7 @@ function classify(segments: string[], item: Json): { table: string; itemKey?: st
 }
 
 function toParam(schema: Json, deref: (x: unknown) => unknown, required: boolean, description?: unknown): DraftParam | undefined {
-  const s = schema.allOf ? (deref((schema.allOf as unknown[])[0]) as Json) : schema;
+  const s = flatten(schema, deref);
   let type = s.type as string | undefined;
   if (!type && Array.isArray(s.enum)) type = typeof s.enum[0] === "number" ? "number" : "string";
   if (!type) type = "string";
@@ -250,9 +250,9 @@ function toParam(schema: Json, deref: (x: unknown) => unknown, required: boolean
   return param;
 }
 
-function collectFields(acc: { fields: Map<string, Json>; rows: Json[] }, schema: Json, deref: (x: unknown) => unknown, withExamples = true) {
-  const s = (schema.type === "array" ? deref(schema.items) : schema) as Json;
-  if (!s || typeof s !== "object") return;
+function collectFields(acc: { fields: Map<string, Json>; rows: Json[] }, node: Json, deref: (x: unknown) => unknown, withExamples = true) {
+  const schema = flatten(node, deref);
+  const s = schema.type === "array" ? flatten(schema.items, deref) : schema;
   for (const [name, raw] of Object.entries((s.properties ?? {}) as Json)) acc.fields.set(name, deref(raw) as Json);
   if (!withExamples) return;
   const examples = schema.type === "array" && Array.isArray(schema.example) ? schema.example : s.example ? [s.example] : [];
@@ -274,8 +274,31 @@ function requestSchema(op: Json, deref: (x: unknown) => unknown): Json | undefin
   const body = deref(op.requestBody) as Json | undefined;
   const content = (body?.content ?? {}) as Json;
   const media = (content["application/json"] ?? Object.values(content)[0]) as Json | undefined;
-  const schema = media?.schema ? (deref(media.schema) as Json) : undefined;
+  const schema = media?.schema ? flatten(media.schema, deref) : undefined;
   return schema && (schema.type === "object" || schema.properties) ? schema : undefined;
+}
+
+/**
+ * `node` dereferenced, with its `allOf` members (themselves flattened) merged in: their
+ * properties are combined, their required lists joined, and the schema's own keywords win over
+ * theirs. A member's `example` is left out, since it shows that member alone, not the whole object.
+ */
+function flatten(node: unknown, deref: (x: unknown) => unknown, depth = 0): Json {
+  const schema = deref(node);
+  if (!schema || typeof schema !== "object" || Array.isArray(schema)) return {};
+  const { allOf, ...own } = schema as Json;
+  if (!Array.isArray(allOf) || depth > 20) return own;
+  const parts = allOf.map((member) => {
+    const { example: _, ...rest } = flatten(member, deref, depth + 1);
+    return rest;
+  });
+  parts.push(own);
+  const merged: Json = Object.assign({}, ...parts);
+  const properties = Object.assign({}, ...parts.map((p) => p.properties ?? {})) as Json;
+  const required = [...new Set(parts.flatMap((p) => (Array.isArray(p.required) ? (p.required as string[]) : [])))];
+  if (Object.keys(properties).length) merged.properties = properties;
+  if (required.length) merged.required = required;
+  return merged;
 }
 
 function makeDeref(spec: Json) {

@@ -67,6 +67,7 @@ No model is involved: the same spec always produces the same draft.
 | `/customers/{customer_id}/orders` | parent params become filters and create values |
 | `POST /orders/{id}/cancel` (no GET) | action: a `get` on the parent plus a review note to model the effect |
 | a body param named like another table's key | existence `check` on that table |
+| a schema composed with `allOf` | its members' properties and required lists merged, in bodies, responses and params |
 | `example` on a response schema | seed rows |
 
 It cannot infer some things, so they become `# TODO(review):` comments next to the tool:
