@@ -3,10 +3,12 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { freightScriptedAgent } from "../src/demo/freight-agents.ts";
-import { runLeaderboard } from "../src/run/leaderboard.ts";
+import { ModelsFile, runLeaderboard } from "../src/run/leaderboard.ts";
+import { costOf, priceKey, registerPrices } from "../src/run/usage.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
 import type { AgentAdapter } from "../src/sim/types.ts";
 import { loadDomain } from "../src/spec/load.ts";
+import YAML from "yaml";
 
 const example = path.resolve("examples/freight");
 const agents: Record<string, () => AgentAdapter> = {
@@ -229,5 +231,19 @@ describe("leaderboard", () => {
     await expect(
       runLeaderboard({ domain, entries: [], user: scriptedUser(), k: 1, outDir: os.tmpdir(), taskIds: ["nope"], resolveAgent: async () => freightScriptedAgent("careful") }),
     ).rejects.toThrow(/unknown task id\(s\): nope/);
+  });
+});
+
+describe("leaderboard/models.yaml", () => {
+  it("parses, names each model once, and prices every model and the caller with the committed price file", async () => {
+    const cfg = ModelsFile.parse(YAML.parse(await readFile("leaderboard/models.yaml", "utf8")));
+    expect(cfg).toMatchObject({ user: "claude:global.anthropic.claude-sonnet-5-5", k: 4 });
+    expect(new Set(cfg.models.map((m) => m.label)).size).toBe(cfg.models.length);
+    registerPrices(JSON.parse(await readFile("prices/bedrock.eu-west-1.json", "utf8")));
+    // A claude: agent records usage under the model name Claude reports; a bedrock: agent under its model ID.
+    const usageKey = (spec: string) => (spec.startsWith("claude:") ? priceKey(spec.slice("claude:".length)) : spec.slice("bedrock:".length));
+    for (const spec of [cfg.user!, ...cfg.models.map((m) => m.agent)]) {
+      expect(costOf({ [usageKey(spec)]: { calls: 1, input: 1, output: 1, cacheRead: 1, cacheWrite: 1 } }), spec).not.toBeNull();
+    }
   });
 });
