@@ -5,6 +5,7 @@ import { renderHtml } from "../report/html.ts";
 import type { Domain } from "../spec/schema.ts";
 import { noopAgent } from "../sim/noop.ts";
 import { scriptedUser } from "../sim/scripted.ts";
+import type { Provider } from "../sim/claude.ts";
 import type { AgentAdapter, UserSimulator } from "../sim/types.ts";
 import { changedVerdicts, RegradeError, regradeSuite } from "./regrade.ts";
 import { runSuite, type SuiteResult } from "./suite.ts";
@@ -51,12 +52,52 @@ export interface LeaderboardRow {
   error?: string;
 }
 
+/** What produced a run, beyond the domain, caller, k and models: recorded in run.json and leaderboard.json. */
+export interface RunInfo {
+  /** sandtable's version, and the git commit it ran from (with `dirty` for uncommitted changes) when it ran from its own clone. */
+  sandtable: { version: string; commit?: string; dirty?: boolean };
+  /** Where Claude ran: anthropic or bedrock. Set when a Claude model ran. */
+  provider?: Provider;
+  /** The AWS region every Bedrock call went to. Set when something ran on Bedrock. */
+  region?: string;
+}
+
+/** Whether any spec runs Claude, and whether any call goes to Bedrock: a bedrock: agent, or Claude on provider bedrock. */
+export function bedrockUse(specs: readonly string[], provider: Provider): { claude: boolean; bedrock: boolean } {
+  const claude = specs.some((s) => s === "claude" || s.startsWith("claude:"));
+  return { claude, bedrock: specs.some((s) => s.startsWith("bedrock:")) || (claude && provider === "bedrock") };
+}
+
+/**
+ * The region for Bedrock calls: `region`, else AWS_REGION or AWS_DEFAULT_REGION, else the region in the AWS
+ * profile's config file, as the AWS SDK reads it. Undefined when none is set.
+ */
+export async function bedrockRegion(region: string | undefined, awsProfile: string | undefined): Promise<string | undefined> {
+  const set = region ?? process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION;
+  if (set) return set;
+  try {
+    const { BedrockRuntimeClient } = await import("@aws-sdk/client-bedrock-runtime");
+    return await new BedrockRuntimeClient(awsProfile ? { profile: awsProfile } : {}).config.region();
+  } catch {
+    return undefined;
+  }
+}
+
+/** "0.1.0 (commit 1a2b3c4)": the sandtable that wrote a leaderboard, for its "Generated … with sandtable" line. */
+function builtWith(s: RunInfo["sandtable"] | undefined): string {
+  if (!s) return "";
+  const commit = s.commit ? ` (commit ${s.commit.slice(0, 7)}${s.dirty ? ", with uncommitted changes" : ""})` : "";
+  return ` ${s.version}${commit}`;
+}
+
 export interface LeaderboardResult {
   version: 1;
   domain: string;
   user: string;
   k: number;
   generatedAt: string;
+  /** The sandtable that graded and ranked the rows; each model's run.json says what ran its trials. */
+  sandtable?: RunInfo["sandtable"];
   rows: LeaderboardRow[];
 }
 
@@ -72,6 +113,8 @@ export interface LeaderboardOptions {
   taskIds?: string[];
   /** Reuse an entry's results.json when it exists and matches this run (default true). */
   resume?: boolean;
+  /** Written to each model's run.json when its trials run, and the `sandtable` part to leaderboard.json. */
+  runInfo?: RunInfo;
   /** `note` says why stored results were not reused, or why an entry was skipped. */
   onEntry?: (label: string, status: "cached" | "regraded" | "ran" | "failed" | "skipped", note?: string) => void;
 }
@@ -223,7 +266,7 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
         result = await runSuite({ domain, agent, user, k, taskIds, concurrency: opts.concurrency ?? 4 });
         await mkdir(dir, { recursive: true });
         await writeFileAtomic(file, JSON.stringify(result, null, 2));
-        await writeFileAtomic(keyFile, JSON.stringify(key, null, 2));
+        await writeFileAtomic(keyFile, JSON.stringify({ ...key, ...opts.runInfo }, null, 2));
         await writeFileAtomic(path.join(dir, "report.html"), renderHtml(result));
         fresh = true;
       } catch (err) {
@@ -258,7 +301,15 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
   // Errored rows (NaN) sort last; a 0% model still ranks above them.
   const score = (x: number) => (Number.isNaN(x) ? -1 : x);
   rows.sort((a, b) => score(b.passHatK) - score(a.passHatK) || score(b.passHat1) - score(a.passHat1));
-  const result: LeaderboardResult = { version: 1, domain: domain.name, user: user.name, k, generatedAt: new Date().toISOString(), rows };
+  const result: LeaderboardResult = {
+    version: 1,
+    domain: domain.name,
+    user: user.name,
+    k,
+    generatedAt: new Date().toISOString(),
+    ...(opts.runInfo ? { sandtable: opts.runInfo.sandtable } : {}),
+    rows,
+  };
   await writeFile(path.join(outDir, "leaderboard.json"), JSON.stringify(result, null, 2));
   await writeFile(path.join(outDir, "LEADERBOARD.md"), renderLeaderboardMarkdown(result));
   await writeFile(path.join(outDir, "leaderboard.html"), renderLeaderboardHtml(result));
@@ -305,7 +356,7 @@ export function renderLeaderboardMarkdown(l: LeaderboardResult): string {
       : [place, model, ...passCells(r, l.k), String(totalViolations(r)), r.topFailure ?? "", ...(soft ? [softCell(r)] : []), usd(r.agentCostPerTrialUsd), secs(r.agentTurnP95Ms)];
     lines.push(`| ${cells.join(" | ")} |`);
   }
-  lines.push("", `Generated ${l.generatedAt} with [sandtable](https://github.com/sandtable-ai/sandtable). Per-model reports and trajectories are in the folders next to this file.`, "");
+  lines.push("", `Generated ${l.generatedAt} with [sandtable](https://github.com/sandtable-ai/sandtable)${builtWith(l.sandtable)}. Per-model reports and trajectories are in the folders next to this file.`, "");
   return lines.join("\n");
 }
 
@@ -339,7 +390,7 @@ th{font-size:12px;color:var(--muted)}tr.base td{color:var(--muted);font-style:it
 <tbody>
 ${body}
 </tbody></table></div>
-<p>Generated ${esc(l.generatedAt)} with <a href="https://github.com/sandtable-ai/sandtable">sandtable</a>.</p>
+<p>Generated ${esc(l.generatedAt)} with <a href="https://github.com/sandtable-ai/sandtable">sandtable</a>${esc(builtWith(l.sandtable))}.</p>
 </main></body></html>
 `;
 }

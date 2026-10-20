@@ -1,9 +1,11 @@
+import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { freightScriptedAgent } from "../src/demo/freight-agents.ts";
-import { ModelsFile, runLeaderboard } from "../src/run/leaderboard.ts";
+import { bedrockRegion, bedrockUse, ModelsFile, runLeaderboard } from "../src/run/leaderboard.ts";
 import { costOf, priceKey, registerPrices } from "../src/run/usage.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
 import type { AgentAdapter } from "../src/sim/types.ts";
@@ -245,5 +247,59 @@ describe("leaderboard/models.yaml", () => {
     for (const spec of [cfg.user!, ...cfg.models.map((m) => m.agent)]) {
       expect(costOf({ [usageKey(spec)]: { calls: 1, input: 1, output: 1, cacheRead: 1, cacheWrite: 1 } }), spec).not.toBeNull();
     }
+  });
+});
+
+describe("leaderboard provenance", () => {
+  it("records what ran each model in run.json, and the sandtable that ranked them in leaderboard.json", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const domain = await loadDomain(example);
+    const runInfo = { sandtable: { version: "9.9.9", commit: "abc1234def", dirty: false }, provider: "bedrock" as const, region: "eu-west-1" };
+    await runLeaderboard({ domain, entries: [{ label: "Careful rules", agent: "scripted:careful" }], user: scriptedUser(), k: 1, taskIds: ["no-mc-number"], outDir: dir, runInfo, resolveAgent: async () => freightScriptedAgent("careful") });
+    expect(JSON.parse(await readFile(path.join(dir, "careful-rules", "run.json"), "utf8"))).toMatchObject({ agent: "scripted:careful", ...runInfo });
+    expect(JSON.parse(await readFile(path.join(dir, "leaderboard.json"), "utf8")).sandtable).toEqual(runInfo.sandtable);
+    expect(await readFile(path.join(dir, "LEADERBOARD.md"), "utf8")).toContain("with [sandtable](https://github.com/sandtable-ai/sandtable) 9.9.9 (commit abc1234).");
+    expect(await readFile(path.join(dir, "leaderboard.html"), "utf8")).toContain("sandtable</a> 9.9.9 (commit abc1234).");
+  });
+
+  it("knows which specs run Claude and which calls go to Bedrock", () => {
+    expect(bedrockUse(["claude:global.anthropic.claude-sonnet-5-5", "bedrock:global.openai.gpt-6-luna"], "bedrock")).toEqual({ claude: true, bedrock: true });
+    expect(bedrockUse(["claude", "scripted:careful"], "anthropic")).toEqual({ claude: true, bedrock: false });
+    expect(bedrockUse(["scripted", "bedrock:qwen.qwen3-next-80b-a3b"], "anthropic")).toEqual({ claude: false, bedrock: true });
+    expect(bedrockUse(["scripted", "scripted:careful", "noop"], "bedrock")).toEqual({ claude: false, bedrock: false });
+  });
+
+  it("takes the Bedrock region from --region, then AWS_REGION, then the AWS profile's config", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-aws-"));
+    const config = path.join(dir, "config");
+    await writeFile(config, "[profile board]\nregion = eu-north-1\n");
+    const saved = { ...process.env };
+    try {
+      for (const k of ["AWS_REGION", "AWS_DEFAULT_REGION", "AWS_PROFILE"]) delete process.env[k];
+      process.env.AWS_CONFIG_FILE = config;
+      process.env.AWS_SHARED_CREDENTIALS_FILE = path.join(dir, "none");
+      expect(await bedrockRegion(undefined, "board")).toBe("eu-north-1");
+      expect(await bedrockRegion(undefined, undefined)).toBeUndefined();
+      process.env.AWS_REGION = "us-west-2";
+      expect(await bedrockRegion(undefined, "board")).toBe("us-west-2");
+      expect(await bedrockRegion("eu-west-1", "board")).toBe("eu-west-1");
+    } finally {
+      process.env = saved;
+    }
+  });
+
+  it.skipIf(!process.features.typescript)("sandtable leaderboard records the commit of the sandtable clone it runs from", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const models = path.join(dir, "models.yaml");
+    await writeFile(models, "models:\n  - { label: Careful rules, agent: scripted:careful }\n");
+    const run = (...args: string[]) => promisify(execFile)(args[0]!, args.slice(1), { cwd: dir });
+    await run(process.execPath, path.resolve("src/cli.ts"), "leaderboard", example, "-m", models, "-u", "scripted", "-k", "1", "-t", "no-mc-number", "-o", dir, "--provider", "bedrock", "--region", "eu-west-1");
+    const head = (await promisify(execFile)("git", ["rev-parse", "HEAD"])).stdout.trim();
+    const info = JSON.parse(await readFile(path.join(dir, "careful-rules", "run.json"), "utf8"));
+    expect(info).toMatchObject({ sandtable: { commit: head } });
+    expect(typeof info.sandtable.dirty).toBe("boolean");
+    // Nothing here ran Claude or called Bedrock, so neither the provider nor a region is recorded.
+    expect(info).not.toHaveProperty("provider");
+    expect(info).not.toHaveProperty("region");
   });
 });
