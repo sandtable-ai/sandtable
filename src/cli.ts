@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync, spawn } from "node:child_process";
 import { createRequire } from "node:module";
-import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command, InvalidArgumentError } from "commander";
@@ -122,10 +122,11 @@ function parseResults(text: string, file: string): SuiteResult {
 
 async function loadPrices(file?: string): Promise<PricesFile | undefined> {
   if (!file) return undefined;
-  const content = await readFile(file, "utf8");
-  const added = registerPrices(JSON.parse(content));
+  const bytes = await readFile(file);
+  const added = registerPrices(JSON.parse(bytes.toString("utf8")));
   console.log(`  prices: ${added.length} model(s) from ${file}`);
-  return pricesFile(file, content);
+  // Real paths on both sides, so a symlinked working directory (macOS /var -> /private/var) still reads as inside.
+  return pricesFile(await realpath(file), bytes, await realpath(process.cwd()));
 }
 
 // Printed next steps use `npx sandtable-ai`: every way of installing sandtable needs Node.js and npm
