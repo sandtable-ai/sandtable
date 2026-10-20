@@ -294,7 +294,7 @@ describe("init from OpenAPI: webhook listeners and subscriptions", () => {
       },
       "/listener/parcelDelayedEvent": { post: post({ tags: ["Notification listener"] }) },
       "/listener/parcelReturnedEvent": { post: post() },
-      "/hub": { post: post({ requestBody: { content: { "application/json": { schema: { type: "object", properties: { callback: { type: "string" }, query: { type: "string" } } } } } } }) },
+      "/hub": { post: post({ requestBody: { content: { "application/json": { schema: { type: "object", properties: { callback: { type: "string", format: "uri" }, query: { type: "string" } } } } } } }) },
       "/hub/{id}": { get: post(), delete: post() },
       "/event_subscriptions": { post: post({ tags: ["Events subscription"], requestBody: { content: { "application/json": { schema: { type: "object", properties: { url: { type: "string" } } } } } } }) },
       // Real resources that only sound similar: all drafted.
@@ -315,13 +315,35 @@ describe("init from OpenAPI: webhook listeners and subscriptions", () => {
     expect(skipped).toEqual([
       'POST /parcels: callback "parcelDelivered" ({$request.body#/delivered_hook}), a request the API sends to the client; skipped',
       'POST /parcels: callback "parcelLost" (https://client.example/lost), a request the API sends to the client; skipped',
-      '/listener/parcelDelayedEvent: a webhook listener or event subscription (tagged "Notification listener"), not a resource; skipped',
-      "/listener/parcelReturnedEvent: a webhook listener or event subscription (only POST, under /listener), not a resource; skipped",
-      "/hub: a webhook listener or event subscription (POST /hub takes a callback), not a resource; skipped",
-      "/hub/{id}: a webhook listener or event subscription (POST /hub takes a callback), not a resource; skipped",
-      '/event_subscriptions: a webhook listener or event subscription (tagged "Events subscription"), not a resource; skipped',
+      '/listener/parcelDelayedEvent: a webhook listener or event subscription (tagged "Notification listener", and only POST or DELETE), not a resource; skipped',
+      "/listener/parcelReturnedEvent: a webhook listener or event subscription (only POST, at /listener/<event>), not a resource; skipped",
+      "/hub: a webhook listener or event subscription (POST /hub takes a callback URL), not a resource; skipped",
+      "/hub/{id}: a webhook listener or event subscription (POST /hub takes a callback URL), not a resource; skipped",
+      '/event_subscriptions: a webhook listener or event subscription (tagged "Events subscription", and only POST or DELETE), not a resource; skipped',
       "webhooks.parcelOutForDelivery: an OpenAPI webhook, a request the API sends to the client; skipped",
     ]);
+  });
+
+  it("drafts look-alikes that lack a listener's shape", () => {
+    // A fictional theatre box office. Each path matches a tag or a name, but not the shape.
+    const json = (properties: Record<string, unknown>) => ({ content: { "application/json": { schema: { type: "object", properties } } } });
+    const d = draftFromOpenApi({
+      openapi: "3.0.3",
+      info: { title: "Larkspur Box Office" },
+      paths: {
+        "/events/{event_id}/subscriptions": {
+          get: post({ tags: ["Event subscriptions"] }),
+          post: post({ tags: ["Event subscriptions"], requestBody: json({ seats: { type: "integer" } }) }),
+        },
+        "/listener/restart": { post: post() },
+        "/listener/{listener_id}": { post: post() },
+        "/hub": { post: post({ requestBody: json({ callback: { type: "boolean", description: "Call the patron back" }, phone: { type: "string" } }) }) },
+        "/hub/{id}": { get: post() },
+      },
+    });
+    expect(d.warnings.filter((w) => / not a resource; skipped$/.test(w))).toEqual([]);
+    expect(Object.keys(d.tables)).toEqual(["hub", "listener", "restart", "subscriptions"]);
+    expect(d.tools.map((t) => t.name)).toEqual(["get_subscriptions", "post_subscriptions", "post_restart", "post_hub", "get_hub"]);
   });
 });
 

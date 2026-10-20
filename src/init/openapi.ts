@@ -46,6 +46,7 @@ const METHODS = ["get", "post", "put", "patch", "delete"] as const;
 const PAGINATION = new Set(["limit", "offset", "page", "per_page", "page_size", "cursor", "after", "before", "sort", "order"]);
 const SIDE_EFFECT_HINT = /\b(becomes?|marks?|sets?|tenders?|reserves?|cancels?|updates?|changes?|transitions?)\b/i;
 const LISTENER_TAG = /\b(notification listeners?|events? subscriptions?)\b/i;
+const EVENT_NAME = /^[^{}]+(Event|[_-]event)$/;
 
 /**
  * Why `spec` can't be drafted from, or undefined when it is an OpenAPI 3.x document with paths.
@@ -240,23 +241,36 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
 /**
  * Why the path is a webhook listener or an event subscription, or undefined when it is not one.
  * There the client receives the API's events (`POST /listener/<event>`) or registers a URL to
- * receive them (`POST /hub`), so they are not resources an agent acts on. The rules are narrow,
- * so that a resource that only sounds like one (`/hubs`, `/depots/{id}/listeners`,
- * `/subscriptions`) is still drafted. A path is a listener or subscription when:
- * - every operation on it is tagged "notification listener" or "events subscription", or
- * - it is `/listener/<event>`, and it takes only POST, or
- * - it is `/hub` or `/hub/{id}`, and `POST /hub` takes a `callback` field.
+ * receive them (`POST /hub`), so they are not resources an agent acts on. A tag or a name alone
+ * is not enough, so that a resource that only sounds like one (`/hubs`, `/listener/restart`,
+ * `/events/{id}/subscriptions`) is still drafted. A path is a listener or subscription when:
+ * - every operation on it is tagged "notification listener" or "events subscription", and it
+ *   takes only POST or DELETE, or its POST takes a callback URL, or
+ * - it is `/listener/<event>`, where `<event>` is a name ending in `Event` (or `_event`), and it
+ *   takes only POST, or
+ * - it is `/hub` or `/hub/{id}`, and `POST /hub` takes a callback URL.
+ * A callback URL is a string field named `callback`.
  */
 function listenerEvidence(segments: string[], item: Json, paths: Record<string, Json>, deref: (x: unknown) => unknown): string | undefined {
   const methods = METHODS.filter((m) => item[m]);
   if (methods.length === 0) return undefined;
   const tags = methods.map((m) => (((item[m] as Json).tags ?? []) as unknown[]).map(String).find((t) => LISTENER_TAG.test(t)));
-  if (tags.every((t) => t !== undefined)) return `tagged "${tags[0]}"`;
-  if (segments.length === 2 && segments[0] === "listener" && methods.every((m) => m === "post")) return "only POST, under /listener";
-  const isHub = segments[0] === "hub" && (segments.length === 1 || (segments.length === 2 && /^\{.+\}$/.test(segments[1]!)));
-  const subscribe = paths["/hub"]?.post as Json | undefined;
-  if (isHub && subscribe && ((requestSchema(subscribe, deref)?.properties ?? {}) as Json).callback !== undefined) return "POST /hub takes a callback";
+  if (tags.every((t) => t !== undefined)) {
+    if (methods.every((m) => m === "post" || m === "delete")) return `tagged "${tags[0]}", and only POST or DELETE`;
+    if (takesCallbackUrl(item.post, deref)) return `tagged "${tags[0]}", and POST takes a callback URL`;
+  }
+  const [first, second] = segments;
+  if (segments.length === 2 && first === "listener" && EVENT_NAME.test(second!) && methods.every((m) => m === "post")) return "only POST, at /listener/<event>";
+  const isHub = first === "hub" && (segments.length === 1 || (segments.length === 2 && /^\{.+\}$/.test(second!)));
+  if (isHub && takesCallbackUrl(paths["/hub"]?.post, deref)) return "POST /hub takes a callback URL";
   return undefined;
+}
+
+/** Whether `op` has a request body whose `callback` field is a string: the URL a client subscribes. */
+function takesCallbackUrl(op: unknown, deref: (x: unknown) => unknown): boolean {
+  if (!op || typeof op !== "object") return false;
+  const callback = ((requestSchema(op as Json, deref)?.properties ?? {}) as Json).callback;
+  return callback !== undefined && flatten(callback, deref).type === "string";
 }
 
 /** Work out which table a path addresses, and whether it is an item, a collection or an action. */
