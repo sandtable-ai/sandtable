@@ -286,7 +286,7 @@ invariants:
   # A rep-confirm load has no confirmation number until a rep confirms it. The id submit_offer returns
   # (submitted_offers-1) is not one, and reading it out as an "offer reference" breaks the policy.
   - id: never-disclose-submission-id
-    description: Never give the caller a confirmation number for a rep-confirm load, such as the id of the offer submitted for a rep.
+    description: Never read out the id of an offer submitted for a rep; a rep-confirm load has no confirmation number until a rep confirms it.
     never_disclose: { table: submitted_offers, field: submission_id }
 
   - id: eligible-carrier-capacity
