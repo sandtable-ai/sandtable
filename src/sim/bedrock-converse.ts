@@ -70,8 +70,21 @@ const textOf = (content: ConverseBlock[]) =>
     .join("")
     .replace(REASONING, "");
 
+/** The result for a tool call that was not run, because the reply that made it ended some other way than with a call. */
+const notRun = (toolUseId: string, stopReason: string | undefined): ConverseBlock => ({
+  toolResult: { toolUseId, content: [{ text: JSON.stringify({ error: `not run: the reply ended with stop reason "${stopReason}"` }) }], status: "error" },
+});
+
+const FILTERED = "[agent output was filtered]";
+
+/** Stop reasons a tool call is run under. Grok 4.7 sometimes ends a turn with a call under end_turn. */
+const RUNS_TOOLS = new Set(["tool_use", "end_turn"]);
+
 /** A reply whose reasoning was never closed: the reasoning and the answer can't be told apart. */
-const unclosedReasoning = (res: ConverseResponse) => res.stopReason !== "tool_use" && textOf(res.output?.message?.content ?? []).includes("<reasoning>");
+const unclosedReasoning = (res: ConverseResponse) => {
+  const content = res.output?.message?.content ?? [];
+  return !content.some((b) => b.toolUse) && textOf(content).includes("<reasoning>");
+};
 
 /**
  * Where a model accepts Converse cache points. Every other model rejects the whole request when one
@@ -120,10 +133,16 @@ export function bedrockConverseAgent(opts: BedrockConverseOptions): AgentAdapter
       const system: ConverseBlock[] = cache ? [{ text: ctx.system }, CACHE_POINT] : [{ text: ctx.system }];
       // Append-only conversation in Converse's block format.
       const messages: ConverseMessage[] = [];
+      // Converse rejects two user messages in a row: one that follows a user message not yet sent joins it.
+      const pushUser = (content: ConverseBlock[]) => {
+        const last = messages.at(-1);
+        if (last?.role === "user") last.content.push(...content);
+        else messages.push({ role: "user", content });
+      };
 
       return {
         async reply(userMessage, callTool) {
-          messages.push({ role: "user", content: [{ text: userMessage || "(silence)" }] });
+          pushUser([{ text: userMessage || "(silence)" }]);
           const request = async () => {
             const res = await client.send(
               command({
@@ -150,11 +169,18 @@ export function bedrockConverseAgent(opts: BedrockConverseOptions): AgentAdapter
             // Ask again before taking a reply whose reasoning never closed; it is never added to the conversation.
             for (let retry = 0; retry < MALFORMED_RETRIES && unclosedReasoning(res); retry++) res = await request();
             const message = res.output?.message ?? { role: "assistant" as const, content: [] };
-            messages.push({ role: "assistant", content: message.content });
+            const filtered = res.stopReason === "guardrail_intervened" || res.stopReason === "content_filtered";
+            // Converse rejects an empty message, so an empty reply is kept as what the caller heard.
+            const content = message.content.length > 0 ? message.content : [{ text: filtered ? FILTERED : "(silence)" }];
+            messages.push({ role: "assistant", content });
             const text = textOf(message.content).trim();
-            if (res.stopReason === "guardrail_intervened" || res.stopReason === "content_filtered") return "[agent output was filtered]";
             const uses = message.content.filter((b) => b.toolUse).map((b) => b.toolUse!);
-            if (res.stopReason !== "tool_use" || uses.length === 0) return text;
+            const run = uses.length > 0 && RUNS_TOOLS.has(res.stopReason ?? "");
+            // A call in a reply that ended any other way (cut off, filtered, malformed) is not run, but it still gets
+            // a result, or the next request fails.
+            if (uses.length > 0 && !run) pushUser(uses.map((use) => notRun(use.toolUseId, res.stopReason)));
+            if (filtered) return FILTERED;
+            if (!run) return text;
 
             const results: ConverseBlock[] = [];
             for (const use of uses) {
@@ -167,7 +193,7 @@ export function bedrockConverseAgent(opts: BedrockConverseOptions): AgentAdapter
                 },
               });
             }
-            messages.push({ role: "user", content: results });
+            pushUser(results);
           }
           return "[agent exceeded its tool-call budget for this turn]";
         },

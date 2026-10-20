@@ -55,6 +55,59 @@ describe("claudeAgent", () => {
     expect(second.messages.at(-1)).toMatchObject({ role: "user", content: [{ type: "tool_result", tool_use_id: "t1" }] });
   });
 
+  it("doesn't run a tool call from a reply cut off at max_tokens, but answers it before the caller's next words", async () => {
+    const { client, requests } = fakeClient([
+      { stop_reason: "max_tokens", content: [{ type: "text", text: "Let me check" }, { type: "tool_use", id: "t1", name: "get_load", input: {} }] },
+      { stop_reason: "end_turn", content: [{ type: "text", text: "L-1001 pays $2,100." }] },
+    ]);
+    const session = await claudeAgent({ client }).createSession({ domain: await loadDomain(example), system: "s", tools: [], sessionId: "x" });
+    const calls: string[] = [];
+    const callTool = async (name: string) => (calls.push(name), { ok: true as const, result: {} });
+    expect(await session.reply("What's on L-1001?", callTool)).toBe("Let me check");
+    expect(await session.reply("Hello?", callTool)).toBe("L-1001 pays $2,100.");
+    expect(calls).toEqual([]);
+    const messages = (requests[1] as { messages: Array<{ role: string; content: unknown }> }).messages;
+    expect(messages.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
+    expect(messages[2]!.content).toMatchObject([
+      { type: "tool_result", tool_use_id: "t1", is_error: true },
+      { type: "text", text: "Hello?" },
+    ]);
+    // Append-only: the cut-off reply is sent back unchanged.
+    expect(messages.slice(0, 2)).toEqual([...(requests[0] as { messages: unknown[] }).messages, { role: "assistant", content: [{ type: "text", text: "Let me check" }, { type: "tool_use", id: "t1", name: "get_load", input: {} }] }]);
+  });
+
+  it("answers a tool call in a refused reply without running it, and sends an empty caller line as (silence)", async () => {
+    const { client, requests } = fakeClient([
+      { stop_reason: "refusal", content: [{ type: "tool_use", id: "t1", name: "book_load", input: {} }] },
+      { stop_reason: "end_turn", content: [{ type: "text", text: "Anything else?" }] },
+    ]);
+    const session = await claudeAgent({ client }).createSession({ domain: await loadDomain(example), system: "s", tools: [], sessionId: "x" });
+    const calls: string[] = [];
+    const callTool = async (name: string) => (calls.push(name), { ok: true as const, result: {} });
+    expect(await session.reply("Book it", callTool)).toBe("[agent refused]");
+    await session.reply("", callTool);
+    expect(calls).toEqual([]);
+    const messages = (requests[1] as { messages: Array<{ role: string; content: unknown }> }).messages;
+    expect(messages[2]!.content).toMatchObject([
+      { type: "tool_result", tool_use_id: "t1", is_error: true },
+      { type: "text", text: "(silence)" },
+    ]);
+  });
+
+  it("keeps user and assistant turns alternating after the tool-call budget runs out", async () => {
+    const { client, requests } = fakeClient([
+      { stop_reason: "tool_use", content: [{ type: "tool_use", id: "t1", name: "verify_carrier", input: { mc_number: "100101" } }] },
+      { stop_reason: "end_turn", content: [{ type: "text", text: "Hi again." }] },
+    ]);
+    const session = await claudeAgent({ client, maxToolRounds: 1 }).createSession({ domain: await loadDomain(example), system: "s", tools: [], sessionId: "x" });
+    const callTool = async () => ({ ok: true as const, result: {} });
+    await session.reply("MC 100101", callTool);
+    await session.reply("Hello?", callTool);
+    const messages = (requests[1] as { messages: Array<{ role: string; content: unknown }> }).messages;
+    expect(messages.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
+    expect(messages[2]!.content).toMatchObject([{ type: "tool_result", tool_use_id: "t1" }, { type: "text", text: "Hello?" }]);
+  });
+
   it("does not request fallbacks for models without them", async () => {
     const { client, requests } = fakeClient([{ stop_reason: "end_turn", content: [{ type: "text", text: "hi" }] }]);
     const domain = await loadDomain(example);

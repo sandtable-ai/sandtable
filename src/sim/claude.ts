@@ -212,19 +212,31 @@ export function claudeAgent(opts: ClaudeAgentOptions = {}): AgentAdapter {
 
       return {
         async reply(userMessage, callTool) {
-          messages.push({ role: "user", content: userMessage });
+          // After a turn that ended on tool results (a cut-off reply, or the tool-call budget), the caller's words join them.
+          const last = messages.at(-1);
+          // The API rejects empty text, so a caller who says nothing is sent as "(silence)", as on Converse.
+          const said = userMessage || "(silence)";
+          if (last?.role === "user" && Array.isArray(last.content)) last.content.push({ type: "text", text: said });
+          else messages.push({ role: "user", content: said });
           for (let round = 0; round < maxRounds; round++) {
             const response = await client.beta.messages.create({ ...base, system: ctx.system, tools, messages });
             report(ctx, base.model, response);
             messages.push({ role: "assistant", content: response.content });
 
-            if (response.stop_reason === "refusal") return "[agent refused]";
             if (response.stop_reason === "pause_turn") continue;
 
             const toolUses = response.content.filter(
               (b): b is Anthropic.Beta.BetaToolUseBlock => b.type === "tool_use",
             );
-            if (toolUses.length === 0 || response.stop_reason === "max_tokens") return textOf(response.content);
+            const run = toolUses.length > 0 && (response.stop_reason === "tool_use" || response.stop_reason === "end_turn");
+            if (toolUses.length > 0 && !run) {
+              // A call in a reply that ended any other way (cut off, refused) is not run, but it still gets a result,
+              // or the next request fails.
+              const error = JSON.stringify({ error: `not run: the reply ended with stop reason "${response.stop_reason}"` });
+              messages.push({ role: "user", content: toolUses.map((use) => ({ type: "tool_result" as const, tool_use_id: use.id, content: error, is_error: true })) });
+            }
+            if (response.stop_reason === "refusal") return "[agent refused]";
+            if (!run) return textOf(response.content);
 
             const results: Anthropic.Beta.BetaToolResultBlockParam[] = [];
             for (const use of toolUses) {
