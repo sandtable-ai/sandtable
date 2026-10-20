@@ -220,13 +220,15 @@ sandtable regrade .sandtable/runs/<run>/results.json --domain examples/freight
 | Argument / option | Description |
 |---|---|
 | `<results>` | path to a `results.json` |
-| `-d, --domain <dir>` | the domain the run used, as edited since: a directory (with `sandtable.yaml`) or the file itself |
+| `-d, --domain <dir>` | **required**: the domain the run used, as edited since: a directory (with `sandtable.yaml`) or the file itself. `results.json` records only the domain's `name`, not where it is, so there is no default |
 | `-o, --out <dir>` | output directory for `results.json` and `report.html`. Default: the results' own directory, replacing them |
 | `--no-html` | skip the HTML report |
 
 It replays each trial's tool calls in order against a fresh copy of the world, grades the conversation as a live run would, and recomputes every score. The transcripts, token usage and timing stay as they were recorded. It prints the summary, how many verdicts changed and which, and the new pass^k.
 
-It refuses, and writes nothing, when the stored conversations no longer fit the domain:
+It refuses, and writes nothing, when `--domain` is another domain: the `name` in its `sandtable.yaml` isn't the `domain` that `results.json` records. The error names both. Pass the domain the run used. If you renamed the domain since the run, restore its `name` or rerun it with `run`.
+
+It also refuses, and writes nothing, when the stored conversations no longer fit the domain:
 
 - the agent or the caller would be given something else now: the policy, a tool's schema, or a task's caller prompt, opening line or turn limit (and its script, for the scripted caller). `results.json` keeps a hash of them as `inputs`.
 - a tool call would now return something other than what the agent saw, for example after an edit to the seed records or to what a tool does.
