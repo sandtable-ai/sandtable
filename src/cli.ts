@@ -12,7 +12,7 @@ import { renderHtml } from "./report/html.ts";
 import { everyTrialFailed, runSuite, type SuiteResult } from "./run/suite.ts";
 import { changedVerdicts, RegradeError, regradeSuite } from "./run/regrade.ts";
 import { writeFileAtomic } from "./run/write.ts";
-import { claudeAgent, claudeUser, type ClaudeOptions, type Provider } from "./sim/claude.ts";
+import { claudeAgent, claudeUser, providerOf, type ClaudeOptions, type Provider } from "./sim/claude.ts";
 import { registerPrices } from "./run/usage.ts";
 import { bedrockConverseAgent } from "./sim/bedrock-converse.ts";
 import { httpAgent } from "./sim/http.ts";
@@ -27,7 +27,7 @@ import { draftTasksFromTranscripts } from "./init/transcripts.ts";
 import { DOMAIN_FILE, POLICY_PLACEHOLDER, renderDraft, TASKS_PLACEHOLDER, writeDraft } from "./init/render.ts";
 import { DomainError, loadDomain, pendingReview } from "./spec/load.ts";
 import { lintDomain } from "./grade/lint.ts";
-import { ModelsFile, renderLeaderboardMarkdown, runLeaderboard, type RunInfo } from "./run/leaderboard.ts";
+import { bedrockRegion, bedrockUse, ModelsFile, renderLeaderboardMarkdown, runLeaderboard, type RunInfo } from "./run/leaderboard.ts";
 import { z } from "zod";
 import YAML from "yaml";
 
@@ -405,16 +405,21 @@ withProviderFlags(program
     const parsed = ModelsFile.safeParse(YAML.parse(await readFile(o.models, "utf8")));
     if (!parsed.success) throw new Error(`${o.models}:\n${z.prettifyError(parsed.error)}`);
     const cfg = parsed.data;
-    const p = providerOpts(o);
-    const user = resolveUser(o.user ?? cfg.user ?? "claude", p, o.openaiBaseUrl);
+    const userSpec = o.user ?? cfg.user ?? "claude";
+    const flags = providerOpts(o);
+    const uses = bedrockUse([userSpec, ...cfg.models.map((m) => m.agent)], providerOf(flags));
+    const region = uses.bedrock ? await bedrockRegion(flags.region, flags.awsProfile) : undefined;
+    // With no --region or AWS_REGION, the Claude Bedrock SDK falls back to us-east-1 and the AWS SDK to the
+    // profile's config. Give every adapter the one region run.json records, so it says where the calls went.
+    const p: ClaudeOptions = region ? { ...flags, region } : flags;
+    const user = resolveUser(userSpec, p, o.openaiBaseUrl);
     const k = o.trials ?? cfg.k ?? 4;
     const out = o.out ?? path.join("leaderboard", domain.name);
     const taskIds = o.tasks?.split(",").map((s) => s.trim()).filter(Boolean);
     const tasks = taskIds?.length ? taskIds.length : domain.tasks.length;
-    const region = o.region ?? process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION;
     const runInfo: RunInfo = {
       sandtable: { version, ...sandtableCommit() },
-      provider: o.provider ?? process.env.SANDTABLE_PROVIDER ?? "anthropic",
+      ...(uses.claude ? { provider: providerOf(p) } : {}),
       ...(region ? { region } : {}),
     };
     console.log(`Leaderboard: ${cfg.models.length} model(s) on ${domain.name} (${tasks} tasks, k=${k}, caller ${user.name})\n`);
