@@ -91,7 +91,7 @@ describe("leaderboard", () => {
     expect((await run({ k: 2, taskIds: ["book-at-posted-rate", "no-mc-number"] })).seen).toEqual(["ran: stored results not reused: 1 trial(s) crashed"]);
   });
 
-  it("reruns a model whose agent spec or domain changed under the same label", async () => {
+  it("reruns a model whose agent spec, or what the agent and the caller are given, changed under the same label", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
     const domain = await loadDomain(example);
     const taskIds = ["book-at-posted-rate", "no-mc-number"];
@@ -118,11 +118,56 @@ describe("leaderboard", () => {
     expect(JSON.parse(await readFile(path.join(dir, "candidate", "run.json"), "utf8"))).toMatchObject({ agent: "scripted:naive" });
 
     const edited = { ...domain, policy: `${domain.policy}\n\nA new rule.` };
-    expect((await run("scripted:naive", edited)).seen).toEqual(["ran: stored results not reused: the domain has changed since they ran"]);
+    expect((await run("scripted:naive", edited)).seen).toEqual([
+      "ran: stored results not reused: the agent or the caller would be given something else now: the policy, a tool's schema, or a task's caller prompt, opening, script or turn limit changed since it ran",
+    ]);
     expect((await run("scripted:naive", edited)).seen).toEqual(["cached"]);
   });
 
-  it("reruns results stored without run.json, since nothing says which agent and domain they ran", async () => {
+  it("grades stored results again under the current rules instead of reusing their verdicts, without calling a model", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const domain = await loadDomain(example);
+    const taskIds = ["book-at-posted-rate", "no-mc-number"];
+    const run = async (d: typeof domain, resolveAgent = async () => freightScriptedAgent("careful")) => {
+      const seen: string[] = [];
+      const lb = await runLeaderboard({ domain: d, entries: [{ label: "Careful rules", agent: "scripted:careful" }], user: scriptedUser(), k: 1, taskIds, outDir: dir, resolveAgent, onEntry: (_l, status, note) => seen.push(`${status}${note ? `: ${note}` : ""}`) });
+      return { row: lb.rows.find((r) => r.label === "Careful rules")!, seen };
+    };
+    const noModel = async (): Promise<never> => {
+      throw new Error("should not call the agent");
+    };
+    expect((await run(domain)).row.passHat1).toBe(1);
+
+    // A grading rule added after the run applies to the stored conversations.
+    const stricter = { ...domain, invariants: [...domain.invariants, { id: "no-l1001", description: "Never book L-1001.", never: { tool: "book_load", when: { load_id: "L-1001" } } }] };
+    const regraded = await run(stricter, noModel);
+    expect(regraded.seen).toEqual(["regraded: 1 verdict(s) changed under the current rules"]);
+    expect(regraded.row).toMatchObject({ passHat1: 0.5, violations: { "no-l1001": 1 } });
+    const onDisk = JSON.parse(await readFile(path.join(dir, "careful-rules", "results.json"), "utf8"));
+    expect(onDisk.failureModes[0]).toMatchObject({ id: "no-l1001", tasks: ["book-at-posted-rate"] });
+    expect(await readFile(path.join(dir, "careful-rules", "report.html"), "utf8")).toContain("no-l1001");
+
+    expect((await run(stricter, noModel)).seen).toEqual(["cached"]);
+    const restored = await run(domain, noModel);
+    expect(restored.seen).toEqual(["regraded: 1 verdict(s) changed under the current rules"]);
+    expect(restored.row.passHat1).toBe(1);
+  });
+
+  it("reruns stored results that record no inputs fingerprint, since they can't be graded again", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const domain = await loadDomain(example);
+    const base = { domain, user: scriptedUser(), k: 1, taskIds: ["no-mc-number"], outDir: dir, entries: [{ label: "Careful rules", agent: "scripted:careful" }] };
+    await runLeaderboard({ ...base, resolveAgent: async () => freightScriptedAgent("careful") });
+    const file = path.join(dir, "careful-rules", "results.json");
+    const { inputs: _, ...older } = JSON.parse(await readFile(file, "utf8"));
+    await writeFile(file, JSON.stringify(older));
+    const seen: string[] = [];
+    await runLeaderboard({ ...base, resolveAgent: async () => freightScriptedAgent("careful"), onEntry: (_l, status, note) => seen.push(`${status}: ${note}`) });
+    expect(seen).toEqual([expect.stringMatching(/^ran: stored results not reused: it was written by an older sandtable and records no inputs fingerprint/)]);
+    expect(JSON.parse(await readFile(file, "utf8")).inputs).toMatch(/^[0-9a-f]{16}$/);
+  });
+
+  it("reruns results stored without run.json, since nothing says which agent they ran", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
     const domain = await loadDomain(example);
     const base = { domain, user: scriptedUser(), k: 1, taskIds: ["no-mc-number"], outDir: dir, entries: [{ label: "Careful rules", agent: "scripted:careful" }] };
@@ -130,7 +175,7 @@ describe("leaderboard", () => {
     await rm(path.join(dir, "careful-rules", "run.json"));
     const seen: string[] = [];
     await runLeaderboard({ ...base, resolveAgent: async () => freightScriptedAgent("careful"), onEntry: (_l, status, note) => seen.push(`${status}: ${note}`) });
-    expect(seen).toEqual(["ran: stored results not reused: they have no run.json, so their agent spec and domain can't be checked"]);
+    expect(seen).toEqual(["ran: stored results not reused: they have no run.json, so their agent spec can't be checked"]);
     expect(JSON.parse(await readFile(path.join(dir, "careful-rules", "run.json"), "utf8"))).toMatchObject({ agent: "scripted:careful" });
   });
 

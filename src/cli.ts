@@ -397,7 +397,7 @@ withProviderFlags(program
     const taskIds = o.tasks?.split(",").map((s) => s.trim()).filter(Boolean);
     const tasks = taskIds?.length ? taskIds.length : domain.tasks.length;
     console.log(`Leaderboard: ${cfg.models.length} model(s) on ${domain.name} (${tasks} tasks, k=${k}, caller ${user.name})\n`);
-    const mark = { cached: "↺ cached ", ran: "✓ ran    ", failed: "✗ failed ", skipped: "- skipped" } as const;
+    const mark = { cached: "↺ cached  ", regraded: "↻ regraded", ran: "✓ ran     ", failed: "✗ failed  ", skipped: "- skipped " } as const;
     const result = await runLeaderboard({
       domain,
       entries: cfg.models,

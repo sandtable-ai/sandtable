@@ -81,7 +81,7 @@ npx sandtable-ai leaderboard ./sandtable -m models.yaml -k 4 --provider bedrock 
 ```
 
 - Keep the caller (`user:` in the models file) fixed across models, or the comparison is meaningless. Disclose which model plays the caller, since it may favour its own family.
-- Re-running skips models whose results exist for the same agent spec, domain, k, caller and tasks, so an interrupted run never pays twice. Any other change reruns the model and prints why. Pass `--no-resume` to redo one, or `-t <ids>` for a cheap check of a few tasks.
+- Re-running skips models whose results exist for the same agent spec, domain, k, caller and tasks, so an interrupted run never pays twice. Their stored conversations are graded again under the domain's current rules, so an edit to an invariant or an expectation updates every model without a model call (`↻ regraded`). A change to what the agent or the caller is given (the policy, a tool, a task's caller instructions) reruns the model and prints why. Pass `--no-resume` to redo one, or `-t <ids>` for a cheap check of a few tasks.
 - Costs are estimates. Claude uses list prices, and `--prices <file>` adds verified prices for other models (`{ "<model-id>": { input, output, cacheRead, cacheWrite } }` in USD per million tokens; for Bedrock, `scripts/bedrock-prices.mjs` in the sandtable repo writes the file). Anything else shows `n/a`; never fill it in by hand.
 
 ## Where the results are

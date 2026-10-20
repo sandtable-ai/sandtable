@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
@@ -7,8 +6,10 @@ import type { Domain } from "../spec/schema.ts";
 import { noopAgent } from "../sim/noop.ts";
 import { scriptedUser } from "../sim/scripted.ts";
 import type { AgentAdapter, UserSimulator } from "../sim/types.ts";
+import { changedVerdicts, RegradeError, regradeSuite } from "./regrade.ts";
 import { runSuite, type SuiteResult } from "./suite.ts";
 import { costOf, totalTokens } from "./usage.ts";
+import { writeFileAtomic } from "./write.ts";
 
 /** The models file `sandtable leaderboard -m <file>` reads. */
 export const ModelsFile = z
@@ -72,7 +73,7 @@ export interface LeaderboardOptions {
   /** Reuse an entry's results.json when it exists and matches this run (default true). */
   resume?: boolean;
   /** `note` says why stored results were not reused, or why an entry was skipped. */
-  onEntry?: (label: string, status: "cached" | "ran" | "failed" | "skipped", note?: string) => void;
+  onEntry?: (label: string, status: "cached" | "regraded" | "ran" | "failed" | "skipped", note?: string) => void;
 }
 
 export function slugify(label: string): string {
@@ -102,24 +103,17 @@ export function staleReason(r: SuiteResult, want: { domain: string; k: number; u
 
 /**
  * What defines a model's stored results beyond what results.json records: the agent spec from the
- * models file (results.json has only the adapter's name, and `claude` names a default model) and
- * the domain's content. Written next to results.json as run.json.
+ * models file (results.json has only the adapter's name, and `claude` names a default model).
+ * Written next to results.json as run.json.
  */
 interface RunKey {
   agent: string;
-  domain: string;
-}
-
-/** A short hash of the loaded domain: any edit to its tools, rules, tasks or records changes it. */
-export function domainFingerprint(domain: Domain): string {
-  return createHash("sha256").update(JSON.stringify(domain)).digest("hex").slice(0, 16);
 }
 
 /** Why results run under `had` cannot stand in for `want`. Without a run.json, nothing says what they ran. */
 export function changedRunKey(had: RunKey | undefined, want: RunKey): string | undefined {
-  if (!had) return "they have no run.json, so their agent spec and domain can't be checked";
+  if (!had) return "they have no run.json, so their agent spec can't be checked";
   if (had.agent !== want.agent) return `they are for agent ${had.agent}, not ${want.agent}`;
-  if (had.domain !== want.domain) return "the domain has changed since they ran";
   return undefined;
 }
 
@@ -185,7 +179,6 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
   if (unknown.length) throw new Error(`unknown task id(s): ${unknown.join(", ")}`);
   const tasks = opts.taskIds?.length ? domain.tasks.filter((t) => opts.taskIds!.includes(t.id)) : domain.tasks;
   const taskIds = tasks.map((t) => t.id);
-  const fingerprint = domainFingerprint(domain);
   await mkdir(outDir, { recursive: true });
   const rows: LeaderboardRow[] = [];
 
@@ -197,7 +190,7 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
     const dir = path.join(outDir, slugify(entry.label));
     const file = path.join(dir, "results.json");
     const keyFile = path.join(dir, "run.json");
-    const key: RunKey = { agent: entry.agent, domain: fingerprint };
+    const key: RunKey = { agent: entry.agent };
     let result: SuiteResult | undefined;
     let stale: string | undefined;
     let fresh = false;
@@ -205,9 +198,23 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
       const stored = JSON.parse(await readFile(file, "utf8")) as SuiteResult;
       const storedKey = await readFile(keyFile, "utf8").then((t) => JSON.parse(t) as RunKey, () => undefined);
       stale = changedRunKey(storedKey, key) ?? staleReason(stored, { domain: domain.name, k, user: user.name, taskIds });
+      // Stored verdicts are never reused as they are: the stored conversations are graded again under the
+      // current rules, so every row of the board is graded by the same grader.
       if (!stale) {
-        result = stored;
-        opts.onEntry?.(entry.label, "cached");
+        try {
+          result = regradeSuite(domain, stored);
+        } catch (err) {
+          if (!(err instanceof RegradeError)) throw err;
+          stale = err.message;
+        }
+      }
+      if (result && JSON.stringify(result) === JSON.stringify(stored)) opts.onEntry?.(entry.label, "cached");
+      else if (result) {
+        // The current rules grade the stored conversations differently: rewrite their files. These hold the
+        // only copy of paid conversations, so a write is never left half done.
+        await writeFileAtomic(file, JSON.stringify(result, null, 2));
+        await writeFileAtomic(path.join(dir, "report.html"), renderHtml(result));
+        opts.onEntry?.(entry.label, "regraded", `${changedVerdicts(stored, result).length} verdict(s) changed under the current rules`);
       }
     }
     if (!result) {
@@ -215,9 +222,9 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
         const agent = await opts.resolveAgent(entry.agent);
         result = await runSuite({ domain, agent, user, k, taskIds, concurrency: opts.concurrency ?? 4 });
         await mkdir(dir, { recursive: true });
-        await writeFile(file, JSON.stringify(result, null, 2));
-        await writeFile(keyFile, JSON.stringify(key, null, 2));
-        await writeFile(path.join(dir, "report.html"), renderHtml(result));
+        await writeFileAtomic(file, JSON.stringify(result, null, 2));
+        await writeFileAtomic(keyFile, JSON.stringify(key, null, 2));
+        await writeFileAtomic(path.join(dir, "report.html"), renderHtml(result));
         fresh = true;
       } catch (err) {
         opts.onEntry?.(entry.label, "failed");
