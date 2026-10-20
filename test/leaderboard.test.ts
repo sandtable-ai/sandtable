@@ -6,7 +6,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { freightScriptedAgent } from "../src/demo/freight-agents.ts";
-import { bedrockRegion, bedrockUse, ModelsFile, pricesFile, runLeaderboard } from "../src/run/leaderboard.ts";
+import { bedrockRegion, bedrockUse, ModelsFile, pricesFile, runLeaderboard, type RunInfo } from "../src/run/leaderboard.ts";
 import { costOf, priceKey, registerPrices } from "../src/run/usage.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
 import type { AgentAdapter } from "../src/sim/types.ts";
@@ -335,6 +335,35 @@ describe("leaderboard provenance", () => {
     expect(reused.costUsd).toBeCloseTo(first.costUsd! * 3);
     expect(reused.costPerTrialUsd).toBeCloseTo(first.costPerTrialUsd! * 3);
     expect(reused.agentCostPerTrialUsd).toBeCloseTo(first.agentCostPerTrialUsd! * 3);
+  });
+
+  it("reruns a model whose stored results ran on another provider or region, or don't say where they ran", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const domain = await loadDomain(example);
+    const sandtable = { version: "9.9.9", commit: "abc1234def", dirty: false };
+    const run = async (runInfo: RunInfo | undefined, resolveAgent = async () => freightScriptedAgent("careful")) => {
+      const seen: string[] = [];
+      const entries = [{ label: "Careful rules", agent: "scripted:careful" }];
+      await runLeaderboard({ domain, entries, user: scriptedUser(), k: 1, taskIds: ["no-mc-number"], outDir: dir, ...(runInfo ? { runInfo } : {}), resolveAgent, onEntry: (_l, status, note) => seen.push(`${status}${note ? `: ${note}` : ""}`) });
+      return seen;
+    };
+    const noModel = async (): Promise<never> => {
+      throw new Error("should not call the agent");
+    };
+    const eu = { sandtable, provider: "bedrock" as const, region: "eu-west-1" };
+    await run(eu);
+    expect(await run(eu, noModel)).toEqual(["cached"]);
+    // Library callers that pass no runInfo keep reusing results, as before.
+    expect(await run(undefined, noModel)).toEqual(["cached"]);
+    expect(await run({ ...eu, region: "us-east-1" })).toEqual(["ran: stored results not reused: they ran in eu-west-1, not us-east-1"]);
+    expect(await run({ sandtable, provider: "anthropic" })).toEqual(["ran: stored results not reused: they ran on bedrock, not anthropic"]);
+    // A run.json from before provider and region were recorded can't say where it ran.
+    const keyFile = path.join(dir, "careful-rules", "run.json");
+    await writeFile(keyFile, JSON.stringify({ agent: "scripted:careful" }));
+    expect(await run(eu)).toEqual(["ran: stored results not reused: they ran on an unrecorded provider, not bedrock"]);
+    // Scripted agents and callers run nowhere: no provider or region on either side still matches.
+    await writeFile(keyFile, JSON.stringify({ agent: "scripted:careful", sandtable }));
+    expect(await run({ sandtable }, noModel)).toEqual(["cached"]);
   });
 
   it("knows which specs run Claude and which calls go to Bedrock", () => {

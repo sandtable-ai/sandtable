@@ -153,7 +153,7 @@ export interface LeaderboardOptions {
   taskIds?: string[];
   /** Reuse an entry's results.json when it exists and matches this run (default true). */
   resume?: boolean;
-  /** Written to each model's run.json when its trials run, and the `sandtable` part to leaderboard.json. */
+  /** Written to each model's run.json when its trials run, and the `sandtable` part to leaderboard.json. Stored results are reused only where their run.json has the same provider and region. */
   runInfo?: RunInfo;
   /** The `--prices` file the costs use: recorded in leaderboard.json. */
   prices?: PricesFile;
@@ -215,6 +215,16 @@ export function changedRunKey(had: RunKey | undefined, want: RunKey): string | u
   // A run.json written before effort was recorded: every Claude agent then ran at medium.
   const ran = had.effort ?? (isClaude(had.agent) ? "medium" : undefined);
   if (ran !== want.effort) return `they ran at effort ${ran ?? "none"}, not ${want.effort ?? "none"}`;
+  return undefined;
+}
+
+/**
+ * Why results that ran where `had` says can't stand in for a run where `now` says: another provider or Bedrock
+ * region, or a run.json from before either was recorded. Price, routing and the served model can differ.
+ */
+export function changedWhere(had: Pick<RunInfo, "provider" | "region">, now: Pick<RunInfo, "provider" | "region">): string | undefined {
+  if (had.provider !== now.provider) return `they ran on ${had.provider ?? "an unrecorded provider"}, not ${now.provider ?? "none"}`;
+  if (had.region !== now.region) return `they ran in ${had.region ?? "an unrecorded region"}, not ${now.region ?? "none"}`;
   return undefined;
 }
 
@@ -312,8 +322,11 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
     let fresh = false;
     if ((opts.resume ?? true) && (await exists(file))) {
       const stored = JSON.parse(await readFile(file, "utf8")) as SuiteResult;
-      const storedKey = await readFile(keyFile, "utf8").then((t) => JSON.parse(t) as RunKey, () => undefined);
-      stale = changedRunKey(storedKey, key) ?? staleReason(stored, { domain: domain.name, k, user: user.name, taskIds });
+      const storedKey = await readFile(keyFile, "utf8").then((t) => JSON.parse(t) as RunKey & Partial<RunInfo>, () => undefined);
+      stale =
+        changedRunKey(storedKey, key) ??
+        (storedKey && opts.runInfo ? changedWhere(storedKey, opts.runInfo) : undefined) ??
+        staleReason(stored, { domain: domain.name, k, user: user.name, taskIds });
       // Stored verdicts are never reused as they are: the stored conversations are graded again under the
       // current rules, so every row of the board is graded by the same grader.
       if (!stale) {
