@@ -3,21 +3,26 @@
 //
 //   AWS_PROFILE=... node scripts/bedrock-prices.mjs <region> <model-id>... > prices/bedrock.<region>.json
 //   node scripts/bedrock-prices.mjs --from <get-products.json> <region> <model-id>...   (offline, from a saved dump)
+//   ... --verified prices/bedrock.verified.json ...   (prices AWS publishes on its own pages but not in the Pricing API)
 //
 // Output: { region, source, generatedAt, prices: { <model-id>: { input, output, cacheRead, cacheWrite, usageTypes } } }
-// in USD per million tokens. Models that cannot be resolved are listed under `unresolved` with the reason, never guessed.
+// in USD per million tokens. A model the Pricing API can't price takes its entry from --verified, which carries the
+// page it came from (`source`) instead of `usageTypes`. Models that cannot be resolved either way are listed under
+// `unresolved` with the reason, never guessed.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 const argv = process.argv.slice(2);
 let from;
-if (argv[0] === "--from") {
-  from = argv[1];
-  argv.splice(0, 2);
+let verifiedFile;
+while (argv[0] === "--from" || argv[0] === "--verified") {
+  const [flag, value] = argv.splice(0, 2);
+  if (flag === "--from") from = value;
+  else verifiedFile = value;
 }
 const [region, ...models] = argv;
 if (!region || models.length === 0) {
-  console.error("usage: bedrock-prices.mjs [--from dump.json] <region> <model-id>...");
+  console.error("usage: bedrock-prices.mjs [--from dump.json] [--verified prices.json] <region> <model-id>...");
   process.exit(2);
 }
 
@@ -114,6 +119,15 @@ for (const model of models) {
     cacheWrite: m(cacheWrite) ?? m(input),
     usageTypes: { input, output, ...(cacheRead ? { cacheRead } : {}), ...(cacheWrite ? { cacheWrite } : {}) },
   };
+}
+
+// Only for models the Pricing API can't price: where it has a price, that one stands.
+const verified = verifiedFile ? JSON.parse(readFileSync(verifiedFile, "utf8")).prices : {};
+for (const model of models) {
+  const v = verified[model];
+  if (prices[model] || !v) continue;
+  prices[model] = { input: v.input, output: v.output, cacheRead: v.cacheRead, cacheWrite: v.cacheWrite, source: v.source, ...(v.row ? { row: v.row } : {}) };
+  delete unresolved[model];
 }
 
 process.stdout.write(

@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -174,5 +174,36 @@ describe("scripts/bedrock-prices.mjs", () => {
     );
     expect(Object.keys(out.prices)).not.toContain("global.openai.gpt-5.5");
     expect(stderr).toContain("  global.openai.gpt-5.5: no eu-west-1 usage type names gpt-5.5");
+  });
+
+  it("takes a model the Pricing API can't price from --verified, with its source, and never overrides the Pricing API", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "sandtable-prices-"));
+    const dump = path.join(dir, "get-products.json");
+    writeFileSync(dump, JSON.stringify({ PriceList: [] }));
+    const verified = path.join(dir, "verified.json");
+    const luna = { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite: 0.125, source: "https://docs.aws.amazon.com/luna", row: "Global CRIS | $0.10 | ..." };
+    writeFileSync(verified, JSON.stringify({ prices: { "global.openai.gpt-6-luna": luna, "global.xai.grok-4.7": { ...luna, source: "https://example.com/wrong" } } }));
+    const script = path.resolve("scripts/bedrock-prices.mjs");
+    const run = async (from: string) => JSON.parse((await promisify(execFile)(process.execPath, [script, "--from", from, "--verified", verified, "eu-west-1", "global.openai.gpt-6-luna", "global.xai.grok-4.7", "global.openai.gpt-6-astra"])).stdout) as PricesFile;
+
+    const none = await run(dump);
+    expect(none.prices["global.openai.gpt-6-luna"]).toEqual(luna);
+    expect(none.unresolved).toEqual({ "global.openai.gpt-6-astra": "no eu-west-1 usage type names gpt-6-astra" });
+
+    // Where the Pricing API has a price, it stands.
+    const withGrok = path.join(dir, "with-grok.json");
+    const item = (usagetype: string, usd: number) => JSON.stringify({ product: { attributes: { usagetype } }, terms: { OnDemand: { T: { priceDimensions: { D: { unit: "1K tokens", pricePerUnit: { USD: String(usd) } } } } } } });
+    writeFileSync(withGrok, JSON.stringify({ PriceList: [item("EU-xai.grok-4.7-mantle-input-tokens-global-standard", 0.002), item("EU-xai.grok-4.7-mantle-output-tokens-global-standard", 0.006)] }));
+    expect((await run(withGrok)).prices["global.xai.grok-4.7"]).toMatchObject({ input: 2, output: 6, usageTypes: { input: "EU-xai.grok-4.7-mantle-input-tokens-global-standard" } });
+  });
+
+  it("prices/bedrock.verified.json gives every entry four prices and the AWS page it came from", async () => {
+    const { prices } = JSON.parse(readFileSync(path.resolve("prices/bedrock.verified.json"), "utf8")) as { prices: Record<string, Record<string, unknown>> };
+    expect(Object.keys(prices).sort()).toEqual(["global.openai.gpt-6-astra", "global.openai.gpt-6-luna", "global.openai.gpt-6.1-sol"]);
+    for (const [model, p] of Object.entries(prices)) {
+      for (const k of ["input", "output", "cacheRead", "cacheWrite"]) expect(typeof p[k], `${model} ${k}`).toBe("number");
+      expect(p.source, model).toMatch(/^https:\/\/docs\.aws\.amazon\.com\/bedrock\//);
+      expect(p.row, model).toMatch(/Global CRIS/);
+    }
   });
 });

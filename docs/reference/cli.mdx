@@ -109,7 +109,7 @@ sandtable run ./my-domain --agent http://localhost:8787/step -k 4 --fail-under 8
 | `--no-html` | skip the HTML report |
 | `--fail-under <pct>` | exit 1 if pass^k (k = `--trials`) is below this percentage, `0` to `100`. A trailing `%` is accepted |
 | `--open` | open the HTML report in the browser when the run finishes |
-| `--prices <file>` | extra model prices for the cost estimate: `{ "<model-id>": { "input", "output", "cacheRead", "cacheWrite" } }` in USD per million tokens. For Bedrock, [`scripts/bedrock-prices.mjs`](https://github.com/sandtable-ai/sandtable/blob/main/scripts/bedrock-prices.mjs) in the repo writes this file from the AWS Pricing API |
+| `--prices <file>` | extra model prices for the cost estimate: `{ "<model-id>": { "input", "output", "cacheRead", "cacheWrite" } }` in USD per million tokens. For Bedrock, [`scripts/bedrock-prices.mjs`](https://github.com/sandtable-ai/sandtable/blob/main/scripts/bedrock-prices.mjs) in the repo writes this file from the AWS Pricing API, and with `--verified` takes the models it doesn't list from [`prices/bedrock.verified.json`](https://github.com/sandtable-ai/sandtable/blob/main/prices/bedrock.verified.json), prices copied from AWS's model pages with their source |
 | `--provider`, `--region`, `--aws-profile` | where Claude runs, and the AWS settings for `bedrock:<model-id>`; see [provider options](#provider-options) |
 
 `--agent` accepts:
