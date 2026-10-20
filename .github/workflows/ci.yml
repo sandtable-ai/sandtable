@@ -4,19 +4,17 @@ on:
     branches: [main]
   pull_request:
 
-# While the repository is private, Actions minutes are metered: a pull request runs the gate once,
-# on the oldest supported Node, and main runs everything. Once it is public, run everything on pull
-# requests again (#156). A newer push cancels the run it replaces.
+# A newer push to a pull request cancels the run it replaces; runs on main always finish.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node: ${{ fromJSON(github.event_name == 'pull_request' && '[20]' || '[20, 22, 24]') }}
+        node: [20, 22, 24]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -29,7 +27,6 @@ jobs:
       - run: npm run check
 
   python-launcher:
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -44,7 +41,6 @@ jobs:
   # (scripted or mock models, no API keys). Node examples import sandtable-ai from the built root.
   frameworks:
     name: frameworks (${{ matrix.example }})
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
