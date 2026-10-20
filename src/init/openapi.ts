@@ -110,7 +110,10 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
           warnings.push(`${method.toUpperCase()} ${p}: callback "${name}" (${url}), a request the API sends to the client; skipped`);
         }
       }
-      for (const schema of responseSchemas(op, deref)) collectFields(acc, schema, deref);
+      for (const media of responseMedia(op, deref)) {
+        if (media.schema) collectFields(acc, media.schema as Json, deref);
+        acc.rows.push(...mediaExamples(media, deref));
+      }
       const body = requestSchema(op, deref);
       if (body && !shape.action) collectFields(acc, body, deref, false);
     }
@@ -227,7 +230,13 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
 
   const outTables: Record<string, DraftTable> = {};
   for (const [name, t] of [...tables].sort(([a], [b]) => a.localeCompare(b))) {
-    outTables[name] = { key: t.key!, rows: t.rows.filter((r) => r[t.key!] !== undefined), fields: [...t.fields.keys()] };
+    // One example often answers several operations (GET, POST, PATCH): keep the first row per key.
+    const rows = new Map<string, Json>();
+    for (const row of t.rows) {
+      const key = row[t.key!];
+      if (key !== undefined && !rows.has(String(key))) rows.set(String(key), row);
+    }
+    outTables[name] = { key: t.key!, rows: [...rows.values()], fields: [...t.fields.keys()] };
   }
   return {
     name: slug(title),
@@ -349,18 +358,32 @@ function collectFields(acc: { fields: Map<string, Json>; rows: Json[] }, node: J
   for (const [name, raw] of Object.entries((s.properties ?? {}) as Json)) acc.fields.set(name, deref(raw) as Json);
   if (!withExamples) return;
   const examples = schema.type === "array" && Array.isArray(schema.example) ? schema.example : s.example ? [s.example] : [];
-  for (const ex of examples) if (ex && typeof ex === "object" && !Array.isArray(ex)) acc.rows.push(ex as Json);
+  acc.rows.push(...examples.filter(isRow));
 }
 
-function responseSchemas(op: Json, deref: (x: unknown) => unknown): Json[] {
+/** The media type object of each 2xx response, JSON when there is a choice. */
+function responseMedia(op: Json, deref: (x: unknown) => unknown): Json[] {
   const out: Json[] = [];
   for (const [code, raw] of Object.entries((op.responses ?? {}) as Json)) {
     if (!/^2\d\d$/.test(code)) continue;
     const content = ((deref(raw) as Json).content ?? {}) as Json;
     const media = (content["application/json"] ?? Object.values(content)[0]) as Json | undefined;
-    if (media?.schema) out.push(deref(media.schema) as Json);
+    if (media) out.push(media);
   }
   return out;
+}
+
+/**
+ * Rows from a media type's own `example` and from the `value` of each entry in its `examples`
+ * map, read as a schema's `example` is: an object is a row, an array is a list of rows.
+ */
+function mediaExamples(media: Json, deref: (x: unknown) => unknown): Json[] {
+  const named = Object.values((media.examples ?? {}) as Json).map((ex) => (deref(ex) as Json | undefined)?.value);
+  return [media.example, ...named].flatMap((value) => (Array.isArray(value) ? value : [value])).filter(isRow);
+}
+
+function isRow(x: unknown): x is Json {
+  return !!x && typeof x === "object" && !Array.isArray(x);
 }
 
 function requestSchema(op: Json, deref: (x: unknown) => unknown): Json | undefined {

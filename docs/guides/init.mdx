@@ -70,7 +70,7 @@ No model is involved: the same spec always produces the same draft.
 | a schema composed with `allOf` | its members' properties and required lists merged, in bodies, responses and params |
 | a field or param named `@type` or `pickup-window` | param `at_type` or `pickup_window`, since `$` references only name letters, digits and `_`; the op still writes `"@type": $at_type` |
 | a `{param}` in the path that the spec doesn't declare | a required string param |
-| `example` on a response schema | seed rows |
+| `example` on a response schema or its media type, and each `value` in the media type's `examples` | seed rows; an array is several rows, and a key seen twice keeps its first row |
 
 It cannot infer some things, so they become `# TODO(review):` comments next to the tool:
 

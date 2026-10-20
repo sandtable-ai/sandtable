@@ -347,6 +347,66 @@ describe("init from OpenAPI: webhook listeners and subscriptions", () => {
   });
 });
 
+describe("init from OpenAPI: examples on the media type", () => {
+  // A fictional lending library whose examples sit next to the schema, not inside it.
+  const json = (media: Record<string, unknown>) => ({ content: { "application/json": media } });
+  const spec = {
+    openapi: "3.0.3",
+    info: { title: "Fernhollow Library" },
+    paths: {
+      "/books": {
+        get: {
+          responses: {
+            "200": json({
+              schema: { type: "array", items: { $ref: "#/components/schemas/Book" } },
+              examples: {
+                shelf: { summary: "Two books", value: [{ book_id: "B-1", title: "The Quiet Orchard" }, { book_id: "B-2", title: "Salt and Lanterns" }] },
+                newest: { $ref: "#/components/examples/NewestBook" },
+              },
+            }),
+          },
+        },
+      },
+      "/books/{book_id}": {
+        // The same book as in the list: drafted once.
+        get: { responses: { "200": json({ schema: { $ref: "#/components/schemas/Book" }, example: { book_id: "B-1", title: "The Quiet Orchard" } }) } },
+      },
+      "/members/{member_id}": {
+        get: {
+          responses: {
+            "200": json({
+              schema: { type: "object", properties: { member_id: { type: "string" }, name: { type: "string" } } },
+              examples: { wren: { value: { member_id: "M-7", name: "Wren Halloway" } }, remote: { externalValue: "https://library.example/members/m-8.json" } },
+            }),
+          },
+        },
+      },
+      "/loans": {
+        post: {
+          requestBody: json({ schema: { type: "object", properties: { book_id: { type: "string" } } }, example: { loan_id: "L-1", book_id: "B-1" } }),
+          responses: { "201": { description: "lent" } },
+        },
+      },
+    },
+    components: {
+      schemas: { Book: { type: "object", properties: { book_id: { type: "string" }, title: { type: "string" } } } },
+      examples: { NewestBook: { value: { book_id: "B-3", title: "Nine Winters" } } },
+    },
+  };
+
+  it("seeds rows from the media type's example and the examples map's values, once per key", () => {
+    const d = draftFromOpenApi(spec);
+    expect(d.tables.books!.rows).toEqual([
+      { book_id: "B-1", title: "The Quiet Orchard" },
+      { book_id: "B-2", title: "Salt and Lanterns" },
+      { book_id: "B-3", title: "Nine Winters" },
+    ]);
+    expect(d.tables.members!.rows).toEqual([{ member_id: "M-7", name: "Wren Halloway" }]);
+    // As with schema examples, a request body's example is not a row.
+    expect(d.tables.loans!.rows).toEqual([]);
+  });
+});
+
 describe("init from OpenAPI: what it refuses", () => {
   it("accepts an OpenAPI 3.x document with paths", async () => {
     expect(openApiProblem(await freightSpec())).toBeUndefined();
