@@ -368,8 +368,8 @@ describe("init from OpenAPI: examples on the media type", () => {
         },
       },
       "/books/{book_id}": {
-        // The same book as in the list: drafted once.
-        get: { responses: { "200": json({ schema: { $ref: "#/components/schemas/Book" }, example: { book_id: "B-1", title: "The Quiet Orchard" } }) } },
+        // The same book as in the list, with one more field: drafted once, from this fuller example.
+        get: { responses: { "200": json({ schema: { $ref: "#/components/schemas/Book" }, example: { book_id: "B-1", title: "The Quiet Orchard", author: "Ilse Marrow" } }) } },
       },
       "/members/{member_id}": {
         get: {
@@ -397,13 +397,14 @@ describe("init from OpenAPI: examples on the media type", () => {
   it("seeds rows from the media type's example and the examples map's values, once per key", () => {
     const d = draftFromOpenApi(spec);
     expect(d.tables.books!.rows).toEqual([
-      { book_id: "B-1", title: "The Quiet Orchard" },
+      { book_id: "B-1", title: "The Quiet Orchard", author: "Ilse Marrow" },
       { book_id: "B-2", title: "Salt and Lanterns" },
       { book_id: "B-3", title: "Nine Winters" },
     ]);
     expect(d.tables.members!.rows).toEqual([{ member_id: "M-7", name: "Wren Halloway" }]);
     // As with schema examples, a request body's example is not a row.
     expect(d.tables.loans!.rows).toEqual([]);
+    expect(d.warnings).toContain('books: 2 examples have book_id "B-1"; kept the one with the most fields and dropped 1');
   });
 });
 

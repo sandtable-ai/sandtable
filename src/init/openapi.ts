@@ -230,13 +230,18 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
 
   const outTables: Record<string, DraftTable> = {};
   for (const [name, t] of [...tables].sort(([a], [b]) => a.localeCompare(b))) {
-    // One example often answers several operations (GET, POST, PATCH): keep the first row per key.
-    const rows = new Map<string, Json>();
+    // One example often answers several operations (a list, GET, POST, PATCH), so a key can repeat.
+    // Keep the row with the most fields, which is the fullest example, and say what was dropped.
+    const byKey = new Map<string, Json[]>();
     for (const row of t.rows) {
       const key = row[t.key!];
-      if (key !== undefined && !rows.has(String(key))) rows.set(String(key), row);
+      if (key !== undefined) byKey.set(String(key), [...(byKey.get(String(key)) ?? []), row]);
     }
-    outTables[name] = { key: t.key!, rows: [...rows.values()], fields: [...t.fields.keys()] };
+    const rows = [...byKey].map(([key, same]) => {
+      if (same.length > 1) warnings.push(`${name}: ${same.length} examples have ${t.key} "${key}"; kept the one with the most fields and dropped ${same.length - 1}`);
+      return same.reduce((kept, row) => (Object.keys(row).length > Object.keys(kept).length ? row : kept));
+    });
+    outTables[name] = { key: t.key!, rows, fields: [...t.fields.keys()] };
   }
   return {
     name: slug(title),
