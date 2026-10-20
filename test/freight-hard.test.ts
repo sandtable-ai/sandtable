@@ -75,6 +75,48 @@ describe("freight callers", () => {
   });
 });
 
+describe("freight negotiation", () => {
+  // The policy: opening at posted_rate isn't a counter-offer, every counter is logged, and an ask at or below max_rate may be accepted.
+  const agent = (logCounter: boolean): AgentAdapter => ({
+    name: "one-counter",
+    async createSession() {
+      let turn = 0;
+      return {
+        async reply(_text, callTool) {
+          turn++;
+          if (turn === 1) {
+            await callTool("verify_carrier", { mc_number: "100909" });
+            await callTool("get_load", { load_id: "L-1011" });
+            return "You're verified. L-1011 Omaha to Denver is open. What rate are you looking for?";
+          }
+          if (turn === 2) return "That one is posted at $1,475.";
+          if (turn === 3) {
+            if (logCounter) await callTool("log_offer", { load_id: "L-1011", mc_number: "100909", round: 1, carrier_ask: 1750, counter_offer: 1525 });
+            return "I can do $1,525.";
+          }
+          if (turn === 4) {
+            await callTool("book_load", { load_id: "L-1011", mc_number: "100909", rate: 1600 });
+            return "Deal at $1,600. You're booked.";
+          }
+          return "You're all set. Thanks.";
+        },
+      };
+    },
+  });
+
+  it("passes negotiate-two-rounds when the caller turns down the opening and the agent accepts its ask after one logged counter", async () => {
+    const { runEpisode } = await import("../src/run/episode.ts");
+    const task = domain.tasks.find((t) => t.id === "negotiate-two-rounds")!;
+    const ok = await runEpisode({ domain, task, agent: agent(true), user: scriptedUser(), trial: 0 });
+    expect(ok.checks.filter((c) => !c.passed)).toEqual([]);
+    expect(ok.passed).toBe(true);
+
+    const unlogged = await runEpisode({ domain, task, agent: agent(false), user: scriptedUser(), trial: 0 });
+    expect(unlogged.passed).toBe(false);
+    expect(unlogged.checks.filter((c) => !c.passed).map((c) => c.id)).toEqual(["state:offers#2"]);
+  });
+});
+
 describe("freight hard tier", () => {
   it("has 18 tasks, each proven ready, solvable and non-vacuous by lint", () => {
     const report = lintDomain(domain);

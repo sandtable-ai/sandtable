@@ -224,7 +224,7 @@
   expect:
     state:
       - { table: bookings, where: { load_id: L-1011, mc_number: "100909", rate: { $gte: 1575, $lte: 1640 } }, count: 1 }
-      - { table: offers, where: { load_id: L-1011, mc_number: "100909", round: { $gte: 2 } } }
+      - { table: offers, where: { load_id: L-1011, mc_number: "100909", round: { $gte: 1 } } }
     called: [verify_carrier, book_load]
 
 - id: negotiate-rounds-exhausted
