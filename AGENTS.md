@@ -108,9 +108,9 @@ Update these in the same PR as the code change:
 6. The `release` workflow then:
    - checks everything, and refuses a tag that has no matching CHANGELOG section
    - stages npm (pre-releases under `next`)
-   - publishes to PyPI
+   - waits for that npm version to go live, then publishes to PyPI
    - creates the GitHub release from that section
-7. Approve the staged npm release on npmjs.com, or with `npm stage approve <id>`.
+7. Approve the staged npm release on npmjs.com, or with `npm stage approve <id>`. PyPI and the GitHub release follow within a minute. If you approve more than 2 hours after the tag, re-run the workflow's failed jobs.
 
 ## Map
 
