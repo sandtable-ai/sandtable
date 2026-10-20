@@ -155,7 +155,7 @@ The repo has the freight leaderboard's own, [`leaderboard/models.yaml`](https://
 | Argument / option | Description |
 |---|---|
 | `<domain>` | domain directory (with `sandtable.yaml`) or the file itself |
-| `-m, --models <file>` | YAML file: `{ user?, k?, models: [{ label, agent, effort? }] }`; `agent` takes the same specs as `run --agent`; `effort` (`low`, `medium`, `high`, `xhigh` or `max`) is for `claude:` agents only |
+| `-m, --models <file>` | **required**: the models file, YAML: `{ user?, k?, models: [{ label, agent, effort? }] }`; `agent` takes the same specs as `run --agent`; `effort` (`low`, `medium`, `high`, `xhigh` or `max`) is for `claude:` agents only |
 | `-u, --user <spec>` | simulated user for every model; overrides the models file. Default: `claude` |
 | `-k, --trials <n>` | trials per task; overrides the models file. Default: `4` |
 | `-t, --tasks <ids>` | comma-separated task ids to run, for every model and the baseline. Default: all tasks |
