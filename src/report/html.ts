@@ -34,6 +34,7 @@ tr:last-child td{border-bottom:0}
 .check{display:grid;grid-template-columns:16px 1fr;column-gap:8px;margin:4px 0}
 .change{font:13px/20px ui-monospace,"SF Mono",Menlo,Consolas,monospace;margin:4px 0}.change span{color:var(--muted)}.change b{font-weight:600}
 .change details{display:inline;margin-left:8px}.change summary{display:inline;cursor:pointer;color:var(--muted);font-size:12px}.change details[open] span{display:block}
+.change summary::before{content:"▸ "}.change details[open]>summary::before{content:"▾ "}
 .ev{border-radius:8px;padding:8px 12px;margin:8px 0;white-space:pre-wrap}
 .ev small{display:block;color:var(--muted);font:12px/16px ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;margin-bottom:4px}
 .ev small b{font-weight:600;text-transform:uppercase;letter-spacing:.04em}.ev small code{font-size:1em}
@@ -132,7 +133,7 @@ function show(ti, i) {
 // An update shows only the fields it changed, before → after, with the whole row behind a toggle; an insert or a
 // delete shows the row.
 function change(c) {
-  const head = '<div class="change">' + c.kind + " " + esc(c.table) + " " + esc(c.key) + " ";
+  const head = '<div class="change">' + esc(c.kind) + " " + esc(c.table) + " " + esc(c.key) + " ";
   if (c.kind !== "update" || !c.before || !c.after) return head + "<span>" + esc(json(c.after ?? c.before)) + "</span></div>";
   const shown = (v) => v === undefined ? "(unset)" : json(v);
   const fields = Object.keys({ ...c.before, ...c.after }).filter((k) => JSON.stringify(c.before[k]) !== JSON.stringify(c.after[k]));
