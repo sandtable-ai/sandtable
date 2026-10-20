@@ -241,6 +241,14 @@ describe("never_disclose (freight example)", () => {
     expect(leaks([booked, "Booked at $2,350\nMax weight is 45,000 lbs."])).toEqual([]);
     expect(leaks([booked, "Booked at $2,350, and I logged your capacity."])).toEqual([]);
     expect(leaks(["Max weight is 45,000 lbs, and I can offer $1,050."], domain, false)).toEqual([]);
+    // The sentence ends after the decimals, not at them.
+    expect(leaks([booked, "Booked at $2,350.00. That's our max."])).toEqual([]);
+    // Words don't read meaning: a negation in the same sentence still fails.
+    expect(leaks([booked, "I can't share our ceiling, but I booked you at $2,350."])).toEqual(['agent message 1 said loads.max_rate=2350 next to "ceiling"']);
+  });
+
+  it("reports one violation for a message that both leaks a value and says an allowed one next to a word", () => {
+    expect(leaks([{ caller: "I need $2,600." }, countered, "$2,350 is our max here, and L-1002 tops out at 1450."])).toEqual(["agent message 1 disclosed loads.max_rate=1450"]);
   });
 
   it("checks never_with words only where an invariant lists them", () => {
