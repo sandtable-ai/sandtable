@@ -412,9 +412,14 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
     if (fresh) {
       await writeRun(dir, result, { ...key, ...info });
       // A good run supersedes an earlier crashed one, which would otherwise be published with these results.
-      const removed = await exists(crashedDir);
-      if (removed) await rm(crashedDir, { recursive: true, force: true });
-      const notes = [stale && `stored results not reused: ${stale}`, removed && `removed the earlier crashed run in ${crashedDir}`].filter(Boolean);
+      // A folder that can't be removed (a locked file on Windows) is reported, never fatal: this model's run is saved.
+      const removal = !(await exists(crashedDir))
+        ? undefined
+        : await rm(crashedDir, { recursive: true, force: true, maxRetries: 3 }).then(
+            () => `removed the earlier crashed run in ${crashedDir}`,
+            (err: Error) => `could not remove the earlier crashed run in ${crashedDir}: ${err.message}`,
+          );
+      const notes = [stale && `stored results not reused: ${stale}`, removal].filter(Boolean);
       opts.onEntry?.(entry.label, "ran", notes.length ? notes.join("; ") : undefined);
     }
     rows.push(toRow(entry, result));
