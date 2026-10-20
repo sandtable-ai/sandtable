@@ -29,6 +29,7 @@ export interface BedrockConverseOptions {
   modelId: string;
   region?: string;
   awsProfile?: string;
+  /** Output tokens per model call, reasoning included. Default 16000, the same as the Claude adapter. */
   maxTokens?: number;
   maxToolRounds?: number;
   /** Inject a client (tests); otherwise one is built from @aws-sdk/client-bedrock-runtime. */
@@ -130,7 +131,7 @@ export function bedrockConverseAgent(opts: BedrockConverseOptions): AgentAdapter
                 system,
                 messages: cache ? withCachePoint(messages, cache) : messages,
                 ...(toolConfig ? { toolConfig } : {}),
-                inferenceConfig: { maxTokens: opts.maxTokens ?? 4096 },
+                inferenceConfig: { maxTokens: opts.maxTokens ?? 16000 },
               }),
             );
             const u = res.usage;

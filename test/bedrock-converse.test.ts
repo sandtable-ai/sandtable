@@ -12,6 +12,7 @@ type Req = {
   system: Array<Record<string, unknown>>;
   messages: Array<{ role: string; content: Array<Record<string, unknown>> }>;
   toolConfig?: { tools: unknown[] };
+  inferenceConfig?: { maxTokens?: number };
 };
 
 /** Replays canned Converse responses and records each request. */
@@ -60,6 +61,7 @@ describe("bedrockConverseAgent", () => {
     expect(text).toBe("You're verified, but I can't find that load.");
     expect(calls).toEqual(["verify_carrier", "get_load"]);
     expect(requests[0]!.modelId).toBe("global.openai.gpt-5.5");
+    expect(requests[0]!.inferenceConfig).toEqual({ maxTokens: 16000 });
     expect(requests[0]!.toolConfig!.tools).toHaveLength(domain.tools.length);
     const last = requests[2]!.messages;
     expect(last.at(-1)).toMatchObject({ role: "user", content: [{ toolResult: { toolUseId: "t2", status: "error" } }] });
