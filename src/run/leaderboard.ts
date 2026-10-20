@@ -5,19 +5,37 @@ import { renderHtml } from "../report/html.ts";
 import type { Domain } from "../spec/schema.ts";
 import { noopAgent } from "../sim/noop.ts";
 import { scriptedUser } from "../sim/scripted.ts";
-import type { Provider } from "../sim/claude.ts";
+import { DEFAULT_AGENT_EFFORT, type Effort, type Provider } from "../sim/claude.ts";
 import type { AgentAdapter, UserSimulator } from "../sim/types.ts";
 import { changedVerdicts, RegradeError, regradeSuite } from "./regrade.ts";
 import { runSuite, type SuiteResult } from "./suite.ts";
 import { costOf, totalTokens } from "./usage.ts";
 import { writeFileAtomic } from "./write.ts";
 
+/** Whether an agent spec runs the Claude adapter, the only one whose reasoning effort can be set. */
+const isClaude = (spec: string) => spec === "claude" || spec.startsWith("claude:");
+
+/** Why an entry's `effort` can't be used, or undefined when it can. */
+function effortProblem(entry: { agent: string; effort?: Effort }): string | undefined {
+  return entry.effort !== undefined && !isClaude(entry.agent) ? `effort applies only to claude: agents, not ${entry.agent}` : undefined;
+}
+
 /** The models file `sandtable leaderboard -m <file>` reads. */
 export const ModelsFile = z
   .object({
     user: z.string().optional(),
     k: z.number().int().positive().optional(),
-    models: z.array(z.object({ label: z.string(), agent: z.string() }).strict()).min(1),
+    models: z
+      .array(
+        z
+          .object({ label: z.string(), agent: z.string(), effort: z.enum(["low", "medium", "high", "xhigh", "max"]).optional() })
+          .strict()
+          .superRefine((m, ctx) => {
+            const problem = effortProblem(m);
+            if (problem) ctx.addIssue({ code: "custom", path: ["effort"], message: problem });
+          }),
+      )
+      .min(1),
   })
   .strict();
 
@@ -26,6 +44,8 @@ export interface LeaderboardEntry {
   label: string;
   /** Agent spec as accepted by `sandtable run --agent`, e.g. claude:claude-opus-5-5 or bedrock:global.openai.gpt-5.5. */
   agent: string;
+  /** Reasoning effort for a `claude:` agent. Default: the Claude agent's own (`medium`). Rejected on any other agent. */
+  effort?: Effort;
 }
 
 export interface LeaderboardRow {
@@ -107,7 +127,8 @@ export interface LeaderboardOptions {
   user: UserSimulator;
   k: number;
   outDir: string;
-  resolveAgent: (spec: string) => Promise<AgentAdapter>;
+  /** Builds an entry's agent; `effort` is set only for a claude: entry that sets one. */
+  resolveAgent: (spec: string, effort?: Effort) => Promise<AgentAdapter>;
   concurrency?: number;
   /** Run only these tasks, for every model and the baseline. Default: all. */
   taskIds?: string[];
@@ -146,17 +167,27 @@ export function staleReason(r: SuiteResult, want: { domain: string; k: number; u
 
 /**
  * What defines a model's stored results beyond what results.json records: the agent spec from the
- * models file (results.json has only the adapter's name, and `claude` names a default model).
- * Written next to results.json as run.json.
+ * models file (results.json has only the adapter's name, and `claude` names a default model), and a
+ * Claude agent's reasoning effort. Written next to results.json as run.json.
  */
 interface RunKey {
   agent: string;
+  /** The effort a Claude agent ran at; absent for other agents. */
+  effort?: Effort;
+}
+
+/** The run key of an entry: a Claude agent's effort is its own, or the Claude agent's default. */
+function runKey(entry: LeaderboardEntry): RunKey {
+  return { agent: entry.agent, ...(isClaude(entry.agent) ? { effort: entry.effort ?? DEFAULT_AGENT_EFFORT } : {}) };
 }
 
 /** Why results run under `had` cannot stand in for `want`. Without a run.json, nothing says what they ran. */
 export function changedRunKey(had: RunKey | undefined, want: RunKey): string | undefined {
   if (!had) return "they have no run.json, so their agent spec can't be checked";
   if (had.agent !== want.agent) return `they are for agent ${had.agent}, not ${want.agent}`;
+  // A run.json written before effort was recorded: every Claude agent then ran at medium.
+  const ran = had.effort ?? (isClaude(had.agent) ? "medium" : undefined);
+  if (ran !== want.effort) return `they ran at effort ${ran ?? "none"}, not ${want.effort ?? "none"}`;
   return undefined;
 }
 
@@ -220,6 +251,10 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
   const { domain, entries, user, k, outDir } = opts;
   const unknown = (opts.taskIds ?? []).filter((id) => !domain.tasks.some((t) => t.id === id));
   if (unknown.length) throw new Error(`unknown task id(s): ${unknown.join(", ")}`);
+  for (const entry of entries) {
+    const problem = effortProblem(entry);
+    if (problem) throw new Error(`${entry.label}: ${problem}`);
+  }
   const tasks = opts.taskIds?.length ? domain.tasks.filter((t) => opts.taskIds!.includes(t.id)) : domain.tasks;
   const taskIds = tasks.map((t) => t.id);
   await mkdir(outDir, { recursive: true });
@@ -233,7 +268,7 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
     const dir = path.join(outDir, slugify(entry.label));
     const file = path.join(dir, "results.json");
     const keyFile = path.join(dir, "run.json");
-    const key: RunKey = { agent: entry.agent };
+    const key = runKey(entry);
     let result: SuiteResult | undefined;
     let stale: string | undefined;
     let fresh = false;
@@ -262,7 +297,7 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
     }
     if (!result) {
       try {
-        const agent = await opts.resolveAgent(entry.agent);
+        const agent = await opts.resolveAgent(entry.agent, entry.effort);
         result = await runSuite({ domain, agent, user, k, taskIds, concurrency: opts.concurrency ?? 4 });
         await mkdir(dir, { recursive: true });
         await writeFileAtomic(file, JSON.stringify(result, null, 2));

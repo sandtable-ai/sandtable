@@ -390,7 +390,7 @@ withProviderFlags(program
   .command("leaderboard"))
   .argument("<domain>", "domain directory (with sandtable.yaml) or file")
   .description("rank several agents on one domain under the same simulated users, plus a do-nothing baseline")
-  .requiredOption("-m, --models <file>", "YAML file: { user?, k?, models: [{ label, agent }] } (agent specs as in `run --agent`)")
+  .requiredOption("-m, --models <file>", "YAML file: { user?, k?, models: [{ label, agent, effort? }] } (agent specs as in `run --agent`; effort low|medium|high|xhigh|max, for claude: agents only)")
   .option("-u, --user <spec>", "simulated user for every model (overrides the models file; default claude)")
   .option("-k, --trials <n>", "trials per task (overrides the models file; default 4)", int)
   .option("-t, --tasks <ids>", "comma-separated task ids to run, for every model and the baseline")
@@ -435,7 +435,7 @@ withProviderFlags(program
       concurrency: o.concurrency,
       resume: o.resume,
       runInfo,
-      resolveAgent: (spec) => resolveAgent(spec, p, o.openaiBaseUrl),
+      resolveAgent: (spec, effort) => resolveAgent(spec, effort ? { ...p, effort } : p, o.openaiBaseUrl),
       onEntry: (label, status, note) => console.log(`  ${mark[status]}  ${label}${note ? `  (${note})` : ""}`),
     });
     console.log(`\n${renderLeaderboardMarkdown(result)}`);

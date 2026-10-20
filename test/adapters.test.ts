@@ -62,6 +62,21 @@ describe("claudeAgent", () => {
     await session.reply("hello", async () => ({ ok: true }));
     expect(requests[0]).not.toHaveProperty("fallbacks");
   });
+
+  it("sends effort medium unless one is set, and the simulated user low", async () => {
+    const domain = await loadDomain(example);
+    const effortOf = async (effort?: "high") => {
+      const { client, requests } = fakeClient([{ stop_reason: "end_turn", content: [{ type: "text", text: "hi" }] }]);
+      const session = await claudeAgent({ client, model: "claude-sonnet-5-5", ...(effort ? { effort } : {}) }).createSession({ domain, system: "s", tools: [], sessionId: "x" });
+      await session.reply("hello", async () => ({ ok: true }));
+      return requests[0]!.output_config;
+    };
+    expect(await effortOf()).toEqual({ effort: "medium" });
+    expect(await effortOf("high")).toEqual({ effort: "high" });
+    const { client, requests } = fakeClient([{ stop_reason: "end_turn", content: [{ type: "text", text: "Hi." }] }]);
+    await (await claudeUser({ client }).createSession({ domain, task: domain.tasks[0]! })).next(null);
+    expect(requests.at(-1)?.output_config).toEqual({ effort: "low" });
+  });
 });
 
 describe("claudeUser", () => {

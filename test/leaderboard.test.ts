@@ -241,6 +241,9 @@ describe("leaderboard/models.yaml", () => {
     const cfg = ModelsFile.parse(YAML.parse(await readFile("leaderboard/models.yaml", "utf8")));
     expect(cfg).toMatchObject({ user: "claude:global.anthropic.claude-sonnet-5-5", k: 4 });
     expect(new Set(cfg.models.map((m) => m.label)).size).toBe(cfg.models.length);
+    // Every model at its provider's default effort: high for Sonnet 5.5 and Fable 5.1; Opus and Haiku 5.5 at sandtable's medium.
+    const effort = (label: string) => cfg.models.find((m) => m.label === label)!.effort;
+    expect([effort("Claude Fable 5.1"), effort("Claude Sonnet 5.5"), effort("Claude Opus 5.5"), effort("Claude Haiku 5.5")]).toEqual(["high", "high", undefined, undefined]);
     registerPrices(JSON.parse(await readFile("prices/bedrock.eu-west-1.json", "utf8")));
     // A claude: agent records usage under the model name Claude reports; a bedrock: agent under its model ID.
     const usageKey = (spec: string) => (spec.startsWith("claude:") ? priceKey(spec.slice("claude:".length)) : spec.slice("bedrock:".length));
@@ -303,3 +306,60 @@ describe("leaderboard provenance", () => {
     expect(info).not.toHaveProperty("region");
   });
 });
+
+describe("leaderboard effort", () => {
+  const careful = async () => freightScriptedAgent("careful");
+  const base = async (dir: string) => ({ domain: await loadDomain(example), user: scriptedUser(), k: 1, taskIds: ["no-mc-number"], outDir: dir });
+
+  it("passes a claude: entry's effort to its agent and records the effective effort in run.json", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const asked: Record<string, string | undefined> = {};
+    const entries = [
+      { label: "Sonnet", agent: "claude:claude-sonnet-5-5", effort: "high" as const },
+      { label: "Opus", agent: "claude:claude-opus-5-5" },
+      { label: "Luna", agent: "bedrock:global.openai.gpt-6-luna" },
+    ];
+    await runLeaderboard({ ...(await base(dir)), entries, resolveAgent: async (spec, effort) => ((asked[spec] = effort), careful()) });
+    expect(asked).toEqual({ "claude:claude-sonnet-5-5": "high", "claude:claude-opus-5-5": undefined, "bedrock:global.openai.gpt-6-luna": undefined });
+    const runJson = async (slug: string) => JSON.parse(await readFile(path.join(dir, slug, "run.json"), "utf8"));
+    expect(await runJson("sonnet")).toMatchObject({ agent: "claude:claude-sonnet-5-5", effort: "high" });
+    expect(await runJson("opus")).toMatchObject({ agent: "claude:claude-opus-5-5", effort: "medium" });
+    expect(await runJson("luna")).not.toHaveProperty("effort");
+  });
+
+  it("reuses a claude agent's results stored without an effort as medium, and reruns them at another effort", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const opts = await base(dir);
+    await runLeaderboard({ ...opts, entries: [{ label: "Sonnet", agent: "claude:claude-sonnet-5-5" }], resolveAgent: careful });
+    // A run.json written before effort was recorded, as by the paid run at 6ad55be.
+    const keyFile = path.join(dir, "sonnet", "run.json");
+    const { effort: _, ...older } = JSON.parse(await readFile(keyFile, "utf8"));
+    await writeFile(keyFile, JSON.stringify(older));
+    const run = async (entry: { label: string; agent: string; effort?: "high" }, resolveAgent = careful) => {
+      const seen: string[] = [];
+      await runLeaderboard({ ...opts, entries: [entry], resolveAgent, onEntry: (_l, status, note) => seen.push(`${status}${note ? `: ${note}` : ""}`) });
+      return seen;
+    };
+    const noModel = async (): Promise<never> => {
+      throw new Error("should not call the agent");
+    };
+    expect(await run({ label: "Sonnet", agent: "claude:claude-sonnet-5-5" }, noModel)).toEqual(["cached"]);
+    expect(await run({ label: "Sonnet", agent: "claude:claude-sonnet-5-5", effort: "high" })).toEqual(["ran: stored results not reused: they ran at effort medium, not high"]);
+    expect(JSON.parse(await readFile(keyFile, "utf8"))).toMatchObject({ effort: "high" });
+    expect(await run({ label: "Sonnet", agent: "claude:claude-sonnet-5-5", effort: "high" }, noModel)).toEqual(["cached"]);
+    expect(await run({ label: "Sonnet", agent: "claude:claude-sonnet-5-5" })).toEqual(["ran: stored results not reused: they ran at effort high, not medium"]);
+  });
+
+  it("rejects an effort on any agent but claude:, in the models file and in the library", async () => {
+    const parsed = ModelsFile.safeParse({ models: [{ label: "Luna", agent: "bedrock:global.openai.gpt-6-luna", effort: "high" }] });
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues[0]).toMatchObject({ path: ["models", 0, "effort"], message: "effort applies only to claude: agents, not bedrock:global.openai.gpt-6-luna" });
+    expect(ModelsFile.safeParse({ models: [{ label: "Sonnet", agent: "claude:claude-sonnet-5-5", effort: "high" }] }).success).toBe(true);
+    expect(ModelsFile.safeParse({ models: [{ label: "Sonnet", agent: "claude:claude-sonnet-5-5", effort: "adaptive" }] }).success).toBe(false);
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    await expect(
+      runLeaderboard({ ...(await base(dir)), entries: [{ label: "Luna", agent: "bedrock:global.openai.gpt-6-luna", effort: "high" }], resolveAgent: careful }),
+    ).rejects.toThrow("Luna: effort applies only to claude: agents, not bedrock:global.openai.gpt-6-luna");
+  });
+});
+

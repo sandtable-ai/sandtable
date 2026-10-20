@@ -8,6 +8,9 @@ export const DEFAULT_MODEL = "claude-opus-5-5";
 
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 
+/** The effort the Claude agent runs at unless one is set (the simulated user runs at `low`). */
+export const DEFAULT_AGENT_EFFORT: Effort = "medium";
+
 /** Where Claude runs: the Anthropic API, or Amazon Bedrock (AWS credentials from the usual chain). */
 export type Provider = "anthropic" | "bedrock";
 
@@ -193,7 +196,7 @@ function textOf(content: Anthropic.Beta.BetaContentBlock[]): string {
 
 /** Reference agent: Claude with the domain's tools and policy. Use it as a baseline, or swap in your own agent. */
 export function claudeAgent(opts: ClaudeAgentOptions = {}): AgentAdapter {
-  const base = requestBase(opts, "medium");
+  const base = requestBase(opts, DEFAULT_AGENT_EFFORT);
   const maxRounds = opts.maxToolRounds ?? 12;
   return {
     name: `${providerOf(opts) === "bedrock" ? "bedrock" : "claude"}:${base.model}`,
