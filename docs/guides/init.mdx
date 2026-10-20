@@ -48,7 +48,7 @@ The SOP and transcript steps call Claude. They have been verified in live runs o
   </Step>
 </Steps>
 
-You can also pass all three inputs at once: `sandtable init --openapi api.yaml --sop policy.md --transcripts calls/ -o sandtable`. The steps run in the order above.
+You can also pass all three inputs at once: `npx sandtable-ai init --openapi api.yaml --sop policy.md --transcripts calls/ -o sandtable`. The steps run in the order above.
 
 ## From an OpenAPI spec (deterministic)
 
@@ -133,7 +133,7 @@ npx sandtable-ai review sandtable              # list what is pending, with sour
 npx sandtable-ai validate sandtable --strict   # fails while anything is pending (use in CI)
 ```
 
-While items are pending, runs still work, but their reports are marked **provisional**. Run `sandtable lint` too: it catches drafted tasks that are vacuous, unreachable or unsolvable before anyone spends money running them. To accept an item, change `review: pending` to `review: accepted` or delete the line. [Review workflow](/concepts/review-workflow) covers what to check.
+While items are pending, runs still work, but their reports are marked **provisional**. Run `npx sandtable-ai lint` too: it catches drafted tasks that are vacuous, unreachable or unsolvable before anyone spends money running them. To accept an item, change `review: pending` to `review: accepted` or delete the line. [Review workflow](/concepts/review-workflow) covers what to check.
 
 ## What a real draft looks like
 

@@ -1,6 +1,6 @@
 # Resolving review items
 
-`sandtable review <domain>` lists pending tools, invariants and tasks. The drafts below are real `init --openapi` output for two fictional APIs: the freight TMS bundled in `examples/freight/source/`, and an invented outdoor-gear shop, Bramble Outfitters. Resolve each note, show the engineer the change, and accept only once they agree.
+`npx sandtable-ai review <domain>` lists pending tools, invariants and tasks. The drafts below are real `init --openapi` output for two fictional APIs: the freight TMS bundled in `examples/freight/source/`, and an invented outdoor-gear shop, Bramble Outfitters. Resolve each note, show the engineer the change, and accept only once they agree.
 
 ## Contents
 - [Tool notes](#tool-notes): status codes, side effects, action endpoints

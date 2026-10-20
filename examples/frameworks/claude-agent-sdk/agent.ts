@@ -1,7 +1,7 @@
 /**
  * Rehearse an agent built with the Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`).
  *
- *   sandtable run examples/freight --agent examples/frameworks/claude-agent-sdk/agent.ts
+ *   npx sandtable-ai run examples/freight --agent examples/frameworks/claude-agent-sdk/agent.ts
  *
  * sandtable calls the default export with no options and opens one session per trial.
  * Each session is one long-lived query() in streaming input mode: the SDK keeps the
