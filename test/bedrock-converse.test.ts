@@ -180,6 +180,44 @@ describe("bedrockConverseAgent", () => {
       expect(calls).toEqual([]);
       expect(requests[1]!.messages.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
       expect(requests[1]!.messages[2]!.content).toMatchObject([{ toolResult: { toolUseId: "t1", status: "error" } }, { text: "Hello?" }]);
+      const result = requests[1]!.messages[2]!.content[0] as { toolResult: { content: Array<{ text: string }> } };
+      expect(JSON.parse(result.toolResult.content[0]!.text)).toEqual({ error: 'not run: the reply ended with stop reason "max_tokens"' });
+      // Append-only: what was sent before is sent again unchanged.
+      expect(requests[1]!.messages.slice(0, requests[0]!.messages.length)).toEqual(requests[0]!.messages);
+    });
+
+    it("doesn't run a call from a filtered or malformed reply, but answers it", async () => {
+      for (const stopReason of ["content_filtered", "malformed_tool_use", "model_context_window_exceeded"]) {
+        const { client, requests } = stub([
+          { stopReason, output: { message: { role: "assistant", content: [{ toolUse: { toolUseId: "t1", name: "book_load", input: {} } }] } } },
+          say("Sorry about that."),
+        ]);
+        const calls: string[] = [];
+        const s = await session(client);
+        await s.reply("Book it", recording(calls));
+        await s.reply("Hello?", recording(calls));
+        expect(calls, stopReason).toEqual([]);
+        expect(requests[1]!.messages[2]!.content, stopReason).toMatchObject([{ toolResult: { toolUseId: "t1", status: "error" } }, { text: "Hello?" }]);
+      }
+    });
+
+    it("runs a call that comes with unclosed reasoning instead of asking again", async () => {
+      const { client, requests } = stub([
+        { stopReason: "end_turn", output: { message: { role: "assistant", content: [{ text: "<reasoning>verify first" }, { toolUse: { toolUseId: "t1", name: "verify_carrier", input: {} } }] } } },
+        say("You're verified."),
+      ]);
+      const calls: string[] = [];
+      expect(await (await session(client)).reply("MC 100101", recording(calls))).toBe("You're verified.");
+      expect(calls).toEqual(["verify_carrier"]);
+      expect(requests).toHaveLength(2);
+    });
+
+    it("keeps an empty reply as what the caller heard, since Converse rejects an empty message", async () => {
+      const { client, requests } = stub([{ stopReason: "content_filtered", output: { message: { role: "assistant", content: [] } } }, say("Hi.")]);
+      const s = await session(client);
+      expect(await s.reply("hi", recording([]))).toBe("[agent output was filtered]");
+      await s.reply("Hello?", recording([]));
+      expect(requests[1]!.messages[1]).toEqual({ role: "assistant", content: [{ text: "[agent output was filtered]" }] });
     });
 
     it("keeps user and assistant turns alternating after the tool-call budget runs out", async () => {
