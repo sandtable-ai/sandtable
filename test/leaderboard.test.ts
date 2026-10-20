@@ -327,6 +327,29 @@ describe("leaderboard effort", () => {
     expect(await runJson("luna")).not.toHaveProperty("effort");
   });
 
+  it("shows the effort each Claude model ran at next to its name, also when its results are reused", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const entries = [
+      { label: "Sonnet", agent: "claude:claude-sonnet-5-5", effort: "high" as const },
+      { label: "Opus", agent: "claude:claude-opus-5-5" },
+      { label: "Luna", agent: "bedrock:global.openai.gpt-6-luna" },
+    ];
+    const opts = { ...(await base(dir)), entries, resolveAgent: careful };
+    await runLeaderboard(opts);
+    const lb = await runLeaderboard({ ...opts, resolveAgent: async (): Promise<never> => { throw new Error("should not call the agent"); } });
+    expect(lb.rows.filter((r) => r.error)).toEqual([]);
+    const effort = (label: string) => lb.rows.find((r) => r.label === label)!.effort;
+    expect([effort("Sonnet"), effort("Opus"), effort("Luna"), effort("Do-nothing baseline")]).toEqual(["high", "medium", undefined, undefined]);
+    const md = await readFile(path.join(dir, "LEADERBOARD.md"), "utf8");
+    expect(md).toContain("| Sonnet (effort high) |");
+    expect(md).toContain("| Opus (effort medium) |");
+    expect(md).toContain("| Luna |");
+    const html = await readFile(path.join(dir, "leaderboard.html"), "utf8");
+    expect(html).toContain('<a href="./sonnet/report.html">Sonnet</a> <span class="effort">effort high</span>');
+    expect(html).toContain('<a href="./luna/report.html">Luna</a></td>');
+    expect(JSON.parse(await readFile(path.join(dir, "leaderboard.json"), "utf8")).rows.find((r: { label: string }) => r.label === "Sonnet")).toMatchObject({ effort: "high" });
+  });
+
   it("reuses a claude agent's results stored without an effort as medium, and reruns them at another effort", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
     const opts = await base(dir);
