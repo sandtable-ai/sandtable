@@ -20,7 +20,7 @@ import { appendRows, appendToDomainList } from "./init/merge.ts";
 import { draftFromOpenApi, openApiProblem } from "./init/openapi.ts";
 import { draftInvariantsFromSop, knownFields } from "./init/sop.ts";
 import { draftTasksFromTranscripts } from "./init/transcripts.ts";
-import { DOMAIN_FILE, POLICY_PLACEHOLDER, renderDraft, TASKS_PLACEHOLDER, writeDraft } from "./init/render.ts";
+import { DOMAIN_FILE, isPolicyPlaceholder, POLICY_PLACEHOLDER, renderDraft, TASKS_PLACEHOLDER, writeDraft } from "./init/render.ts";
 import { DomainError, domainWarnings, loadDomain, pendingReview } from "./spec/load.ts";
 import { lintDomain } from "./grade/lint.ts";
 import { bedrockRegion, bedrockUse, ModelsFile, pricesFile, renderLeaderboardMarkdown, runLeaderboard, type PricesFile, type RunInfo } from "./run/leaderboard.ts";
@@ -197,7 +197,7 @@ withProviderFlags(program
       const domain = await loadDomain(o.out);
       const policyFile = path.join(o.out, "policy.md");
       const currentPolicy = await readFile(policyFile, "utf8").catch(() => undefined);
-      if (currentPolicy === POLICY_PLACEHOLDER) await writeFile(policyFile, sopText);
+      if (isPolicyPlaceholder(currentPolicy)) await writeFile(policyFile, sopText);
       console.log(`Drafting invariants from ${o.sop}...`);
       const res = await draftInvariantsFromSop({
         domain,
@@ -243,7 +243,7 @@ program
     for (const w of domainWarnings(d)) console.log(`⚠ ${w}`);
     const pending = pendingReview(d);
     if (pending.length) {
-      console.log(`⚠ ${pending.length} drafted item(s) pending review (sandtable review ${domainPath})`);
+      console.log(`⚠ ${pending.length} drafted item(s) pending review (${NEXT} review ${domainPath})`);
       if (o.strict) process.exitCode = 1;
     }
   });
@@ -480,7 +480,7 @@ program
           `can't regrade ${resultsPath}: it is a run of ${stored.domain}, not ${domain.name}, so --domain ${o.domain} is likely not the domain the run used. Pass the one whose sandtable.yaml has \`name: ${stored.domain}\`, the name results.json records as "domain". If you renamed the domain since the run, restore its \`name:\` or rerun it with \`npx sandtable-ai run\`.`,
         );
       }
-      throw new Error(`can't regrade ${resultsPath}: ${err.message}. Rerun it with \`sandtable run\` instead.`);
+      throw new Error(`can't regrade ${resultsPath}: ${err.message}. Rerun it with \`npx sandtable-ai run\` instead.`);
     }
     const flipped = changedVerdicts(stored, result);
     console.log(renderTerminal(result));

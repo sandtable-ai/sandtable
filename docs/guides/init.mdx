@@ -22,33 +22,33 @@ The SOP and transcript steps call Claude. They have been verified in live runs o
 <Steps>
   <Step title="Draft from the API">
     ```bash
-    sandtable init --openapi path/to/openapi.yaml -o sandtable
-    sandtable validate sandtable
+    npx sandtable-ai init --openapi path/to/openapi.yaml -o sandtable
+    npx sandtable-ai validate sandtable
     ```
     Writes `sandtable/sandtable.yaml`, a placeholder `policy.md` and an empty `tasks.yaml`. It refuses to overwrite existing files unless you pass `--force`. It reads OpenAPI 3.x, in YAML or JSON. It writes nothing for a Swagger 2.0 spec (convert it to OpenAPI 3 first) or for a spec it can't draft a single tool from.
   </Step>
   <Step title="Add invariants from the SOP">
     ```bash
-    sandtable init --sop policy.md -o sandtable
+    npx sandtable-ai init --sop policy.md -o sandtable
     ```
     Appends invariants to the existing domain and replaces the placeholder `policy.md` with the SOP.
   </Step>
   <Step title="Add tasks from transcripts">
     ```bash
-    sandtable init --transcripts calls/ -o sandtable
+    npx sandtable-ai init --transcripts calls/ -o sandtable
     ```
     Appends personas, tasks and any fictional seed rows the tasks need.
   </Step>
   <Step title="Review, lint, then run">
     ```bash
-    sandtable review sandtable              # what still needs a human decision
-    sandtable lint sandtable                # ready, solvable, non-vacuous, graded (no model calls)
-    sandtable run sandtable --agent noop --user scripted   # the floor, before any real agent
+    npx sandtable-ai review sandtable              # what still needs a human decision
+    npx sandtable-ai lint sandtable                # ready, solvable, non-vacuous, graded (no model calls)
+    npx sandtable-ai run sandtable --agent noop --user scripted   # the floor, before any real agent
     ```
   </Step>
 </Steps>
 
-You can also pass all three inputs at once: `sandtable init --openapi api.yaml --sop policy.md --transcripts calls/ -o sandtable`. The steps run in the order above.
+You can also pass all three inputs at once: `npx sandtable-ai init --openapi api.yaml --sop policy.md --transcripts calls/ -o sandtable`. The steps run in the order above.
 
 ## From an OpenAPI spec (deterministic)
 
@@ -86,8 +86,8 @@ Tables with no examples get a `TODO: add seed rows` comment that lists the field
 ## From an SOP (Claude, grounded)
 
 ```bash
-sandtable init --openapi api.yaml --sop policy.md -o sandtable   # draft, then add invariants
-sandtable init --sop policy.md -o sandtable                       # add invariants to an existing domain
+npx sandtable-ai init --openapi api.yaml --sop policy.md -o sandtable   # draft, then add invariants
+npx sandtable-ai init --sop policy.md -o sandtable                       # add invariants to an existing domain
 ```
 
 Claude reads the SOP alongside the domain's tools, params, tables and known fields, and proposes invariants in the six existing [kinds](/reference/spec#invariants), using structured outputs. Nothing it proposes is trusted as-is:
@@ -102,8 +102,8 @@ The SOP also becomes `policy.md` when the domain still has the placeholder. Pass
 ## From call or chat transcripts (Claude, grounded)
 
 ```bash
-sandtable init --transcripts calls/ -o sandtable          # a directory of .txt/.md files, or one file
-sandtable init --openapi api.yaml --sop policy.md --transcripts calls/ -o sandtable   # all three steps
+npx sandtable-ai init --transcripts calls/ -o sandtable          # a directory of .txt/.md files, or one file
+npx sandtable-ai init --openapi api.yaml --sop policy.md --transcripts calls/ -o sandtable   # all three steps
 ```
 
 Each transcript becomes one task:
@@ -129,11 +129,11 @@ Local scrubbing catches patterns, not every identifying detail. Read transcripts
 Drafted invariants and tasks carry `review: pending` and a `source` (the file and the quote they came from). Tools with review notes are marked the same way.
 
 ```bash
-sandtable review sandtable              # list what is pending, with sources
-sandtable validate sandtable --strict   # fails while anything is pending (use in CI)
+npx sandtable-ai review sandtable              # list what is pending, with sources
+npx sandtable-ai validate sandtable --strict   # fails while anything is pending (use in CI)
 ```
 
-While items are pending, runs still work, but their reports are marked **provisional**. Run `sandtable lint` too: it catches drafted tasks that are vacuous, unreachable or unsolvable before anyone spends money running them. To accept an item, change `review: pending` to `review: accepted` or delete the line. [Review workflow](/concepts/review-workflow) covers what to check.
+While items are pending, runs still work, but their reports are marked **provisional**. Run `npx sandtable-ai lint` too: it catches drafted tasks that are vacuous, unreachable or unsolvable before anyone spends money running them. To accept an item, change `review: pending` to `review: accepted` or delete the line. [Review workflow](/concepts/review-workflow) covers what to check.
 
 ## What a real draft looks like
 

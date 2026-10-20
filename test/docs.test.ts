@@ -158,12 +158,12 @@ describe("pages that quote the bundled examples", () => {
   it.skipIf(!process.features.typescript)("quote today's terminal output", { timeout: 30_000 }, async () => {
     const [lint, validate] = await Promise.all([cli("lint", "examples/freight"), cli("validate", "examples/freight")]);
     const problems = [
-      ...staleOutput("docs/index.mdx", "$ sandtable demo", "sandtable demo", renderTerminal(naive)),
-      ...staleOutput("docs/concepts/baselines.mdx", "agent noop · user scripted", "sandtable run examples/freight --agent noop --user scripted", renderTerminal(noop)),
-      ...staleOutput("docs/concepts/baselines.mdx", "$ sandtable lint examples/freight", "sandtable lint examples/freight", lint),
-      ...staleOutput("docs/guides/claude-code-plugin.mdx", "Top failure modes", "sandtable run examples/freight --agent scripted:naive --user scripted", renderTerminal(naive)),
-      ...staleOutput("docs/guides/claude-code-plugin.mdx", "✓ book-then-quick-pay-handoff", "sandtable lint examples/freight", lint),
-      ...staleOutput("docs/reference/cli.mdx", "✓ freight-carrier-sales:", "sandtable validate examples/freight", validate),
+      ...staleOutput("docs/index.mdx", "$ npx sandtable-ai demo", "npx sandtable-ai demo", renderTerminal(naive)),
+      ...staleOutput("docs/concepts/baselines.mdx", "agent noop · user scripted", "npx sandtable-ai run examples/freight --agent noop --user scripted", renderTerminal(noop)),
+      ...staleOutput("docs/concepts/baselines.mdx", "$ npx sandtable-ai lint examples/freight", "npx sandtable-ai lint examples/freight", lint),
+      ...staleOutput("docs/guides/claude-code-plugin.mdx", "Top failure modes", "npx sandtable-ai run examples/freight --agent scripted:naive --user scripted", renderTerminal(naive)),
+      ...staleOutput("docs/guides/claude-code-plugin.mdx", "✓ book-then-quick-pay-handoff", "npx sandtable-ai lint examples/freight", lint),
+      ...staleOutput("docs/reference/cli.mdx", "✓ freight-carrier-sales:", "npx sandtable-ai validate examples/freight", validate),
     ];
     expect(problems, HINT).toEqual([]);
   });

@@ -1,7 +1,7 @@
 /**
  * Rehearse an agent built with the OpenAI Agents SDK (`@openai/agents`).
  *
- *   sandtable run examples/freight --agent examples/frameworks/openai-agents/agent.ts
+ *   npx sandtable-ai run examples/freight --agent examples/frameworks/openai-agents/agent.ts
  *
  * sandtable calls the default export with no options and opens one session per trial.
  * The SDK's Runner runs the tool loop, and every function tool's `execute` goes through

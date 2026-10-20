@@ -85,9 +85,9 @@ A persona changes *how* the caller behaves: impatient, evasive, friendly, pushy 
 ## Check your suite
 
 ```bash
-sandtable validate ./my-domain                          # schema and cross-references
-sandtable lint ./my-domain                              # ready, solvable, non-vacuous, graded
-sandtable run ./my-domain --agent noop --user scripted  # the floor
+npx sandtable-ai validate ./my-domain                          # schema and cross-references
+npx sandtable-ai lint ./my-domain                              # ready, solvable, non-vacuous, graded
+npx sandtable-ai run ./my-domain --agent noop --user scripted  # the floor
 ```
 
 Then run the real agent, open the report, and read the failing trajectories. For each failure, decide whether the agent, the task or the simulated caller was wrong, and fix the right one. A suite earns trust one corrected task at a time.

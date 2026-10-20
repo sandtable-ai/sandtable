@@ -8,7 +8,7 @@ keywords: ["HTTP API", "step protocol", "session_id", "agent as a service", "any
 `--agent https://your-agent/step` rehearses any agent that runs as a service, in any language. sandtable sends one POST per step, and the agent answers with either its reply to the user or tool calls for sandtable to run against the simulated world. The agent keeps its own conversation state, keyed by `session_id`.
 
 ```bash
-sandtable run ./my-domain --agent http://localhost:8787/step
+npx sandtable-ai run ./my-domain --agent http://localhost:8787/step
 ```
 
 ## Request
@@ -98,7 +98,7 @@ export default httpAgent("https://agent.example.com/step", {
 ```
 
 ```bash
-sandtable run ./my-domain --agent ./http-agent.mjs
+npx sandtable-ai run ./my-domain --agent ./http-agent.mjs
 ```
 
 ## A toy agent

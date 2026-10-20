@@ -15,12 +15,12 @@ In about five minutes: an offline demo with no API key, the same example with Cl
 
     ```bash
     npx sandtable-ai --help
-    # or pin it in a project
+    # or pin it in a project, and npx runs that copy
     npm install --save-dev sandtable-ai
-    npx sandtable --help
+    npx sandtable-ai --help
     ```
 
-    Where these docs write `sandtable <command>`, run `npx sandtable-ai <command>`, or `npx sandtable <command>` once it is installed in the project.
+    These docs run the CLI as `npx sandtable-ai <command>`, which uses the copy installed in the project when there is one. Keep the `-ai`: npm has an unrelated package called `sandtable`, and without the suffix npx downloads and runs that package whenever `sandtable-ai` isn't installed in the project.
   </Tab>
   <Tab title="Python launcher">
     Installs a `sandtable` command that runs the matching CLI release. Needs Node 20 or later.
@@ -31,7 +31,7 @@ In about five minutes: an offline demo with no API key, the same example with Cl
     pip install sandtable-ai && sandtable --help
     ```
 
-    Where these docs write `sandtable <command>`, run `uvx sandtable-ai <command>`, or `sandtable <command>` after `pip install`.
+    The `npx sandtable-ai <command>` lines in these docs work as written, since the launcher needs Node too. To go through the launcher, run `uvx sandtable-ai <command>` instead, or `sandtable <command>` after `pip install`. Keep the `-ai` with uvx and pip: PyPI's `sandtable` is an unrelated package.
   </Tab>
   <Tab title="From source">
     For contributors. Needs Node 22.18 or later, which runs the TypeScript sources directly.
@@ -43,7 +43,7 @@ In about five minutes: an offline demo with no API key, the same example with Cl
     npm run sandtable -- --help
     ```
 
-    Where these docs write `sandtable <command>`, run `npm run sandtable -- <command>`.
+    Where these docs write `npx sandtable-ai <command>`, run `npm run sandtable -- <command>`.
   </Tab>
 </Tabs>
 
@@ -52,7 +52,7 @@ In about five minutes: an offline demo with no API key, the same example with Cl
 <Steps>
   <Step title="Run the offline demo">
     ```bash
-    sandtable demo
+    npx sandtable-ai demo
     ```
 
     Two rule-based agents replay 50 scripted carrier calls against a fictional freight brokerage. The **naive** agent books whatever it is asked to and scores pass^1 10.0% (5 of 50), with its rule breaks grouped under "Top failure modes". The **careful** agent verifies carriers, respects the rate ceiling and hands off when it should, and scores 100%.
@@ -69,13 +69,13 @@ In about five minutes: an offline demo with no API key, the same example with Cl
       <Tab title="Anthropic API">
         ```bash
         export ANTHROPIC_API_KEY=...
-        sandtable demo --live --user-model claude-haiku-5-5
+        npx sandtable-ai demo --live --user-model claude-haiku-5-5
         ```
       </Tab>
       <Tab title="Amazon Bedrock">
         ```bash
         npm install --save-dev sandtable-ai @anthropic-ai/bedrock-sdk
-        npx sandtable demo --live --provider bedrock --region eu-west-1 --user-model claude-haiku-5-5
+        npx sandtable-ai demo --live --provider bedrock --region eu-west-1 --user-model claude-haiku-5-5
         ```
         Uses your AWS credentials (`--aws-profile` or the default chain). The Bedrock client is an optional package, so it goes next to `sandtable-ai`. See [Run against your agent](/guides/bring-your-agent#claude-on-amazon-bedrock).
       </Tab>
@@ -152,7 +152,7 @@ In about five minutes: an offline demo with no API key, the same example with Cl
 
     ```bash
     node agent-server.mjs        # or: python3 agent_server.py
-    sandtable run examples/freight --agent http://localhost:8787/step --user scripted
+    npx sandtable-ai run examples/freight --agent http://localhost:8787/step --user scripted
     ```
 
     It scores pass^1 36.0% (18 of 50). It never books a load, so it passes only tasks where the right outcome is to book nothing. The [noop baseline](/concepts/baselines), an agent that never calls a tool, scores 32.0% (16 of 50) for the same reason. The toy agent passes two more tasks than noop, `double-brokering-on-yes` and `broker-claims-carrier`: in both, the agent must look the carrier up with `verify_carrier` and then book nothing, and the toy agent does look it up. The noop score is the floor of a suite, and the first number to know about it.

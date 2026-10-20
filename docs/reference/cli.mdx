@@ -6,7 +6,7 @@ keywords: ["command line", "sandtable run", "flags", "options", "environment var
 ---
 
 ```text
-sandtable <command> [options]
+npx sandtable-ai <command> [options]
 ```
 
 | Command | What it does |
@@ -21,7 +21,7 @@ sandtable <command> [options]
 | [`report`](#report) | re-render the HTML report for a past run |
 | [`regrade`](#regrade) | re-score a past run's stored trials under the domain's current rules, without calling a model |
 
-`sandtable --version` prints the version and `sandtable <command> --help` lists a command's options. From a clone of the repo, run `npm run sandtable -- <command>`.
+`npx sandtable-ai --version` prints the version and `npx sandtable-ai <command> --help` lists a command's options. From a clone of the repo, run `npm run sandtable -- <command>`.
 
 `validate`, `lint`, `review`, `run` and `leaderboard` accept `examples/freight` and `examples/clinic` outside a clone too. When the current directory has no folder of that name, they use the copy bundled with the package and print its path on stderr. A folder of that name in the current directory always wins, and any other path is used as given.
 
@@ -30,7 +30,7 @@ sandtable <command> [options]
 Draft a domain from a customer's artifacts. Review the output before trusting it. See [Draft a domain with init](/guides/init).
 
 ```bash
-sandtable init --openapi api.yaml --sop policy.md --transcripts calls/ -o sandtable
+npx sandtable-ai init --openapi api.yaml --sop policy.md --transcripts calls/ -o sandtable
 ```
 
 | Option | Description |
@@ -50,7 +50,7 @@ At least one of `--openapi`, `--sop` and `--transcripts` is required. They run i
 Check a domain for schema and cross-reference errors.
 
 ```bash
-sandtable validate ./my-domain [--strict]
+npx sandtable-ai validate ./my-domain [--strict]
 ```
 
 | Argument / option | Description |
@@ -69,7 +69,7 @@ A `⚠` line is a warning, not an error, and never fails `validate`, not even wi
 Prove every task is ready, solvable, non-vacuous and graded, without any model call. See [The noop baseline and lint](/concepts/baselines).
 
 ```bash
-sandtable lint ./my-domain
+npx sandtable-ai lint ./my-domain
 ```
 
 | Argument | Description |
@@ -83,7 +83,7 @@ Each task prints as `✓` (clean), `!` (warnings) or `✗` (errors), followed by
 List drafted items that still need a person to accept them. See [Review workflow](/concepts/review-workflow).
 
 ```bash
-sandtable review ./my-domain
+npx sandtable-ai review ./my-domain
 ```
 
 | Argument | Description |
@@ -95,7 +95,7 @@ sandtable review ./my-domain
 Run every task k times against an agent and grade the results.
 
 ```bash
-sandtable run ./my-domain --agent http://localhost:8787/step -k 4 --fail-under 85
+npx sandtable-ai run ./my-domain --agent http://localhost:8787/step -k 4 --fail-under 85
 ```
 
 | Argument / option | Description |
@@ -136,7 +136,7 @@ The run prints a summary (per-task results, pass^k, latency, cost, per-tag score
 Rank several agents on one domain under the same simulated users, next to a do-nothing baseline.
 
 ```bash
-sandtable leaderboard examples/freight -m models.yaml -k 4 \
+npx sandtable-ai leaderboard examples/freight -m models.yaml -k 4 \
   --provider bedrock --region eu-west-1 --prices bedrock-prices.json
 ```
 
@@ -179,8 +179,8 @@ Each model's `run.json` also records what ran its trials: `sandtable` (the `vers
 Rehearse the bundled freight carrier-sales example.
 
 ```bash
-sandtable demo                                       # offline: two rule-based agents, no API key
-sandtable demo --live --user-model claude-haiku-5-5  # Claude plays the caller and the agent
+npx sandtable-ai demo                                       # offline: two rule-based agents, no API key
+npx sandtable-ai demo --live --user-model claude-haiku-5-5  # Claude plays the caller and the agent
 ```
 
 | Option | Description |
@@ -199,7 +199,7 @@ The offline demo runs the `scripted:naive` and `scripted:careful` agents against
 Re-render the HTML report for a past run, for example after upgrading sandtable.
 
 ```bash
-sandtable report .sandtable/runs/<run>/results.json [-o report.html]
+npx sandtable-ai report .sandtable/runs/<run>/results.json [-o report.html]
 ```
 
 | Argument / option | Description |
@@ -214,7 +214,7 @@ It prints the path it wrote.
 Re-score a past run's stored trials after editing how the domain grades them: an invariant, an expectation or a `never_disclose` rule. No model is called, so a fixed grading rule doesn't cost a rerun.
 
 ```bash
-sandtable regrade .sandtable/runs/<run>/results.json --domain examples/freight
+npx sandtable-ai regrade .sandtable/runs/<run>/results.json --domain examples/freight
 ```
 
 | Argument / option | Description |

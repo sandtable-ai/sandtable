@@ -9,7 +9,7 @@ export async function importOptional<T>(name: string, load: () => Promise<T>, ne
   } catch (err) {
     if (!isMissing(err, name)) throw err;
     throw new Error(
-      `${neededFor} needs the optional package ${name}. Install it next to sandtable-ai: npm install --save-dev sandtable-ai ${name}, then npx sandtable <command>. For a one-off run: npx -p sandtable-ai -p ${name} sandtable <command>`,
+      `${neededFor} needs the optional package ${name}. Install it next to sandtable-ai: npm install --save-dev sandtable-ai ${name}, then npx sandtable-ai <command>. For a one-off run: npx -p sandtable-ai -p ${name} sandtable <command>`,
     );
   }
 }

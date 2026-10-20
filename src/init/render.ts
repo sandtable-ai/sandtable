@@ -6,12 +6,27 @@ import type { OpenApiDraft } from "./openapi.ts";
 
 export const POLICY_PLACEHOLDER = `# Policy
 
+TODO: paste the customer's operating procedure (SOP) here, or draft from one with \`npx sandtable-ai init --sop <file>\`.
+The reference agent uses this text as its system prompt.
+`;
+
+/**
+ * The placeholder policy.md that 0.1.0-alpha.1 wrote, before it said `npx sandtable-ai`. A draft made
+ * by that release still holds it, and `init --sop` must replace it too, or the TODO stays the policy.
+ */
+export const POLICY_PLACEHOLDER_0_1_0_ALPHA_1 = `# Policy
+
 TODO: paste the customer's operating procedure (SOP) here, or draft from one with \`sandtable init --sop <file>\`.
 The reference agent uses this text as its system prompt.
 `;
 
+/** Whether a policy.md still holds the placeholder that `init` wrote, in this release or an earlier one. */
+export function isPolicyPlaceholder(text: string | undefined): boolean {
+  return text === POLICY_PLACEHOLDER || text === POLICY_PLACEHOLDER_0_1_0_ALPHA_1;
+}
+
 export const TASKS_PLACEHOLDER = `# TODO: add tasks (see "personas and tasks" in docs/reference/spec.mdx of the sandtable repo),
-# or draft them from call transcripts with \`sandtable init --transcripts <dir>\`.
+# or draft them from call transcripts with \`npx sandtable-ai init --transcripts <dir>\`.
 []
 `;
 
@@ -41,8 +56,8 @@ export function renderDraft(d: OpenApiDraft, source: string): string {
     tasks: "./tasks.yaml",
   });
   doc.commentBefore = [
-    ` Drafted by \`sandtable init\` from ${source}.`,
-    " Review every TODO, add seed rows and invariants, then run `sandtable validate`.",
+    ` Drafted by \`npx sandtable-ai init\` from ${source}.`,
+    " Review every TODO, add seed rows and invariants, then run `npx sandtable-ai validate`.",
   ].join("\n");
   for (const [name, t] of Object.entries(d.tables)) {
     if (t.rows.length) continue;

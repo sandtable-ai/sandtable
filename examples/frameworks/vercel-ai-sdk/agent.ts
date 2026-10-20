@@ -1,7 +1,7 @@
 /**
  * Rehearse an agent built with the Vercel AI SDK (`ai`).
  *
- *   sandtable run examples/freight --agent examples/frameworks/vercel-ai-sdk/agent.ts
+ *   npx sandtable-ai run examples/freight --agent examples/frameworks/vercel-ai-sdk/agent.ts
  *
  * sandtable calls the default export with no options and opens one session per trial.
  * The agent is a ToolLoopAgent: the AI SDK runs the tool loop, and every tool's `execute`

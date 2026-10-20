@@ -60,7 +60,7 @@ export function renderTerminal(r: SuiteResult): string {
   const lines: string[] = [];
   lines.push(bold(`sandtable · ${r.domain}`) + dim(` · agent ${r.agent} · user ${r.user} · k=${r.k}`));
   if (r.pendingReview?.length) {
-    lines.push(yellow(`  ⚠ ${r.pendingReview.length} drafted item(s) pending review: results are provisional (sandtable review <domain>)`));
+    lines.push(yellow(`  ⚠ ${r.pendingReview.length} drafted item(s) pending review: results are provisional (npx sandtable-ai review <domain>)`));
   }
   lines.push("");
   const width = Math.max(4, ...r.tasks.map((t) => t.id.length));

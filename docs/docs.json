@@ -66,9 +66,9 @@
   },
   "markdown": {
     "instructions": [
-      "sandtable is an early-alpha, open-source CLI (TypeScript, MIT): https://github.com/sandtable-ai/sandtable. If a flag here disagrees with `sandtable <command> --help`, trust the help output.",
+      "sandtable is an early-alpha, open-source CLI (TypeScript, MIT): https://github.com/sandtable-ai/sandtable. Run it as `npx sandtable-ai <command>`, never with the bare name: npm's `sandtable` is an unrelated package. If a flag here disagrees with `npx sandtable-ai <command> --help`, trust the help output.",
       "Grading is deterministic: pass/fail comes from the world's end state, invariants and the tool-call log, never from an LLM judge.",
-      "To draft a domain for a user, read /guides/init and /reference/spec, then run `sandtable validate`, `sandtable lint` and `sandtable review` before any model-backed run. Keep all example data fictional.",
+      "To draft a domain for a user, read /guides/init and /reference/spec, then run `npx sandtable-ai validate`, `lint` and `review` before any model-backed run. Keep all example data fictional.",
       "In Claude Code, the sandtable plugin teaches these steps as skills: `/plugin marketplace add sandtable-ai/sandtable`, then `/plugin install sandtable@sandtable`.",
       "Every page is available as Markdown by appending .md to its URL. /llms.txt lists every page, /llms-full.txt contains the whole site, and https://sandtable.dev/mcp is a search MCP server for these docs."
     ]

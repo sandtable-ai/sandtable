@@ -65,7 +65,7 @@ Two things limit what a score can tell you:
 `--fail-under` compares the **highest** pass^k a run computes (k = `--trials`) against a percentage, and exits 1 when it is below:
 
 ```bash
-sandtable run ./my-domain --agent http://localhost:8787/step -k 4 --fail-under 85
+npx sandtable-ai run ./my-domain --agent http://localhost:8787/step -k 4 --fail-under 85
 ```
 
 Raising k with the same threshold makes the gate stricter. See [Use it in CI](/guides/ci).

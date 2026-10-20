@@ -12,7 +12,7 @@ A score means little until you know what doing nothing scores, and whether each 
 `--agent noop` never calls a tool and answers every message with "Sorry, I can't help with that right now." With a scripted user, it runs offline:
 
 ```bash
-sandtable run ./my-domain --agent noop --user scripted
+npx sandtable-ai run ./my-domain --agent noop --user scripted
 ```
 
 It passes exactly the tasks whose success is "nothing happened": refusals, handoffs that only need a polite answer, and missing-information cases. On the freight example it scores **32%**:
@@ -56,7 +56,7 @@ Make refusal tasks discriminate. "Nothing was booked" is passed by an agent that
 A task that expects a write but has no `reference` gets a warning, since its solvability is unproven. `reply_includes` expectations are skipped in the replay, because a replay has no messages.
 
 ```text
-$ sandtable lint examples/freight
+$ npx sandtable-ai lint examples/freight
 ✓ book-at-posted-rate  (write · ready · solvable · noop fails)
 ✓ negotiate-within-ceiling  (write · ready · solvable · noop fails)
 ✓ walk-away-above-ceiling  (no-write · ready · solvable ? · noop passes)

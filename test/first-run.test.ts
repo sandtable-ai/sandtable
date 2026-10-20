@@ -25,6 +25,8 @@ describe.skipIf(!process.features.typescript)("the next steps", () => {
     const out = path.join(mkdtempSync(path.join(tmpdir(), "sandtable-init-")), "mine");
     const { stdout } = await promisify(execFile)(process.execPath, [cli, "init", "--openapi", path.resolve("examples/freight/source/openapi.yaml"), "-o", out]);
     expect(nextSteps(stdout).slice(1)).toEqual([`  npx sandtable-ai review ${out}`, `  npx sandtable-ai validate ${out} --strict`]);
+    const validate = (await promisify(execFile)(process.execPath, [cli, "validate", out])).stdout;
+    expect(validate).toContain(`pending review (npx sandtable-ai review ${out})`);
   });
 });
 

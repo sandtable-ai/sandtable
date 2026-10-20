@@ -1,6 +1,8 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import type Anthropic from "@anthropic-ai/sdk";
 import YAML from "yaml";
 import { describe, expect, it } from "vitest";
@@ -90,5 +92,34 @@ describe("init from an SOP", () => {
     const reloaded = await loadDomain(dir);
     expect(reloaded.invariants.map((i) => i.id)).toEqual(["verify-before-book", "eligible-carrier"]);
     expect(pendingReview(reloaded).filter((p) => p.kind === "invariant")).toHaveLength(2);
+  });
+});
+
+// What 0.1.0-alpha.1 wrote to policy.md. A draft made by that release still holds it until someone edits it.
+const ALPHA_1_POLICY_PLACEHOLDER = `# Policy
+
+TODO: paste the customer's operating procedure (SOP) here, or draft from one with \`sandtable init --sop <file>\`.
+The reference agent uses this text as its system prompt.
+`;
+
+describe.skipIf(!process.features.typescript)("init --sop on an existing draft", () => {
+  it.each([
+    ["this release", POLICY_PLACEHOLDER],
+    ["0.1.0-alpha.1", ALPHA_1_POLICY_PLACEHOLDER],
+  ])("replaces the placeholder policy.md that %s wrote with the SOP", async (_, placeholder) => {
+    const { dir } = await draftedDomainDir();
+    await writeFile(path.join(dir, "policy.md"), placeholder);
+    const sop = path.join(dir, "sop.md");
+    await writeFile(sop, SOP);
+    // No credentials anywhere, so the invariant-drafting call fails before anything is sent.
+    // init replaces the placeholder policy.md before it drafts.
+    const env = {
+      ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(ANTHROPIC_|AWS_|SANDTABLE_)/.test(k))),
+      HOME: dir,
+      XDG_CONFIG_HOME: dir,
+    };
+    const init = promisify(execFile)(process.execPath, [path.resolve("src/cli.ts"), "init", "--sop", sop, "-o", dir, "--provider", "anthropic"], { env });
+    await expect(init).rejects.toThrow(/ANTHROPIC_API_KEY/);
+    expect(await readFile(path.join(dir, "policy.md"), "utf8")).toBe(SOP);
   });
 });
