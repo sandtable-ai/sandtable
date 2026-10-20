@@ -106,7 +106,6 @@ describe("regrade", () => {
     expect(() => regradeSuite(domain, older)).toThrow(/records no inputs fingerprint/);
   });
 
-  // The CLI runs from source, which needs a Node that strips TypeScript types (CI's Node 20 tests dist/).
   it.skipIf(!process.features.typescript)("sandtable regrade rewrites results.json under an edited domain and lists the verdicts that changed", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-regrade-"));
     const domainDir = path.join(dir, "freight");
