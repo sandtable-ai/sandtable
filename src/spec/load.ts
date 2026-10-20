@@ -4,6 +4,7 @@ import YAML from "yaml";
 import { z } from "zod";
 import { mentions, protectedValues } from "../grade/invariants.ts";
 import { agentSystemPrompt } from "../sim/prompts.ts";
+import { substitute } from "../world/match.ts";
 import { DomainSpec, type Domain, type Tool } from "./schema.ts";
 
 export const DOMAIN_FILE = "sandtable.yaml";
@@ -78,6 +79,13 @@ export function validateDomain(d: Domain): string[] {
       const name = "get" in op ? op.get : "list" in op ? op.list : "create" in op ? op.create : "update" in op ? op.update : undefined;
       if (name) table(name, `tools.${t.name}.ops[${i}]`);
     });
+    const unresolved = (value: unknown, where: string) => {
+      for (const { ref, name } of references(value)) {
+        if (!Object.hasOwn(t.params, name)) problems.push(`${where}: "${ref}" never resolves: tool "${t.name}" has no param "${name}"`);
+      }
+    };
+    t.checks.forEach((c, i) => unresolved(c, `tools.${t.name}.checks[${i}]`));
+    t.ops.forEach((op, i) => unresolved(op, `tools.${t.name}.ops[${i}]`));
     if (t.returns >= t.ops.length) problems.push(`tools.${t.name}: returns=${t.returns} but only ${t.ops.length} op(s)`);
   }
 
@@ -144,6 +152,18 @@ export function validateDomain(d: Domain): string[] {
  * the transcript check looks only for numbers and strings of 3 or more characters. A table
  * without seed rows, or rows without the field, can't be judged (tools may create the values).
  */
+/** Every argument reference in a tool's op or check, read exactly as resolve() reads it at run time. */
+function references(value: unknown): { ref: string; name: string }[] {
+  if (typeof value === "string") {
+    const found: { ref: string; name: string }[] = [];
+    substitute(value, (name, ref) => found.push({ ref, name }));
+    return found;
+  }
+  if (Array.isArray(value)) return value.flatMap(references);
+  if (value && typeof value === "object") return Object.values(value).flatMap(references);
+  return [];
+}
+
 function undetectable(d: Domain, table: string, field: string): string | undefined {
   const values = (d.world.tables[table]?.rows ?? []).map((r) => r[field]).filter((v) => v !== undefined && v !== null);
   const fix = "protect a field that holds numbers or longer text, or remove the invariant and keep the rule as a comment";

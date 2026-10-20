@@ -34,6 +34,12 @@ describe("match", () => {
     expect(resolve({ a: "$x", b: "id ${x}", c: ["$y"] }, { x: 7, y: "z" })).toEqual({ a: 7, b: "id 7", c: ["z"] });
   });
 
+  it("leaves strings that are not references as they are, and only reads arguments that were passed", () => {
+    const literals = ["$$", "$$$", "$/hr", "$USD/kg", "$€", "$5", "$@id", "${}", "$ {x}"];
+    expect(resolve(literals, {})).toEqual(literals);
+    expect(resolve({ a: "$constructor", b: "id ${toString}" }, {})).toEqual({ a: undefined, b: "id " });
+  });
+
   it("supports operators", () => {
     const row = { rate: 2100, origin: "Dallas, TX", tags: null };
     expect(matches(row, { rate: { $gte: 2000, $lte: 2200 } })).toBe(true);

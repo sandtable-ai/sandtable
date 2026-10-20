@@ -67,6 +67,9 @@ No model is involved: the same spec always produces the same draft.
 | `/customers/{customer_id}/orders` | parent params become filters and create values |
 | `POST /orders/{id}/cancel` (no GET) | action: a `get` on the parent plus a review note to model the effect |
 | a body param named like another table's key | existence `check` on that table |
+| a schema composed with `allOf` | its members' properties and required lists merged, in bodies, responses and params |
+| a field or param named `@type` or `pickup-window` | param `at_type` or `pickup_window`, since `$` references only name letters, digits and `_`; the op still writes `"@type": $at_type` |
+| a `{param}` in the path that the spec doesn't declare | a required string param |
 | `example` on a response schema | seed rows |
 
 It cannot infer some things, so they become `# TODO(review):` comments next to the tool:

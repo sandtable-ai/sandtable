@@ -4,6 +4,8 @@
  * conditions, seed data) becomes a review note instead of a guess.
  */
 
+import { isParamName } from "../world/match.ts";
+
 type Json = Record<string, unknown>;
 
 export interface DraftParam {
@@ -123,7 +125,8 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
       notes: [],
     };
 
-    const filters: Json = {};
+    // The tool's inputs by their name in the spec: path and query params, then body fields.
+    const inputs = new Map<string, { param: DraftParam; loc: string }>();
     for (const p of o.params) {
       const name = String(p.name);
       const loc = String(p.in);
@@ -137,10 +140,10 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
         warnings.push(`${where}: parameter "${name}" is not a scalar; skipped`);
         continue;
       }
-      tool.params[name] = param;
-      if (loc === "path" && o.parents.includes(name)) filters[name] = `$${name}`;
-      if (loc === "query") filters[name] = param.type === "string" && !param.enum ? { $contains: `$${name}` } : `$${name}`;
+      inputs.set(name, { param, loc }); // an operation's own parameter overrides the path's
     }
+    // A path parameter the spec forgot to declare is still a required argument.
+    for (const name of pathParams(o.path)) if (!inputs.has(name)) inputs.set(name, { param: { type: "string", required: true }, loc: "path" });
 
     const bodyFields: string[] = [];
     const body = requestSchema(o.op, deref);
@@ -152,13 +155,25 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
           warnings.push(`${where}: body field "${name}" is not a scalar; skipped`);
           continue;
         }
-        tool.params[name] ??= param;
+        if (!inputs.has(name)) inputs.set(name, { param, loc: "body" });
         bodyFields.push(name);
       }
     }
 
-    const keyRef = o.itemKey ? `$${o.itemKey}` : undefined;
-    const values = Object.fromEntries([...o.parents, ...bodyFields].map((f) => [f, `$${f}`]));
+    const renames: string[] = [];
+    const paramOf = paramNames([...inputs.keys()], (name, param, taken) => {
+      renames.push(`${where}: "${name}" is param "${param}", since "${taken}" is another field's param`);
+    });
+    const ref = (name: string) => `$${paramOf.get(name)}`;
+    const filters: Json = {};
+    for (const [name, { param, loc }] of inputs) {
+      tool.params[paramOf.get(name)!] = param;
+      if (loc === "path" && o.parents.includes(name)) filters[name] = ref(name);
+      if (loc === "query") filters[name] = param.type === "string" && !param.enum ? { $contains: ref(name) } : ref(name);
+    }
+
+    const keyRef = o.itemKey ? ref(o.itemKey) : undefined;
+    const values = Object.fromEntries([...o.parents, ...bodyFields].map((f) => [f, ref(f)]));
     if (o.action) {
       tool.ops.push({ get: o.table, key: keyRef! });
       tool.notes.push(`"${o.action}" is an action on ${o.table}: replace or extend the get op with update/create ops that model its effect.`);
@@ -169,17 +184,18 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
     } else if (o.method === "post" && !o.itemKey) {
       tool.ops.push({ create: o.table, values });
     } else if ((o.method === "put" || o.method === "patch") && o.itemKey) {
-      tool.ops.push({ update: o.table, key: keyRef!, set: Object.fromEntries(bodyFields.map((f) => [f, `$${f}`])) });
+      tool.ops.push({ update: o.table, key: keyRef!, set: Object.fromEntries(bodyFields.map((f) => [f, ref(f)])) });
     } else {
       warnings.push(`${where}: ${o.method.toUpperCase()} is not supported by the draft; skipped`);
       names.delete(tool.name);
       continue;
     }
+    warnings.push(...renames);
 
     if (o.method !== "get") {
-      for (const name of Object.keys(tool.params)) {
+      for (const [name, safe] of paramOf) {
         const owner = keyOwners.get(name);
-        if (owner && owner !== o.table) tool.checks.push({ table: owner, key: `$${name}`, error: `${owner} \${${name}} not found` });
+        if (owner && owner !== o.table) tool.checks.push({ table: owner, key: `$${safe}`, error: `${owner} \${${safe}} not found` });
       }
     }
     for (const [code, raw] of Object.entries((o.op.responses ?? {}) as Json)) {
@@ -236,8 +252,35 @@ function classify(segments: string[], item: Json): { table: string; itemKey?: st
   }
 }
 
+/**
+ * A tool param name for each name in the spec, one that a `$name` reference resolves (see
+ * `substitute()` in src/world/match.ts). Names that already qualify keep themselves, and are
+ * claimed first. Each other name is rewritten (`@type` becomes `at_type`, `pickup-window`
+ * becomes `pickup_window`), with `_2`, `_3`… and a call to `onSuffix` when that name is taken.
+ */
+function paramNames(names: string[], onSuffix: (name: string, param: string, taken: string) => void): Map<string, string> {
+  const paramOf = new Map<string, string>();
+  for (const name of names) if (isParamName(name)) paramOf.set(name, name);
+  const taken = new Set(paramOf.values());
+  for (const name of names) {
+    if (paramOf.has(name)) continue;
+    let base = name.replace(/^@/, "at_").replace(/\W+/g, "_").replace(/_+$/, "") || "param";
+    if (/^\d/.test(base)) base = `_${base}`;
+    let param = base;
+    for (let i = 2; taken.has(param); i++) param = `${base}_${i}`;
+    if (param !== base) onSuffix(name, param, base);
+    paramOf.set(name, param);
+    taken.add(param);
+  }
+  return paramOf;
+}
+
+function pathParams(path: string): string[] {
+  return [...path.matchAll(/\{([^}]+)\}/g)].map((m) => m[1]!);
+}
+
 function toParam(schema: Json, deref: (x: unknown) => unknown, required: boolean, description?: unknown): DraftParam | undefined {
-  const s = schema.allOf ? (deref((schema.allOf as unknown[])[0]) as Json) : schema;
+  const s = flatten(schema, deref);
   let type = s.type as string | undefined;
   if (!type && Array.isArray(s.enum)) type = typeof s.enum[0] === "number" ? "number" : "string";
   if (!type) type = "string";
@@ -250,9 +293,9 @@ function toParam(schema: Json, deref: (x: unknown) => unknown, required: boolean
   return param;
 }
 
-function collectFields(acc: { fields: Map<string, Json>; rows: Json[] }, schema: Json, deref: (x: unknown) => unknown, withExamples = true) {
-  const s = (schema.type === "array" ? deref(schema.items) : schema) as Json;
-  if (!s || typeof s !== "object") return;
+function collectFields(acc: { fields: Map<string, Json>; rows: Json[] }, node: Json, deref: (x: unknown) => unknown, withExamples = true) {
+  const schema = flatten(node, deref);
+  const s = schema.type === "array" ? flatten(schema.items, deref) : schema;
   for (const [name, raw] of Object.entries((s.properties ?? {}) as Json)) acc.fields.set(name, deref(raw) as Json);
   if (!withExamples) return;
   const examples = schema.type === "array" && Array.isArray(schema.example) ? schema.example : s.example ? [s.example] : [];
@@ -274,8 +317,31 @@ function requestSchema(op: Json, deref: (x: unknown) => unknown): Json | undefin
   const body = deref(op.requestBody) as Json | undefined;
   const content = (body?.content ?? {}) as Json;
   const media = (content["application/json"] ?? Object.values(content)[0]) as Json | undefined;
-  const schema = media?.schema ? (deref(media.schema) as Json) : undefined;
+  const schema = media?.schema ? flatten(media.schema, deref) : undefined;
   return schema && (schema.type === "object" || schema.properties) ? schema : undefined;
+}
+
+/**
+ * `node` dereferenced, with its `allOf` members (themselves flattened) merged in: their
+ * properties are combined, their required lists joined, and the schema's own keywords win over
+ * theirs. A member's `example` is left out, since it shows that member alone, not the whole object.
+ */
+function flatten(node: unknown, deref: (x: unknown) => unknown, depth = 0): Json {
+  const schema = deref(node);
+  if (!schema || typeof schema !== "object" || Array.isArray(schema)) return {};
+  const { allOf, ...own } = schema as Json;
+  if (!Array.isArray(allOf) || depth > 20) return own;
+  const parts = allOf.map((member) => {
+    const { example: _, ...rest } = flatten(member, deref, depth + 1);
+    return rest;
+  });
+  parts.push(own);
+  const merged: Json = Object.assign({}, ...parts);
+  const properties = Object.assign({}, ...parts.map((p) => p.properties ?? {})) as Json;
+  const required = [...new Set(parts.flatMap((p) => (Array.isArray(p.required) ? (p.required as string[]) : [])))];
+  if (Object.keys(properties).length) merged.properties = properties;
+  if (required.length) merged.required = required;
+  return merged;
 }
 
 function makeDeref(spec: Json) {

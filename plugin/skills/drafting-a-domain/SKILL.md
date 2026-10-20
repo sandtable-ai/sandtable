@@ -131,6 +131,7 @@ Each task gets a line such as `✗ my-task  (write · NOT ready · NOT solvable 
 | `reference[i] <tool> failed: <error>` | a call in the reference errors | fix the args, the seed rows, or the tool's `checks` |
 | `reference does not pass: <check id>: <detail>` | a correct agent would still fail | the reference, the expectation or the tool ops are wrong: decide which with the SOP |
 | `no reference: add the tool calls a correct agent would make` (warning) | solvability unproven | add a `reference` |
+| `tools.<tool>.ops[i]: "$x" never resolves: tool "<tool>" has no param "x"` (also from `validate`, and for `checks[i]`) | a `$x` or `${x}` names no param of the tool, so it would be empty at run time | add the param or fix the name. A literal such as `"$/hr"` stays text, but a whole `"$USD"` is a reference |
 
 Lint counts a task as a write when it expects rows to exist (a `state` entry without `key` whose `count` is absent or positive) or lists a writing tool in `called`. An update checked with `key` plus `fields` is labelled `no-write`, so it is never flagged as vacuous: check that its line says `noop fails`, or add the writing tool to `called`.
 

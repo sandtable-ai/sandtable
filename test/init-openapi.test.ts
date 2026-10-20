@@ -131,6 +131,145 @@ describe("init from OpenAPI: edge cases", () => {
   });
 });
 
+describe("init from OpenAPI: allOf-composed schemas", () => {
+  // A fictional repair shop whose bodies and responses extend a shared base entity with allOf.
+  const ticketBody = (required: string[]) => ({
+    allOf: [
+      { $ref: "#/components/schemas/Entity" },
+      { type: "object", required, properties: { device_serial: { type: "string" }, issue: { type: "string" }, priority: { $ref: "#/components/schemas/Priority" }, parts: { type: "array" } } },
+    ],
+  });
+  const spec = {
+    openapi: "3.0.3",
+    info: { title: "Quillmoor Repairs" },
+    paths: {
+      "/repair_tickets": {
+        get: {
+          operationId: "listRepairTickets",
+          parameters: [{ name: "priority", in: "query", description: "Only tickets this urgent", schema: { allOf: [{ $ref: "#/components/schemas/Priority" }], default: "normal" } }],
+          responses: { "200": { content: { "application/json": { schema: { type: "array", items: { $ref: "#/components/schemas/RepairTicket" } } } } } },
+        },
+        post: {
+          operationId: "createRepairTicket",
+          requestBody: { content: { "application/json": { schema: { $ref: "#/components/schemas/RepairTicket_Create" } } } },
+          responses: { "201": { description: "created" } },
+        },
+      },
+      "/repair_tickets/{ticket_id}": {
+        patch: {
+          operationId: "updateRepairTicket",
+          parameters: [{ name: "ticket_id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: { content: { "application/json": { schema: ticketBody([]) } } },
+          responses: { "200": { description: "ok" } },
+        },
+      },
+    },
+    components: {
+      schemas: {
+        Base: { type: "object", required: ["kind"], properties: { kind: { type: "string" } } },
+        // Nested: a member that is itself composed.
+        Entity: { allOf: [{ $ref: "#/components/schemas/Base" }, { type: "object", properties: { ticket_id: { type: "string" }, opened_at: { type: "string" } } }] },
+        Priority: { type: "string", enum: ["low", "normal", "urgent"], description: "How urgent the repair is" },
+        RepairTicket: { allOf: [{ $ref: "#/components/schemas/Entity" }, { type: "object", properties: { device_serial: { type: "string" }, status: { type: "string" } } }] },
+        RepairTicket_Create: ticketBody(["device_serial", "issue"]),
+      },
+    },
+  };
+
+  it("merges the members' properties into tool params and create values", () => {
+    const byName = Object.fromEntries(draftFromOpenApi(spec).tools.map((t) => [t.name, t]));
+    const create = byName.create_repair_ticket!;
+    expect(create.ops).toEqual([
+      { create: "repair_tickets", values: { kind: "$kind", ticket_id: "$ticket_id", opened_at: "$opened_at", device_serial: "$device_serial", issue: "$issue", priority: "$priority" } },
+    ]);
+    expect(create.params.device_serial).toMatchObject({ type: "string", required: true });
+    expect(create.params.kind).toMatchObject({ required: true });
+    expect(create.params.opened_at).toMatchObject({ required: false });
+    expect(create.params.priority).toMatchObject({ enum: ["low", "normal", "urgent"], description: "How urgent the repair is" });
+    expect(byName.update_repair_ticket!.ops[0]).toMatchObject({ update: "repair_tickets", key: "$ticket_id", set: { device_serial: "$device_serial", issue: "$issue" } });
+  });
+
+  it("reads table fields from every member and composed params whole", () => {
+    const d = draftFromOpenApi(spec);
+    expect(d.tables.repair_tickets).toMatchObject({ key: "ticket_id" });
+    expect(d.tables.repair_tickets!.fields).toEqual(expect.arrayContaining(["kind", "ticket_id", "opened_at", "device_serial", "status", "issue"]));
+    // The param's own keywords win over its members'.
+    expect(d.tools.find((t) => t.name === "list_repair_tickets")!.params.priority).toEqual({
+      type: "string",
+      required: false,
+      description: "Only tickets this urgent",
+      enum: ["low", "normal", "urgent"],
+      default: "normal",
+    });
+    expect(d.warnings.join("\n")).toMatch(/body field "parts" is not a scalar/);
+  });
+});
+
+describe("init from OpenAPI: names that aren't identifiers", () => {
+  // A fictional courier whose fields follow a JSON-LD style (`@type`) and kebab-case.
+  const str = { type: "string" };
+  const spec = {
+    openapi: "3.0.3",
+    info: { title: "Brindle Couriers" },
+    paths: {
+      "/couriers/{courier-id}": { get: { parameters: [{ name: "courier-id", in: "path", required: true, schema: str }], responses: { "200": { description: "ok" } } } },
+      "/couriers/{courier-id}/jobs": {
+        parameters: [{ name: "courier-id", in: "path", required: true, schema: str }],
+        get: { operationId: "listJobs", parameters: [{ name: "created-after", in: "query", schema: str }], responses: { "200": { description: "ok" } } },
+        post: {
+          operationId: "createJob",
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: { allOf: [{ type: "object", required: ["@type"], properties: { "@type": str, "@baseType": str } }, { type: "object", properties: { "pickup-window": str, note: str } }] },
+              },
+            },
+          },
+          responses: { "201": { description: "created" } },
+        },
+      },
+      // The path parameter is not declared, as hand-written specs sometimes leave it.
+      "/jobs/{job_id}": { patch: { operationId: "updateJob", requestBody: { content: { "application/json": { schema: { type: "object", properties: { "@type": str } } } } }, responses: { "200": { description: "ok" } } } },
+    },
+  };
+
+  it("gives such fields params with identifier names and maps them back in the ops", () => {
+    const byName = Object.fromEntries(draftFromOpenApi(spec).tools.map((t) => [t.name, t]));
+    const create = byName.create_job!;
+    expect(Object.keys(create.params)).toEqual(["courier_id", "at_type", "at_baseType", "pickup_window", "note"]);
+    expect(create.params.at_type).toMatchObject({ type: "string", required: true });
+    expect(create.ops).toEqual([
+      { create: "jobs", values: { "courier-id": "$courier_id", "@type": "$at_type", "@baseType": "$at_baseType", "pickup-window": "$pickup_window", note: "$note" } },
+    ]);
+    expect(create.checks).toEqual([{ table: "couriers", key: "$courier_id", error: "couriers ${courier_id} not found" }]);
+    expect(byName.list_jobs!.ops).toEqual([{ list: "jobs", where: { "courier-id": "$courier_id", "created-after": { $contains: "$created_after" } } }]);
+    expect(byName.update_job!.params).toEqual({ job_id: { type: "string", required: true }, at_type: { type: "string", required: false } });
+    expect(byName.update_job!.ops).toEqual([{ update: "jobs", key: "$job_id", set: { "@type": "$at_type" } }]);
+  });
+
+  it("keeps names that already work, and warns when a rewritten name takes a suffix", () => {
+    const properties = Object.fromEntries(["@type", "at_type", "a-b", "a_b", "a.b", "constructor", "toString"].map((f) => [f, str]));
+    const body = { content: { "application/json": { schema: { type: "object", properties } } } };
+    const d = draftFromOpenApi({ ...spec, paths: { "/parcels": { post: { operationId: "createParcel", requestBody: body, responses: { "201": { description: "ok" } } } } } });
+    const create = d.tools[0]!;
+    expect(create.ops).toEqual([
+      { create: "parcels", values: { "@type": "$at_type_2", at_type: "$at_type", "a-b": "$a_b_2", a_b: "$a_b", "a.b": "$a_b_3", constructor: "$constructor", toString: "$toString" } },
+    ]);
+    expect(Object.keys(create.params)).toEqual(["at_type_2", "at_type", "a_b_2", "a_b", "a_b_3", "constructor", "toString"]);
+    expect(d.warnings).toEqual([
+      'POST /parcels: "@type" is param "at_type_2", since "at_type" is another field\'s param',
+      'POST /parcels: "a-b" is param "a_b_2", since "a_b" is another field\'s param',
+      'POST /parcels: "a.b" is param "a_b_3", since "a_b" is another field\'s param',
+    ]);
+  });
+
+  it("writes a draft that validates", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-init-"));
+    await writeDraft(dir, { [DOMAIN_FILE]: renderDraft(draftFromOpenApi(spec), "openapi.yaml"), "policy.md": POLICY_PLACEHOLDER, "tasks.yaml": TASKS_PLACEHOLDER });
+    expect((await loadDomain(dir)).tools.map((t) => t.name)).toEqual(["get_couriers", "list_jobs", "create_job", "update_job"]);
+  });
+});
+
 describe("init from OpenAPI: what it refuses", () => {
   it("accepts an OpenAPI 3.x document with paths", async () => {
     expect(openApiProblem(await freightSpec())).toBeUndefined();
