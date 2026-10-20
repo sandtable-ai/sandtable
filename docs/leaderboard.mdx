@@ -20,7 +20,7 @@ Every model on this board plays the same AI agent on a fictional freight brokera
 | Score | pass^4: the share of tasks where all four trials pass. pass^1 is shown next to it |
 | Baseline | a do-nothing agent that never calls a tool. It passes the 16 tasks where doing nothing is correct, and sets the floor |
 
-Each call starts from a fresh copy of the world. The caller follows hidden instructions (who it is, what it wants, its floor price, when to push back) and never sees the agent's policy. A conversation ends when the caller hangs up, or after 16 agent turns.
+Each call starts from a fresh copy of the world. The caller follows hidden instructions (who it is, what it wants, its floor price, when to push back) and never sees the agent's policy. A conversation ends when the caller hangs up, or after 16 agent turns (20 or 24 for the five tasks with long negotiations or several loads).
 
 [pass^k](/concepts/pass-k) is the share of tasks an agent gets right every time out of k tries, estimated from the trials as in τ-bench. A model that passes a task three times out of four scores on pass^1 but not on pass^4, so the gap between the two is how often its successes fail to repeat.
 
@@ -51,15 +51,21 @@ Left out: GLM 5.3 (not enabled on the account the board ran on), Gemma 3 27B (ne
 
 - **The same prompt, byte for byte.** Every model gets the same system prompt (the domain's description and policy), the same tool schemas and the same caller. Each model's `results.json` records an `inputs` hash of exactly these, and it is identical across models.
 - **The same output budget.** 16,000 output tokens per model call for every model, reasoning included.
-- **Reasoning settings.** The Claude models run at effort `medium`, sandtable's setting for its reference agent. That is the provider default for Claude Opus 5.5 and Claude Haiku 5.5, and one level below it for Claude Sonnet 5.5 and Claude Fable 5.1, whose default is `high`. Every other model runs at its provider's default: sandtable sends no reasoning settings through Converse. No model gets a temperature or a sampling setting.
-- **Tool rounds.** Up to 12 model calls per agent turn, for every model.
+- **Reasoning settings.** Every model runs at its provider's default reasoning effort, and the caller at `low`. For the Claude models the default is [Anthropic's documented one](https://platform.claude.com/docs/en/build-with-claude/effort), sent explicitly in `leaderboard/models.yaml`: `medium` for Claude Opus 5.5 and Claude Haiku 5.5, `high` for Claude Sonnet 5.5 and Claude Fable 5.1. sandtable sends no reasoning settings through Converse, so every other model gets its provider default, which for some models means no reasoning. No model gets a temperature or a sampling setting.
+- **Tool rounds.** Up to 12 tool rounds per agent turn, for every model. One accommodation is per model: through Converse, a reply whose `<reasoning>` text never closes (gpt-oss does this now and then) is thrown away and asked for again, up to twice per round. The thrown-away replies' tokens still count toward cost.
 - **Routing.** Every model with a global cross-region inference profile runs on it (all Claude models, the GPT-6 models, Grok 4.7, Nova 2 Lite). The others run in eu-west-1.
 - **Prompt caching.** Each model gets the caching its provider offers through the API sandtable calls: Claude's cache breakpoints, Nova's Converse cache points, the GPT-6 models' and Grok's own caching. The others don't cache. Caching changes cost and latency, not what the model sees.
-- **Cost.** *Cost / trial* counts the agent model's tokens at list price, so it compares models. The caller's cost, the same for every model, is left out of the column and kept in `leaderboard.json` (`costUsd`, `costPerTrialUsd`). Claude prices are Anthropic's list prices, which match AWS's global-profile prices. The other prices come from the AWS Pricing API for eu-west-1, and the GPT-6 models', which the Pricing API doesn't list, from AWS's model cards ([`prices/bedrock.verified.json`](https://github.com/sandtable-ai/sandtable/blob/main/prices/bedrock.verified.json), with the source of each). These are estimates: no batch, discount or reserved pricing.
+- **Cost.** *Cost / trial* counts only the agent model's tokens at list price (`agentCostPerTrialUsd` in `leaderboard.json`), so it compares models. The caller's cost is left out of the column. It differs by model, because a longer conversation costs the caller more tokens (in the canary, $0.0028 to $0.0044 per trial). `costUsd` and `costPerTrialUsd` in `leaderboard.json` are agent and caller together. Claude prices are Anthropic's list prices, which are also AWS's prices for the global cross-region profiles the board uses ([Amazon Bedrock pricing](https://aws.amazon.com/bedrock/pricing/), Anthropic, Global Cross-region Inference). The other prices come from the AWS Pricing API for eu-west-1, and the GPT-6 models', which the Pricing API doesn't list, from AWS's model cards ([`prices/bedrock.verified.json`](https://github.com/sandtable-ai/sandtable/blob/main/prices/bedrock.verified.json), with the source of each). These are estimates: no batch, discount or reserved pricing.
 
 ## Reproduce it
 
-From a clean clone at the run's commit, with access to the models on Amazon Bedrock in eu-west-1:
+You need access to the models on Amazon Bedrock in eu-west-1. The board runs the models in [`leaderboard/models.yaml`](https://github.com/sandtable-ai/sandtable/blob/main/leaderboard/models.yaml) except Claude Fable 5.1, which was held back (see [Which models](#which-models)): delete its entry to run the same set.
+
+The trials ran at commit `6ad55be`, except Claude Sonnet 5.5's, which ran again after [#170](https://github.com/sandtable-ai/sandtable/issues/170) set its effort to its default, `high`, at the commit that merged that change. Every trial was graded at the commit that merged [#166](https://github.com/sandtable-ai/sandtable/issues/166)'s disclosure rule.
+
+{/* RESULTS: the #171 and #167 merge commits, in full, after the two sentences above. */}
+
+To run the trials again, from a clean clone at the commit they ran at:
 
 ```bash
 git clone https://github.com/sandtable-ai/sandtable && cd sandtable
@@ -70,9 +76,9 @@ node src/cli.ts leaderboard examples/freight -m leaderboard/models.yaml \
   --prices prices/bedrock.eu-west-1.json -c 8
 ```
 
-Each model's folder holds its full `results.json` (every conversation, tool call, check and world change), a `report.html`, and `run.json`, which records the sandtable version, the commit, whether the checkout had uncommitted changes, the provider and the region. Running the command again reuses finished models. Their stored conversations are graded again under the current rules at no model cost ([`sandtable regrade`](/reference/cli#regrade) does the same for one run).
+Each model's folder holds its full `results.json` (every conversation, tool call, check and world change), a `report.html`, and `run.json`, which records the sandtable version, the commit, whether the checkout had uncommitted changes, the provider, the region and, for a Claude agent, its effort. Running the command again reuses finished models. Their stored conversations are graded again under the current rules at no model cost ([`sandtable regrade`](/reference/cli#regrade) does the same for one run). So to check the grading without paying for a model call, run the same command at the grading commit with the published results as the output folder (`-o`).
 
-{/* RESULTS: the run's commit if it differs, the date, the total cost, and where the published trajectories live. */}
+{/* RESULTS: the date, the total cost, and where the published trajectories live. */}
 
 ## Known limits
 
@@ -81,6 +87,9 @@ Each model's folder holds its full `results.json` (every conversation, tool call
 - **Values, not meaning.** The disclosure checks match numbers in digit spellings (`2350`, `2,350`, `$2,350.00`). A ceiling spelled out in words ("twenty-three fifty") isn't caught, and confirming a caller's guess ("Yes, $2,350 is our max") or calling a logged counter-offer "our ceiling" passes. Tone, politeness and whether the agent sounds like a good broker are not graded.
 - **A made-up load is filed under the wrong rule.** An agent that books a load ID it invented fails the trial, but the violation is reported as `rep-confirm-not-booked` ([#163](https://github.com/sandtable-ai/sandtable/issues/163)). It happened in 1 of 1,009 stored trials before the run.
 - **Coincidental numbers.** An offer on one load can equal another load's ceiling. Since [#166](https://github.com/sandtable-ai/sandtable/issues/166), a value counts as disclosed only once the agent has been shown it, in a tool result or its prompt.
-{/* RESULTS: confirm the board's trials were regraded with #166 before publishing. */}
 - **A small sample.** Four trials per task is enough to separate a model that repeats its successes from one that doesn't, but not to rank close models with confidence. Confidence intervals and flaky-task verdicts are planned ([#27](https://github.com/sandtable-ai/sandtable/issues/27)).
+- **Tuned against three models.** Before the run, the tasks, callers and grader were debugged against canary runs of three of the 14 models (Claude Haiku 5.5, GPT-6 Luna and Qwen3 Next 80B: [#161](https://github.com/sandtable-ai/sandtable/issues/161), [#162](https://github.com/sandtable-ai/sandtable/issues/162), [#164](https://github.com/sandtable-ai/sandtable/issues/164), [#165](https://github.com/sandtable-ai/sandtable/issues/165), [#166](https://github.com/sandtable-ai/sandtable/issues/166)), and earlier development runs used only Claude agents. A task problem that only other models run into may remain.
+- **Latency isn't a clean model measure.** *p95 turn* is wall-clock time per agent turn at 8 trials in parallel. It includes throttling retries, and it depends on routing: global profiles and in-region models don't run on the same capacity.
 - **One domain, in text.** It's a single fictional carrier-sales desk in English, over text, not audio. A model's rank here says how it follows this kind of SOP with tools, not how it does everywhere.
+
+{/* RESULTS: confirm the board's trials were regraded with #166 before publishing. */}
