@@ -8,19 +8,20 @@
 # lab, the newest model in each current tier; for an open-weight family, its largest current model. That
 # excludes models Converse can't reach from there: DeepSeek, Llama, Gemma 4, Mistral Large 3 and the larger
 # Qwen3 models. Left out: GLM 5.3 (not enabled on the account the board runs on), Gemma 3 27B (never calls
-# a tool on Bedrock), GPT-5.5 (superseded by GPT-6.1 Sol) and Kimi K3 (cost).
+# a tool on Bedrock), GPT-5.5 (superseded by GPT-6.1 Sol) and Kimi K3 (cost). Claude Fable 5.1 is left out too:
+# on Amazon Bedrock it needs the account-level data-retention mode aws_review, which the account the board
+# runs on doesn't enable. A later Fable model joins the board when it ships.
 # Every Claude model runs on a global inference profile, like the other models that have one.
 #
 # Every model runs at its provider's default reasoning effort. The other models get no reasoning setting
 # at all. A Claude agent is sent an explicit effort, its documented default: medium for Claude Opus 5.5
-# and Claude Haiku 5.5 (sandtable's own default, so their entries set none), high for Claude Sonnet 5.5
-# and Claude Fable 5.1. https://platform.claude.com/docs/en/build-with-claude/effort: "Most Claude models
+# and Claude Haiku 5.5 (sandtable's own default, so their entries set none), high for Claude Sonnet 5.5.
+# https://platform.claude.com/docs/en/build-with-claude/effort: "Most Claude models
 # default to high effort ...; Claude Opus 5.5 and Claude Haiku 5.5 default to medium." The simulated
 # caller runs at effort low.
 user: "claude:global.anthropic.claude-sonnet-5-5"
 k: 4
 models:
-  - { label: Claude Fable 5.1, agent: "claude:global.anthropic.claude-fable-5-1", effort: high }
   - { label: Claude Opus 5.5, agent: "claude:global.anthropic.claude-opus-5-5" }
   - { label: Claude Sonnet 5.5, agent: "claude:global.anthropic.claude-sonnet-5-5", effort: high }
   - { label: Claude Haiku 5.5, agent: "claude:global.anthropic.claude-haiku-5-5" }
