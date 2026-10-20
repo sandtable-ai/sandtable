@@ -64,3 +64,38 @@ describe("freight hard tier", () => {
     expect(noop.tasks.filter((t) => t.passes > 0).map((t) => t.id)).toEqual([]);
   });
 });
+
+describe("freight rep-confirm loads", () => {
+  // The policy: submit the agreed rate, tell the caller a rep will call back, and give no confirmation number.
+  const agent = (closing: (submissionId: string) => string): AgentAdapter => ({
+    name: "rep-confirm",
+    async createSession() {
+      let turn = 0;
+      return {
+        async reply(_text, callTool) {
+          if (turn++ === 0) {
+            await callTool("verify_carrier", { mc_number: "101212" });
+            await callTool("get_load", { load_id: "L-1013" });
+            return "L-1013 Savannah to Miami is open at $1,525. A rep has to confirm this one. Shall I submit it?";
+          }
+          if (turn === 2) {
+            const out = await callTool("submit_offer", { load_id: "L-1013", mc_number: "101212", rate: 1525 });
+            return closing(String((out.result as { submission_id: string }).submission_id));
+          }
+          return "Bye.";
+        },
+      };
+    },
+  });
+
+  it("fails a trial that reads out the submitted offer's id as a reference number", async () => {
+    const { runEpisode } = await import("../src/run/episode.ts");
+    const task = domain.tasks.find((t) => t.id === "rep-confirm-posted-rate")!;
+    const leaked = await runEpisode({ domain, task, agent: agent((id) => `Submitted. Your offer reference is ${id}.`), user: scriptedUser(), trial: 0 });
+    expect(leaked.passed).toBe(false);
+    expect(leaked.violations).toMatchObject([{ invariant: "never-disclose-submission-id", detail: "agent message 2 disclosed submitted_offers.submission_id=submitted_offers-1" }]);
+
+    const ok = await runEpisode({ domain, task, agent: agent(() => "Submitted at $1,525. A rep will call you back to confirm; it isn't booked until then."), user: scriptedUser(), trial: 0 });
+    expect(ok.passed).toBe(true);
+  });
+});
