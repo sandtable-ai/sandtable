@@ -166,7 +166,7 @@ export interface LeaderboardOptions {
   userSpec?: string;
   /** The `--prices` file the costs use: recorded in leaderboard.json. */
   prices?: PricesFile;
-  /** `note` says why stored results were not reused, or why an entry was skipped. */
+  /** Called once per entry, and for the do-nothing baseline when it fails. `note` says why stored results were not reused, why an entry was skipped, or what crashed. */
   onEntry?: (label: string, status: "cached" | "regraded" | "ran" | "failed" | "skipped", note?: string) => void;
 }
 
@@ -499,7 +499,7 @@ export function renderLeaderboardHtml(l: LeaderboardResult): string {
     .map((r) => {
       const effort = r.effort ? ` <span class="effort">effort ${esc(r.effort)}</span>` : "";
       const link = r.baseline ? esc(r.label) : `<a href="./${slugify(r.label)}/report.html">${esc(r.label)}</a>${effort}`;
-      if (r.error) return `<tr><td>${link}</td><td colspan="${passHeads(l.k).length + (soft ? 5 : 4)}" class="err">${esc(r.error)}</td></tr>`;
+      if (r.error) return `<tr${r.baseline ? ' class="base"' : ""}><td>${link}</td><td colspan="${passHeads(l.k).length + (soft ? 5 : 4)}" class="err">${esc(r.error)}</td></tr>`;
       const pass = passCells(r, l.k).map((c, i, all) => (i === all.length - 1 ? `<td><b>${c}</b></td>` : `<td>${c}</td>`)).join("");
       return `<tr${r.baseline ? ' class="base"' : ""}><td>${link}</td>${pass}<td>${totalViolations(r)}</td><td>${esc(r.topFailure ?? "")}</td>${soft ? `<td>${esc(softCell(r))}</td>` : ""}<td>${usd(r.agentCostPerTrialUsd)}</td><td>${secs(r.agentTurnP95Ms)}</td></tr>`;
     })
