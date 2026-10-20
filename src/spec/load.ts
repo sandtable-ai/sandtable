@@ -2,7 +2,9 @@ import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
 import { z } from "zod";
-import { DomainSpec, type Domain } from "./schema.ts";
+import { mentions } from "../grade/invariants.ts";
+import { agentSystemPrompt } from "../sim/prompts.ts";
+import { DomainSpec, type Domain, type Tool } from "./schema.ts";
 
 export const DOMAIN_FILE = "sandtable.yaml";
 
@@ -152,6 +154,35 @@ function undetectable(d: Domain, table: string, field: string): string | undefin
     return `every seeded value is shorter than 3 characters, and shorter strings are not checked; ${fix}`;
   }
   return undefined;
+}
+
+/**
+ * What `validate` warns about: likely mistakes that still leave a valid domain. A `never_disclose` value counts
+ * only once the agent has been shown it, so a field that no tool returns and sandtable's default system prompt
+ * doesn't state can never fire. A custom agent may learn it another way, so this is a warning, not an error.
+ */
+export function domainWarnings(d: Domain): string[] {
+  const warnings: string[] = [];
+  const prompt = agentSystemPrompt(d);
+  for (const inv of d.invariants) {
+    if (!("never_disclose" in inv)) continue;
+    const { table, field } = inv.never_disclose;
+    if (undetectable(d, table, field) || d.tools.some((t) => returnsTable(t, table))) continue;
+    const values = (d.world.tables[table]?.rows ?? []).map((r) => r[field]).filter((v) => typeof v === "number" || typeof v === "string");
+    if (values.some((v) => mentions(prompt, String(v)))) continue;
+    warnings.push(
+      `invariants.${inv.id}: never_disclose can't fire on ${table}.${field}: no tool returns a ${table} record and the policy states none of its values, ` +
+        "and a value counts only once the agent has been shown it; return the field from a tool, or state the value in the policy if your agent knows it from its own prompt",
+    );
+  }
+  return warnings;
+}
+
+/** Whether a tool's result, the op at `returns`, holds records of `table`. */
+function returnsTable(t: Tool, table: string): boolean {
+  const op = t.ops[Math.min(t.returns, t.ops.length - 1)]!;
+  const target = "get" in op ? op.get : "list" in op ? op.list : "create" in op ? op.create : "update" in op ? op.update : undefined;
+  return target === table;
 }
 
 export interface PendingItem {

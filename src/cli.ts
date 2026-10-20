@@ -21,7 +21,7 @@ import { draftFromOpenApi, openApiProblem } from "./init/openapi.ts";
 import { draftInvariantsFromSop, knownFields } from "./init/sop.ts";
 import { draftTasksFromTranscripts } from "./init/transcripts.ts";
 import { DOMAIN_FILE, POLICY_PLACEHOLDER, renderDraft, TASKS_PLACEHOLDER, writeDraft } from "./init/render.ts";
-import { DomainError, loadDomain, pendingReview } from "./spec/load.ts";
+import { DomainError, domainWarnings, loadDomain, pendingReview } from "./spec/load.ts";
 import { lintDomain } from "./grade/lint.ts";
 import { bedrockRegion, bedrockUse, ModelsFile, renderLeaderboardMarkdown, runLeaderboard, type RunInfo } from "./run/leaderboard.ts";
 import { z } from "zod";
@@ -237,6 +237,7 @@ program
   .action(async (domainPath: string, o: { strict?: boolean }) => {
     const d = await loadDomain(await resolveDomain(domainPath));
     console.log(`✓ ${d.name}: ${Object.keys(d.world.tables).length} tables, ${d.tools.length} tools, ${d.invariants.length} invariants, ${d.tasks.length} tasks`);
+    for (const w of domainWarnings(d)) console.log(`⚠ ${w}`);
     const pending = pendingReview(d);
     if (pending.length) {
       console.log(`⚠ ${pending.length} drafted item(s) pending review (sandtable review ${domainPath})`);

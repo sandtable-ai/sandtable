@@ -222,7 +222,8 @@ export function asciiHyphens(text: string): string {
   return text.replace(/[\u2010\u2011]/g, "-");
 }
 
-function mentions(text: string, value: string): boolean {
+/** Whether `text` says `value`, in the spellings `never_disclose` matches. */
+export function mentions(text: string, value: string): boolean {
   const said = asciiHyphens(text);
   const n = Number(value);
   if (value.trim() !== "" && Number.isFinite(n)) {
