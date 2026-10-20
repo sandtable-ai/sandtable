@@ -168,7 +168,7 @@ describe("regrade", () => {
 
     const err = await promisify(execFile)(process.execPath, [cli, "regrade", file, "--domain", domainDir]).catch((e: { code: number; stderr: string }) => e);
     expect(err).toMatchObject({ code: 1 });
-    expect((err as { stderr: string }).stderr).toMatch(/^can't regrade .*results\.json: the agent or the caller would be given something else now: .*Rerun it with `sandtable run` instead\./);
+    expect((err as { stderr: string }).stderr).toMatch(/^can't regrade .*results\.json: the agent or the caller would be given something else now: .*Rerun it with `npx sandtable-ai run` instead\./);
     expect(await readFile(file, "utf8")).toBe(JSON.stringify(run));
   });
 

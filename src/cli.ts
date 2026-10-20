@@ -480,7 +480,7 @@ program
           `can't regrade ${resultsPath}: it is a run of ${stored.domain}, not ${domain.name}, so --domain ${o.domain} is likely not the domain the run used. Pass the one whose sandtable.yaml has \`name: ${stored.domain}\`, the name results.json records as "domain". If you renamed the domain since the run, restore its \`name:\` or rerun it with \`npx sandtable-ai run\`.`,
         );
       }
-      throw new Error(`can't regrade ${resultsPath}: ${err.message}. Rerun it with \`sandtable run\` instead.`);
+      throw new Error(`can't regrade ${resultsPath}: ${err.message}. Rerun it with \`npx sandtable-ai run\` instead.`);
     }
     const flipped = changedVerdicts(stored, result);
     console.log(renderTerminal(result));
