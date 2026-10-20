@@ -74,7 +74,9 @@ function quickstartAgentFetch(): typeof fetch {
   });
   if (!handler) throw new Error("the quickstart's toy agent no longer calls createServer(handler)");
   const serve = handler;
-  return async (_url, init) => new Response(await new Promise<string>((end) => void serve([String(init?.body)], { setHeader() {}, end })));
+  // A handler that throws rejects the fetch, so the trial ends in an error instead of waiting for end().
+  return async (_url, init) =>
+    new Response(await new Promise<string>((end, fail) => Promise.resolve(serve([String(init?.body)], { setHeader() {}, end })).catch(fail)));
 }
 
 let freight: Domain;
@@ -98,6 +100,8 @@ beforeAll(async () => {
   } finally {
     vi.unstubAllGlobals();
   }
+  const crashed = toy.tasks.flatMap((t) => t.trials).find((t) => t.endReason === "error");
+  if (crashed) throw new Error(`the quickstart's toy agent crashed: ${crashed.error}`);
 });
 
 describe("pages that quote the bundled examples", () => {
