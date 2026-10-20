@@ -250,6 +250,14 @@ export function changedWhere(had: Where, now: Where): string | undefined {
   return undefined;
 }
 
+/** "3 of 200 trial(s) crashed: <the first error>", or undefined when no trial crashed. */
+function crashOf(r: SuiteResult): string | undefined {
+  const crashes = r.tasks.flatMap((t) => t.trials.filter((tr) => tr.endReason === "error"));
+  if (crashes.length === 0) return undefined;
+  const trials = r.tasks.reduce((n, t) => n + t.trials.length, 0);
+  return `${crashes.length} of ${trials} trial(s) crashed: ${crashes[0]!.error ?? "unknown error"}`;
+}
+
 function errorRow(entry: LeaderboardEntry, error: string): LeaderboardRow {
   return {
     label: entry.label,
@@ -384,10 +392,8 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
     }
     // A crashed trial (credentials, throttling) says nothing about the model: show the row as an
     // error instead of ranking it, and let the next run retry the model.
-    const crashes = result.tasks.flatMap((t) => t.trials.filter((tr) => tr.endReason === "error"));
-    if (crashes.length) {
-      const trials = result.tasks.reduce((n, t) => n + t.trials.length, 0);
-      const message = `${crashes.length} of ${trials} trial(s) crashed: ${crashes[0]!.error ?? "unknown error"}`;
+    const message = crashOf(result);
+    if (message) {
       let note = fresh && stale ? `${message}; stored results not reused: ${stale}` : message;
       if (fresh) {
         // The stored files may be the only copy of paid conversations: a crashed rerun goes beside them, never over them.
@@ -408,10 +414,18 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
   // when every task has a script; otherwise it runs under the same simulated user as the models.
   const scripted = tasks.every((t) => t.user.script?.length);
   const noop = await runSuite({ domain, agent: noopAgent(), user: scripted ? scriptedUser() : user, k: scripted ? 1 : k, taskIds });
-  const baseline = toRow({ label: "Do-nothing baseline", agent: "noop" }, noop, true);
-  // A scripted noop run is deterministic, so its pass^k equals its pass^1.
-  if (scripted) baseline.passHatK = baseline.passHat1;
-  rows.push(baseline);
+  const baselineEntry = { label: "Do-nothing baseline", agent: "noop" };
+  const baselineCrash = crashOf(noop);
+  if (baselineCrash) {
+    // A baseline whose caller crashed sets no floor: it shows as an error, like a model.
+    opts.onEntry?.(baselineEntry.label, "failed", baselineCrash);
+    rows.push({ ...errorRow(baselineEntry, baselineCrash), baseline: true });
+  } else {
+    const baseline = toRow(baselineEntry, noop, true);
+    // A scripted noop run is deterministic, so its pass^k equals its pass^1.
+    if (scripted) baseline.passHatK = baseline.passHat1;
+    rows.push(baseline);
+  }
 
   // Errored rows (NaN) sort last; a 0% model still ranks above them.
   const score = (x: number) => (Number.isNaN(x) ? -1 : x);

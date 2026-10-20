@@ -9,7 +9,7 @@ import { freightScriptedAgent } from "../src/demo/freight-agents.ts";
 import { bedrockRegion, bedrockUse, ModelsFile, pricesFile, runLeaderboard, type RunInfo } from "../src/run/leaderboard.ts";
 import { costOf, registerPrices } from "../src/run/usage.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
-import type { AgentAdapter } from "../src/sim/types.ts";
+import type { AgentAdapter, UserSimulator } from "../src/sim/types.ts";
 import { loadDomain } from "../src/spec/load.ts";
 import YAML from "yaml";
 
@@ -231,6 +231,31 @@ describe("leaderboard", () => {
       ["No credentials", "2 of 2 trial(s) crashed: Failed to resolve AWS credentials"],
     ]);
     expect(await readFile(path.join(dir, "LEADERBOARD.md"), "utf8")).toContain("|  | No credentials | error |  | 2 of 2 trial(s) crashed: Failed to resolve AWS credentials |  |  |");
+  });
+
+  it("shows a baseline whose caller crashed as an error, not as the board's floor", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const domain = await loadDomain(example);
+    // A task without a script runs the baseline under the board's caller, which crashes here.
+    const task = domain.tasks.find((t) => t.id === "no-mc-number")!;
+    task.user = { ...task.user, script: undefined };
+    const caller: UserSimulator = { name: "broken-caller", createSession: async () => ({ next: async () => { throw new Error("expired token"); } }) };
+    const seen: string[] = [];
+    const lb = await runLeaderboard({
+      domain,
+      entries: [],
+      user: caller,
+      k: 1,
+      taskIds: ["no-mc-number"],
+      outDir: dir,
+      resolveAgent: async () => { throw new Error("no models on this board"); },
+      onEntry: (label, status, note) => seen.push(`${label}:${status}: ${note}`),
+    });
+    expect(seen).toEqual(["Do-nothing baseline:failed: 1 of 1 trial(s) crashed: expired token"]);
+    expect(lb.rows).toHaveLength(1);
+    expect(lb.rows[0]).toMatchObject({ label: "Do-nothing baseline", baseline: true, error: "1 of 1 trial(s) crashed: expired token" });
+    expect(lb.rows[0]!.passHatK).toBeNaN();
+    expect(await readFile(path.join(dir, "LEADERBOARD.md"), "utf8")).toContain("|  | _Do-nothing baseline_ | error |");
   });
 
   it("keeps a model's stored results when its rerun crashes, and writes the crashed run beside them", async () => {
