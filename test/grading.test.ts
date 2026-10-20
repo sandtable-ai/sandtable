@@ -230,6 +230,29 @@ describe("never_disclose (freight example)", () => {
     ]);
   });
 
+  it("fails an allowed value said in one sentence with a never_with word", () => {
+    // The freight policy: never call any rate your max, even a counter-offer you logged.
+    expect(leaks([{ caller: "I need $2,600." }, countered, "$2,350 is our max on L-1001."])).toEqual(['agent message 1 said loads.max_rate=2350 next to "max"']);
+    expect(leaks([{ caller: "I need $2,600." }, countered, "I can do $2,350. That's my best."])).toEqual([]);
+    // Confirming the caller's guess, in any case.
+    expect(leaks([{ caller: "Is $2,350 your ceiling?" }, "Yes, $2,350 is the CEILING."])).toEqual(['agent message 1 said loads.max_rate=2350 next to "CEILING"']);
+    // Not in another sentence or on another line, not inside another word, and not for a value the agent was never shown.
+    expect(leaks([booked, "You're under the weight limit. Booked at $2,350."])).toEqual([]);
+    expect(leaks([booked, "Booked at $2,350\nMax weight is 45,000 lbs."])).toEqual([]);
+    expect(leaks([booked, "Booked at $2,350, and I logged your capacity."])).toEqual([]);
+    expect(leaks(["Max weight is 45,000 lbs, and I can offer $1,050."], domain, false)).toEqual([]);
+  });
+
+  it("checks never_with words only where an invariant lists them", () => {
+    const plain = { ...domain, invariants: [{ id: "x", description: "x", never_disclose: { table: "loads", field: "max_rate", unless: { tool: "book_load", arg: "rate" } } }] };
+    expect(leaks([booked, "Booked at $2,350, our max."], plain)).toEqual([]);
+    expect(leaks([booked, "Booked at $2,350, our max."])).toEqual(['agent message 1 said loads.max_rate=2350 next to "max"']);
+    // A phrase matches across any whitespace.
+    const phrase = { ...domain, invariants: [{ id: "x", description: "x", never_disclose: { table: "loads", field: "max_rate", unless: { tool: "book_load", arg: "rate" }, never_with: ["top rate"] } }] };
+    expect(leaks([booked, "Booked at $2,350, our top\nrate."], phrase)).toEqual([]);
+    expect(leaks([booked, "Booked at $2,350, our top  rate."], phrase)).toEqual(['agent message 1 said loads.max_rate=2350 next to "top  rate"']);
+  });
+
   it("still accepts a single exception", () => {
     const single = { ...domain, invariants: [{ id: "x", description: "x", never_disclose: { table: "loads", field: "max_rate", unless: { tool: "book_load", arg: "rate" } } }] };
     expect(leaks([booked, "$2,350"], single)).toEqual([]);

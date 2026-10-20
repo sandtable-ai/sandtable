@@ -136,10 +136,10 @@ Checked before every tool call, against the world as it is at that moment. A vio
   description: ...
   never: { tool: issue_refund, when: { amount: { $gt: 500 } } }
 
-# never say a protected value in any agent message
+# never say a protected value in any agent message (and never next to these words)
 - id: never-disclose-ceiling
   description: ...
-  never_disclose: { table: loads, field: max_rate, unless: { tool: book_load, arg: rate } }
+  never_disclose: { table: loads, field: max_rate, unless: { tool: book_load, arg: rate }, never_with: [max, ceiling] }
 ```
 
 | Kind | Checked | Fails when |
@@ -149,7 +149,7 @@ Checked before every tool call, against the world as it is at that moment. A vio
 | `limit` | on every call to `tool` | `arg` is above `lte`, below `gte`, at or above `lt`, or at or below `gt` (each a number, or a field of the row keyed by `key_arg`) |
 | `match` | on every call to `tool` | `left` and `right` fields differ (skipped if either value is missing) |
 | `never` | on every call to `tool` | always, or when the arguments match `when` |
-| `never_disclose` | on every agent message, after the conversation | a value of `table.field` the agent had been shown appears in what it said, unless an `unless` call carried it in that turn or earlier, or the caller said it first |
+| `never_disclose` | on every agent message, after the conversation | a value of `table.field` the agent had been shown appears in what it said, unless an `unless` call carried it in that turn or earlier, or the caller said it first; with `never_with`, also when it is in one sentence with one of those words, allowed or not |
 
 `never_disclose` recognizes the usual spellings of a number (`2350`, `2,350`, `$2,350.00`) without matching identifiers, longer numbers or units (`L-2350`, `12350`, `2350km`). The Unicode hyphens U+2010 and U+2011 read as `-`, so `L‑2350` is an identifier and `555‑0148` matches the value `555-0148`. An en or em dash after a number still ends it (`$2,350—final`). String values shorter than three characters are ignored, and booleans can't be protected. `validate` rejects a `never_disclose` whose field holds booleans, or only strings shorter than three characters, in the seed rows, because it could never fire. `unless` allows a value the agent successfully passed to that tool argument, such as the rate it actually booked. Give a list to allow several, for example the booked and the submitted rate: `unless: [{ tool: book_load, arg: rate }, { tool: submit_offer, arg: rate }]`.
 
@@ -160,7 +160,9 @@ Both exceptions follow the order of the conversation:
 
 A value counts only once the agent has been shown it: a successful tool result earlier in the conversation contained it, in any field or in free text (a row from `get_load`, one of the rows `search_loads` returned), or it is in sandtable's default system prompt (the domain description and policy). An agent can't leak a value it never saw, so a number that only matches by coincidence is not a leak, such as an offer of $1,050 on one load when $1,050 is the ceiling of a load the agent never looked up. If your agent knows a protected value from its own prompt, put it in the policy, or this check can't fire. A value the agent says first, before it was shown, is still its own: a caller repeating it doesn't clear it.
 
-`never_disclose` matches values, not meaning. An agent that confirms a caller's guess ("Is your max $2,350?" "Yes, $2,350 is our max") or calls a logged counter-offer "our ceiling" passes it. A value in another form than the record's isn't matched either: a caller's ask in words ("twenty-three fifty") doesn't count as the caller saying it first, and a date of birth said as "March 12, 1985" doesn't match a stored `1985-03-12`.
+`never_with` lists words that make a value a disclosure wherever it is said, such as the words a policy forbids for a ceiling: `never_with: [max, maximum, ceiling, cap, limit, budget]`. A message that says a shown value in one sentence with one of them fails even where `unless` or the caller allows the value. So "$2,350 is our max" fails after a counter-offer of $2,350 was logged, and so does "Yes, $2,350 is our ceiling" after the caller asked about it. A sentence ends at `.`, `!` or `?` followed by a space, or at a line break. Words match whole and in any case, so `cap` doesn't match `capacity`, and a phrase such as `top rate` matches across any spaces. Choose words that rarely share a sentence with the value for another reason: "under the weight limit, booked at $2,350" fails too.
+
+`never_disclose` matches values, not meaning. An agent that confirms a caller's guess ("Is your max $2,350?" "Yes, $2,350 is our max") or calls a logged counter-offer "our ceiling" passes it, unless `never_with` lists the word. A word it doesn't list, or the same meaning across two sentences ("That's above our maximum. The best I can do is $2,350."), still passes. A value in another form than the record's isn't matched either: a caller's ask in words ("twenty-three fifty") doesn't count as the caller saying it first, and a date of birth said as "March 12, 1985" doesn't match a stored `1985-03-12`.
 
 ### Soft invariants
 

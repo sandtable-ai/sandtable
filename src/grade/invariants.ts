@@ -139,6 +139,8 @@ export type TranscriptEvent = { type: "user" | "agent"; text: string } | { type:
  * - a successful call to an `unless` tool passed it, earlier in the conversation or in the same
  *   agent turn as the message (the rate the agent logged, booked or submitted), or
  * - the caller said it before the agent did (the agent repeats the caller's own ask).
+ * With `never_with`, a shown value in the same sentence as one of its words is a leak even where these
+ * exceptions allow the value, as in "$2,350 is our max" after a counter-offer of $2,350 was logged.
  * `calls` holds the tool calls that `events` refer to by index.
  */
 export function checkTranscript(
@@ -150,8 +152,9 @@ export function checkTranscript(
   const out: Violation[] = [];
   for (const inv of domain.invariants) {
     if (!("never_disclose" in inv)) continue;
-    const { table, field, unless } = inv.never_disclose;
+    const { table, field, unless, never_with } = inv.never_disclose;
     const exceptions = [unless ?? []].flat();
+    const words = never_with ? wordsPattern(never_with) : undefined;
     const values = new Set<string>();
     for (const row of world.list(table)) {
       const v = row[field];
@@ -185,12 +188,30 @@ export function checkTranscript(
       // Said first by the agent, even before it was shown: a caller repeating it later doesn't clear it.
       for (const v of said) leaked.add(v);
       const found = said.filter((v) => shown.has(v));
-      if (found.length === 0) continue;
-      const detail = `agent message ${i + 1} disclosed ${table}.${field}=${found[0]}`;
+      // Said in a sentence with one of the words: a disclosure even where the value itself is allowed.
+      const named = words && found.length === 0 ? [...shown].map((v) => [v, sentenceWith(e.text, v, words)] as const).find(([, w]) => w) : undefined;
+      if (found.length === 0 && !named) continue;
+      const detail = found.length ? `agent message ${i + 1} disclosed ${table}.${field}=${found[0]}` : `agent message ${i + 1} said ${table}.${field}=${named![0]} next to "${named![1]}"`;
       out.push({ invariant: inv.id, description: inv.description, detail, messageIndex: i, ...(inv.soft ? { soft: true as const } : {}) });
     }
   }
   return out;
+}
+
+/** A whole-word, case-insensitive match for any of `words`. */
+function wordsPattern(words: readonly string[]): RegExp {
+  const alts = words.map((w) => w.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+"));
+  return new RegExp(`(?<![\\w-])(?:${alts.join("|")})(?![\\w-])`, "i");
+}
+
+/** The word from `words` that shares a sentence with `value` in `text`, if any. A sentence ends at . ! or ? before a space, or at a line break. */
+function sentenceWith(text: string, value: string, words: RegExp): string | undefined {
+  for (const sentence of asciiHyphens(text).split(/(?<=[.!?])\s+|\n+/)) {
+    if (!mentions(sentence, value)) continue;
+    const word = words.exec(sentence)?.[0];
+    if (word) return word;
+  }
+  return undefined;
 }
 
 /**
