@@ -272,6 +272,14 @@ export function toRow(entry: LeaderboardEntry, r: SuiteResult, baseline = false)
   };
 }
 
+/** A model's results.json, run.json and report.html, each written whole or not at all. */
+async function writeRun(dir: string, result: SuiteResult, info: object): Promise<void> {
+  await mkdir(dir, { recursive: true });
+  await writeFileAtomic(path.join(dir, "results.json"), JSON.stringify(result, null, 2));
+  await writeFileAtomic(path.join(dir, "run.json"), JSON.stringify(info, null, 2));
+  await writeFileAtomic(path.join(dir, "report.html"), renderHtml(result));
+}
+
 /**
  * Run several agents on one domain under the same simulated users, plus a do-nothing
  * baseline, and rank them by pass^k. Each entry's full results are kept next to the
@@ -329,10 +337,6 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
       try {
         const agent = await opts.resolveAgent(entry.agent, entry.effort);
         result = await runSuite({ domain, agent, user, k, taskIds, concurrency: opts.concurrency ?? 4 });
-        await mkdir(dir, { recursive: true });
-        await writeFileAtomic(file, JSON.stringify(result, null, 2));
-        await writeFileAtomic(keyFile, JSON.stringify({ ...key, ...opts.runInfo }, null, 2));
-        await writeFileAtomic(path.join(dir, "report.html"), renderHtml(result));
         fresh = true;
       } catch (err) {
         opts.onEntry?.(entry.label, "failed");
@@ -341,15 +345,23 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
       }
     }
     // A crashed trial (credentials, throttling) says nothing about the model: show the row as an
-    // error instead of ranking it. Its results stay on disk, and the next run retries the model.
+    // error instead of ranking it, and let the next run retry the model.
     const crashes = result.tasks.flatMap((t) => t.trials.filter((tr) => tr.endReason === "error"));
     if (crashes.length) {
       const trials = result.tasks.reduce((n, t) => n + t.trials.length, 0);
       const message = `${crashes.length} of ${trials} trial(s) crashed: ${crashes[0]!.error ?? "unknown error"}`;
-      opts.onEntry?.(entry.label, "failed", message);
+      let note = message;
+      if (fresh) {
+        // The stored files may be the only copy of paid conversations: a crashed rerun goes beside them, never over them.
+        const crashedDir = path.join(dir, "crashed");
+        await writeRun(crashedDir, result, { ...key, ...opts.runInfo });
+        note += `; the crashed run is in ${crashedDir}${(await exists(file)) ? ", and the stored results are kept" : ""}`;
+      }
+      opts.onEntry?.(entry.label, "failed", note);
       rows.push(errorRow(entry, message));
       continue;
     }
+    if (fresh) await writeRun(dir, result, { ...key, ...opts.runInfo });
     if (fresh) opts.onEntry?.(entry.label, "ran", stale && `stored results not reused: ${stale}`);
     rows.push(toRow(entry, result));
   }

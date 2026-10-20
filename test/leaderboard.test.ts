@@ -221,12 +221,39 @@ describe("leaderboard", () => {
       resolveAgent: async () => broken,
       onEntry: (label, status, note) => seen.push(`${label}:${status}: ${note}`),
     });
-    expect(seen).toEqual(["No credentials:failed: 2 of 2 trial(s) crashed: Failed to resolve AWS credentials"]);
+    const crashedDir = path.join(dir, "no-credentials", "crashed");
+    expect(seen).toEqual([`No credentials:failed: 2 of 2 trial(s) crashed: Failed to resolve AWS credentials; the crashed run is in ${crashedDir}`]);
+    // Nothing was stored before, so nothing is in the model's folder but the crashed run: the next run retries it.
+    expect(JSON.parse(await readFile(path.join(crashedDir, "results.json"), "utf8")).tasks[0].trials[0].endReason).toBe("error");
+    await expect(readFile(path.join(dir, "no-credentials", "results.json"))).rejects.toThrow();
     expect(lb.rows.map((r) => [r.label, r.error ?? ""])).toEqual([
       ["Do-nothing baseline", ""],
       ["No credentials", "2 of 2 trial(s) crashed: Failed to resolve AWS credentials"],
     ]);
     expect(await readFile(path.join(dir, "LEADERBOARD.md"), "utf8")).toContain("|  | No credentials | error |  | 2 of 2 trial(s) crashed: Failed to resolve AWS credentials |  |  |");
+  });
+
+  it("keeps a model's stored results when its rerun crashes, and writes the crashed run beside them", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const domain = await loadDomain(example);
+    const broken: AgentAdapter = { name: "broken", createSession: async () => ({ reply: async () => { throw new Error("Could not resolve authentication method"); } }) };
+    const run = async (agent: AgentAdapter, resume: boolean) => {
+      const seen: string[] = [];
+      const entries = [{ label: "Careful rules", agent: "scripted:careful" }];
+      const lb = await runLeaderboard({ domain, entries, user: scriptedUser(), k: 1, taskIds: ["no-mc-number"], outDir: dir, resume, resolveAgent: async () => agent, onEntry: (_l, status, note) => seen.push(`${status}: ${note}`) });
+      return { seen, row: lb.rows.find((r) => r.label === "Careful rules")! };
+    };
+    await run(freightScriptedAgent("careful"), true);
+    const model = path.join(dir, "careful-rules");
+    const stored = await Promise.all(["results.json", "run.json", "report.html"].map((f) => readFile(path.join(model, f), "utf8")));
+    // --no-resume forces the rerun, as a stale key would; every trial of it crashes.
+    const { seen, row } = await run(broken, false);
+    expect(seen).toEqual([`failed: 1 of 1 trial(s) crashed: Could not resolve authentication method; the crashed run is in ${path.join(model, "crashed")}, and the stored results are kept`]);
+    expect(row.error).toBe("1 of 1 trial(s) crashed: Could not resolve authentication method");
+    expect(await Promise.all(["results.json", "run.json", "report.html"].map((f) => readFile(path.join(model, f), "utf8")))).toEqual(stored);
+    expect(JSON.parse(await readFile(path.join(model, "crashed", "results.json"), "utf8")).tasks[0].trials[0]).toMatchObject({ endReason: "error" });
+    // The stored results are still there to resume from.
+    expect((await run(broken, true)).seen).toEqual(["cached: undefined"]);
   });
 
   it("rejects unknown task ids before running anything", async () => {
