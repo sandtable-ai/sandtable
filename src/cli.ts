@@ -468,7 +468,7 @@ program
       // A run of another domain: the fix is usually the --domain the run used, unless the domain was renamed since.
       if (stored.domain !== domain.name) {
         throw new Error(
-          `can't regrade ${resultsPath}: it is a run of ${stored.domain}, not ${domain.name}, so --domain ${o.domain} is likely not the domain the run used. Pass the one whose sandtable.yaml has \`name: ${stored.domain}\`, the name results.json records as "domain". If you renamed the domain since the run, restore its \`name:\` or rerun it with \`sandtable run\`.`,
+          `can't regrade ${resultsPath}: it is a run of ${stored.domain}, not ${domain.name}, so --domain ${o.domain} is likely not the domain the run used. Pass the one whose sandtable.yaml has \`name: ${stored.domain}\`, the name results.json records as "domain". If you renamed the domain since the run, restore its \`name:\` or rerun it with \`npx sandtable-ai run\`.`,
         );
       }
       throw new Error(`can't regrade ${resultsPath}: ${err.message}. Rerun it with \`sandtable run\` instead.`);

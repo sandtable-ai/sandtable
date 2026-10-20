@@ -185,7 +185,7 @@ describe("regrade", () => {
     expect(stderr).toContain(`can't regrade ${file}: it is a run of freight-carrier-sales, not clinic-front-desk, so --domain ${clinic} is likely not the domain the run used.`);
     // How to tell which domain the run used: results.json names it, as its sandtable.yaml does.
     expect(stderr).toContain("name: freight-carrier-sales");
-    expect(stderr).toContain("If you renamed the domain since the run, restore its `name:` or rerun it with `sandtable run`.");
+    expect(stderr).toContain("If you renamed the domain since the run, restore its `name:` or rerun it with `npx sandtable-ai run`.");
     expect(await readFile(file, "utf8")).toBe(JSON.stringify(run));
 
     // The run's own domain, renamed since: the same refusal, and restoring the name is enough.
