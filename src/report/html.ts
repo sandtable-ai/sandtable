@@ -32,7 +32,8 @@ tr:last-child td{border-bottom:0}
 .trial{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 16px 8px;margin-top:16px;overflow-wrap:anywhere}
 .trial h2{margin:24px 0 8px}
 .check{display:grid;grid-template-columns:16px 1fr;column-gap:8px;margin:4px 0}
-.change{font:13px/20px ui-monospace,"SF Mono",Menlo,Consolas,monospace;margin:4px 0}.change span{color:var(--muted)}
+.change{font:13px/20px ui-monospace,"SF Mono",Menlo,Consolas,monospace;margin:4px 0}.change span{color:var(--muted)}.change b{font-weight:600}
+.change details{display:inline;margin-left:8px}.change summary{display:inline;cursor:pointer;color:var(--muted);font-size:12px}.change details[open] span{display:block}
 .ev{border-radius:8px;padding:8px 12px;margin:8px 0;white-space:pre-wrap}
 .ev small{display:block;color:var(--muted);font:12px/16px ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;margin-bottom:4px}
 .ev small b{font-weight:600;text-transform:uppercase;letter-spacing:.04em}.ev small code{font-size:1em}
@@ -122,11 +123,21 @@ function show(ti, i) {
   }).join("");
   const checks = tr.checks.map((c) => '<div class="check"><span class="' + (c.passed ? "okt" : "badt") + '">' + (c.passed ? "✓" : "✗") + "</span><div><code>" + esc(c.id) + "</code> " + esc(c.detail) + "</div></div>").join("") +
     (tr.soft || []).map((c) => '<div class="check"><span class="meta">' + (c.broken ? "~" : "·") + "</span><div><code>" + esc(c.id) + "</code> <span class='meta'>soft:</span> " + esc(c.broken ? c.violations.map((v) => v.detail).join("; ") : "not broken") + "</div></div>").join("");
-  const changes = tr.changes.length ? tr.changes.map((c) => '<div class="change">' + c.kind + " " + esc(c.table) + " " + esc(c.key) + " <span>" + esc(json(c.after ?? c.before)) + "</span></div>").join("") : "<div class='meta'>No writes.</div>";
+  const changes = tr.changes.length ? tr.changes.map(change).join("") : "<div class='meta'>No writes.</div>";
   $("detail").innerHTML = '<div class="trial"><h2 style="margin-top:0">' + esc(t.id) + " · trial " + (i + 1) + " · " +
     (tr.passed ? '<span class="okt">passed</span>' : '<span class="badt">failed</span>') + '</h2><div class="meta">ended: ' + tr.endReason + " · " + tr.turns + " turns · " + tr.durationMs + "ms" + (calls(tr.usage) ? " · " + usd(tr.usage.costUsd) : "") + (tr.error ? " · " + esc(tr.error) : "") +
     "</div><h2>Checks</h2>" + checks + "<h2>World changes</h2>" + changes + "<h2>Transcript</h2>" + evs + "</div>";
   $("detail").scrollIntoView({ behavior: "smooth" });
+}
+// An update shows only the fields it changed, before → after, with the whole row behind a toggle; an insert or a
+// delete shows the row.
+function change(c) {
+  const head = '<div class="change">' + c.kind + " " + esc(c.table) + " " + esc(c.key) + " ";
+  if (c.kind !== "update" || !c.before || !c.after) return head + "<span>" + esc(json(c.after ?? c.before)) + "</span></div>";
+  const shown = (v) => v === undefined ? "(unset)" : json(v);
+  const fields = Object.keys({ ...c.before, ...c.after }).filter((k) => JSON.stringify(c.before[k]) !== JSON.stringify(c.after[k]));
+  const diff = fields.map((k) => "<b>" + esc(k) + "</b> " + esc(shown(c.before[k])) + " → " + esc(shown(c.after[k]))).join(", ");
+  return head + (diff || "<span>no field changed</span>") + "<details><summary>whole row</summary><span>" + esc(json(c.after)) + "</span></details></div>";
 }
 const firstFail = R.tasks.findIndex((t) => t.trials.some((tr) => !tr.passed));
 if (firstFail >= 0) show(firstFail, R.tasks[firstFail].trials.findIndex((tr) => !tr.passed));
