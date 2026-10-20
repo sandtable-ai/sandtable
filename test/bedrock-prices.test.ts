@@ -167,6 +167,10 @@ describe("scripts/bedrock-prices.mjs", () => {
     expect(out.prices["global.xai.grok-4.7"]).toMatchObject({ input: 2, output: 6, cacheRead: 0.5, cacheWrite: 2 });
   });
 
+  it("names only the Pricing API as the source when --verified adds nothing", () => {
+    expect((out as PricesFile & { source: string }).source).toBe("AWS Pricing API (AmazonBedrock, on-demand)");
+  });
+
   it("says why a model has no price", () => {
     expect(out.unresolved["global.openai.gpt-5.5"]).toBe("no eu-west-1 usage type names gpt-5.5");
     expect(out.unresolved["example.tiny-model-v1:0"]).toBe(
@@ -188,6 +192,7 @@ describe("scripts/bedrock-prices.mjs", () => {
 
     const none = await run(dump);
     expect(none.prices["global.openai.gpt-6-luna"]).toEqual(luna);
+    expect((none as PricesFile & { source: string }).source).toBe(`AWS Pricing API (AmazonBedrock, on-demand); entries with a \`source\` URL are copied from AWS model pages (${verified})`);
     expect(none.unresolved).toEqual({ "global.openai.gpt-6-astra": "no eu-west-1 usage type names gpt-6-astra" });
 
     // Where the Pricing API has a price, it stands.

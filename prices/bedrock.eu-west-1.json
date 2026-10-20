@@ -1,7 +1,7 @@
 {
   "region": "eu-west-1",
-  "source": "AWS Pricing API (AmazonBedrock, on-demand)",
-  "generatedAt": "2026-10-20T07:33:42.810Z",
+  "source": "AWS Pricing API (AmazonBedrock, on-demand); entries with a `source` URL are copied from AWS model pages (prices/bedrock.verified.json)",
+  "generatedAt": "2026-10-20T08:07:36.268Z",
   "prices": {
     "openai.gpt-oss-120b-1:0": {
       "input": 0.18,

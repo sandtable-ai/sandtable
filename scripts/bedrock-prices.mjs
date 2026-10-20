@@ -123,15 +123,18 @@ for (const model of models) {
 
 // Only for models the Pricing API can't price: where it has a price, that one stands.
 const verified = verifiedFile ? JSON.parse(readFileSync(verifiedFile, "utf8")).prices : {};
+let fromPages = 0;
 for (const model of models) {
   const v = verified[model];
   if (prices[model] || !v) continue;
   prices[model] = { input: v.input, output: v.output, cacheRead: v.cacheRead, cacheWrite: v.cacheWrite, source: v.source, ...(v.row ? { row: v.row } : {}) };
   delete unresolved[model];
+  fromPages++;
 }
+const source = `AWS Pricing API (AmazonBedrock, on-demand)${fromPages ? `; entries with a \`source\` URL are copied from AWS model pages (${verifiedFile})` : ""}`;
 
 process.stdout.write(
-  `${JSON.stringify({ region, source: "AWS Pricing API (AmazonBedrock, on-demand)", generatedAt: new Date().toISOString(), prices, unresolved }, null, 2)}\n`,
+  `${JSON.stringify({ region, source, generatedAt: new Date().toISOString(), prices, unresolved }, null, 2)}\n`,
 );
 const missing = Object.entries(unresolved);
 if (missing.length) console.error(`unresolved (cost will show n/a):\n${missing.map(([model, why]) => `  ${model}: ${why}`).join("\n")}`);
