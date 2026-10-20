@@ -1,0 +1,35 @@
+name: Feature request
+description: Something sandtable can't do yet that you need for your agent or your customer.
+labels: ["type:feature"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you're trying to do
+      description: The agent, the customer workflow or the check you need, and where sandtable stops you today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would help
+      description: A flag, a spec key, an adapter, a report column... A YAML or command sketch helps.
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: What you do now
+      description: Your workaround, or the other tool you use for it.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - domain spec and grading
+        - init (drafting a domain)
+        - run, leaderboard and reports
+        - agent or simulated-user adapters
+        - Claude Code plugin
+        - docs
+        - something else

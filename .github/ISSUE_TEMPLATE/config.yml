@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and ideas
+    url: https://github.com/sandtable-ai/sandtable/discussions
+    about: Ask how to model a domain, read a result or plug in your agent.
+  - name: Docs
+    url: https://sandtable.dev
+    about: Guides, the CLI reference and the domain spec.
+  - name: Report a vulnerability
+    url: https://github.com/sandtable-ai/sandtable/security/advisories/new
+    about: Privately, never in a public issue.
