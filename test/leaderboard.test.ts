@@ -656,3 +656,46 @@ describe("leaderboard effort", () => {
   });
 });
 
+describe("sandtable leaderboard exit code", () => {
+  // No key or AWS setting: a model call, if one slipped through, fails instead of costing money.
+  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("AWS_") && !["ANTHROPIC_API_KEY", "OPENAI_API_KEY"].includes(k)));
+  const board = async (models: string) => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    await writeFile(path.join(dir, "models.yaml"), models);
+    // An agent whose every trial crashes, as a model without credentials does.
+    await writeFile(path.join(dir, "crash-agent.mjs"), 'export default { name: "crash", createSession: async () => ({ reply: async () => { throw new Error("no credentials for this model"); } }) };\n');
+    const args = [path.resolve("src/cli.ts"), "leaderboard", example, "-m", "models.yaml", "-u", "scripted", "-k", "1", "-t", "no-mc-number", "-o", "board"];
+    const ran = await promisify(execFile)(process.execPath, args, { cwd: dir, env }).then(
+      (r) => ({ code: 0, ...r }),
+      (e: { code: number; stdout: string; stderr: string }) => e,
+    );
+    return { ...ran, dir };
+  };
+
+  it.skipIf(!process.features.typescript)("exits 1 when every model failed or crashed, and says what to check", async () => {
+    // One agent spec that doesn't resolve, and one agent whose every trial crashes.
+    const { code, stderr, dir } = await board("models:\n  - { label: Unknown, agent: nope }\n  - { label: Crashing, agent: ./crash-agent.mjs }\n");
+    expect(code).toBe(1);
+    expect(stderr).toContain("Every model failed");
+    expect(stderr).toContain("credentials, provider and region");
+    // The board is still written, so each model's error can be read.
+    const lb = JSON.parse(await readFile(path.join(dir, "board", "leaderboard.json"), "utf8")) as { rows: { label: string; baseline: boolean; error?: string }[] };
+    expect(lb.rows.filter((r) => !r.baseline).map((r) => [r.label, r.error !== undefined])).toEqual([
+      ["Unknown", true],
+      ["Crashing", true],
+    ]);
+  });
+
+  it.skipIf(!process.features.typescript)("exits 0 when at least one model ran, even if others failed", async () => {
+    const { code, stderr } = await board("models:\n  - { label: Careful rules, agent: scripted:careful }\n  - { label: Crashing, agent: ./crash-agent.mjs }\n");
+    expect(code).toBe(0);
+    expect(stderr).not.toContain("Every model failed");
+  });
+
+  it.skipIf(!process.features.typescript)("exits 0 for a board of noop entries only: the baseline ran, and no model failed", async () => {
+    const { code, stderr } = await board("models:\n  - { label: Nothing, agent: noop }\n");
+    expect(code).toBe(0);
+    expect(stderr).not.toContain("Every model failed");
+  });
+});
+
