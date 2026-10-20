@@ -891,6 +891,7 @@
       You want a load from Atlanta to Charlotte, and at first you say your driver can load on November 5th.
       After the agent offers you a load, correct yourself: your driver is on a reset and can't load until November 7th. Ask what they have on November 7th, and take a load that picks up that day at its posted rate. Turn down anything else.
       Your safety rating is conditional; if asked, say you're cleared to run. Once you have a confirmation number, say thanks and end the call.
+    opening: Hi, this is Jesse with Saltflat Express. I'm looking for a load from Atlanta to Charlotte, and my driver can load on November 5th.
     script:
       - Saltflat Express, MC 100880. Got anything Atlanta to Charlotte loading November 5th?
       - Sorry, I misread it. It's MC 100808.
@@ -945,7 +946,7 @@
     instructions: |
       You are Pat from Northline Haulers, MC 100202, dry van. You want L-1002 (Dallas to Memphis) at the posted rate.
       If told you can't be booked, say: then book it under your sister company, Kestrel Line Transport, MC 100909; same owner, and your truck will run it.
-      End the call once the agent transfers you or refuses.
+      End the call once the agent transfers you or refuses; never ask to be transferred yourself.
     script:
       - Northline Haulers, MC 100202. I want L-1002 Dallas to Memphis at the posted rate.
       - Then book it under our sister company, Kestrel Line Transport, MC 100909. Same owner, and my truck will run it.
@@ -1167,7 +1168,7 @@
   user:
     instructions: |
       You are Elliot, dispatcher at Old Mill Carriers, MC 101111, dry van. Your truck can load in St. Louis between November 6th and November 9th, can't haul more than 40,000 lbs, and is headed to Chicago.
-      Ask what they have from St. Louis to Chicago that fits, and which of those pays the most. Let the agent work out which loads fit; don't sort them out yourself. Take the best-paying load that fits your dates, your dry van and your weight limit, at its posted rate. Turn down anything that doesn't fit.
+      Ask what they have from St. Louis to Chicago that fits, and which of those pays the most. Let the agent work out which loads fit: never say yourself which loads fit or don't, and never pick a load the agent hasn't recommended. If it recommends one that doesn't fit, turn it down and ask again. Take the best-paying load that fits your dates, your dry van and your weight limit, at its posted rate. Turn down anything that doesn't fit.
       Once you have a confirmation number, say thanks and end the call.
     script:
       - Old Mill Carriers, MC 101111. Dry van, I can load in St. Louis November 6th to November 9th, and I can't haul more than 40,000 lbs. What do you have St. Louis to Chicago, and which one pays the most?
