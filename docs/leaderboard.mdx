@@ -98,18 +98,23 @@ You need access to the models on Amazon Bedrock in eu-west-1. The board runs the
 
 The trials of 11 of the 13 models ran at commit `6ad55be`. A resume at commit `ea6fb39` (`ea6fb39ba1d69967b3b416cf07324839a6b9168d`) then did two things. It ran two models again: Claude Sonnet 5.5 at its default effort, `high` ([#170](https://github.com/sandtable-ai/sandtable/issues/170)), and all 200 of Grok 4.7's trials, after [#176](https://github.com/sandtable-ai/sandtable/issues/176) made the Converse adapter run a tool call that comes with `end_turn` (Grok sends some, and one crashed a trial). And it graded every model's trials under the rules at that commit, including [#166](https://github.com/sandtable-ai/sandtable/issues/166)'s disclosure rule and [#178](https://github.com/sandtable-ai/sandtable/issues/178)'s fixed task check. A last resume at commit `90e6e2d` (`90e6e2d01fe0c5372e68d1c816cdf01dafeeb725`) ran no model. It graded every model's trials again under [#180](https://github.com/sandtable-ai/sandtable/issues/180)'s wording rule and re-rendered every report.
 
-To run the trials again, start from a clean clone at the commit they ran at: `6ad55be` for the 11 models, and `ea6fb39` for Claude Sonnet 5.5 and Grok 4.7, which need [#170](https://github.com/sandtable-ai/sandtable/issues/170) and [#176](https://github.com/sandtable-ai/sandtable/issues/176):
+To run the board again, clone sandtable at `90e6e2d`, where the same adapters run all 13 models, and pass the [published `models.yaml`](https://github.com/sandtable-ai/leaderboard/blob/main/freight-v1/models.yaml). That file is `leaderboard/models.yaml` without Claude Fable 5.1, which `90e6e2d` still lists:
 
 ```bash
 git clone https://github.com/sandtable-ai/sandtable && cd sandtable
-git checkout 6ad55beb25d222445c46b95ae9084de3794924e6
+git checkout 90e6e2d01fe0c5372e68d1c816cdf01dafeeb725
+git clone https://github.com/sandtable-ai/leaderboard ../leaderboard
 npm ci
-node src/cli.ts leaderboard examples/freight -m leaderboard/models.yaml \
+node src/cli.ts leaderboard examples/freight -m ../leaderboard/freight-v1/models.yaml \
   --provider bedrock --region eu-west-1 --aws-profile <your-profile> \
   --prices prices/bedrock.eu-west-1.json -c 8
 ```
 
-Each model's folder holds its full `results.json` (every conversation, tool call, check and world change), a `report.html`, and `run.json`, which records the sandtable version, the commit, whether the checkout had uncommitted changes, the provider, the region and, for a Claude agent, its effort. Running the command again reuses finished models. Their stored conversations are graded again under the current rules at no model cost ([`sandtable regrade`](/reference/cli#regrade) does the same for one run). So to check the grading without paying for a model call, run the same command at `90e6e2d` with the [published results](https://github.com/sandtable-ai/leaderboard/tree/main/freight-v1) as the output folder (`-o`); every model is reused and graded again, and the board comes out the same. The README of [sandtable-ai/leaderboard](https://github.com/sandtable-ai/leaderboard) walks through it.
+The 11 models' original trials ran at `6ad55be`. Between that commit and `90e6e2d`, the only adapter change that can change a trial is [#176](https://github.com/sandtable-ai/sandtable/issues/176)'s: tool calls that come with an unusual stop reason, and empty messages an API rejects. Before it, both crashed the trial, and none of the 11 models' trials crashed. The one case it could change without a crash, a Converse call dropped on a last turn, is in the known limits below.
+
+For an exact replica of those 11 models' trials, check out `6ad55be` and pass a models file that lists the 11 models with no `effort`, such as the published `models.yaml` without its Claude Sonnet 5.5 and Grok 4.7 entries. At that commit, `leaderboard/models.yaml` still lists Claude Fable 5.1, and a models file can't set `effort`.
+
+Each model's folder holds its full `results.json` (every conversation, tool call, check and world change), a `report.html`, and `run.json`, which records the sandtable version, the commit, whether the checkout had uncommitted changes, the provider, the region and, for a Claude agent, its effort. Running the command again reuses finished models. Their stored conversations are graded again under the current rules at no model cost ([`sandtable regrade`](/reference/cli#regrade) does the same for one run). So to check the grading without paying for a model call, run the same command at `90e6e2d` with the [published results](https://github.com/sandtable-ai/leaderboard/tree/main/freight-v1) as the output folder (`-o ../leaderboard/freight-v1`); every model is reused and graded again, and the board comes out the same. The README of [sandtable-ai/leaderboard](https://github.com/sandtable-ai/leaderboard) walks through it.
 
 `leaderboard.json` records the sandtable that graded and ranked the board, version 0.1.0-alpha.1 at `90e6e2d` from a checkout with no uncommitted changes, and the prices it was costed with: `prices/bedrock.eu-west-1.json` and its sha256. Each `run.json` names the commit its model's trials ran at.
 
