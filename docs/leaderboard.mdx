@@ -20,15 +20,15 @@ Six models pass all 200 of their trials: Claude Opus 5.5, Claude Sonnet 5.5, Cla
 | 1 | GPT-6.1 Sol | 100.0% | 100.0% | 0 | | 19.6% (10/51) | $0.0062 | 5.7s |
 | 1 | Grok 4.7 | 100.0% | 100.0% | 0 | | 26.4% (14/53) | $0.026 | 15.7s |
 | 7 | GPT-6 Luna | 99.0% | 96.0% | 1 | `state:bookings#2` (2×) | 30.2% (16/53) | $0.0005 | 2.9s |
-| 8 | MiniMax M2.5 | 76.5% | 64.0% | 45 | `never-disclose-ceiling` (43×) | 46.7% (14/30) | $0.012 | 14.8s |
+| 8 | MiniMax M2.5 | 75.5% | 64.0% | 47 | `never-disclose-ceiling` (45×) | 46.7% (14/30) | $0.012 | 14.8s |
 | 9 | Qwen3 Next 80B | 56.5% | 46.0% | 74 | `never-disclose-ceiling` (67×) | 92.3% (12/13) | $0.0043 | 4.2s |
-| 10 | gpt-oss-120b | 62.0% | 42.0% | 65 | `never-disclose-ceiling` (65×) | 90.2% (37/41) | $0.0040 | 4.4s |
+| 10 | gpt-oss-120b | 59.0% | 40.0% | 71 | `never-disclose-ceiling` (71×) | 90.2% (37/41) | $0.0040 | 4.4s |
 | 11 | Nova 2 Lite | 52.0% | 36.0% | 100 | `never-disclose-ceiling` (73×) | 66.7% (10/15) | $0.0032 | 2.8s |
-| 12 | Ministral 3 14B | 64.5% | 34.0% | 66 | `never-disclose-ceiling` (28×) | 40.4% (19/47) | $0.0052 | 8.7s |
+| 12 | Ministral 3 14B | 64.0% | 34.0% | 69 | `never-disclose-ceiling` (31×) | 40.4% (19/47) | $0.0052 | 8.7s |
 | | _Do-nothing baseline_ | 32.0% | 32.0% | 0 | `state:bookings#1` (20×) | n/a | n/a | 0.0s |
 | 13 | Nemotron 3 Super 120B | 44.5% | 30.0% | 115 | `never-disclose-ceiling` (104×) | 80.0% (16/20) | $0.0060 | 3.8s |
 
-{/* RESULTS: link leaderboard.json, LEADERBOARD.md and the per-model reports once where they're published is decided. */}
+Every conversation behind these numbers is published in [sandtable-ai/leaderboard](https://github.com/sandtable-ai/leaderboard/tree/main/freight-v1): `LEADERBOARD.md`, `leaderboard.json`, the `models.yaml` the board ran, and one folder per model with its `run.json`, `results.json` and `report.html`. [The board as a page](https://sandtable-ai.github.io/leaderboard/freight-v1/leaderboard.html) links each model to its report, where every trial's checks, transcript and record changes can be read.
 
 How to read it:
 
@@ -36,19 +36,19 @@ How to read it:
 - **Rule violations** counts each rule a trial broke once, so one trial can add more than one. **Top failure** is the most common failed check, with the number of trials it failed.
 - **Cost / trial** counts the agent model's tokens only, at list price, and *p95 turn* includes throttling retries: see [What keeps the comparison fair](#what-keeps-the-comparison-fair) and [Known limits](#known-limits).
 - **GPT-6 Luna's two failures** are both the model's mistakes: in `rounds-exhausted-then-alternative` it didn't book the alternative load, L-1018, and in `three-trucks-one-call` it booked $1,300 on a load whose `max_rate` is $1,285.
-- **Saying the ceiling.** For MiniMax M2.5, Nemotron 3 Super 120B, gpt-oss-120b, Qwen3 Next 80B and Nova 2 Lite, 76% to 94% of the failed trials include a `never-disclose-ceiling` violation. Ministral 3 14B is the exception, at 28 of its 71 failed trials. Its failures are spread more widely: acting for carriers the eligibility rules exclude, and offering, booking or submitting above `max_rate`.
-- **pass^1 against pass^4.** The gap is largest for Ministral 3 14B (64.5% and 34.0%) and gpt-oss-120b (62.0% and 42.0%): they often pass a task once without passing it every time.
+- **Saying the ceiling.** For MiniMax M2.5, Nemotron 3 Super 120B, gpt-oss-120b, Qwen3 Next 80B and Nova 2 Lite, 76% to 94% of the failed trials include a `never-disclose-ceiling` violation. Ministral 3 14B is the exception, at 31 of its 72 failed trials. Its failures are spread more widely: acting for carriers the eligibility rules exclude, and offering, booking or submitting above `max_rate`.
+- **pass^1 against pass^4.** The gap is largest for Ministral 3 14B (64.0% and 34.0%) and gpt-oss-120b (59.0% and 40.0%): they often pass a task once without passing it every time.
 - **Counter-at-ceiling** is the soft rule: the share of trials with a logged counter-offer where one reached `max_rate`. Qwen3 Next 80B (12 of 13) and gpt-oss-120b (37 of 41) nearly always end up countering at the ceiling. Claude Haiku 5.5 does in 4 of 51.
 - **Empty replies.** Some agent turns had no text: Nemotron 3 Super 120B in 8 of 856, gpt-oss-120b in 2 of 753, MiniMax M2.5 in 1 of 810, and no other model in any.
 - **Every trial finished.** None of the 2,600 trials crashed or reached its turn limit; in every one, the caller hung up.
 
-The first pass ran on October 20, 2026, from 09:01 to 10:36 UTC. One resume from 10:44 to 11:04 UTC ran Claude Sonnet 5.5 and Grok 4.7 again, and regraded the other 11 models; regrading changed 16 verdicts, all on `negotiate-two-rounds` ([#178](https://github.com/sandtable-ai/sandtable/issues/178)). The published rows cost $44.45 at list prices, agent and caller together. With the two runs they replaced (Claude Sonnet 5.5 at effort `medium`, $4.77, and Grok 4.7 before [#176](https://github.com/sandtable-ai/sandtable/issues/176), $5.90), the board cost $55.12. The canary runs before it cost about $2 more.
+The first pass ran on October 20, 2026, from 09:01 to 10:36 UTC. One resume from 10:44 to 11:04 UTC ran Claude Sonnet 5.5 and Grok 4.7 again, and regraded the other 11 models; regrading changed 16 verdicts, all on `negotiate-two-rounds` ([#178](https://github.com/sandtable-ai/sandtable/issues/178)). A final regrade at 12:39 UTC, with no model calls, applied [#180](https://github.com/sandtable-ai/sandtable/issues/180)'s wording rule and changed 9 more, all from pass to fail: 6 in gpt-oss-120b, 2 in MiniMax M2.5 and 1 in Ministral 3 14B. That makes 25 changed verdicts since the first pass, each one described on this page. The published rows cost $44.45 at list prices, agent and caller together. With the two runs they replaced (Claude Sonnet 5.5 at effort `medium`, $4.77, and Grok 4.7 before [#176](https://github.com/sandtable-ai/sandtable/issues/176), $5.90), the board cost $55.12. The canary runs before it cost about $2 more.
 
 ## Setup
 
 | | |
 |---|---|
-| Domain | [`examples/freight`](https://github.com/sandtable-ai/sandtable/tree/main/examples/freight) at `ea6fb39` ("freight v1"): 8 tables, 9 tools, 18 rules (one of them soft), 4 caller personas |
+| Domain | [`examples/freight`](https://github.com/sandtable-ai/sandtable/tree/main/examples/freight) at `90e6e2d`, the commit that graded the board ("freight v1"): 8 tables, 9 tools, 18 rules (one of them soft), 4 caller personas |
 | Tasks | 50 rehearsed inbound calls. 32 must change the world (book, submit for a rep, log, call back, transfer) and 18 must not. 18 of the 50 are a hard tier: multi-load calls, corrections mid-call, negotiation across rounds, identity and re-brokering traps |
 | Trials | k = 4 per task and model: 200 conversations per model |
 | Simulated caller | Claude Sonnet 5.5 on a global Bedrock inference profile (`claude:global.anthropic.claude-sonnet-5-5`), effort `low`, the same for every model |
@@ -96,7 +96,7 @@ All 13 models in `leaderboard/models.yaml` ran. Claude Fable 5.1 isn't on this b
 
 You need access to the models on Amazon Bedrock in eu-west-1. The board runs the models in [`leaderboard/models.yaml`](https://github.com/sandtable-ai/sandtable/blob/main/leaderboard/models.yaml), with `-m leaderboard/models.yaml`.
 
-The trials of 11 of the 13 models ran at commit `6ad55be`. A single resume at commit `ea6fb39` (`ea6fb39ba1d69967b3b416cf07324839a6b9168d`) then did two things. It ran two models again: Claude Sonnet 5.5 at its default effort, `high` ([#170](https://github.com/sandtable-ai/sandtable/issues/170)), and all 200 of Grok 4.7's trials, after [#176](https://github.com/sandtable-ai/sandtable/issues/176) made the Converse adapter run a tool call that comes with `end_turn` (Grok sends some, and one crashed a trial). And it graded every model's trials under the rules at that commit, including [#166](https://github.com/sandtable-ai/sandtable/issues/166)'s disclosure rule and [#178](https://github.com/sandtable-ai/sandtable/issues/178)'s fixed task check.
+The trials of 11 of the 13 models ran at commit `6ad55be`. A resume at commit `ea6fb39` (`ea6fb39ba1d69967b3b416cf07324839a6b9168d`) then did two things. It ran two models again: Claude Sonnet 5.5 at its default effort, `high` ([#170](https://github.com/sandtable-ai/sandtable/issues/170)), and all 200 of Grok 4.7's trials, after [#176](https://github.com/sandtable-ai/sandtable/issues/176) made the Converse adapter run a tool call that comes with `end_turn` (Grok sends some, and one crashed a trial). And it graded every model's trials under the rules at that commit, including [#166](https://github.com/sandtable-ai/sandtable/issues/166)'s disclosure rule and [#178](https://github.com/sandtable-ai/sandtable/issues/178)'s fixed task check. A last resume at commit `90e6e2d` (`90e6e2d01fe0c5372e68d1c816cdf01dafeeb725`) ran no model. It graded every model's trials again under [#180](https://github.com/sandtable-ai/sandtable/issues/180)'s wording rule and re-rendered every report.
 
 To run the trials again, start from a clean clone at the commit they ran at: `6ad55be` for the 11 models, and `ea6fb39` for Claude Sonnet 5.5 and Grok 4.7, which need [#170](https://github.com/sandtable-ai/sandtable/issues/170) and [#176](https://github.com/sandtable-ai/sandtable/issues/176):
 
@@ -109,11 +109,9 @@ node src/cli.ts leaderboard examples/freight -m leaderboard/models.yaml \
   --prices prices/bedrock.eu-west-1.json -c 8
 ```
 
-Each model's folder holds its full `results.json` (every conversation, tool call, check and world change), a `report.html`, and `run.json`, which records the sandtable version, the commit, whether the checkout had uncommitted changes, the provider, the region and, for a Claude agent, its effort. Running the command again reuses finished models. Their stored conversations are graded again under the current rules at no model cost ([`sandtable regrade`](/reference/cli#regrade) does the same for one run). So to check the grading without paying for a model call, run the same command at `ea6fb39` with the published results as the output folder (`-o`).
+Each model's folder holds its full `results.json` (every conversation, tool call, check and world change), a `report.html`, and `run.json`, which records the sandtable version, the commit, whether the checkout had uncommitted changes, the provider, the region and, for a Claude agent, its effort. Running the command again reuses finished models. Their stored conversations are graded again under the current rules at no model cost ([`sandtable regrade`](/reference/cli#regrade) does the same for one run). So to check the grading without paying for a model call, run the same command at `90e6e2d` with the [published results](https://github.com/sandtable-ai/leaderboard/tree/main/freight-v1) as the output folder (`-o`); every model is reused and graded again, and the board comes out the same. The README of [sandtable-ai/leaderboard](https://github.com/sandtable-ai/leaderboard) walks through it.
 
-`leaderboard.json` records the sandtable that graded and ranked the board: version 0.1.0-alpha.1 at `ea6fb39`, from a checkout with no uncommitted changes. Each `run.json` names the commit its model's trials ran at.
-
-{/* RESULTS: where the published trajectories live (Ulises's decision). */}
+`leaderboard.json` records the sandtable that graded and ranked the board, version 0.1.0-alpha.1 at `90e6e2d` from a checkout with no uncommitted changes, and the prices it was costed with: `prices/bedrock.eu-west-1.json` and its sha256. Each `run.json` names the commit its model's trials ran at.
 
 ## Known limits
 
@@ -127,4 +125,5 @@ Each model's folder holds its full `results.json` (every conversation, tool call
 - **Tuned against three models.** Before the run, the tasks, callers and grader were debugged against canary runs of three of the 13 models (Claude Haiku 5.5, GPT-6 Luna and Qwen3 Next 80B: [#161](https://github.com/sandtable-ai/sandtable/issues/161), [#162](https://github.com/sandtable-ai/sandtable/issues/162), [#164](https://github.com/sandtable-ai/sandtable/issues/164), [#165](https://github.com/sandtable-ai/sandtable/issues/165), [#166](https://github.com/sandtable-ai/sandtable/issues/166)), and earlier development runs used only Claude agents. A task problem that only other models run into may remain.
 - **Latency isn't a clean model measure.** *p95 turn* is wall-clock time per agent turn at 8 trials in parallel. It includes throttling retries, and it depends on routing: global profiles and in-region models don't run on the same capacity.
 - **11 models ran before a tool-call fix.** Before [#176](https://github.com/sandtable-ai/sandtable/issues/176), the Converse adapter didn't run a tool call that came with `end_turn` instead of `tool_use`. Before the agent's last turn, that crashed the trial, as it did once for Grok 4.7, which is why Grok ran again. On the last turn, it dropped the call without an error. None of the other 9 Converse models' 1,800 trials crashed, so none of them sent such a call before a last turn, but their stored results can't rule out a call dropped on one. The Claude adapter already ran these calls.
+- **Cut-off replies aren't counted.** The trials ran before [#173](https://github.com/sandtable-ai/sandtable/issues/173), which counts the model calls that stopped at the 16,000-token output limit, so the board can't say how often a model hit it. The reports show no count for these runs. Empty replies (above) are the closest sign.
 - **One domain, in text.** It's a single fictional carrier-sales desk in English, over text, not audio. A model's rank here says how it follows this kind of SOP with tools, not how it does everywhere.
