@@ -155,11 +155,7 @@ export function checkTranscript(
     const { table, field, unless, never_with } = inv.never_disclose;
     const exceptions = [unless ?? []].flat();
     const words = never_with ? wordsPattern(never_with) : undefined;
-    const values = new Set<string>();
-    for (const row of world.list(table)) {
-      const v = row[field];
-      if (typeof v === "number" || (typeof v === "string" && v.trim().length >= 3)) values.add(String(v));
-    }
+    const values = protectedValues(world.list(table), field);
     // Values the agent has been shown so far: sandtable's default system prompt, then each tool result.
     const prompt = agentSystemPrompt(domain);
     const shown = new Set([...values].filter((v) => mentions(prompt, v)));
@@ -220,6 +216,16 @@ function sentenceWith(text: string, value: string, words: RegExp): string | unde
  */
 export function asciiHyphens(text: string): string {
   return text.replace(/[\u2010\u2011]/g, "-");
+}
+
+/** The values of `field` that `never_disclose` looks for: numbers, and strings of 3 or more characters. */
+export function protectedValues(rows: readonly Record<string, unknown>[], field: string): Set<string> {
+  const values = new Set<string>();
+  for (const row of rows) {
+    const v = row[field];
+    if (typeof v === "number" || (typeof v === "string" && v.trim().length >= 3)) values.add(String(v));
+  }
+  return values;
 }
 
 /** Whether `text` says `value`, in the spellings `never_disclose` matches. */

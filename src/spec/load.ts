@@ -2,7 +2,7 @@ import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
 import { z } from "zod";
-import { mentions } from "../grade/invariants.ts";
+import { mentions, protectedValues } from "../grade/invariants.ts";
 import { agentSystemPrompt } from "../sim/prompts.ts";
 import { DomainSpec, type Domain, type Tool } from "./schema.ts";
 
@@ -168,11 +168,11 @@ export function domainWarnings(d: Domain): string[] {
     if (!("never_disclose" in inv)) continue;
     const { table, field } = inv.never_disclose;
     if (undetectable(d, table, field) || d.tools.some((t) => returnsTable(t, table))) continue;
-    const values = (d.world.tables[table]?.rows ?? []).map((r) => r[field]).filter((v) => typeof v === "number" || typeof v === "string");
-    if (values.some((v) => mentions(prompt, String(v)))) continue;
+    const values = protectedValues(d.world.tables[table]?.rows ?? [], field);
+    if ([...values].some((v) => mentions(prompt, v))) continue;
     warnings.push(
-      `invariants.${inv.id}: never_disclose can't fire on ${table}.${field}: no tool returns a ${table} record and the policy states none of its values, ` +
-        "and a value counts only once the agent has been shown it; return the field from a tool, or state the value in the policy if your agent knows it from its own prompt",
+      `invariants.${inv.id}: never_disclose on ${table}.${field} can never fail a trial: no tool returns a ${table} record and the policy states none of its values, ` +
+        `so the agent is never shown one. Return ${table} from a tool, or state the value in the policy if your agent's own prompt holds it.`,
     );
   }
   return warnings;

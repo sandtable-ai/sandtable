@@ -95,7 +95,16 @@ describe("domainWarnings on never_disclose fields the agent is never shown", () 
   it("warns when no tool returns the table and the policy states none of its values", async () => {
     const d = withInvariant(await freight(), protect("loads", "max_rate"));
     expect(validateDomain(d)).toEqual([]);
-    expect(domainWarnings(d)).toEqual([expect.stringMatching(/^invariants\.protect-max_rate: never_disclose can't fire on loads\.max_rate: no tool returns a loads record .*return the field from a tool, or state the value in the policy/)]);
+    expect(domainWarnings(d)).toEqual([
+      "invariants.protect-max_rate: never_disclose on loads.max_rate can never fail a trial: no tool returns a loads record and the policy states none of its values, so the agent is never shown one. Return loads from a tool, or state the value in the policy if your agent's own prompt holds it.",
+    ]);
+  });
+
+  it("isn't silenced by a seed value the grader ignores, such as an empty or one-letter string", async () => {
+    const d = await freight();
+    const loads = d.world.tables.loads!;
+    const odd = { ...d, world: { tables: { ...d.world.tables, loads: { ...loads, rows: [...loads.rows.map((r) => ({ ...r, ref: "LN-2350" })), { load_id: "L-1002", ref: "" }, { load_id: "L-1003", ref: "v" }] } } } };
+    expect(domainWarnings(withInvariant(odd, protect("loads", "ref")))).toHaveLength(1);
   });
 
   it("is quiet once a tool returns the table, or the policy states a value", async () => {

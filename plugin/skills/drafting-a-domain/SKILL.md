@@ -21,7 +21,7 @@ The `init` drafting steps use Claude: `ANTHROPIC_API_KEY`, or `--provider bedroc
 ## Workflow
 
 1. Draft with `init`.
-2. `validate` until the schema and cross-references are clean.
+2. `validate` until the schema and cross-references are clean. A `⚠` line is a warning, not an error. For a `never_disclose` field the agent is never shown, return its table from a tool. State the value in the policy only if the real agent's prompt holds it: putting a ceiling in the prompt just to clear the warning changes what the agent knows.
 3. Resolve every item `review` lists, with the engineer.
 4. Seed the world.
 5. Give every write task a `reference`.
