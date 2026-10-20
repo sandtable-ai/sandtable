@@ -50,13 +50,26 @@ jobs:
       # (one click with 2FA), so a compromised workflow alone can never ship a version.
       - run: npm stage publish . --access public ${{ needs.check.outputs.prerelease == 'true' && '--tag next' || '' }}
 
+  # The PyPI launcher runs `npx sandtable-ai@<its own version>`, so it is published only once that
+  # version is live on npm, after a maintainer approves the staged release. Published earlier, every
+  # `uvx`/`pip` user would get ETARGET, and PyPI never accepts the same version twice (#105).
   pypi:
-    needs: check
+    needs: [check, npm]
     runs-on: ubuntu-latest
+    timeout-minutes: 130
     permissions:
       contents: read
       id-token: write   # PyPI trusted publishing
     steps:
+      - name: Wait for the npm release to go live
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          for _ in $(seq 120); do
+            [ "$(npm view "sandtable-ai@${version}" version 2>/dev/null)" = "${version}" ] && exit 0
+            sleep 60
+          done
+          echo "::error::sandtable-ai@${version} is not on npm after 2 hours. Approve the staged release on npmjs.com (or npm stage approve <id>), then re-run the failed jobs."
+          exit 1
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       - run: uv build python --out-dir python/dist
