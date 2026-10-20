@@ -23,7 +23,7 @@ import { draftTasksFromTranscripts } from "./init/transcripts.ts";
 import { DOMAIN_FILE, POLICY_PLACEHOLDER, renderDraft, TASKS_PLACEHOLDER, writeDraft } from "./init/render.ts";
 import { DomainError, loadDomain, pendingReview } from "./spec/load.ts";
 import { lintDomain } from "./grade/lint.ts";
-import { bedrockRegion, bedrockUse, ModelsFile, renderLeaderboardMarkdown, runLeaderboard, type RunInfo } from "./run/leaderboard.ts";
+import { bedrockRegion, bedrockUse, ModelsFile, pricesFile, renderLeaderboardMarkdown, runLeaderboard, type PricesFile, type RunInfo } from "./run/leaderboard.ts";
 import { z } from "zod";
 import YAML from "yaml";
 
@@ -120,10 +120,12 @@ function parseResults(text: string, file: string): SuiteResult {
   return r as SuiteResult;
 }
 
-async function loadPrices(file?: string): Promise<void> {
-  if (!file) return;
-  const added = registerPrices(JSON.parse(await readFile(file, "utf8")));
+async function loadPrices(file?: string): Promise<PricesFile | undefined> {
+  if (!file) return undefined;
+  const content = await readFile(file, "utf8");
+  const added = registerPrices(JSON.parse(content));
   console.log(`  prices: ${added.length} model(s) from ${file}`);
+  return pricesFile(file, content);
 }
 
 // Printed next steps use `npx sandtable-ai`: every way of installing sandtable needs Node.js and npm
@@ -342,7 +344,7 @@ withProviderFlags(program
   .option("--no-resume", "rerun models even when matching results already exist")
   .option("--prices <file>", PRICES_HELP)
   .action(async (domainPath: string, o: { models: string; user?: string; trials?: number; tasks?: string; concurrency: number; openaiBaseUrl?: string; out?: string; resume: boolean; prices?: string } & ProviderFlags) => {
-    await loadPrices(o.prices);
+    const prices = await loadPrices(o.prices);
     const domain = await loadDomain(await resolveDomain(domainPath));
     const parsed = ModelsFile.safeParse(YAML.parse(await readFile(o.models, "utf8")));
     if (!parsed.success) throw new Error(`${o.models}:\n${z.prettifyError(parsed.error)}`);
@@ -377,6 +379,7 @@ withProviderFlags(program
       concurrency: o.concurrency,
       resume: o.resume,
       runInfo,
+      ...(prices ? { prices } : {}),
       resolveAgent: (spec, effort) => leaderboardAgent(spec, effort, p, o.openaiBaseUrl),
       onEntry: (label, status, note) => console.log(`  ${mark[status]}  ${label}${note ? `  (${note})` : ""}`),
     });

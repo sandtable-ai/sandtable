@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
@@ -120,7 +121,19 @@ export interface LeaderboardResult {
   generatedAt: string;
   /** The sandtable that graded and ranked the rows; each model's run.json says what ran its trials. */
   sandtable?: RunInfo["sandtable"];
+  /** The `--prices` file the costs use, if one was passed. The built-in Claude prices are pinned by the commit. */
+  prices?: PricesFile;
   rows: LeaderboardRow[];
+}
+
+/** A prices file as a board records it: the path as given, and a hash of its content. */
+export interface PricesFile {
+  file: string;
+  sha256: string;
+}
+
+export function pricesFile(file: string, content: string): PricesFile {
+  return { file, sha256: createHash("sha256").update(content).digest("hex") };
 }
 
 export interface LeaderboardOptions {
@@ -138,6 +151,8 @@ export interface LeaderboardOptions {
   resume?: boolean;
   /** Written to each model's run.json when its trials run, and the `sandtable` part to leaderboard.json. */
   runInfo?: RunInfo;
+  /** The `--prices` file the costs use: recorded in leaderboard.json. */
+  prices?: PricesFile;
   /** `note` says why stored results were not reused, or why an entry was skipped. */
   onEntry?: (label: string, status: "cached" | "regraded" | "ran" | "failed" | "skipped", note?: string) => void;
 }
@@ -353,6 +368,7 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
     k,
     generatedAt: new Date().toISOString(),
     ...(opts.runInfo ? { sandtable: opts.runInfo.sandtable } : {}),
+    ...(opts.prices ? { prices: opts.prices } : {}),
     rows,
   };
   await writeFile(path.join(outDir, "leaderboard.json"), JSON.stringify(result, null, 2));
