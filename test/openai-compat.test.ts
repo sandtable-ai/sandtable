@@ -213,6 +213,19 @@ describe("openaiCompatAgent", () => {
     expect((err as Error).message).not.toContain("sk-secret");
   });
 
+  it("counts a reply cut off at the token limit (finish_reason length) in the recorded usage", async () => {
+    stubEndpoint([completion({ content: "Let me" }, "length", { prompt_tokens: 50, completion_tokens: 4096 }), say("Hi.", { prompt_tokens: 60, completion_tokens: 2 })]);
+    const { domain } = await freight();
+    const recorded: unknown[] = [];
+    const session = await openaiCompatAgent({ baseUrl: BASE, model: "gpt-4.1-mini" }).createSession({ domain, system: "s", tools: [], sessionId: "t#0", recordUsage: (_m, u) => recorded.push(u) });
+    expect(await session.reply("a", noTools)).toBe("Let me");
+    await session.reply("b", noTools);
+    expect(recorded).toEqual([
+      { input: 50, output: 4096, cacheRead: 0, maxTokensStops: 1 },
+      { input: 60, output: 2, cacheRead: 0 },
+    ]);
+  });
+
   it("records usage per request, counting cached prompt tokens as cache reads", async () => {
     stubEndpoint([
       say("one", { prompt_tokens: 1000, completion_tokens: 50, total_tokens: 1050, prompt_tokens_details: { cached_tokens: 400 } }),

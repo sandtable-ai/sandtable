@@ -28,6 +28,16 @@ describe("terminal summary", () => {
   });
 });
 
+describe("terminal usage lines", () => {
+  it("say how many model calls stopped at max_tokens, and nothing while none did", async () => {
+    const r = await runSuite({ domain: await loadDomain(path.resolve("examples/freight")), agent: freightScriptedAgent("careful"), user: scriptedUser(), taskIds: ["no-mc-number"] });
+    r.usage.agent = { "claude-haiku-5-5": { calls: 3, input: 900, output: 17000, cacheRead: 0, cacheWrite: 0 } };
+    expect(plain(renderTerminal(r))).not.toContain("max_tokens");
+    r.usage.agent["claude-haiku-5-5"]!.maxTokensStops = 1;
+    expect(plain(renderTerminal(r))).toContain("agent claude-haiku-5-5: 3 calls, 900 in, 17.0k out, 0 cache read, 0 cache write, 1 stopped at max_tokens");
+  });
+});
+
 describe("fitList", () => {
   it("shows a list whole when it fits", () => {
     expect(fitList(["walk-away", "expired-insurance"], 40)).toBe("(walk-away, expired-insurance)");

@@ -186,6 +186,19 @@ describe("bedrockConverseAgent", () => {
       expect(requests[1]!.messages.slice(0, requests[0]!.messages.length)).toEqual(requests[0]!.messages);
     });
 
+    it("counts a reply cut off at maxTokens in the recorded usage", async () => {
+      const cut = { stopReason: "max_tokens", output: { message: { role: "assistant", content: [{ text: "Let me" }] } }, usage: { inputTokens: 900, outputTokens: 16000 } };
+      const { client } = stub([cut, say("Hi.")]);
+      const usage: unknown[] = [];
+      const s = await bedrockConverseAgent({ modelId: "global.xai.grok-4.7", client }).createSession({ domain: await loadDomain(example), system: "s", tools: [], sessionId: "x", recordUsage: (_m, u) => usage.push(u) });
+      expect(await s.reply("Hello?", recording([]))).toBe("Let me");
+      await s.reply("Hello?", recording([]));
+      expect(usage).toEqual([
+        { input: 900, output: 16000, cacheRead: 0, cacheWrite: 0, maxTokensStops: 1 },
+        { input: 120, output: 20, cacheRead: 0, cacheWrite: 0 },
+      ]);
+    });
+
     it("doesn't run a call from a filtered or malformed reply, but answers it", async () => {
       for (const stopReason of ["content_filtered", "malformed_tool_use", "model_context_window_exceeded"]) {
         const { client, requests } = stub([

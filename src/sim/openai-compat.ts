@@ -114,10 +114,11 @@ function chatCompletions(opts: OpenAICompatOptions, recordUsage?: UsageRecorder)
     }
     if (!res.ok) throw new Error(`${url} returned ${res.status}: ${(await res.text()).slice(0, 500)}`);
     const data = (await res.json()) as ChatCompletion;
+    const choice = data.choices?.[0];
     // Keyed by the requested name, not the served snapshot, so the price lookup is stable.
     // Recorded even without a usage block, so an unpriced model shows cost n/a rather than $0.
-    recordUsage?.(opts.model, usageOf(data.usage));
-    const choice = data.choices?.[0];
+    // finish_reason "length": the reply hit the server's token limit and may be cut off.
+    recordUsage?.(opts.model, { ...usageOf(data.usage), ...(choice?.finish_reason === "length" ? { maxTokensStops: 1 } : {}) });
     if (!choice?.message) throw new Error(`${url} returned no choices`);
     return { message: choice.message, finishReason: choice.finish_reason ?? null };
   };

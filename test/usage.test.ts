@@ -2,7 +2,7 @@ import path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
 import { runSuite } from "../src/run/suite.ts";
-import { costOf, percentile, recordInto, registerPrices, sumUsage, type UsageByModel } from "../src/run/usage.ts";
+import { costOf, percentile, recordInto, registerPrices, sumUsage, totalTokens, type UsageByModel } from "../src/run/usage.ts";
 import { claudeAgent } from "../src/sim/claude.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
 import { loadDomain } from "../src/spec/load.ts";
@@ -27,6 +27,18 @@ describe("usage accounting", () => {
     const a = { agent: { m: { calls: 1, input: 1, output: 2, cacheRead: 3, cacheWrite: 4 } }, user: {}, costUsd: null };
     const total = sumUsage([a, a]);
     expect(total.agent.m).toEqual({ calls: 2, input: 2, output: 4, cacheRead: 6, cacheWrite: 8 });
+  });
+
+  it("counts calls that stopped at max_tokens, with no count until one has", () => {
+    const g: UsageByModel = {};
+    recordInto(g, "m", { output: 10 });
+    expect(g.m).not.toHaveProperty("maxTokensStops");
+    recordInto(g, "m", { output: 16000, maxTokensStops: 1 });
+    expect(g.m).toMatchObject({ calls: 2, maxTokensStops: 1 });
+    const trial = { agent: g, user: {}, costUsd: null };
+    expect(sumUsage([trial, trial]).agent.m).toMatchObject({ calls: 4, maxTokensStops: 2 });
+    expect(totalTokens({ a: g.m!, b: { calls: 1, input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } })).toMatchObject({ calls: 3, maxTokensStops: 1 });
+    expect(sumUsage([{ agent: { m: { calls: 1, input: 1, output: 1, cacheRead: 0, cacheWrite: 0 } }, user: {}, costUsd: null }]).agent.m).not.toHaveProperty("maxTokensStops");
   });
 
   it("computes nearest-rank percentiles", () => {
