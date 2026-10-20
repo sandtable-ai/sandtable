@@ -155,7 +155,7 @@ In about five minutes: an offline demo with no API key, the same example with Cl
     sandtable run examples/freight --agent http://localhost:8787/step --user scripted
     ```
 
-    It scores pass^1 32%: exactly what the [noop baseline](/concepts/baselines) scores, because it never books anything and only passes the tasks where the right outcome is to do nothing. That floor is the first number to know about any suite.
+    It scores pass^1 36.0% (18 of 50). It never books a load, so it passes only tasks where the right outcome is to book nothing. The [noop baseline](/concepts/baselines), an agent that never calls a tool, scores 32.0% (16 of 50) for the same reason. The toy agent passes two more tasks than noop, `double-brokering-on-yes` and `broker-claims-carrier`: in both, the agent must look the carrier up with `verify_carrier` and then book nothing, and the toy agent does look it up. The noop score is the floor of a suite, and the first number to know about it.
 
     `examples/freight` works from any directory: when there is no such folder where you run the command, sandtable uses the copy bundled with the package and prints its path.
   </Step>
