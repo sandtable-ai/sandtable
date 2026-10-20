@@ -285,6 +285,18 @@ describe("leaderboard", () => {
     expect((await run(broken, true)).seen).toEqual(["cached: undefined"]);
   });
 
+  it("rejects two labels that would share a folder before running anything", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const entries = [
+      { label: "GPT 6", agent: "scripted:careful" },
+      { label: "gpt-6", agent: "scripted:naive" },
+    ];
+    await expect(
+      runLeaderboard({ domain: await loadDomain(example), entries, user: scriptedUser(), k: 1, outDir: dir, resolveAgent: async () => { throw new Error("should not run"); } }),
+    ).rejects.toThrow('"GPT 6" and "gpt-6" would share the folder gpt-6/: give one of them another label');
+    expect(await readdir(dir)).toEqual([]);
+  });
+
   it("rejects unknown task ids before running anything", async () => {
     const domain = await loadDomain(example);
     await expect(

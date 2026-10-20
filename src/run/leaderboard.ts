@@ -329,9 +329,16 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
   const { domain, entries, user, k, outDir } = opts;
   const unknown = (opts.taskIds ?? []).filter((id) => !domain.tasks.some((t) => t.id === id));
   if (unknown.length) throw new Error(`unknown task id(s): ${unknown.join(", ")}`);
+  const folders = new Map<string, string>();
   for (const entry of entries) {
     const problem = effortProblem(entry);
     if (problem) throw new Error(`${entry.label}: ${problem}`);
+    if (entry.agent === "noop") continue;
+    // Each model keeps its results in a folder named after its label: two labels that make the same name would overwrite each other.
+    const folder = slugify(entry.label);
+    const other = folders.get(folder);
+    if (other !== undefined) throw new Error(`"${other}" and "${entry.label}" would share the folder ${folder}/: give one of them another label`);
+    folders.set(folder, entry.label);
   }
   const tasks = opts.taskIds?.length ? domain.tasks.filter((t) => opts.taskIds!.includes(t.id)) : domain.tasks;
   const taskIds = tasks.map((t) => t.id);
