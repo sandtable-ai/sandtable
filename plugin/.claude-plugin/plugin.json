@@ -1,6 +1,6 @@
 {
   "name": "sandtable",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0",
   "description": "Drive sandtable from your coding agent: draft a domain from a customer's OpenAPI spec, SOP and call transcripts, resolve review notes, write reference calls, lint, rehearse an agent with pass^k, and attribute failing trajectories to the agent, the simulated user or the task.",
   "author": {
     "name": "The sandtable authors",
