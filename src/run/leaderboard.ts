@@ -6,9 +6,10 @@ import type { Domain } from "../spec/schema.ts";
 import { noopAgent } from "../sim/noop.ts";
 import { scriptedUser } from "../sim/scripted.ts";
 import type { AgentAdapter, UserSimulator } from "../sim/types.ts";
-import { RegradeError, regradeBlocker, regradeSuite } from "./regrade.ts";
+import { changedVerdicts, RegradeError, regradeSuite } from "./regrade.ts";
 import { runSuite, type SuiteResult } from "./suite.ts";
 import { costOf, totalTokens } from "./usage.ts";
+import { writeFileAtomic } from "./write.ts";
 
 /** The models file `sandtable leaderboard -m <file>` reads. */
 export const ModelsFile = z
@@ -72,7 +73,7 @@ export interface LeaderboardOptions {
   /** Reuse an entry's results.json when it exists and matches this run (default true). */
   resume?: boolean;
   /** `note` says why stored results were not reused, or why an entry was skipped. */
-  onEntry?: (label: string, status: "cached" | "ran" | "failed" | "skipped", note?: string) => void;
+  onEntry?: (label: string, status: "cached" | "regraded" | "ran" | "failed" | "skipped", note?: string) => void;
 }
 
 export function slugify(label: string): string {
@@ -114,12 +115,6 @@ export function changedRunKey(had: RunKey | undefined, want: RunKey): string | u
   if (!had) return "they have no run.json, so their agent spec can't be checked";
   if (had.agent !== want.agent) return `they are for agent ${had.agent}, not ${want.agent}`;
   return undefined;
-}
-
-/** Trials whose verdict differs between two runs of the same trials. */
-function changedVerdicts(before: SuiteResult, after: SuiteResult): number {
-  const was = new Map(before.tasks.flatMap((t) => t.trials.map((tr) => [`${tr.taskId}#${tr.trial}`, tr.passed] as const)));
-  return after.tasks.reduce((n, t) => n + t.trials.filter((tr) => was.get(`${tr.taskId}#${tr.trial}`) !== tr.passed).length, 0);
 }
 
 function errorRow(entry: LeaderboardEntry, error: string): LeaderboardRow {
@@ -202,7 +197,7 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
     if ((opts.resume ?? true) && (await exists(file))) {
       const stored = JSON.parse(await readFile(file, "utf8")) as SuiteResult;
       const storedKey = await readFile(keyFile, "utf8").then((t) => JSON.parse(t) as RunKey, () => undefined);
-      stale = changedRunKey(storedKey, key) ?? staleReason(stored, { domain: domain.name, k, user: user.name, taskIds }) ?? regradeBlocker(domain, stored);
+      stale = changedRunKey(storedKey, key) ?? staleReason(stored, { domain: domain.name, k, user: user.name, taskIds });
       // Stored verdicts are never reused as they are: the stored conversations are graded again under the
       // current rules, so every row of the board is graded by the same grader.
       if (!stale) {
@@ -213,13 +208,13 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
           stale = err.message;
         }
       }
-      if (result) {
-        const changed = changedVerdicts(stored, result);
-        if (JSON.stringify(result) !== JSON.stringify(stored)) {
-          await writeFile(file, JSON.stringify(result, null, 2));
-          await writeFile(path.join(dir, "report.html"), renderHtml(result));
-        }
-        opts.onEntry?.(entry.label, "cached", changed ? `regraded under the current rules: ${changed} verdict(s) changed` : undefined);
+      if (result && JSON.stringify(result) === JSON.stringify(stored)) opts.onEntry?.(entry.label, "cached");
+      else if (result) {
+        // The current rules grade the stored conversations differently: rewrite their files. These hold the
+        // only copy of paid conversations, so a write is never left half done.
+        await writeFileAtomic(file, JSON.stringify(result, null, 2));
+        await writeFileAtomic(path.join(dir, "report.html"), renderHtml(result));
+        opts.onEntry?.(entry.label, "regraded", `${changedVerdicts(stored, result).length} verdict(s) changed under the current rules`);
       }
     }
     if (!result) {
@@ -227,9 +222,9 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
         const agent = await opts.resolveAgent(entry.agent);
         result = await runSuite({ domain, agent, user, k, taskIds, concurrency: opts.concurrency ?? 4 });
         await mkdir(dir, { recursive: true });
-        await writeFile(file, JSON.stringify(result, null, 2));
-        await writeFile(keyFile, JSON.stringify(key, null, 2));
-        await writeFile(path.join(dir, "report.html"), renderHtml(result));
+        await writeFileAtomic(file, JSON.stringify(result, null, 2));
+        await writeFileAtomic(keyFile, JSON.stringify(key, null, 2));
+        await writeFileAtomic(path.join(dir, "report.html"), renderHtml(result));
         fresh = true;
       } catch (err) {
         opts.onEntry?.(entry.label, "failed");

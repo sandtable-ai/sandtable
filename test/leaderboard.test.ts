@@ -119,7 +119,7 @@ describe("leaderboard", () => {
 
     const edited = { ...domain, policy: `${domain.policy}\n\nA new rule.` };
     expect((await run("scripted:naive", edited)).seen).toEqual([
-      "ran: stored results not reused: the agent or the caller would see something else now: the policy, a tool, a seed record or a task's caller instructions changed since it ran",
+      "ran: stored results not reused: the agent or the caller would be given something else now: the policy, a tool's schema, or a task's caller prompt, opening, script or turn limit changed since it ran",
     ]);
     expect((await run("scripted:naive", edited)).seen).toEqual(["cached"]);
   });
@@ -141,14 +141,16 @@ describe("leaderboard", () => {
     // A grading rule added after the run applies to the stored conversations.
     const stricter = { ...domain, invariants: [...domain.invariants, { id: "no-l1001", description: "Never book L-1001.", never: { tool: "book_load", when: { load_id: "L-1001" } } }] };
     const regraded = await run(stricter, noModel);
-    expect(regraded.seen).toEqual(["cached: regraded under the current rules: 1 verdict(s) changed"]);
+    expect(regraded.seen).toEqual(["regraded: 1 verdict(s) changed under the current rules"]);
     expect(regraded.row).toMatchObject({ passHat1: 0.5, violations: { "no-l1001": 1 } });
     const onDisk = JSON.parse(await readFile(path.join(dir, "careful-rules", "results.json"), "utf8"));
     expect(onDisk.failureModes[0]).toMatchObject({ id: "no-l1001", tasks: ["book-at-posted-rate"] });
     expect(await readFile(path.join(dir, "careful-rules", "report.html"), "utf8")).toContain("no-l1001");
 
     expect((await run(stricter, noModel)).seen).toEqual(["cached"]);
-    expect((await run(domain, noModel)).row.passHat1).toBe(1);
+    const restored = await run(domain, noModel);
+    expect(restored.seen).toEqual(["regraded: 1 verdict(s) changed under the current rules"]);
+    expect(restored.row.passHat1).toBe(1);
   });
 
   it("reruns stored results that record no inputs fingerprint, since they can't be graded again", async () => {
