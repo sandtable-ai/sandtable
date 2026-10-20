@@ -444,6 +444,8 @@ describe("leaderboard provenance", () => {
       for (const k of ["AWS_REGION", "AWS_DEFAULT_REGION", "AWS_PROFILE"]) delete process.env[k];
       process.env.AWS_CONFIG_FILE = config;
       process.env.AWS_SHARED_CREDENTIALS_FILE = path.join(dir, "none");
+      // Without a region anywhere, the AWS SDK would ask EC2 instance metadata, a network call.
+      process.env.AWS_EC2_METADATA_DISABLED = "true";
       expect(await bedrockRegion(undefined, "board")).toBe("eu-north-1");
       expect(await bedrockRegion(undefined, undefined)).toBeUndefined();
       process.env.AWS_REGION = "us-west-2";
@@ -476,7 +478,8 @@ describe("leaderboard provenance", () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
     // An empty HOME has no ~/.aws/config, and no AWS_* variable names a region or a profile.
     const home = await mkdtemp(path.join(os.tmpdir(), "sandtable-home-"));
-    const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("AWS_"))), HOME: home };
+    // AWS_EC2_METADATA_DISABLED keeps the SDK from asking EC2 instance metadata for a region, a network call.
+    const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("AWS_"))), HOME: home, AWS_EC2_METADATA_DISABLED: "true" };
     const models = path.join(dir, "models.yaml");
     await writeFile(models, 'models:\n  - { label: Luna, agent: "bedrock:global.openai.gpt-6-luna" }\n');
     const out = path.join(dir, "board");
