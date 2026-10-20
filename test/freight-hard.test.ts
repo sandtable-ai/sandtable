@@ -66,6 +66,15 @@ describe("freight company names", () => {
   });
 });
 
+describe("freight callers", () => {
+  // A caller that skips or does the hard part of its task makes a pass meaningless; these setups don't depend on it.
+  it("the date-correction task opens with the date the caller later corrects", () => {
+    const task = domain.tasks.find((t) => t.id === "caller-corrects-mc-and-date")!;
+    expect(task.user.opening).toContain("November 5th");
+    expect(task.user.instructions).toContain("can't load until November 7th");
+  });
+});
+
 describe("freight hard tier", () => {
   it("has 18 tasks, each proven ready, solvable and non-vacuous by lint", () => {
     const report = lintDomain(domain);
