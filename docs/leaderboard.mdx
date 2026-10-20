@@ -51,7 +51,7 @@ Left out: GLM 5.3 (not enabled on the account the board ran on), Gemma 3 27B (ne
 
 - **The same prompt, byte for byte.** Every model gets the same system prompt (the domain's description and policy), the same tool schemas and the same caller. Each model's `results.json` records an `inputs` hash of exactly these, and it is identical across models.
 - **The same output budget.** 16,000 output tokens per model call for every model, reasoning included.
-- **Reasoning settings.** Every model runs at its provider's default reasoning effort, and the caller at `low`. For the Claude models the default is [Anthropic's documented one](https://platform.claude.com/docs/en/build-with-claude/effort), sent explicitly in `leaderboard/models.yaml`: `medium` for Claude Opus 5.5 and Claude Haiku 5.5, `high` for Claude Sonnet 5.5 and Claude Fable 5.1. sandtable sends no reasoning settings through Converse, so every other model gets its provider default, which for some models means no reasoning. No model gets a temperature or a sampling setting.
+- **Reasoning settings.** Every model runs at its provider's default reasoning effort, and the caller at `low`. For the Claude models the default is [Anthropic's documented one](https://platform.claude.com/docs/en/build-with-claude/effort), sent explicitly in `leaderboard/models.yaml`: `medium` for Claude Opus 5.5 and Claude Haiku 5.5, `high` for Claude Sonnet 5.5 and Claude Fable 5.1. The board shows each Claude model's effort next to its name. sandtable sends no reasoning settings through Converse, so every other model gets its provider default, which for some models means no reasoning. No model gets a temperature or a sampling setting.
 - **Tool rounds.** Up to 12 tool rounds per agent turn, for every model. One accommodation is per model: through Converse, a reply whose `<reasoning>` text never closes (gpt-oss does this now and then) is thrown away and asked for again, up to twice per round. The thrown-away replies' tokens still count toward cost.
 - **Routing.** Every model with a global cross-region inference profile runs on it (all Claude models, the GPT-6 models, Grok 4.7, Nova 2 Lite). The others run in eu-west-1.
 - **Prompt caching.** Each model gets the caching its provider offers through the API sandtable calls: Claude's cache breakpoints, Nova's Converse cache points, the GPT-6 models' and Grok's own caching. The others don't cache. Caching changes cost and latency, not what the model sees.
@@ -61,11 +61,11 @@ Left out: GLM 5.3 (not enabled on the account the board ran on), Gemma 3 27B (ne
 
 You need access to the models on Amazon Bedrock in eu-west-1. The board runs the models in [`leaderboard/models.yaml`](https://github.com/sandtable-ai/sandtable/blob/main/leaderboard/models.yaml) except Claude Fable 5.1, which was held back (see [Which models](#which-models)): delete its entry to run the same set.
 
-The trials ran at commit `6ad55be`, except Claude Sonnet 5.5's, which ran again after [#170](https://github.com/sandtable-ai/sandtable/issues/170) set its effort to its default, `high`, at the commit that merged that change. Every trial was graded at the commit that merged [#166](https://github.com/sandtable-ai/sandtable/issues/166)'s disclosure rule.
+The trials of 12 of the 13 models ran at commit `6ad55be`, all but Claude Sonnet 5.5's. A single resume at a later commit then did two things: it ran Sonnet 5.5's trials again at its default effort, `high` ([#170](https://github.com/sandtable-ai/sandtable/issues/170)), and it graded every model's trials under the rules at that commit, [#166](https://github.com/sandtable-ai/sandtable/issues/166)'s disclosure rule included.
 
-{/* RESULTS: the #171 and #167 merge commits, in full, after the two sentences above. */}
+{/* RESULTS: that resume's commit, in full (c3b86da or later), in the paragraph above. */}
 
-To run the trials again, from a clean clone at the commit they ran at:
+To run the trials again, start from a clean clone at the commit they ran at: `6ad55be` for the 12 models, and the resume's commit for Claude Sonnet 5.5, since setting its effort in `leaderboard/models.yaml` came later:
 
 ```bash
 git clone https://github.com/sandtable-ai/sandtable && cd sandtable
@@ -76,7 +76,7 @@ node src/cli.ts leaderboard examples/freight -m leaderboard/models.yaml \
   --prices prices/bedrock.eu-west-1.json -c 8
 ```
 
-Each model's folder holds its full `results.json` (every conversation, tool call, check and world change), a `report.html`, and `run.json`, which records the sandtable version, the commit, whether the checkout had uncommitted changes, the provider, the region and, for a Claude agent, its effort. Running the command again reuses finished models. Their stored conversations are graded again under the current rules at no model cost ([`sandtable regrade`](/reference/cli#regrade) does the same for one run). So to check the grading without paying for a model call, run the same command at the grading commit with the published results as the output folder (`-o`).
+Each model's folder holds its full `results.json` (every conversation, tool call, check and world change), a `report.html`, and `run.json`, which records the sandtable version, the commit, whether the checkout had uncommitted changes, the provider, the region and, for a Claude agent, its effort. Running the command again reuses finished models. Their stored conversations are graded again under the current rules at no model cost ([`sandtable regrade`](/reference/cli#regrade) does the same for one run). So to check the grading without paying for a model call, run the same command at the resume's commit with the published results as the output folder (`-o`).
 
 {/* RESULTS: the date, the total cost, and where the published trajectories live. */}
 
