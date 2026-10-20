@@ -269,9 +269,10 @@ describe("leaderboard/models.yaml", () => {
     const cfg = ModelsFile.parse(YAML.parse(await readFile("leaderboard/models.yaml", "utf8")));
     expect(cfg).toMatchObject({ user: "claude:global.anthropic.claude-sonnet-5-5", k: 4 });
     expect(new Set(cfg.models.map((m) => m.label)).size).toBe(cfg.models.length);
-    // Every model at its provider's default effort: high for Sonnet 5.5 and Fable 5.1; Opus and Haiku 5.5 at sandtable's medium.
+    // Every model at its provider's default effort: high for Sonnet 5.5; Opus and Haiku 5.5 at sandtable's medium.
     const effort = (label: string) => cfg.models.find((m) => m.label === label)!.effort;
-    expect([effort("Claude Fable 5.1"), effort("Claude Sonnet 5.5"), effort("Claude Opus 5.5"), effort("Claude Haiku 5.5")]).toEqual(["high", "high", undefined, undefined]);
+    expect([effort("Claude Sonnet 5.5"), effort("Claude Opus 5.5"), effort("Claude Haiku 5.5")]).toEqual(["high", undefined, undefined]);
+    expect(cfg.models).toHaveLength(13);
     registerPrices(JSON.parse(await readFile("prices/bedrock.eu-west-1.json", "utf8")));
     // On Bedrock, claude: and bedrock: agents both record usage under the model ID they request.
     const usageKey = (spec: string) => spec.slice(spec.indexOf(":") + 1);
