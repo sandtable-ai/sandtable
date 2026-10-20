@@ -60,6 +60,7 @@ First public release.
 
 ### Fixed
 
+- **Leaderboard**: two models whose labels make the same folder name, such as `GPT 6` and `gpt-6`, are refused before anything runs, instead of one overwriting the other's results ([#200](https://github.com/sandtable-ai/sandtable/issues/200)).
 - **Leaderboard**: a model's next run without a crash removes the `crashed/` folder an earlier crashed rerun left beside its results, so publishing the model's folder no longer ships a stale crashed run. While stored results are reused next to one, the output says where it is ([#192](https://github.com/sandtable-ai/sandtable/issues/192)).
 - **Leaderboard**: a do-nothing baseline whose trials crashed shows as an error row, as a model does, instead of a 0% floor the board ranks against. The baseline runs under the board's caller when a task has no script, so an expired key or throttling could crash it ([#193](https://github.com/sandtable-ai/sandtable/issues/193)).
 - `sandtable leaderboard` no longer overwrites a model's stored results with a rerun whose trials crashed, for example after a resume without `--provider bedrock` or without credentials. The crashed run goes to a `crashed/` folder in the model's folder, the stored results stay, and the next run retries the model ([#188](https://github.com/sandtable-ai/sandtable/issues/188)).
