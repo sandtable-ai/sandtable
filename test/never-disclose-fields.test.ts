@@ -1,8 +1,8 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
 import { draftInvariantsFromSop, knownFields } from "../src/init/sop.ts";
-import { validateDomain } from "../src/spec/load.ts";
-import { DomainSpec, InvariantSpec, type Domain, type Invariant } from "../src/spec/schema.ts";
+import { domainWarnings, loadDomain, validateDomain } from "../src/spec/load.ts";
+import { DomainSpec, InvariantSpec, ToolSpec, type Domain, type Invariant } from "../src/spec/schema.ts";
 
 // never_disclose looks for numbers and strings of 3 or more characters in what the agent says.
 // On a field of booleans or very short values it can never fire, so it must not pass review silently.
@@ -86,5 +86,39 @@ describe("never_disclose never_with", () => {
     expect(parse([])).toBe(false);
     expect(parse(["max", " "])).toBe(false);
     expect(parse("max")).toBe(false);
+  });
+});
+
+describe("domainWarnings on never_disclose fields the agent is never shown", () => {
+  const getLoad = (over: object = {}) => ToolSpec.parse({ name: "get_load", description: "Look up a load.", params: { load_id: { type: "string" } }, ops: [{ get: "loads", key: "$load_id" }], ...over });
+
+  it("warns when no tool returns the table and the policy states none of its values", async () => {
+    const d = withInvariant(await freight(), protect("loads", "max_rate"));
+    expect(validateDomain(d)).toEqual([]);
+    expect(domainWarnings(d)).toEqual([
+      "invariants.protect-max_rate: never_disclose on loads.max_rate can never fail a trial: no tool returns a loads record and the policy states none of its values, so the agent is never shown one. Return loads from a tool, or state the value in the policy if your agent's own prompt holds it.",
+    ]);
+  });
+
+  it("isn't silenced by a seed value the grader ignores, such as an empty or one-letter string", async () => {
+    const d = await freight();
+    const loads = d.world.tables.loads!;
+    const odd = { ...d, world: { tables: { ...d.world.tables, loads: { ...loads, rows: [...loads.rows.map((r) => ({ ...r, ref: "LN-2350" })), { load_id: "L-1002", ref: "" }, { load_id: "L-1003", ref: "v" }] } } } };
+    expect(domainWarnings(withInvariant(odd, protect("loads", "ref")))).toHaveLength(1);
+  });
+
+  it("is quiet once a tool returns the table, or the policy states a value", async () => {
+    const d = withInvariant(await freight(), protect("loads", "max_rate"));
+    expect(domainWarnings({ ...d, tools: [...d.tools, getLoad()] })).toEqual([]);
+    // A tool that lists the rows, or returns them from a later op, shows them too; one that returns another op doesn't.
+    expect(domainWarnings({ ...d, tools: [...d.tools, getLoad({ name: "list_loads", ops: [{ list: "loads" }] })] })).toEqual([]);
+    expect(domainWarnings({ ...d, tools: [...d.tools, getLoad({ ops: [{ respond: "ok" }, { get: "loads", key: "$load_id" }], returns: 1 })] })).toEqual([]);
+    expect(domainWarnings({ ...d, tools: [...d.tools, getLoad({ ops: [{ get: "loads", key: "$load_id" }, { respond: "ok" }], returns: 1 })] })).toHaveLength(1);
+    expect(domainWarnings({ ...d, policy: `${d.policy} Never go above $2,350 on L-1001.` })).toEqual([]);
+  });
+
+  it("leaves fields validate already rejects to validate, and finds nothing to warn about in the bundled examples", async () => {
+    expect(domainWarnings(withInvariant(await freight(), protect("carriers", "do_not_use")))).toEqual([]);
+    for (const example of ["examples/freight", "examples/clinic"]) expect(domainWarnings(await loadDomain(example)), example).toEqual([]);
   });
 });

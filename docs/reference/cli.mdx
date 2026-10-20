@@ -62,6 +62,8 @@ sandtable validate ./my-domain [--strict]
 ✓ freight-carrier-sales: 8 tables, 9 tools, 18 invariants, 50 tasks
 ```
 
+A `⚠` line is a warning, not an error, and never fails `validate`, not even with `--strict`. It flags a `never_disclose` field that no tool returns and the policy doesn't state, which can never fire, since a value counts only once the agent has been shown it.
+
 ## lint
 
 Prove every task is ready, solvable, non-vacuous and graded, without any model call. See [The noop baseline and lint](/concepts/baselines).
