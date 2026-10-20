@@ -42,6 +42,7 @@ First public release.
   - `--fail-under` CI gate; `run --open` opens the report
   - `--prices <file>` adds verified prices for models sandtable doesn't price itself; `scripts/bedrock-prices.mjs` resolves Bedrock prices from the AWS Pricing API
   - the HTML report's trial view shows rule ids in their own case on the tool call that broke them, hangs each check's detail under its rule id, and wraps long tool arguments, results and record changes between fields instead of running past the card ([#70](https://github.com/sandtable-ai/sandtable/issues/70))
+  - in the HTML report's world changes, an update shows only the fields it changed, as before → after (`status "available" → "booked"`), with the whole row behind a toggle. An insert or a delete still shows its row ([#80](https://github.com/sandtable-ai/sandtable/issues/80))
 - **Claude Code plugin**: this repository is a plugin marketplace (`/plugin marketplace add sandtable-ai/sandtable`). Its skills teach a coding agent to draft and review a domain, write tasks, run it and attribute failures; a `failure-triager` subagent reads failing trials. Not part of the npm package.
 - **Python launcher**: `uvx sandtable-ai` or `pip install sandtable-ai` installs a `sandtable` command that runs the matching CLI release (Node.js 20+ required).
 - **Examples**:
