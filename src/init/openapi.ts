@@ -345,14 +345,16 @@ function pathParams(path: string): string[] {
 
 function toParam(schema: Json, deref: (x: unknown) => unknown, required: boolean, description?: unknown): DraftParam | undefined {
   const s = flatten(schema, deref);
+  // A nullable enum lists null among its values: an agent can't pass it, so the param's enum leaves it out.
+  const values = Array.isArray(s.enum) ? (s.enum.filter((v) => v !== null) as (string | number)[]) : undefined;
   let type = s.type as string | undefined;
-  if (!type && Array.isArray(s.enum)) type = typeof s.enum[0] === "number" ? "number" : "string";
+  if (!type && values) type = typeof values[0] === "number" ? "number" : "string";
   if (!type) type = "string";
   if (!["string", "number", "integer", "boolean"].includes(type)) return undefined;
   const param: DraftParam = { type: type as DraftParam["type"], required };
   const desc = (description ?? s.description) as string | undefined;
   if (desc) param.description = String(desc).trim();
-  if (Array.isArray(s.enum)) param.enum = s.enum as (string | number)[];
+  if (values?.length) param.enum = values;
   if (!required && ["string", "number", "boolean"].includes(typeof s.default)) param.default = s.default as string | number | boolean;
   return param;
 }
@@ -403,11 +405,17 @@ function requestSchema(op: Json, deref: (x: unknown) => unknown): Json | undefin
  * `node` dereferenced, with its `allOf` members (themselves flattened) merged in: their
  * properties are combined, their required lists joined, and the schema's own keywords win over
  * theirs. A member's `example` is left out, since it shows that member alone, not the whole object.
+ * An OpenAPI 3.1 nullable type (`type: [string, "null"]`) reads as its one other type, as 3.0's
+ * `nullable: true` does; a type array with two other types, or none, is left as it is.
  */
 function flatten(node: unknown, deref: (x: unknown) => unknown, depth = 0): Json {
   const schema = deref(node);
   if (!schema || typeof schema !== "object" || Array.isArray(schema)) return {};
   const { allOf, ...own } = schema as Json;
+  if (Array.isArray(own.type)) {
+    const types = own.type.filter((t) => t !== "null");
+    if (types.length === 1) own.type = types[0];
+  }
   if (!Array.isArray(allOf) || depth > 20) return own;
   const parts = allOf.map((member) => {
     const { example: _, ...rest } = flatten(member, deref, depth + 1);
