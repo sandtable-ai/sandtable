@@ -10,6 +10,7 @@ import { formatPercent, renderTerminal } from "./report/terminal.ts";
 import { renderHtml } from "./report/html.ts";
 import { criticalFailures, everyTrialFailed, runSuite, type SuiteResult } from "./run/suite.ts";
 import { changedVerdicts, RegradeError, regradeSuite } from "./run/regrade.ts";
+import { baselineSnapshot, checkBaseline } from "./run/compare.ts";
 import { parseResults } from "./run/read.ts";
 import { writeFileAtomic } from "./run/write.ts";
 import { claudeAgent, claudeUser, providerOf, type ClaudeOptions, type Provider } from "./sim/claude.ts";
@@ -294,12 +295,19 @@ withProviderFlags(program
   .option("-o, --out <dir>", "output directory for results.json and report.html")
   .option("--no-html", "skip the HTML report")
   .option("--fail-under <pct>", "exit 1 if pass^k is below this percentage (CI gate)", percent)
+  .option("--baseline <results>", "a previous run's results.json: also show which tasks broke or got fixed since, and how pass^k moved")
   .option("--open", "open the HTML report in the browser when the run finishes")
   .option("--prices <file>", PRICES_HELP)
-  .action(async (domainPath: string, o: { agent: string; user: string; openaiBaseUrl?: string; trials: number; tasks?: string; concurrency: number; out?: string; html: boolean; failUnder?: number; open?: boolean; prices?: string } & ProviderFlags) => {
+  .action(async (domainPath: string, o: { agent: string; user: string; openaiBaseUrl?: string; trials: number; tasks?: string; concurrency: number; out?: string; html: boolean; failUnder?: number; baseline?: string; open?: boolean; prices?: string } & ProviderFlags) => {
     await loadPrices(o.prices);
     const domain = await loadDomain(await resolveDomain(domainPath));
     if (domain.tasks.length === 0) throw new Error(`${domain.name} has no tasks yet: add some to tasks.yaml`);
+    // Read the baseline before any trial runs, so a wrong file costs no model calls.
+    let baseline: SuiteResult | undefined;
+    if (o.baseline !== undefined) {
+      baseline = parseResults(await readFile(o.baseline, "utf8"), o.baseline);
+      checkBaseline(baseline, domain.name, o.baseline);
+    }
     const agent = await resolveAgent(o.agent, providerOpts(o), o.openaiBaseUrl);
     const user = resolveUser(o.user, providerOpts(o), o.openaiBaseUrl);
     let done = 0;
@@ -317,7 +325,8 @@ withProviderFlags(program
       },
     });
     if (process.stderr.isTTY) process.stderr.write("\r".padEnd(72) + "\r");
-    console.log(renderTerminal(result));
+    if (baseline) result.baseline = baselineSnapshot(baseline);
+    console.log(renderTerminal(result, o.baseline ? { baseline: o.baseline } : {}));
     const out = await save(result, o.out ?? defaultOut(domain.name), o.html);
     console.log(`\n  results: ${path.join(out, "results.json")}${o.html ? `\n  report:  ${path.join(out, "report.html")}` : ""}`);
     if (failIfNothingGraded(result)) return;

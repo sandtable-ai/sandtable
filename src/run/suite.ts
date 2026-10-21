@@ -4,6 +4,7 @@ import { passHatK } from "../grade/passk.ts";
 import { pendingReview, type PendingItem } from "../spec/load.ts";
 import type { Domain, Task } from "../spec/schema.ts";
 import type { AgentAdapter, UserSimulator } from "../sim/types.ts";
+import type { BaselineSnapshot } from "./compare.ts";
 import { runEpisode, type TrialResult } from "./episode.ts";
 import { inputsFingerprint } from "./inputs.ts";
 import { percentile, sumUsage, type Usage } from "./usage.ts";
@@ -77,6 +78,8 @@ export interface SuiteResult {
   pendingReview: PendingItem[];
   /** Time the agent took to answer each user turn, tool calls included. */
   latency: { agentTurnP50Ms: number | null; agentTurnP95Ms: number | null };
+  /** The earlier run this one was compared with (`run --baseline`); reports show what changed since. */
+  baseline?: BaselineSnapshot;
 }
 
 export interface TagScore {

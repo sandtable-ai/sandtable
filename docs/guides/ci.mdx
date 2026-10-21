@@ -2,7 +2,7 @@
 title: "Test AI agents in CI: gate pull requests on pass^k"
 sidebarTitle: "Use it in CI"
 description: "Gate pull requests on agent reliability: free offline checks on every change, and a model-backed rehearsal that fails the build below a pass^k threshold."
-keywords: ["continuous integration", "GitHub Actions", "--fail-under", "regression testing", "exit codes", "prompt changes"]
+keywords: ["continuous integration", "GitHub Actions", "--fail-under", "--baseline", "regression testing", "exit codes", "prompt changes"]
 ---
 
 The goal is simple: a prompt tweak, model swap or tool change that breaks a customer rule should fail the build, the same way a broken unit test does. `sandtable` gives you two tiers for that.
@@ -122,6 +122,42 @@ Until sandtable reaches 1.0, pin an exact version of `sandtable-ai` in `package.
   </Tab>
 </Tabs>
 
+## Compare with the last run on main
+
+`--fail-under` says whether this run is good enough. `--baseline` says what changed: it compares the run with an earlier `results.json` of the same domain and lists the tasks that broke or got fixed, new failures first, with pass^1 and pass^k before and after ([details](/reference/cli#compare-with-a-baseline)). The report shows the same changes at the top, so a reviewer opening the artifact sees the regressions first.
+
+Keep the last good run on `main` as the baseline. One way is to run the same job on pushes to `main` too, and on a pull request, download the newest artifact from `main` before rehearsing:
+
+```yaml
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: read   # gh run download reads artifacts of other runs
+
+# in the rehearse job, before the Rehearse step:
+      - name: Fetch the baseline from main
+        if: github.event_name == 'pull_request'
+        run: |
+          run_id=$(gh run list --workflow sandtable.yml --branch main --event push --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          [ -n "$run_id" ] && gh run download "$run_id" --name sandtable-report --dir .sandtable/baseline || echo "no baseline yet"
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Rehearse
+        run: |
+          baseline=()
+          [ -f .sandtable/baseline/results.json ] && baseline=(--baseline .sandtable/baseline/results.json)
+          npx sandtable-ai run ./sandtable --agent http://localhost:8787/step \
+            --user claude:claude-haiku-5-5 -k 3 --fail-under 85 --out .sandtable/ci "${baseline[@]}"
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+The first pull request, before `main` has a run, rehearses without a baseline. Compare like with like: keep the simulated user and k the same as on `main`, since the comparison names any difference but can't take it out of the numbers. The comparison never changes the exit code.
+
 ## Choosing the threshold and k
 
 - **Measure first.** Run the suite a few times on `main` and set `--fail-under` a little below what the current agent reliably scores. Raise it as the agent improves.
@@ -136,4 +172,4 @@ Each run costs tasks × k conversations. For scale: the first 10 tasks of the bu
 
 ## Coming next
 
-Comparing a run against a stored baseline and posting pass^k deltas as a pull request comment are planned ([#12](https://github.com/sandtable-ai/sandtable/issues/12), [#13](https://github.com/sandtable-ai/sandtable/issues/13)), as are critical tasks that fail the build on their own ([#28](https://github.com/sandtable-ai/sandtable/issues/28)).
+Posting the changes since the baseline as a pull request comment is planned ([#13](https://github.com/sandtable-ai/sandtable/issues/13)), as are critical tasks that fail the build on their own ([#28](https://github.com/sandtable-ai/sandtable/issues/28)).
