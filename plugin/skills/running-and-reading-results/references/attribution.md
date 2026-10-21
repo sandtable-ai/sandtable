@@ -34,9 +34,11 @@ The agent attempted a forbidden call or said a protected value. Usually the **ag
 
 ### `state`
 The world did not end as expected. Read `changes` and the transcript:
-- The agent never attempted the write, or wrote the wrong row, while the user asked clearly → **agent**.
+- The agent never attempted the write, or wrote the wrong row, while the user asked clearly and the records support the request → **agent**.
+- The agent stopped because the records contradict the request (the item isn't on the order, the account shows another membership level) → check the seed rows, and the task's `given.rows`, against `user.instructions`. If they disagree, it's the **task spec**, and the agent was right to stop: fix the row or the instructions so they agree. Only when the records do support the request did the agent misread them → **agent**.
 - The tool call failed with a tool error the real API would not return, or succeeded where the real API would refuse → **task spec** (tool modelling).
 - The user never asked, gave up early, or accepted something outside its goal → **simulated user**.
+- The user stated a fact its instructions don't contain (the item's condition, a receipt, a date), and the agent acted on it → **simulated user**, but the fix goes into the task: add the fact to `user.instructions`, so every trial gets the same answer.
 - The agent did what the SOP says, and the expectation wants something else (an exact rate where the SOP allows a band, a row the SOP would not create) → **task spec**.
 
 ### `called` / `not_called`
@@ -68,6 +70,8 @@ These follow runs of the bundled, fictional freight domain: the first live runs 
 **The agent leaked the ceiling.** In `walk-away-above-ceiling`, a firm caller refused every offer, and in one of two trials the agent said "I can't go past $1,450 on this one" without logging that as a counter-offer. $1,450 is the load's `max_rate`, so `never-disclose-ceiling` failed. Offering the ceiling as a logged counter is allowed; stating it as a limit is not. The user behaved. Owner: **agent**. Fix: the agent's negotiation instructions (log every counter with `log_offer`, raise it in small steps, never call a rate the limit).
 
 **The agent booked before vetting.** `book_load` came before any `verify_carrier`, and `verify-before-book` failed with "book_load(...) was called without a prior successful verify_carrier for the same mc_number". Owner: **agent**. Fix: make verification the first step in its prompt or code.
+
+**The careful agent lost.** In a task drafted from a support chat, the caller asks to add a jacket to an existing refund, but the drafted seed order holds only jeans. One model looked the order up, said the jacket isn't on it and changed nothing, and the `state` check failed. Another model added the jacket without checking, and passed. The seed row contradicts `user.instructions`, so the owner is the **task spec**, and the model that stopped was right. Fix: make the order hold the jacket (in the seed or with `given.rows`), then rerun the task for every model before comparing them.
 
 **The task could not be passed.** A drafted task expected `loads L-1001 status: booked`, but the drafted booking tool only created a booking row. `lint` had already said `NOT ready`. Owner: **task spec**. Fix: resolve the side-effect review note (add the `update` op), then rerun `lint`.
 
