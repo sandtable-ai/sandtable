@@ -1,5 +1,5 @@
 import { comparisonOf, type Comparison, type TaskChange } from "../run/compare.ts";
-import { criticalFailures, type SoftScore, type SuiteResult } from "../run/suite.ts";
+import { gradedOutcomes, skippedTrials, trialStatus, type SoftScore, type SuiteResult, type TaskSummary } from "../run/suite.ts";
 import { totalTokens, type UsageByModel } from "../run/usage.ts";
 
 const useColor = process.stdout.isTTY && !process.env.NO_COLOR;
@@ -57,6 +57,24 @@ export function softLine(x: SoftScore): string {
   return `${formatPercent(x.rate).padStart(6)}  ${dim(`${x.broken} of ${x.applied} ${x.tool ? `trials that called ${x.tool}` : "trials"}`)}`;
 }
 
+/** "30%–95%": a 95% interval, in whole percent. */
+export function formatInterval(i: { low: number; high: number }): string {
+  return `${Math.round(i.low * 100)}%–${Math.round(i.high * 100)}%`;
+}
+
+const MARK = { passed: green("✓"), failed: red("✗"), skipped: dim("○") } as const;
+
+/** Graded trials of a task; results from before verdicts have no count, and every trial was graded. */
+const gradedOf = (t: TaskSummary) => t.graded ?? t.trials.length;
+
+/** What a task's row adds after passes/graded: a flaky or skipped verdict, or how many trials were skipped. */
+function taskNote(t: TaskSummary): string {
+  if (t.verdict === "skipped") return dim("skipped");
+  const skipped = t.skipped ? `${t.skipped} skipped` : "";
+  if (t.verdict === "flaky") return skipped ? `${yellow("flaky")}${dim(`, ${skipped}`)}` : yellow("flaky");
+  return dim(skipped);
+}
+
 /**
  * The run's summary. A run compared with a baseline ends with what changed since; `baseline` names the
  * file it came from (else the block names the baseline's run id).
@@ -69,27 +87,43 @@ export function renderTerminal(r: SuiteResult, opts: { baseline?: string } = {})
   }
   lines.push("");
   const width = Math.max(4, ...r.tasks.map((t) => t.id.length));
-  const fracWidth = Math.max(...r.tasks.map((t) => `${t.passes}/${t.trials.length}`.length));
+  const fracWidth = Math.max(...r.tasks.map((t) => `${t.passes}/${gradedOf(t)}`.length));
   lines.push(dim(`  ${"task".padEnd(width)}  trials${" ".repeat(Math.max(0, r.k - 6))}  pass`));
   // Critical tasks first, each marked, then the rest; both in spec order.
   const critical = r.tasks.filter((t) => t.critical);
   for (const t of [...critical, ...r.tasks.filter((t) => !t.critical)]) {
-    const marks = t.trials.map((tr) => (tr.passed ? green("✓") : red("✗"))).join("");
+    const marks = t.trials.map((tr) => MARK[trialStatus(tr)]).join("");
     const pad = " ".repeat(Math.max(0, 6 - t.trials.length));
-    const frac = `${t.passes}/${t.trials.length}`;
-    const allPassed = t.passes === t.trials.length;
-    const label = t.critical ? `${" ".repeat(fracWidth - frac.length)}  ${allPassed ? dim("critical") : red("critical")}` : "";
-    lines.push(`  ${t.id.padEnd(width)}  ${marks}${pad}  ${allPassed ? green(frac) : red(frac)}${label}`);
+    const graded = gradedOf(t);
+    const frac = `${t.passes}/${graded}`;
+    const shown = graded === 0 ? dim(frac) : t.passes === graded ? green(frac) : red(frac);
+    const label = t.critical ? (t.passes < graded ? red("critical") : dim("critical")) : "";
+    const notes = [label, taskNote(t)].filter(Boolean).join("  ");
+    lines.push(`  ${t.id.padEnd(width)}  ${marks}${pad}  ${shown}${notes ? `${" ".repeat(fracWidth - frac.length)}  ${notes}` : ""}`);
   }
   lines.push("");
   const hats = Object.entries(r.passHat)
     .filter(([j]) => j === "1" || j === String(r.k))
     .map(([j, v]) => `${bold(`pass^${j}`)} ${formatPercent(v)}`);
+  // pass@k and the flip rate say something only with more than one trial per task.
+  if (r.k > 1 && r.passAt) hats.push(`${bold(`pass@${r.k}`)} ${formatPercent(r.passAt[String(r.k)] ?? Number.NaN)}`);
+  if (r.k > 1 && r.flipRate !== undefined) hats.push(`${bold("flip rate")} ${r.flipRate === null ? "n/a" : formatPercent(r.flipRate)}`);
   lines.push(`  ${hats.join("   ")}`);
   if (critical.length) {
-    const passed = critical.length - criticalFailures(r).length;
+    const passed = critical.filter((t) => gradedOf(t) > 0 && t.passes === gradedOf(t)).length;
     const line = `${passed} of ${critical.length} passed every trial`;
     lines.push(`  ${bold("critical")} ${passed === critical.length ? green(line) : red(line)}`);
+  }
+  const skipped = skippedTrials(r);
+  if (skipped.length) {
+    const trials = r.tasks.reduce((n, t) => n + t.trials.length, 0);
+    lines.push(yellow(`  ${skipped.length} of ${trials} trial(s) skipped (ended in an error): left out of the scores`));
+  }
+  // The estimators need k graded trials of a task to count it in pass^k and pass@k.
+  const short = r.tasks.filter((t) => gradedOutcomes(t).length < r.k).length;
+  if (short) {
+    const tasks = `${short} task${short === 1 ? "" : "s"}`;
+    lines.push(dim(r.k === 1 ? `  pass^1 leaves out ${tasks} with no graded trial` : `  pass^${r.k} and pass@${r.k} leave out ${tasks} with fewer than ${r.k} graded trials`));
   }
   lines.push(dim(`  agent turn latency p50 ${formatMs(r.latency.agentTurnP50Ms)} · p95 ${formatMs(r.latency.agentTurnP95Ms)}`));
   const usageLines = [tokens("agent", r.usage.agent), tokens("user", r.usage.user)].filter(Boolean);
@@ -114,6 +148,35 @@ export function renderTerminal(r: SuiteResult, opts: { baseline?: string } = {})
     lines.push(bold("  Soft rules") + dim(" (reported, never fail a trial)"));
     const sw = Math.max(...soft.map((x) => x.id.length));
     for (const x of soft) lines.push(`  ${x.id.padEnd(sw)}  ${softLine(x)}`);
+  }
+
+  const flaky = r.tasks.filter((t) => t.verdict === "flaky");
+  if (flaky.length) {
+    lines.push("");
+    lines.push(bold("  Flaky tasks") + dim(" (passed some trials, failed others)"));
+    const fw = Math.max(...flaky.map((t) => t.id.length));
+    for (const t of flaky) {
+      const ci = t.interval ? dim(`  95% interval ${formatInterval(t.interval)}`) : "";
+      lines.push(`  ${t.id.padEnd(fw)}  ${t.passes} of ${gradedOf(t)} passed${ci}`);
+    }
+  }
+
+  if (skipped.length) {
+    lines.push("");
+    lines.push(bold("  Skipped trials") + dim(" (ended in an error, not graded)"));
+    // Grouped by error, like failure modes: how many trials, then which tasks.
+    const errors = new Map<string, { count: number; tasks: string[] }>();
+    for (const tr of skipped) {
+      const e = errors.get(tr.error ?? "unknown error") ?? { count: 0, tasks: [] };
+      e.count++;
+      if (!e.tasks.includes(tr.taskId)) e.tasks.push(tr.taskId);
+      errors.set(tr.error ?? "unknown error", e);
+    }
+    for (const [error, { count, tasks }] of errors) {
+      const head = `  ${count}× `;
+      lines.push(`  ${yellow(`${count}×`)} ${clip(error, WIDTH - head.length)}`);
+      lines.push(dim(`     ${fitList(tasks, WIDTH - 5)}`));
+    }
   }
 
   if (r.failureModes.length) {
@@ -143,7 +206,7 @@ function pointsDelta(before: number, after: number): string {
 
 /**
  * What changed since the baseline, regressions first: one line per task whose result moved, the added,
- * removed and unchanged tasks counted on a line each, then pass^1 and pass^k before and after.
+ * removed, ungraded and unchanged tasks counted on a line each, then pass^1 and pass^k before and after.
  */
 function renderComparison(c: Comparison, source: string | undefined): string[] {
   const b = c.baseline;
@@ -175,6 +238,11 @@ function renderComparison(c: Comparison, source: string | undefined): string[] {
     lines.push(`${head.replace(/\d+ failing/, (m) => red(m))}${dim(fitList(added, WIDTH - head.length))}`);
   }
   if (removed.length) lines.push(`  − ${removed.length} only in the baseline ${dim(fitList(removed, WIDTH - 27 - String(removed.length).length))}`);
+  const ungraded = ids("skipped");
+  if (ungraded.length) {
+    const head = `  ○ ${ungraded.length} not graded in one of the runs `;
+    lines.push(`${head}${dim(fitList(ungraded, WIDTH - head.length))}`);
+  }
   if (same) lines.push(dim(`  = ${same} unchanged`));
 
   lines.push("");

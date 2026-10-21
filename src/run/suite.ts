@@ -1,6 +1,6 @@
 import type { CheckKind } from "../grade/expectations.ts";
 import { invariantTool } from "../grade/invariants.ts";
-import { passHatK } from "../grade/passk.ts";
+import { passAtK, passHatK, wilsonInterval } from "../grade/passk.ts";
 import { pendingReview, type PendingItem } from "../spec/load.ts";
 import type { Domain, Task } from "../spec/schema.ts";
 import type { AgentAdapter, UserSimulator } from "../sim/types.ts";
@@ -9,6 +9,12 @@ import { runEpisode, type TrialResult } from "./episode.ts";
 import { inputsFingerprint } from "./inputs.ts";
 import { percentile, sumUsage, type Usage } from "./usage.ts";
 
+/**
+ * A task's verdict over its graded trials: `passed` when every one passed, `failed` when none did, `flaky`
+ * when some did, and `skipped` when every trial was skipped, so nothing about the agent was graded.
+ */
+export type Verdict = "passed" | "failed" | "flaky" | "skipped";
+
 export interface TaskSummary {
   id: string;
   description?: string;
@@ -16,7 +22,15 @@ export interface TaskSummary {
   /** Set only on a critical task: any failed trial fails `sandtable run`. */
   critical?: true;
   trials: TrialResult[];
+  /** Trials that passed. */
   passes: number;
+  /** Trials that were graded: all of them but the skipped ones. Absent in results from before verdicts. */
+  graded?: number;
+  /** Trials skipped because they ended in an error before the agent broke a rule. */
+  skipped?: number;
+  verdict?: Verdict;
+  /** The 95% Wilson score interval for passes / graded; absent when no trial was graded. */
+  interval?: { low: number; high: number };
 }
 
 export interface FailureMode {
@@ -66,8 +80,19 @@ export interface SuiteResult {
   startedAt: string;
   durationMs: number;
   tasks: TaskSummary[];
-  /** pass^1 .. pass^k */
+  /** pass^1 .. pass^k over graded trials. A task with fewer than j graded trials is left out of pass^j. */
   passHat: Record<string, number>;
+  /** pass@1 .. pass@k over graded trials, left out the same way. Absent in results from before verdicts. */
+  passAt?: Record<string, number>;
+  /**
+   * The share of tasks with at least 2 graded trials that passed some and failed others (flaky), from 0 to 1;
+   * null when no task has 2 graded trials, as with k = 1.
+   */
+  flipRate?: number | null;
+  /** Ids of the flaky tasks, in spec order. */
+  flaky?: string[];
+  /** Trials skipped because they ended in an error before the agent broke a rule. */
+  skipped?: number;
   failureModes: FailureMode[];
   /** pass^1 and pass^k per task tag ("untagged" for tasks without tags). */
   byTag: TagScore[];
@@ -144,36 +169,74 @@ export function summarize(
   tasks: readonly Task[],
   results: readonly TrialResult[],
   k: number,
-): Pick<SuiteResult, "tasks" | "passHat" | "failureModes" | "byTag" | "soft"> {
+): Pick<SuiteResult, "tasks" | "passHat" | "passAt" | "flipRate" | "flaky" | "skipped" | "failureModes" | "byTag" | "soft"> {
   const summaries: TaskSummary[] = tasks.map((task) => {
     const trials = results.filter((r) => r.taskId === task.id).sort((a, b) => a.trial - b.trial);
+    const passes = trials.filter((t) => t.passed).length;
+    const graded = trials.filter((t) => !t.skipped).length;
+    const interval = wilsonInterval(passes, graded);
     return {
       id: task.id,
       description: task.description,
       tags: task.tags,
       ...(task.critical ? { critical: true as const } : {}),
       trials,
-      passes: trials.filter((t) => t.passed).length,
+      passes,
+      graded,
+      skipped: trials.length - graded,
+      verdict: verdictOf(passes, graded),
+      ...(interval ? { interval } : {}),
     };
   });
-  const outcomes = summaries.map((s) => s.trials.map((t) => t.passed));
+  const outcomes = summaries.map(gradedOutcomes);
   const passHat: Record<string, number> = {};
-  for (let j = 1; j <= k; j++) passHat[String(j)] = passHatK(outcomes, j);
+  const passAt: Record<string, number> = {};
+  for (let j = 1; j <= k; j++) {
+    passHat[String(j)] = passHatK(outcomes, j);
+    passAt[String(j)] = passAtK(outcomes, j);
+  }
+  const repeated = summaries.filter((s) => (s.graded ?? 0) >= 2);
+  const flaky = summaries.filter((s) => s.verdict === "flaky").map((s) => s.id);
   return {
     tasks: summaries,
     passHat,
+    passAt,
+    flipRate: repeated.length ? flaky.length / repeated.length : null,
+    flaky,
+    skipped: summaries.reduce((n, s) => n + (s.skipped ?? 0), 0),
     failureModes: failureModes(results),
     byTag: tagScores(summaries, k),
     soft: softScores(domain, results),
   };
 }
 
+function verdictOf(passes: number, graded: number): Verdict {
+  if (graded === 0) return "skipped";
+  return passes === graded ? "passed" : passes === 0 ? "failed" : "flaky";
+}
+
+/** Whether each graded trial of a task passed, in trial order: skipped trials are left out. */
+export function gradedOutcomes(task: Pick<TaskSummary, "trials">): boolean[] {
+  return task.trials.filter((t) => !t.skipped).map((t) => t.passed);
+}
+
+/** A trial's status: skipped trials were not graded, so they neither passed nor failed. */
+export function trialStatus(trial: Pick<TrialResult, "passed" | "skipped">): "passed" | "failed" | "skipped" {
+  return trial.skipped ? "skipped" : trial.passed ? "passed" : "failed";
+}
+
+/** The trials that were skipped, in task and trial order. */
+export function skippedTrials(result: Pick<SuiteResult, "tasks">): TrialResult[] {
+  return result.tasks.flatMap((t) => t.trials.filter((tr) => tr.skipped));
+}
+
 /**
  * The critical tasks with at least one failed trial, in spec order. Any one of them fails `sandtable run`,
- * whatever pass^k and `--fail-under` say.
+ * whatever pass^k and `--fail-under` say. A skipped trial isn't a failure: a run with one is incomplete,
+ * and `run` fails it for that.
  */
 export function criticalFailures(result: Pick<SuiteResult, "tasks">): TaskSummary[] {
-  return result.tasks.filter((t) => t.critical && t.passes < t.trials.length);
+  return result.tasks.filter((t) => t.critical && t.passes < (t.graded ?? t.trials.length));
 }
 
 /**
@@ -214,16 +277,20 @@ function tagScores(summaries: TaskSummary[], k: number): TagScore[] {
   }
   return [...groups.entries()]
     .map(([tag, tasks]) => {
-      const outcomes = tasks.map((t) => t.trials.map((tr) => tr.passed));
+      const outcomes = tasks.map(gradedOutcomes);
       return { tag, tasks: tasks.length, passHat1: passHatK(outcomes, 1), passHatK: passHatK(outcomes, k) };
     })
     .sort((a, b) => a.passHat1 - b.passHat1 || a.tag.localeCompare(b.tag));
 }
 
-/** Cluster failed checks across trials so the most common failure surfaces first. */
+/**
+ * Cluster failed checks across trials so the most common failure surfaces first. Skipped trials are left
+ * out: their error is not the agent's failure, and reports list them on their own.
+ */
 function failureModes(results: readonly TrialResult[]): FailureMode[] {
   const modes = new Map<string, FailureMode>();
   for (const r of results) {
+    if (r.skipped) continue;
     const seen = new Set<string>();
     for (const c of r.checks) {
       if (c.passed || seen.has(c.id)) continue;

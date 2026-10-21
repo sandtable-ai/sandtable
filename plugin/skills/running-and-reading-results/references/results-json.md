@@ -18,9 +18,15 @@ SuiteResult
   inputs                       hash of the agent's prompt and tool schemas and each task's caller prompt, opening and
                                turn limit; `sandtable regrade` re-scores the run only while they are unchanged
   startedAt, durationMs
-  passHat                      { "1": 0.95, "2": 0.9 }: pass^1 .. pass^k, as fractions
+  passHat                      { "1": 0.95, "2": 0.9 }: pass^1 .. pass^k, as fractions, over graded trials only;
+                               a task with fewer than j graded trials is left out of pass^j (null if all are)
+  passAt                       pass@1 .. pass@k, the same way: at least one of j trials passes
+  flipRate                     share of tasks with 2+ graded trials that are flaky; null with k = 1
+  flaky[]                      ids of flaky tasks (some graded trials passed, some failed)
+  skipped                      trials skipped across the run; run exits 1 when it isn't 0
   byTag[]                      { tag, tasks, passHat1, passHatK }; "untagged" for tasks without tags
-  failureModes[]               { id, kind, count, tasks[], example }: failed checks clustered, most frequent first
+  failureModes[]               { id, kind, count, tasks[], example }: failed checks of graded trials clustered, most
+                               frequent first; skipped trials' errors are not in it
   soft[]                       { id, description, tool?, applied, broken, rate, tasks[], example? }: one per soft
                                invariant; rate = broken / applied trials (null if it never applied). Never a failure
   pendingReview[]              { kind, id, source? }: non-empty means the run is provisional
@@ -33,13 +39,16 @@ SuiteResult
                                Anthropic API by the model Claude reports
   latency                      { agentTurnP50Ms, agentTurnP95Ms }
   baseline?                    only with `run --baseline`: { runId, startedAt, agent, user, k, inputs?, passHat,
-                               tasks[]: { id, passes, trials } } of the run it was compared with; reports work out
-                               what changed from it
-  tasks[]                      { id, description, tags[], critical?, passes, trials[] }; critical: true only on a
-                               critical task, which fails `run` when any of its trials fails
+                               tasks[]                      { id, description, tags[], critical?, passes, graded, skipped, verdict, interval?,
+                               trials[] }: critical: true only on a critical task, which fails `run` when a graded
+                               trial fails; verdict "passed" | "failed" | "flaky" | "skipped" over graded trials;
+                               interval { low, high } is the 95% Wilson interval for passes / graded. Runs from
+                               before verdicts lack these, and graded every trial
     trials[]                   sorted by trial number
       taskId, trial            trial counts from 0
-      passed
+      passed                   false for a skipped trial too
+      skipped?                 true when it ended in an error before the agent broke a hard invariant or called a
+                               not_called tool: not graded, left out of the scores. Otherwise an error fails it
       endReason                "user_stop" | "max_turns" | "error"
       error?                   set when endReason is "error"
       turns, durationMs, usage
@@ -62,27 +71,27 @@ Check ids and kinds:
 | `called` | `called:transfer_to_human`, or `called:transfer_to_human(reason={"$contains":"billing"})` for an entry with `args` | the tool never succeeded (with `args`: no successful call matched them; the detail shows how the closest call differs) |
 | `not_called` | `not_called:transfer_to_human`, or `not_called:book_load(load_id="L-1004")` for an entry with `args` | the tool was attempted (with `args`: with matching arguments) |
 | `reply` | `reply:confirmation` | no agent message contained the phrase |
-| `runtime` | `runtime` | the trial crashed: adapter, endpoint or simulator error |
+| `runtime` | `runtime` | the trial crashed: adapter, endpoint or simulator error. The trial is skipped unless an `invariant` or `not_called` check failed too |
 
 ## Queries
 
 Headline numbers:
 
 ```bash
-jq '{domain, agent, user, k, passHat, provisional: (.pendingReview | length > 0), costUsd: .usage.costUsd, latency}' "$R"
+jq '{domain, agent, user, k, passHat, passAt, flipRate, skipped, provisional: (.pendingReview | length > 0), costUsd: .usage.costUsd, latency}' "$R"
 ```
 
-Passes per task, and flaky tasks (some trials pass, some fail):
+Passes out of graded trials per task with its verdict, and flaky tasks (some trials pass, some fail) with their 95% interval:
 
 ```bash
-jq -r '.tasks[] | "\(.passes)/\(.trials | length)  \(.id)"' "$R"
-jq -r '.tasks[] | select(.passes > 0 and .passes < (.trials | length)) | "\(.id) \(.passes)/\(.trials | length)"' "$R"
+jq -r '.tasks[] | "\(.passes)/\(.graded)  \(.verdict)  \(.id)"' "$R"
+jq -r '.tasks[] | select(.verdict == "flaky") | "\(.id) \(.passes)/\(.graded) [\(.interval.low * 100 | round)%, \(.interval.high * 100 | round)%]"' "$R"
 ```
 
 Critical tasks that failed a trial, the ones that made `run` exit 1:
 
 ```bash
-jq -r '.tasks[] | select(.critical and .passes < (.trials | length)) | "\(.id) \(.passes)/\(.trials | length)"' "$R"
+jq -r '.tasks[] | select(.critical and .passes < (.graded // (.trials | length))) | "\(.id) \(.passes)/\(.graded // (.trials | length))"' "$R"
 ```
 
 Failure modes, as in the terminal summary:
@@ -91,10 +100,10 @@ Failure modes, as in the terminal summary:
 jq -r '.failureModes[] | "\(.count)x \(.kind) \(.id) [\(.tasks | join(", "))]\n    e.g. \(.example)"' "$R"
 ```
 
-Every failing trial with its failed checks:
+Every failing trial with its failed checks (skipped trials are listed below):
 
 ```bash
-jq -r '.tasks[].trials[] | select(.passed | not) | "\(.taskId)#\(.trial) \(.endReason): " + ([.checks[] | select(.passed | not) | .id] | join(", "))' "$R"
+jq -r '.tasks[].trials[] | select((.passed or .skipped) | not) | "\(.taskId)#\(.trial) \(.endReason): " + ([.checks[] | select(.passed | not) | .id] | join(", "))' "$R"
 ```
 
 Every invariant violation, with the call or message that broke it:
@@ -129,17 +138,18 @@ jq -r '.soft[] | "\(.id): \(.broken) of \(.applied) trials \(if .rate == null th
 jq -r '.tasks[].trials[] | .taskId as $t | .trial as $n | .soft[] | select(.broken) | "\($t)#\($n) \(.id): \(.violations[0].detail)"' "$R"
 ```
 
-Trials that ran out of turns or crashed:
+Trials that ran out of turns or crashed, and the skipped ones (crashed before the agent broke a rule, so not graded):
 
 ```bash
 jq -r '.tasks[].trials[] | select(.endReason != "user_stop") | "\(.taskId)#\(.trial) \(.endReason) \(.error // "")"' "$R"
+jq -r '.tasks[].trials[] | select(.skipped) | "\(.taskId)#\(.trial) \(.error)"' "$R"
 ```
 
 A run made with `--baseline`: each task's passes in the baseline and now (the terminal summary and the report already list what broke and what got fixed):
 
 ```bash
 jq -r '(.baseline.tasks | map({(.id): "\(.passes)/\(.trials)"}) | add) as $then
-  | .tasks[] | "\(.id): \($then[.id] // "-") -> \(.passes)/\(.trials | length)"' "$R"
+  | .tasks[] | "\(.id): \($then[.id] // "-") -> \(.passes)/\(.graded // (.trials | length))"' "$R"
 ```
 
 Compare two runs task by task without rerunning (same k and tasks):

@@ -25,7 +25,7 @@ This run used the example's first 10 tasks. The example has since grown (#45), s
 The only failure was an invariant violation, not a missed goal. In `walk-away-above-ceiling`, a firm caller refused every offer, and in one of two trials the agent answered "the best I can do is $1,450". That is the load's internal `max_rate`, which the SOP forbids revealing. `never_disclose` caught it deterministically. pass^2 falls below pass^1 because this leak is intermittent: exactly the reliability gap a single trial hides (see [pass^k and reliability](/concepts/pass-k)).
 
 <Note>
-Ten tasks and two trials each is a small sample. Read these numbers as evidence that the harness works and catches what it should, not as a model benchmark. Confidence intervals and flaky-task verdicts are planned in [#27](https://github.com/sandtable-ai/sandtable/issues/27).
+Ten tasks and two trials each is a small sample. Read these numbers as evidence that the harness works and catches what it should, not as a model benchmark. Reports now show each task's verdict (passed, failed, flaky or skipped) and a 95% interval for its pass rate, which for two trials is wide (see [pass^k and reliability](/concepts/pass-k)).
 </Note>
 
 ### What the first live runs taught us about the harness

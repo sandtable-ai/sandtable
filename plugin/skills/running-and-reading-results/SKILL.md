@@ -99,7 +99,8 @@ Add `.sandtable/` to the project's `.gitignore` unless the engineer wants runs c
 
 In the terminal summary and the report:
 - a **provisional** line (yellow in the terminal) or banner: drafted items are still pending review, so the score is not yet a claim about the customer's rules.
-- per task, one mark per trial (✓ ✗) and passes/trials. Mixed marks mean a flaky task: the reliability gap pass^k exists to show.
+- per task, one mark per trial (✓ passed, ✗ failed, ○ skipped) and passes out of graded trials. `flaky` marks a task that passed some trials and failed others: the reliability gap pass^k exists to show. With k > 1, the headline adds pass@k (at least one of k trials passes) and the flip rate (the share of tasks that are flaky), and **Flaky tasks** lists them with a 95% interval for each one's pass rate. With few trials it is wide: say so before calling a change real.
+- **Skipped trials**: trials that ended in an error (throttling or a timeout that outlasted the retries, an agent endpoint that went down) before the agent broke any rule. They are left out of the scores, and `run` exits 1 because the run is incomplete: fix the cause (credentials, `--concurrency`, the agent's service) and rerun before reading the score. A trial that broke a rule before its error is failed, not skipped.
 - **By tag**: pass^1 and pass^k per tag. A high `refusal` score next to a low `happy-path` one is what a too-cautious agent looks like.
 - **Soft rules**, when the domain has `soft: true` invariants: how often each was broken, out of the trials where it applied. They never fail a trial, so read them next to pass^k: in the freight example, `counter-at-ceiling` is how often the agent's counter-offers reached the price ceiling.
 - **Top failure modes**: failed checks clustered across trials, most frequent first, each with an example.

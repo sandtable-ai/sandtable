@@ -43,7 +43,15 @@ Worked example, one task, 4 trials, 3 passed:
 
 ## pass^k, not pass@k
 
-**pass@k** is the probability that *at least one* of k trials succeeds. It suits settings where you can pick the best attempt, such as generating code and running tests. A customer-facing agent gets one attempt per conversation, so sandtable reports pass^k. A pass@k column, flaky-task verdicts and confidence intervals are planned ([#27](https://github.com/sandtable-ai/sandtable/issues/27)).
+**pass@k** is the probability that *at least one* of k trials succeeds. It suits settings where you can pick the best attempt, such as generating code and running tests. A customer-facing agent gets one attempt per conversation, so pass^k is the headline. With k > 1, sandtable reports pass@k next to it, because the two together separate a task the agent can't do (both low) from one it can do but not every time (pass@k high, pass^k low).
+
+Each task also gets a verdict over its graded trials: **passed** (every trial passed), **failed** (none did), **flaky** (some did) or **skipped** (no trial was graded). The run's **flip rate** is the share of tasks with at least two graded trials that are flaky. Next to each task's pass rate, reports show a 95% [Wilson score interval](https://en.wikipedia.org/wiki/Binomial_proportion_confidence_interval#Wilson_score_interval), which stays honest at small k: 4 passes out of 4 trials gives 51%–100%, not 100%.
+
+## Skipped trials
+
+A trial that ends in an error, such as a rate limit or a timeout that outlasted the adapter's retries or an agent endpoint that went down, is **skipped** when the agent had broken no rule yet: the conversation never finished, so it says nothing about the agent. Skipped trials are left out of pass^k and pass@k, and a task with fewer than k graded trials is left out of pass^k; the summary says when that happened. A trial in which the agent broke a hard invariant or called a tool it must not call before the error still fails, so an agent that crashes can't hide what it broke first.
+
+A run with skipped trials is incomplete, so `run` exits 1 even without `--fail-under` (see [Use it in CI](/guides/ci#exit-codes)). Rerun it once the cause is fixed.
 
 ## Choosing k
 
@@ -57,7 +65,7 @@ Cost and time grow linearly with tasks × k, so pick k by purpose:
 
 Two things limit what a score can tell you:
 
-- **Few tasks means coarse scores.** With 10 tasks, one flaky task moves pass^k by up to 10 points. Treat small differences between runs as noise until intervals land.
+- **Few tasks means coarse scores.** With 10 tasks, one flaky task moves pass^k by up to 10 points. Treat small differences between runs as noise, and read each task's interval before calling a change real.
 - **Variation needs a source.** Trials differ because the model samples and the simulated user improvises. A deterministic agent replaying a scripted user gives identical trials, so pass^k equals pass^1.
 
 ## Gating on it
