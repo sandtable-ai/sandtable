@@ -23,6 +23,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 - **Leaderboard docs**: the freight board's history includes its re-render at v0.1.2, which ran no model and changed no verdict, and `leaderboard.json` is described as recording 0.1.2 at `eb4cfd2` ([#260](https://github.com/sandtable-ai/sandtable/issues/260)).
 - **Roadmap**: the v0.3 section of `ROADMAP.md` and sandtable.dev/roadmap separates what is done on `main` and not yet released (`run --baseline`, reliability verdicts, critical tasks, argument matchers and `given`) from what is left, including the follow-ups filed since: a regression gate, exit codes, per-tag floors, the leaderboard and `demo --live`, and `sandtable compare` ([#288](https://github.com/sandtable-ai/sandtable/issues/288)).
 
+### Fixed
+
+- `sandtable validate`: an unknown operator such as `$like`, `$in` or `$nin` without a list, or a top-level key such as `$or`, now fails validation in every where clause, with the clause's path: a tool's `list` op and `checks`, invariant `require.where` and `never.when`, and a task's `expect.state` `where` and `fields`. Before, only a `called`/`not_called` entry's `args` were checked: elsewhere, `lint` and `run` stopped on a bare "Unknown operator" without writing results, or a clause matched nothing and a valid call was rejected ([#279](https://github.com/sandtable-ai/sandtable/issues/279)).
+
 ## [0.1.2] - 2026-10-21
 
 A release with no breaking changes: the HTML report and `leaderboard.html` use the sandtable brand in light and dark, sandtable has a logo, and a report's trial squares stay on one line.

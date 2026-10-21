@@ -47,6 +47,8 @@ Inside tool `ops`, `checks`, invariant `where` clauses and task assertions:
 | `$exists` | `true`: the field is set and not null; `false`: it is missing or null |
 | `$contains` | case-insensitive substring |
 
+There are no top-level operators such as `$or`: every field's condition must hold. `validate` fails on an unknown operator, on `$in` or `$nin` without a list (a `"$arg"` reference is a single value, never a list), and on a top-level `$` key, in every where clause, with the clause's path, such as `tools.list_orders.ops[0].where.status: unknown operator "$like"`.
+
 ## world
 
 ```yaml
