@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 ### Fixed
 
 - `sandtable validate`: an unknown operator such as `$like`, `$in` or `$nin` without a list, or a top-level key such as `$or`, now fails validation in every where clause, with the clause's path: a tool's `list` op and `checks`, invariant `require.where` and `never.when`, and a task's `expect.state` `where` and `fields`. Before, only a `called`/`not_called` entry's `args` were checked: elsewhere, `lint` and `run` stopped on a bare "Unknown operator" without writing results, or a clause matched nothing and a valid call was rejected ([#279](https://github.com/sandtable-ai/sandtable/issues/279)).
+- **CLI**: a path that names nothing now says which argument or option it came from, instead of Node's `ENOENT: no such file or directory, open '…'`: `report`, `regrade`, `run --prices` and `--baseline`, `leaderboard -m` and `--prices`, and `init --openapi`, `--sop` and `--transcripts`, e.g. `--prices: no file at prices.json`. A directory given where a file is expected says so, and points at the `results.json` inside it when there is one. `init` reads every input before drafting, so a wrong `--transcripts` path no longer fails after `--sop` has called a model, and a `--transcripts` directory with no `.txt` or `.md` file is named. `report -o` creates the directory it writes into, as `run -o` does ([#280](https://github.com/sandtable-ai/sandtable/issues/280)).
 
 ## [0.1.2] - 2026-10-21
 
