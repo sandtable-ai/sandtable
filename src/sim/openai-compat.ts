@@ -1,6 +1,7 @@
 import type { TokenUsage, UsageRecorder } from "../run/usage.ts";
 import type { ToolSchema } from "../world/tools.ts";
 import { STOP_TOKEN, USER_KICKOFF, userSystemPrompt } from "./prompts.ts";
+import { hasReasoning, stripReasoning } from "./reasoning.ts";
 import type { AgentAdapter, CallTool, UserSimulator } from "./types.ts";
 
 export const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
@@ -118,7 +119,13 @@ function chatCompletions(opts: OpenAICompatOptions, recordUsage?: UsageRecorder)
     // Keyed by the requested name, not the served snapshot, so the price lookup is stable.
     // Recorded even without a usage block, so an unpriced model shows cost n/a rather than $0.
     // finish_reason "length": the reply hit the server's token limit and may be cut off.
-    recordUsage?.(opts.model, { ...usageOf(data.usage), ...(choice?.finish_reason === "length" ? { maxTokensStops: 1 } : {}) });
+    // Reasoning inline in the text is removed before the other side hears it (textOf), and counted here.
+    const reasoning = choice?.message && hasReasoning(rawTextOf(choice.message.content));
+    recordUsage?.(opts.model, {
+      ...usageOf(data.usage),
+      ...(choice?.finish_reason === "length" ? { maxTokensStops: 1 } : {}),
+      ...(reasoning ? { reasoningStripped: 1 } : {}),
+    });
     if (!choice?.message) throw new Error(`${url} returned no choices`);
     return { message: choice.message, finishReason: choice.finish_reason ?? null };
   };
@@ -133,10 +140,17 @@ export function backoffMs(attempt: number, retryAfter?: string | null): number {
   return Math.min(500 * 2 ** attempt, 20_000) * (0.75 + Math.random() * 0.5);
 }
 
+/** The message's text parts as returned. A separate reasoning field (`reasoning_content`, `reasoning`) is never among them. */
+function rawTextOf(content: AssistantMessage["content"]): string {
+  return typeof content === "string" ? content : (content ?? []).filter((p) => p.type === "text").map((p) => p.text ?? "").join("");
+}
+
+/**
+ * What the reply says out loud. Reasoning models served without a reasoning parser inline their reasoning in the
+ * text (`<think>` from Qwen and DeepSeek, `<reasoning>` or `<analysis>` from gpt-oss); the other side never hears it.
+ */
 function textOf(content: AssistantMessage["content"]): string {
-  const text = typeof content === "string" ? content : (content ?? []).filter((p) => p.type === "text").map((p) => p.text ?? "").join("");
-  // Reasoning models served without a reasoning parser (Qwen, DeepSeek) inline their thinking; the caller never hears it.
-  return text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+  return stripReasoning(rawTextOf(content));
 }
 
 /** Tool calls with the ids and type a follow-up request needs, filled in where a server left them out. */

@@ -7,6 +7,11 @@ export interface TokenUsage {
   cacheWrite: number;
   /** Calls whose reply stopped at the output-token limit (`max_tokens`), so it may be cut off. Set once one has. */
   maxTokensStops?: number;
+  /**
+   * Calls whose reply text held reasoning (`<think>`, `<reasoning>`, `<analysis>`…) that sandtable removed before the
+   * other side heard it. Set once one has.
+   */
+  reasoningStripped?: number;
 }
 
 export type UsageByModel = Record<string, TokenUsage>;
@@ -69,12 +74,13 @@ export function recordInto(target: UsageByModel, model: string, u: Partial<Omit<
   t.output += u.output ?? 0;
   t.cacheRead += u.cacheRead ?? 0;
   t.cacheWrite += u.cacheWrite ?? 0;
-  addStops(t, u.maxTokensStops);
+  addCounts(t, u);
 }
 
-/** Adds to `maxTokensStops`, which stays absent while no call has stopped at the limit. */
-function addStops(t: TokenUsage, n: number | undefined): void {
-  if (n) t.maxTokensStops = (t.maxTokensStops ?? 0) + n;
+/** Adds `maxTokensStops` and `reasoningStripped`, each absent while no call has counted. */
+function addCounts(t: TokenUsage, u: Partial<Pick<TokenUsage, "maxTokensStops" | "reasoningStripped">>): void {
+  if (u.maxTokensStops) t.maxTokensStops = (t.maxTokensStops ?? 0) + u.maxTokensStops;
+  if (u.reasoningStripped) t.reasoningStripped = (t.reasoningStripped ?? 0) + u.reasoningStripped;
 }
 
 /**
@@ -122,7 +128,7 @@ export function sumUsage(items: readonly Usage[]): Usage {
         t.output += u.output;
         t.cacheRead += u.cacheRead;
         t.cacheWrite += u.cacheWrite;
-        addStops(t, u.maxTokensStops);
+        addCounts(t, u);
       }
     }
   }
@@ -138,7 +144,7 @@ export function totalTokens(group: UsageByModel): TokenUsage {
     t.output += u.output;
     t.cacheRead += u.cacheRead;
     t.cacheWrite += u.cacheWrite;
-    addStops(t, u.maxTokensStops);
+    addCounts(t, u);
   }
   return t;
 }

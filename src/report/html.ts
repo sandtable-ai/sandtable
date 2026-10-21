@@ -87,6 +87,8 @@ const json = (v) => v === undefined ? "" : JSON.stringify(v, null, 1).replace(/\
 const calls = (u) => u ? [u.agent, u.user].flatMap((g) => Object.values(g || {})).reduce((n, x) => n + x.calls, 0) : 0;
 // Model calls whose reply stopped at max_tokens, agent and caller together.
 const stops = (u) => u ? [u.agent, u.user].flatMap((g) => Object.values(g || {})).reduce((n, x) => n + (x.maxTokensStops || 0), 0) : 0;
+// Model calls whose reply held reasoning in its text, removed before the other side heard it.
+const stripped = (u) => u ? [u.agent, u.user].flatMap((g) => Object.values(g || {})).reduce((n, x) => n + (x.reasoningStripped || 0), 0) : 0;
 $("domain").textContent = R.domain;
 $("meta").textContent = "agent " + R.agent + " · user " + R.user + " · k=" + R.k + " · " + R.startedAt + " · " + (R.durationMs / 1000).toFixed(1) + "s";
 if (R.pendingReview && R.pendingReview.length) {
@@ -113,6 +115,7 @@ $("kpis").innerHTML = hats.map(([j, v]) => '<div class="kpi"><b>' + pct(v) + '</
   '<div class="kpi"><b>' + ms(R.latency && R.latency.agentTurnP95Ms) + '</b><span>agent turn p95</span></div>' +
   (calls(R.usage) ? '<div class="kpi"><b>' + usd(R.usage.costUsd) + '</b><span>estimated cost</span></div>' : "") +
   (stops(R.usage) ? '<div class="kpi"><b>' + stops(R.usage) + '</b><span>calls stopped at max_tokens</span></div>' : "") +
+  (stripped(R.usage) ? '<div class="kpi"><b>' + stripped(R.usage) + '</b><span>replies with reasoning removed</span></div>' : "") +
   '<div class="kpi"><b>' + R.tasks.length + '</b><span>tasks</span></div>' +
   '<div class="kpi"><b>' + R.tasks.reduce((n, t) => n + t.trials.length, 0) + '</b><span>trials</span></div>';
 // Since the baseline: what changed, regressions first, then the scores before and after.
@@ -217,7 +220,7 @@ function show(ti, i) {
     (tr.callerNotes || []).map((n) => "<div class='check'><span class='meta'>!</span><div><span class='meta'>caller note, turn " + n.turn + ":</span> " + esc(n.why) + "</div></div>").join("");
   const changes = tr.changes.length ? tr.changes.map(change).join("") : "<div class='meta'>No writes.</div>";
   $("detail").innerHTML = '<div class="trial"><h2 style="margin-top:0">' + esc(t.id) + " · trial " + (i + 1) + " · " +
-    ({ passed: '<span class="okt">passed</span>', failed: '<span class="badt">failed</span>', skipped: '<span class="meta">skipped: it ended in an error before the agent broke any rule, so it was not graded</span>' })[status(tr)] + '</h2><div class="meta">ended: ' + tr.endReason + " · " + tr.turns + " turns · " + tr.durationMs + "ms" + (calls(tr.usage) ? " · " + usd(tr.usage.costUsd) : "") + (stops(tr.usage) ? " · " + stops(tr.usage) + " stopped at max_tokens" : "") + (tr.error ? " · " + esc(tr.error) : "") +
+    ({ passed: '<span class="okt">passed</span>', failed: '<span class="badt">failed</span>', skipped: '<span class="meta">skipped: it ended in an error before the agent broke any rule, so it was not graded</span>' })[status(tr)] + '</h2><div class="meta">ended: ' + tr.endReason + " · " + tr.turns + " turns · " + tr.durationMs + "ms" + (calls(tr.usage) ? " · " + usd(tr.usage.costUsd) : "") + (stops(tr.usage) ? " · " + stops(tr.usage) + " stopped at max_tokens" : "") + (stripped(tr.usage) ? " · " + stripped(tr.usage) + " with reasoning removed" : "") + (tr.error ? " · " + esc(tr.error) : "") +
     "</div><h2>Checks</h2>" + checks + "<h2>World changes</h2>" + changes + "<h2>Transcript</h2>" + evs + "</div>";
   $("detail").scrollIntoView({ behavior: "smooth" });
 }

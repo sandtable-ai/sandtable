@@ -36,6 +36,14 @@ describe("terminal usage lines", () => {
     r.usage.agent["claude-haiku-5-5"]!.maxTokensStops = 1;
     expect(plain(renderTerminal(r))).toContain("agent claude-haiku-5-5: 3 calls, 900 in, 17.0k out, 0 cache read, 0 cache write, 1 stopped at max_tokens");
   });
+
+  it("say how many replies had reasoning removed, and nothing while none did", async () => {
+    const r = await runSuite({ domain: await loadDomain(path.resolve("examples/freight")), agent: freightScriptedAgent("careful"), user: scriptedUser(), taskIds: ["no-mc-number"] });
+    r.usage.agent = { "openai.gpt-oss-120b-1:0": { calls: 3, input: 900, output: 1700, cacheRead: 0, cacheWrite: 0 } };
+    expect(plain(renderTerminal(r))).not.toContain("reasoning removed");
+    r.usage.agent["openai.gpt-oss-120b-1:0"]!.reasoningStripped = 2;
+    expect(plain(renderTerminal(r))).toContain("agent openai.gpt-oss-120b-1:0: 3 calls, 900 in, 1.7k out, 0 cache read, 0 cache write, 2 with reasoning removed");
+  });
 });
 
 describe("fitList", () => {

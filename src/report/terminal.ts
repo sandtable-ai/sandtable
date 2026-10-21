@@ -48,7 +48,8 @@ function tokens(label: string, group: UsageByModel): string | undefined {
   if (t.calls === 0) return undefined;
   const models = Object.keys(group).join(", ");
   const stops = t.maxTokensStops ? `, ${t.maxTokensStops} stopped at max_tokens` : "";
-  return `${label} ${models}: ${t.calls} calls, ${k(t.input)} in, ${k(t.output)} out, ${k(t.cacheRead)} cache read, ${k(t.cacheWrite)} cache write${stops}`;
+  const reasoning = t.reasoningStripped ? `, ${t.reasoningStripped} with reasoning removed` : "";
+  return `${label} ${models}: ${t.calls} calls, ${k(t.input)} in, ${k(t.output)} out, ${k(t.cacheRead)} cache read, ${k(t.cacheWrite)} cache write${stops}${reasoning}`;
 }
 
 /** "37.5%  3 of 8 trials that called log_offer", or why there is no rate yet. */
