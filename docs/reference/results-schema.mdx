@@ -31,6 +31,7 @@ The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`
 | `flipRate` | number or `null` | the share of tasks with at least 2 graded trials whose graded trials disagree (the flaky ones), from 0 to 1; `null` when no task has 2 graded trials, as with k = 1 |
 | `flaky` | string[] | ids of the flaky tasks, in spec order |
 | `skipped` | number | trials skipped across the run; `run` exits 1 when it isn't 0 |
+| `callerNotes` | object | `{ turns, trials }`: how many caller turns stepped out of role (see each trial's [`callerNotes`](#callernote)), and in how many trials. Absent in results from before caller notes |
 | `failureModes` | `FailureMode[]` | failed checks clustered across graded trials, most frequent first; a skipped trial's error is not one |
 | `byTag` | `TagScore[]` | scores per task tag (`untagged` for tasks without tags), weakest first |
 | `soft` | `SoftScore[]` | one entry per soft invariant in the domain, in spec order; empty when there are none |
@@ -121,6 +122,7 @@ What a run made with `--baseline` keeps of the earlier run, so the terminal summ
 | `checks` | `CheckResult[]` | every check, passed or failed |
 | `violations` | `Violation[]` | hard invariant violations; any one fails the trial |
 | `soft` | `SoftCheck[]` | each soft invariant that applied in this trial, and whether it was broken |
+| `callerNotes` | `CallerNote[]` | present when the simulated user stepped out of its role in some turn; never changes `passed` |
 | `events` | `TrajectoryEvent[]` | the conversation and tool calls, in order |
 | `changes` | `Change[]` | the difference between the world's seed and its final state |
 | `endReason` | string | `user_stop`, `max_turns` or `error` |
@@ -158,6 +160,16 @@ A trial's status is `skipped` when `skipped` is true, else `passed` or `failed` 
 | `id` | string | the soft invariant's id |
 | `broken` | boolean | broken at least once in this trial |
 | `violations` | `Violation[]` | each time it was broken, with the call or message |
+
+### CallerNote
+
+A caller turn in which the simulated user stepped out of its role. The patterns are deliberately narrow, so a note is worth reading, and a role break worded another way is missed. Notes are found from the transcript alone, so [`regrade`](/reference/cli#regrade) finds them again, and they never change a verdict.
+
+| Field | Type | Description |
+|---|---|---|
+| `turn` | number | the caller's turn, counting from 1 |
+| `text` | string | the sentence that was flagged, such as `The agent asked for two things at once, and my instructions say to give one.` |
+| `why` | string | `talks about its instructions`, `says its goal is met` or `talks about the agent in the third person`; several are joined with `; ` |
 
 ### TrajectoryEvent
 

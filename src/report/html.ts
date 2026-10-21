@@ -66,6 +66,7 @@ a{color:inherit}
 <div class="wrap"><table><thead><tr><th>Task</th><th>Trials</th><th>Pass</th><th>Verdict</th><th>Failed checks</th></tr></thead><tbody id="tasks"></tbody></table></div>
 <div id="flaky"></div>
 <div id="skipped"></div>
+<div id="callernotes"></div>
 <div id="tags"></div>
 <div id="soft"></div>
 <h2>Failure modes</h2>
@@ -170,6 +171,12 @@ if (skippedTrials.length) {
     [...errors].map(([error, e]) => "<tr><td>" + e.count + "×</td><td>" + esc(error) + "</td><td>" + e.tasks.map((t) => '<span class="chip">' + esc(t) + "</span>").join("") + "</td></tr>").join("") +
     "</tbody></table></div>";
 }
+const notes = R.tasks.flatMap((t, ti) => t.trials.flatMap((tr, i) => (tr.callerNotes || []).map((n) => ({ ti, i, task: t.id, ...n }))));
+if (notes.length) {
+  $("callernotes").innerHTML = "<h2>Caller notes</h2><p class='explain' style='margin-top:0'>In these turns the simulated user stepped out of its role: it talked about its instructions, said its goal was met, or talked about the agent instead of to it. They never change a verdict, but the agent heard them, so read the trial before trusting its result.</p><div class='wrap'><table><thead><tr><th>Task</th><th>Turn</th><th>Why</th><th>What the caller said</th></tr></thead><tbody>" +
+    notes.map((n) => "<tr><td><b>" + esc(n.task) + "</b><div class='meta'><a href='#detail' onclick='show(" + n.ti + "," + n.i + ");return false'>trial " + (n.i + 1) + "</a></div></td><td>" + n.turn + "</td><td>" + esc(n.why) + "</td><td>" + esc(n.text) + "</td></tr>").join("") +
+    "</tbody></table></div>";
+}
 if (R.byTag && R.byTag.length > 1) {
   $("tags").innerHTML = "<h2>By tag</h2><div class='wrap'><table><thead><tr><th>Tag</th><th>Tasks</th><th>pass^1</th>" + (R.k > 1 ? "<th>pass^" + R.k + "</th>" : "") + "</tr></thead><tbody>" +
     R.byTag.map((t) => "<tr><td><span class='chip'>" + esc(t.tag) + "</span></td><td>" + t.tasks + "</td><td>" + pct(t.passHat1) + "</td>" + (R.k > 1 ? "<td>" + pct(t.passHatK) + "</td>" : "") + "</tr>").join("") +
@@ -189,6 +196,9 @@ $("modes").innerHTML = R.failureModes.length ? R.failureModes.map((m) =>
   : "<tr><td colspan='4' class='okt'>No failures.</td></tr>";
 function show(ti, i) {
   const t = R.tasks[ti], tr = t.trials[i];
+  // Caller notes by the caller's turn, counting from 1, to mark that turn in the transcript.
+  const noteAt = Object.fromEntries((tr.callerNotes || []).map((n) => [n.turn, n]));
+  let turn = 0;
   const evs = tr.events.map((e) => {
     if (e.type === "tool") {
       const v = (e.violations.length ? ' · <span class="viol">violates ' + e.violations.map((id) => "<code>" + esc(id) + "</code>").join(", ") + "</span>" : "") +
@@ -197,10 +207,12 @@ function show(ti, i) {
       return '<div class="ev tool"><small><b>tool</b> #' + e.index + v + "</small>" + esc(e.name) + "(" + esc(json(e.args)) + ")\\n→ " + esc(out) + "</div>";
     }
     const lat = e.type === "agent" && e.latencyMs !== undefined ? " · " + ms(e.latencyMs) : "";
-    return '<div class="ev ' + e.type + '"><small><b>' + e.type + "</b>" + lat + "</small>" + esc(e.text) + "</div>";
+    const note = e.type === "user" && noteAt[++turn] ? ' · <span class="softv">caller note: ' + esc(noteAt[turn].why) + "</span>" : "";
+    return '<div class="ev ' + e.type + '"><small><b>' + e.type + "</b>" + lat + note + "</small>" + esc(e.text) + "</div>";
   }).join("");
   const checks = tr.checks.map((c) => '<div class="check"><span class="' + (c.passed ? "okt" : "badt") + '">' + (c.passed ? "✓" : "✗") + "</span><div><code>" + esc(c.id) + "</code> " + esc(c.detail) + "</div></div>").join("") +
-    (tr.soft || []).map((c) => '<div class="check"><span class="meta">' + (c.broken ? "~" : "·") + "</span><div><code>" + esc(c.id) + "</code> <span class='meta'>soft:</span> " + esc(c.broken ? c.violations.map((v) => v.detail).join("; ") : "not broken") + "</div></div>").join("");
+    (tr.soft || []).map((c) => '<div class="check"><span class="meta">' + (c.broken ? "~" : "·") + "</span><div><code>" + esc(c.id) + "</code> <span class='meta'>soft:</span> " + esc(c.broken ? c.violations.map((v) => v.detail).join("; ") : "not broken") + "</div></div>").join("") +
+    (tr.callerNotes || []).map((n) => "<div class='check'><span class='meta'>!</span><div><span class='meta'>caller note, turn " + n.turn + ":</span> " + esc(n.why) + "</div></div>").join("");
   const changes = tr.changes.length ? tr.changes.map(change).join("") : "<div class='meta'>No writes.</div>";
   $("detail").innerHTML = '<div class="trial"><h2 style="margin-top:0">' + esc(t.id) + " · trial " + (i + 1) + " · " +
     ({ passed: '<span class="okt">passed</span>', failed: '<span class="badt">failed</span>', skipped: '<span class="meta">skipped: it ended in an error before the agent broke any rule, so it was not graded</span>' })[status(tr)] + '</h2><div class="meta">ended: ' + tr.endReason + " · " + tr.turns + " turns · " + tr.durationMs + "ms" + (calls(tr.usage) ? " · " + usd(tr.usage.costUsd) : "") + (stops(tr.usage) ? " · " + stops(tr.usage) + " stopped at max_tokens" : "") + (tr.error ? " · " + esc(tr.error) : "") +

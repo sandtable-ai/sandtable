@@ -204,6 +204,7 @@ describe("claudeUser", () => {
     expect(prompt).toContain(task.user.instructions.trim());
     expect(prompt).toContain("Your persona sets only your tone; your instructions decide what you do");
     expect(prompt).toContain("never mention your instructions");
+    expect(prompt).toContain("never describe the agent or what it asked");
     expect(prompt).toContain("accept the first offer that meets it");
     expect(prompt).toContain("Once the agent says it is transferring you to a person, the call with the agent is over");
   });

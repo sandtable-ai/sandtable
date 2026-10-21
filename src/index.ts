@@ -21,6 +21,7 @@ export { noopAgent } from "./sim/noop.ts";
 export { scriptedUser } from "./sim/scripted.ts";
 export { agentSystemPrompt, userSystemPrompt, STOP_TOKEN } from "./sim/prompts.ts";
 export { runEpisode, type TrialResult, type TrajectoryEvent, type EndReason, type SoftCheck } from "./run/episode.ts";
+export { callerNotes, type CallerNote } from "./run/caller-notes.ts";
 export { runSuite, criticalFailures, trialStatus, type SuiteOptions, type SuiteResult, type TaskSummary, type Verdict, type FailureMode, type SoftScore } from "./run/suite.ts";
 export { regradeSuite, regradeTrial, RegradeError } from "./run/regrade.ts";
 export { compareRuns, baselineSnapshot, type Comparison, type TaskDelta, type TaskChange, type BaselineSnapshot } from "./run/compare.ts";

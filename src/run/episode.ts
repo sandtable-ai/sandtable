@@ -5,6 +5,7 @@ import { agentSystemPrompt, taskContext } from "../sim/prompts.ts";
 import type { AgentAdapter, CallTool, UserSimulator } from "../sim/types.ts";
 import { diffSnapshots, worldFor, type Change, type Snapshot, type World } from "../world/store.ts";
 import { toolSchema } from "../world/tools.ts";
+import { callerNotes, type CallerNote } from "./caller-notes.ts";
 import { createToolRunner, type ToolEvent, type ToolRunner } from "./tool-runner.ts";
 import { costOf, recordInto, type Usage } from "./usage.ts";
 
@@ -51,6 +52,11 @@ export interface TrialResult {
   violations: Violation[];
   /** Soft invariants that applied (their tool was called; for never_disclose, the agent spoke). */
   soft: SoftCheck[];
+  /**
+   * Caller turns in which the simulated user stepped out of its role, e.g. talked about its instructions.
+   * Present only when there are some, and never a reason to fail: read the trial before trusting its verdict.
+   */
+  callerNotes?: CallerNote[];
   events: TrajectoryEvent[];
   changes: Change[];
   endReason: EndReason;
@@ -150,7 +156,8 @@ export function toolEvent(e: ToolEvent): TrajectoryEvent {
 
 /**
  * Grade a finished conversation: invariants on what the agent said, then the task's expectations on
- * the end state and the tool log. Live runs and `sandtable regrade` both grade through here.
+ * the end state and the tool log. Live runs and `sandtable regrade` both grade through here. The caller
+ * notes are found here too, from the transcript alone, and never change the verdict.
  */
 export function gradeEpisode(input: {
   domain: Domain;
@@ -160,13 +167,14 @@ export function gradeEpisode(input: {
   events: readonly TrajectoryEvent[];
   agentMessages: readonly string[];
   error?: string;
-}): Pick<TrialResult, "passed" | "skipped" | "checks" | "violations" | "soft"> {
+}): Pick<TrialResult, "passed" | "skipped" | "checks" | "violations" | "soft" | "callerNotes"> {
   const { domain, task, world, runner, events, agentMessages, error } = input;
   const said = checkTranscript(domain, world, runner.calls, events, agentSystemPrompt(domain, task));
   const violations: Violation[] = [...runner.violations, ...said.filter((v) => !v.soft)];
   const soft = softChecks(domain, runner.calls, agentMessages.length, [...runner.soft, ...said.filter((v) => v.soft)]);
   const { passed, checks } = gradeTrial({ task, world, calls: runner.calls, agentMessages, violations, error });
-  return { passed, ...(isSkipped(checks, error) ? { skipped: true as const } : {}), checks, violations, soft };
+  const notes = callerNotes(events);
+  return { passed, ...(isSkipped(checks, error) ? { skipped: true as const } : {}), checks, violations, soft, ...(notes.length ? { callerNotes: notes } : {}) };
 }
 
 /** What a trial changed in the world, row by row. */

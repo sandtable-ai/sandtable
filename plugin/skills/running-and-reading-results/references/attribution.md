@@ -18,7 +18,7 @@ For each failing trial (see results-json.md for the queries):
 3. **Read the task.** Its `user.instructions`, `expect` and `reference` in `tasks.yaml`, and the SOP sections it touches. Know what a correct conversation looks like before you read this one.
 4. **Read the transcript in order** and stop at the first divergence: the first turn where the user or the agent does something the instructions or the SOP do not call for. Later problems usually follow from it.
 5. **Ask who diverged.**
-   - The user turn contradicts `user.instructions` → **simulated user**.
+   - The user turn contradicts `user.instructions` → **simulated user**. Start with the trial's `callerNotes`: turns where the caller talked about its instructions or about the agent instead of to it. Also look for facts the caller gave that its instructions don't state (an item's condition, a receipt, a date): two trials of one task that answer such a question differently are caller guesses, not the agent's doing. Fix the task by stating the fact in `user.instructions`.
    - The agent turn or tool call contradicts the SOP while the user behaved → **agent**.
    - Nobody diverged, and a check still failed → **task spec**.
 6. **Look at sibling trials.** A task that fails in some trials and passes in others is flaky. Compare a passing and a failing trial of the same task: the difference is usually the divergence.
