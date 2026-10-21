@@ -175,6 +175,30 @@ describe("domain validation", () => {
     ]);
   });
 
+  it("reports an invariant argument named like an Object.prototype member as a param the tool doesn't have", async () => {
+    const d = await loadDomain(example);
+    const ref = (key_arg: string) => ({ table: "loads", key_arg, field: "max_rate" });
+    const broken = {
+      ...d,
+      invariants: [
+        { id: "a", description: "a", before: { first: "verify_carrier", then: "book_load", same: ["constructor"] } },
+        { id: "b", description: "b", require: { tool: "book_load", table: "carriers", key_arg: "toString", where: {} } },
+        { id: "c", description: "c", limit: { tool: "book_load", arg: "valueOf", lte: ref("hasOwnProperty") } },
+        { id: "d", description: "d", match: { tool: "book_load", left: ref("__proto__"), right: ref("load_id") } },
+        { id: "e", description: "e", never_disclose: { table: "loads", field: "max_rate", unless: { tool: "book_load", arg: "isPrototypeOf" } } },
+      ],
+    };
+    expect(validateDomain(broken)).toEqual([
+      'invariants.a: tool "verify_carrier" has no param "constructor"',
+      'invariants.a: tool "book_load" has no param "constructor"',
+      'invariants.b: tool "book_load" has no param "toString"',
+      'invariants.c: tool "book_load" has no param "valueOf"',
+      'invariants.c: tool "book_load" has no param "hasOwnProperty"',
+      'invariants.d: tool "book_load" has no param "__proto__"',
+      'invariants.e: tool "book_load" has no param "isPrototypeOf"',
+    ]);
+  });
+
   it("checks every tool and argument in a never_disclose exception list", async () => {
     const d = await loadDomain(example);
     const unless = [{ tool: "book_load", arg: "rate" }, { tool: "submit_offer", arg: "price" }, { tool: "hold_load", arg: "rate" }];
