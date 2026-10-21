@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **HTML report**: uses the sandtable brand in light and dark: warm neutrals, ink instead of green for passed trials, one terracotta accent for failures and rule violations, square trial marks and the logo in the header. Instead of blue and yellow, caller messages are filled, agent messages outlined and tool calls dashed in monospace, and the report still loads no fonts or other files ([#252](https://github.com/sandtable-ai/sandtable/issues/252)).
+
 ## [0.1.1] - 2026-10-21
 
 A bug-fix release with no breaking changes: names like `toString` are checked like any other in tool arguments and invariants, `init --openapi` drafts OpenAPI 3.1 nullable fields, a closed pipe exits 141 instead of crashing, and `leaderboard` names unreadable stored files and keeps a full board's crashed run during a quick check.
