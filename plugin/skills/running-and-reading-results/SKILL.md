@@ -127,12 +127,21 @@ The check kind is a hint, not a verdict. `invariant` failures are usually the ag
 1. Group failing trials by owner and root cause, and show the engineer the table: task, trial, owner, evidence (quote the event), proposed fix.
 2. Make agent fixes in the agent's code or prompt. Do not edit tool descriptions in `sandtable.yaml` to help the agent unless the real tool's description changes too: the domain mirrors the customer's API.
 3. Never make a score go up by weakening the suite: deleting a failing task, loosening an expectation the SOP supports, lowering k or `--fail-under`. A spec change needs a reason grounded in the SOP and the engineer's agreement.
-4. Rerun the affected tasks at the same k, then the whole suite:
+4. Confirm each fix the cheapest way that proves it. What the fix changed decides the command:
+
+| The fix changed | Confirm with |
+|---|---|
+| only grading: an invariant (`soft: true` included), an `expect` entry, a `never_disclose` rule | `regrade`: it re-scores the stored trials under the edited domain without a model call, and prints each verdict that changed and pass^k before and after |
+| what the agent or the caller is given: `policy.md`, a tool, a task's `user` block (instructions, opening, script), its persona, `given.context` or turn limit; or the agent's own prompt or code | a rerun of only those tasks, at the same k. `regrade` refuses the run, since the conversation could have gone otherwise |
+| seed rows, `given.rows` or a tool's ops | `regrade` first: it replays every stored tool call and stops at the first one that now returns something else. Then rerun those tasks |
 
 ```bash
+npx sandtable-ai regrade .sandtable/runs/<run>/results.json -d ./sandtable -o .sandtable/runs/regraded   # free: grading-only fixes
 npx sandtable-ai run ./sandtable --agent http://localhost:8787/step --tasks walk-away-above-ceiling,expired-insurance -k 4
 npx sandtable-ai run ./sandtable --agent http://localhost:8787/step -k 4 --fail-under 90
 ```
+
+When one triage finds both kinds, fix grading first and regrade, then change the caller's instructions and rerun those tasks: `regrade` refuses the whole run, not just one task, once any task's caller prompt changed. Pass `-o` to `regrade`, or it replaces the run's own `results.json`, which you need as the baseline.
 
 One passing rerun of a flaky task proves little. Report pass^1 and pass^k before and after, at the same k: pass the run from before the fix as `--baseline <results.json>`, and the summary lists which tasks broke or got fixed.
 
