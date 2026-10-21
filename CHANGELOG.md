@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- `world`: a tool argument named like a built-in JavaScript property, such as `toString` or `constructor`, is now rejected as an unknown argument like any other name the tool doesn't have, and a tool param with such a name that the agent omits counts as missing (its default applies) instead of failing with "must be a string" ([#233](https://github.com/sandtable-ai/sandtable/issues/233)).
+
 ## [0.1.0] - 2026-10-20
 
 First public release. sandtable rehearses an AI agent on a simulated copy of one customer's world: a simulated caller with a hidden goal talks to the agent, the agent's tool calls run against stateful mocks of the customer's systems, and every trial is graded without a judge model into pass^k.

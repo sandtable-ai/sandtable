@@ -90,6 +90,25 @@ describe("tools", () => {
     expect(coerceArgs(book, { load_id: "L-1", rate: 1, tip: 5 })).toEqual({ error: 'unknown argument "tip"' });
   });
 
+  it("rejects an argument named like an Object.prototype member as unknown", () => {
+    for (const name of ["toString", "constructor", "hasOwnProperty", "__proto__"]) {
+      // Parsed from JSON, as an agent's arguments are, so "__proto__" is an own key.
+      const raw = JSON.parse(`{ "load_id": "L-1", "rate": 1, "${name}": "x" }`) as unknown;
+      expect(coerceArgs(book, raw)).toEqual({ error: `unknown argument "${name}"` });
+    }
+  });
+
+  it("reads only the arguments the agent passed, even for a param named like an Object.prototype member", () => {
+    const tool: Tool = ToolSpec.parse({
+      name: "label",
+      description: "Label a load",
+      params: { toString: { type: "string", required: false }, constructor: { type: "string", required: false, default: "manual" } },
+      ops: [{ get: "loads", key: "L-1" }],
+    });
+    expect(coerceArgs(tool, {})).toEqual({ args: { constructor: "manual" } });
+    expect(coerceArgs(tool, { toString: "a", constructor: "b" })).toEqual({ args: { toString: "a", constructor: "b" } });
+  });
+
   it("applies param defaults when the agent omits an optional param", () => {
     const search: Tool = ToolSpec.parse({
       name: "search",
