@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
+import { BRAND_CSS, MARK_SVG } from "../report/brand.ts";
 import { renderHtml } from "../report/html.ts";
 import type { Domain } from "../spec/schema.ts";
 import { noopAgent } from "../sim/noop.ts";
@@ -671,16 +672,15 @@ export function renderLeaderboardHtml(l: LeaderboardResult): string {
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Leaderboard · ${esc(l.domain)}</title>
 <style>
-:root{--bg:#fbfaf8;--fg:#1d1d1b;--muted:#6b6a66;--card:#fff;--line:#e6e3dd;--bad:#b42318}
-@media (prefers-color-scheme:dark){:root{--bg:#141413;--fg:#ecebe7;--muted:#9c9a94;--card:#1d1d1b;--line:#33322f;--bad:#ff6b5e}}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
-main{max-width:1040px;margin:0 auto;padding:32px 16px 64px}h1{font-size:22px;margin:0 0 6px}
+${BRAND_CSS}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 var(--sans)}
+main{max-width:1040px;margin:0 auto;padding:32px 16px 64px}h1{font-size:22px;line-height:32px;margin:0 0 8px}
 p{color:var(--muted);max-width:780px}.wrap{overflow-x:auto}
-table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line)}
-th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
-th{font-size:12px;color:var(--muted)}tr.base td{color:var(--muted);font-style:italic}.err{color:var(--bad)}a{color:inherit}.effort{color:var(--muted);font-size:12px;white-space:nowrap}
+table{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border:1px solid var(--line);border-radius:4px}
+th,td{text-align:left;padding:8px 16px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}tr:last-child td{border-bottom:0}
+th{font-size:12px;color:var(--muted)}tr.base td{color:var(--muted);font-style:italic}.err{color:var(--bad-text)}a{color:inherit}.effort{color:var(--muted);font-size:12px;white-space:nowrap}
 </style></head><body><main>
-<h1>Leaderboard: ${esc(l.domain)}</h1>
+<div class="head">${MARK_SVG}<h1>Leaderboard: ${esc(l.domain)}</h1></div>
 <p>Each model plays the agent on every task ${howOften(l.k)} against the same simulated callers (${esc(l.user)}). ${passMeaning(l.k).replace(/^(pass\^\d+)/, "<b>$1</b>")} Grading is deterministic: end state, rules checked on every tool call and message, required and forbidden tools. ${soft ? `${SOFT_NOTE} ` : ""}${COST_NOTE} Click a model for its full report and trajectories.</p>
 <div class="wrap"><table><thead><tr><th>Model</th>${passHeads(l.k).map((h) => `<th>${h}</th>`).join("")}<th>Rule violations</th><th>Top failure</th>${soft ? "<th>Soft rules</th>" : ""}<th>Cost / trial</th><th>p95 turn</th></tr></thead>
 <tbody>

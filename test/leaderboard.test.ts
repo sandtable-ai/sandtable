@@ -6,6 +6,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { freightScriptedAgent } from "../src/demo/freight-agents.ts";
+import { MARK_SVG } from "../src/report/brand.ts";
 import { bedrockRegion, bedrockUse, ModelsFile, pricesFile, runLeaderboard, type RunInfo } from "../src/run/leaderboard.ts";
 import { costOf, registerPrices } from "../src/run/usage.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
@@ -51,7 +52,11 @@ describe("leaderboard", () => {
     const md = await readFile(path.join(dir, "LEADERBOARD.md"), "utf8");
     expect(md).toContain("| 1 | Careful rules | 100.0% | 100.0% |");
     expect(md).toContain("_Do-nothing baseline_");
-    expect(await readFile(path.join(dir, "leaderboard.html"), "utf8")).toContain('href="./careful-rules/report.html"');
+    const html = await readFile(path.join(dir, "leaderboard.html"), "utf8");
+    expect(html).toContain('href="./careful-rules/report.html"');
+    // One self-contained page with the shared logo: nothing is fetched, fonts included.
+    expect(html).toContain(`<div class="head">${MARK_SVG}<h1>Leaderboard: `);
+    expect(html).not.toMatch(/@import|@font-face|url\(|<link|\ssrc=/);
     expect(await readFile(path.join(dir, "careful-rules", "results.json"), "utf8")).toContain('"agent": "scripted:careful"');
   });
 
