@@ -27,11 +27,13 @@ import { bedrockRegion, bedrockUse, ModelsFile, pricesFile, renderLeaderboardMar
 import { z } from "zod";
 import YAML from "yaml";
 
-// A reader that stops early (`| head`, `less` quit before the end) closes the pipe: stop quietly, as other
-// CLIs do, instead of crashing with an EPIPE stack trace. Any other write error still crashes.
+// A reader that stops early (`| head`, `less` quit before the end) closes the pipe: stop quietly with 141,
+// the status a shell reports for a Unix tool killed by SIGPIPE (128 + 13), instead of crashing with an EPIPE
+// stack trace. Node ignores SIGPIPE, so the CLI exits with that status itself. Any other write error still crashes.
+const SIGPIPE_STATUS = 141;
 for (const stream of [process.stdout, process.stderr]) {
   stream.on("error", (err: NodeJS.ErrnoException) => {
-    if (err.code === "EPIPE") process.exit(0);
+    if (err.code === "EPIPE") process.exit(SIGPIPE_STATUS);
     throw err;
   });
 }

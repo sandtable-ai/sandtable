@@ -5,10 +5,10 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 // `sandtable leaderboard ... | head` or `less` quit early: the reader goes away while the CLI still has output.
-// Like other CLIs, it stops quietly instead of crashing with an EPIPE stack trace.
+// Like other Unix tools, it stops quietly with 141 (128 + SIGPIPE) instead of crashing with an EPIPE stack trace.
 
 describe("output piped into a reader that stops early", () => {
-  it.skipIf(!process.features.typescript)("ends the CLI quietly with exit 0", async () => {
+  it.skipIf(!process.features.typescript)("ends the CLI quietly with exit 141, as a Unix tool killed by SIGPIPE", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "sandtable-pipe-"));
     // The board prints its header before any model runs; a slow agent puts the next line well after it.
     const agent = path.join(dir, "agent.mjs");
@@ -22,6 +22,6 @@ describe("output piped into a reader that stops early", () => {
     child.stdout.once("data", () => child.stdout.destroy());
     const code = await new Promise<number | null>((resolve) => child.on("close", resolve));
     expect(stderr).not.toMatch(/EPIPE|\n\s+at /);
-    expect(code).toBe(0);
+    expect(code).toBe(141);
   });
 });
