@@ -48,11 +48,13 @@ export function coerceArgs(tool: Tool, raw: unknown): { args: Args } | { error: 
   if (raw === undefined || raw === null) raw = {};
   if (!isPlainObject(raw)) return { error: "arguments must be a JSON object" };
   const args: Args = {};
+  // Own keys only, on both sides: `in` and a bare lookup would also find Object.prototype members
+  // such as toString or constructor.
   for (const name of Object.keys(raw)) {
-    if (!(name in tool.params)) return { error: `unknown argument "${name}"` };
+    if (!Object.hasOwn(tool.params, name)) return { error: `unknown argument "${name}"` };
   }
   for (const [name, p] of Object.entries(tool.params)) {
-    const value = raw[name];
+    const value = Object.hasOwn(raw, name) ? raw[name] : undefined;
     if (value === undefined || value === null || value === "") {
       if (p.required) return { error: `missing required argument "${name}"` };
       if (p.default !== undefined) args[name] = p.default;
