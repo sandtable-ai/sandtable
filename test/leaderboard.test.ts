@@ -235,6 +235,51 @@ describe("leaderboard", () => {
     expect(JSON.parse(await readFile(path.join(dir, "careful-rules", "run.json"), "utf8"))).toMatchObject({ agent: "scripted:careful" });
   });
 
+  it("names every model's stored results.json or run.json it can't read, and runs nothing", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const domain = await loadDomain(example);
+    const entries = [
+      { label: "Careful rules", agent: "scripted:careful" },
+      { label: "Naive rules", agent: "scripted:naive" },
+      { label: "Fine", agent: "scripted:careful" },
+    ];
+    const base = { domain, user: scriptedUser(), k: 1, taskIds: ["no-mc-number"], outDir: dir, entries };
+    await runLeaderboard({ ...base, resolveAgent: async (spec) => agents[spec]!() });
+    const files = async () => Promise.all((await readdir(dir, { recursive: true })).sort().map(async (f) => [f, await readFile(path.join(dir, f)).catch(() => "folder")]));
+    const results = path.join(dir, "careful-rules", "results.json");
+    const runJson = path.join(dir, "naive-rules", "run.json");
+    const stored = await readFile(results, "utf8");
+    const resolved: string[] = [];
+    const cases: [file: string, text: string, problem: string][] = [
+      [results, stored.slice(0, 300), "is not valid JSON: "],
+      [results, "", "is not valid JSON: Unexpected end of JSON input"],
+      [results, "null", "is not a results.json written by `sandtable run`"],
+      [runJson, '{"agent": "scripted:na', "is not valid JSON: "],
+      [runJson, "[]", "is not a run.json written by `sandtable leaderboard`"],
+    ];
+    for (const [file, text, problem] of cases) {
+      await writeFile(file, text);
+      const board = await files();
+      const err = await runLeaderboard({ ...base, resolveAgent: async (spec) => (resolved.push(spec), agents[spec]!()) }).catch((e: Error) => e);
+      expect(err).toBeInstanceOf(Error);
+      const lines = (err as Error).message.split("\n");
+      expect(lines[0]).toBe("1 model(s) have stored files the board can't read:");
+      expect(lines[1]).toContain(`  - ${file === results ? "Careful rules" : "Naive rules"}: ${file} ${problem}`);
+      expect(lines.at(-1)).toMatch(/^Nothing ran\. Fix each file, or move that model's folder out of .* and run the board again to rerun the model\./);
+      // Stopped before anything ran, was regraded or written.
+      expect(resolved).toEqual([]);
+      expect(await files()).toEqual(board);
+      await writeFile(file, file === results ? stored : JSON.stringify({ agent: "scripted:naive" }));
+    }
+
+    // Every broken file is listed at once, not only the first.
+    await writeFile(results, "");
+    await writeFile(runJson, "{");
+    await expect(runLeaderboard({ ...base, resolveAgent: async (spec) => agents[spec]!() })).rejects.toThrow(
+      `2 model(s) have stored files the board can't read:\n  - Careful rules: ${results} is not valid JSON: Unexpected end of JSON input\n  - Naive rules: ${runJson} is not valid JSON: `,
+    );
+  });
+
   it("skips a noop entry, since the do-nothing baseline is always there, and shows one pass column at k=1", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
     const domain = await loadDomain(example);
