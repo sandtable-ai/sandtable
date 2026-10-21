@@ -87,7 +87,15 @@ describe("Claude Code plugin", () => {
     const market = json(path.join(root, ".claude-plugin", "marketplace.json"));
     const manifest = json(path.join(pluginDir, ".claude-plugin", "plugin.json"));
     expect(market.name).toBe("sandtable");
-    expect(market.plugins).toEqual([expect.objectContaining({ name: "sandtable", source: "./plugin" })]);
+    // Installed from plugin/ at a release tag, so the skills describe the CLI release with the same version
+    // instead of whatever main holds. scripts/sync-version.mjs moves the tag (test/sync-version.test.ts).
+    expect(market.plugins).toEqual([
+      expect.objectContaining({
+        name: "sandtable",
+        source: { source: "git-subdir", url: "https://github.com/sandtable-ai/sandtable.git", path: "plugin", ref: expect.stringMatching(/^v\d+\.\d+\.\d+$/) },
+      }),
+    ]);
+    expect(Object.hasOwn((market.plugins as object[])[0]!, "version")).toBe(false);
     expect(manifest.name).toBe("sandtable");
     expect(manifest.version).toBe(json(path.join(root, "package.json")).version);
   });
