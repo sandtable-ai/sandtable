@@ -28,11 +28,21 @@ sandtable is in **beta**: the spec may still change before 1.0. [Issues](https:/
 
 ## Next: closing the loop in CI (milestone v0.3)
 
-- Baseline comparison and PR comments with pass^k deltas ([#12](https://github.com/sandtable-ai/sandtable/issues/12), [#13](https://github.com/sandtable-ai/sandtable/issues/13))
-- Done, not yet released: reliability verdicts: pass@k, flaky tasks, flip rate, intervals, infra errors as SKIPPED ([#27](https://github.com/sandtable-ai/sandtable/issues/27))
-- Critical tasks ([#28](https://github.com/sandtable-ai/sandtable/issues/28)), failure attribution ([#29](https://github.com/sandtable-ai/sandtable/issues/29)), coverage matrix ([#30](https://github.com/sandtable-ai/sandtable/issues/30))
+Done on `main`, not yet released:
+
+- Baseline comparison: `run --baseline` lists the tasks that broke or got fixed since an earlier run ([#12](https://github.com/sandtable-ai/sandtable/issues/12))
+- Reliability verdicts: pass@k, flaky tasks, flip rate, intervals, infra errors as SKIPPED ([#27](https://github.com/sandtable-ai/sandtable/issues/27))
+- Critical tasks that fail the run whatever the score ([#28](https://github.com/sandtable-ai/sandtable/issues/28))
+- Argument matchers in `called` and `not_called` ([#25](https://github.com/sandtable-ai/sandtable/issues/25)), per-task `given` rows and context ([#37](https://github.com/sandtable-ai/sandtable/issues/37))
+
+Still to do:
+
+- PR comments with pass^k deltas ([#13](https://github.com/sandtable-ai/sandtable/issues/13)), a regression gate ([#281](https://github.com/sandtable-ai/sandtable/issues/281)), comparing two stored runs ([#285](https://github.com/sandtable-ai/sandtable/issues/285))
+- Exit 1 for a failed gate and 2 for an error ([#282](https://github.com/sandtable-ai/sandtable/issues/282)), per-tag pass^k floors ([#283](https://github.com/sandtable-ai/sandtable/issues/283))
+- Critical tasks and skipped trials in `leaderboard` and `demo --live` ([#284](https://github.com/sandtable-ai/sandtable/issues/284))
+- Failure attribution ([#29](https://github.com/sandtable-ai/sandtable/issues/29)), coverage matrix ([#30](https://github.com/sandtable-ai/sandtable/issues/30))
 - Customer sign-off report: rule → evidence → reliability ([#31](https://github.com/sandtable-ai/sandtable/issues/31))
-- Argument matchers ([#25](https://github.com/sandtable-ai/sandtable/issues/25)), nested params ([#26](https://github.com/sandtable-ai/sandtable/issues/26)), per-task `given` overrides ([#37](https://github.com/sandtable-ai/sandtable/issues/37))
+- Nested params ([#26](https://github.com/sandtable-ai/sandtable/issues/26))
 
 ## Then: black-box and platform on-ramps (milestone v0.4)
 

@@ -21,11 +21,19 @@ Issues and milestones on GitHub are the source of truth; this page is the overvi
 - [x] Packages on npm and PyPI, published from one tag (#23)
 
 ## Next: closing the loop in CI (milestone v0.3)
-- [ ] Baseline comparison and PR comments with pass^k deltas (#12, #13)
+Done, not yet released:
+- [x] Baseline comparison: `run --baseline` lists the tasks that broke or got fixed since an earlier run (#12)
 - [x] Reliability verdicts: pass@k, flaky tasks, flip rate, intervals, infra errors as SKIPPED (#27)
-- [ ] Critical tasks (#28), failure attribution (#29), coverage matrix (#30)
+- [x] Critical tasks that fail the run whatever the score (#28)
+- [x] Argument matchers in `called` and `not_called` (#25), per-task `given` rows and context (#37)
+
+Still to do:
+- [ ] PR comments with pass^k deltas (#13), a regression gate (#281), comparing two stored runs (#285)
+- [ ] Exit 1 for a failed gate and 2 for an error (#282), per-tag pass^k floors (#283)
+- [ ] Critical tasks and skipped trials in `leaderboard` and `demo --live` (#284)
+- [ ] Failure attribution (#29), coverage matrix (#30)
 - [ ] Customer sign-off report: rule → evidence → reliability (#31)
-- [ ] Argument matchers (#25), nested params (#26), per-task `given` overrides (#37)
+- [ ] Nested params (#26)
 
 ## Then: black-box and platform on-ramps (milestone v0.4)
 - [ ] Serve the world as REST, MCP and webhook tools for hosted agent platforms (#14)
