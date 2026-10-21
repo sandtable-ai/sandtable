@@ -62,20 +62,47 @@ export function mismatch(row: Row, where: Row): string | undefined {
   return undefined;
 }
 
-/** The operators a where clause understands, e.g. `{ rate: { $lte: 2000 } }`. */
-export const OPERATORS = ["$eq", "$ne", "$in", "$nin", "$gt", "$gte", "$lt", "$lte", "$exists", "$contains"] as const;
+/**
+ * The operators a where clause understands, e.g. `{ rate: { $lte: 2000 } }`, each as a test of the
+ * field's value against the operator's. `validate` and matching both read this one table.
+ */
+const OPERATOR_TESTS: Record<string, (actual: unknown, expected: unknown) => boolean> = {
+  $eq: (actual, expected) => equal(actual, expected),
+  $ne: (actual, expected) => !equal(actual, expected),
+  $in: (actual, expected) => Array.isArray(expected) && expected.some((e) => equal(actual, e)),
+  $nin: (actual, expected) => Array.isArray(expected) && !expected.some((e) => equal(actual, e)),
+  $gt: (actual, expected) => compare(actual, expected) > 0,
+  $gte: (actual, expected) => compare(actual, expected) >= 0,
+  $lt: (actual, expected) => compare(actual, expected) < 0,
+  $lte: (actual, expected) => compare(actual, expected) <= 0,
+  $exists: (actual, expected) => (actual !== undefined && actual !== null) === Boolean(expected),
+  $contains: (actual, expected) =>
+    typeof actual === "string" && typeof expected === "string" && actual.toLowerCase().includes(expected.toLowerCase()),
+};
+
+export const OPERATORS: readonly string[] = Object.keys(OPERATOR_TESTS);
 
 /**
- * Why a where clause would fail or never match at run time, one line per condition: an unknown
- * operator (which throws mid-run), or `$in` / `$nin` without a list (which matches nothing).
+ * Why a where clause would fail or never match at run time, one line per problem, each starting with the
+ * field: an unknown operator (which throws mid-run), `$in` / `$nin` without a list (which matches
+ * nothing), or a field named like an operator, such as `$or` (no row has it, so it matches nothing).
+ * With `refs`, the clause belongs to a tool, whose "$arg" references are replaced by an argument: a
+ * single value, so never the list `$in` needs.
  */
-export function operatorProblems(where: Row): string[] {
+export function operatorProblems(where: Row, opts: { refs?: boolean } = {}): string[] {
   const problems: string[] = [];
   for (const [field, cond] of Object.entries(where)) {
+    if (field.startsWith("$")) {
+      problems.push(`${field}: a where clause has no operators at the top, only fields, and all of them must hold`);
+      continue;
+    }
     if (!isOperatorObject(cond)) continue;
     for (const [op, expected] of Object.entries(cond)) {
-      if (!(OPERATORS as readonly string[]).includes(op)) problems.push(`${field}: unknown operator "${op}" (use ${OPERATORS.join(", ")})`);
-      else if ((op === "$in" || op === "$nin") && !Array.isArray(expected)) problems.push(`${field}: ${op} needs a list`);
+      if (!Object.hasOwn(OPERATOR_TESTS, op)) problems.push(`${field}: unknown operator "${op}" (use ${OPERATORS.join(", ")})`);
+      else if ((op === "$in" || op === "$nin") && !Array.isArray(expected)) {
+        const ref = opts.refs && typeof expected === "string" && WHOLE_REF.test(expected);
+        problems.push(`${field}: ${op} needs a list${ref ? `, and "${expected}" is a single argument value: list the values, or use ${op === "$in" ? "$eq" : "$ne"}` : ""}`);
+      }
     }
   }
   return problems;
@@ -83,40 +110,13 @@ export function operatorProblems(where: Row): string[] {
 
 function test(actual: unknown, cond: unknown): boolean {
   if (isOperatorObject(cond)) {
-    return Object.entries(cond).every(([op, expected]) => applyOperator(op, actual, expected));
+    return Object.entries(cond).every(([op, expected]) => {
+      // Own keys only, so "$constructor" is as unknown as "$like". `validate` rejects both before a run.
+      if (!Object.hasOwn(OPERATOR_TESTS, op)) throw new Error(`Unknown operator ${op}`);
+      return OPERATOR_TESTS[op]!(actual, expected);
+    });
   }
   return equal(actual, cond);
-}
-
-function applyOperator(op: string, actual: unknown, expected: unknown): boolean {
-  switch (op) {
-    case "$eq":
-      return equal(actual, expected);
-    case "$ne":
-      return !equal(actual, expected);
-    case "$in":
-      return Array.isArray(expected) && expected.some((e) => equal(actual, e));
-    case "$nin":
-      return Array.isArray(expected) && !expected.some((e) => equal(actual, e));
-    case "$gt":
-      return compare(actual, expected) > 0;
-    case "$gte":
-      return compare(actual, expected) >= 0;
-    case "$lt":
-      return compare(actual, expected) < 0;
-    case "$lte":
-      return compare(actual, expected) <= 0;
-    case "$exists":
-      return (actual !== undefined && actual !== null) === Boolean(expected);
-    case "$contains":
-      return (
-        typeof actual === "string" &&
-        typeof expected === "string" &&
-        actual.toLowerCase().includes(expected.toLowerCase())
-      );
-    default:
-      throw new Error(`Unknown operator ${op}`);
-  }
 }
 
 /** Compare numbers numerically and everything else as strings. Returns NaN when not comparable. */

@@ -42,6 +42,8 @@ tasks: ./tasks.yaml                 # any top-level value that is a relative .md
 | `$exists` | `true`: the field is set and not null |
 | `$contains` | case-insensitive substring |
 
+- No `$or`, `$regex` or other operators: `validate` fails on an unknown operator, on `$in`/`$nin` without a list (`"$arg"` is one value, never a list), and on a top-level `$` key, in any where clause.
+
 ## Tools
 
 ```yaml

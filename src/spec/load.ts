@@ -56,6 +56,10 @@ export function validateDomain(d: Domain): string[] {
   const tool = (name: string, where: string) => {
     if (!tools.has(name)) problems.push(`${where}: unknown tool "${name}"`);
   };
+  // Every where clause, at its path: `validate` catches what would throw or silently match nothing at run time.
+  const operators = (clause: Record<string, unknown> | undefined, where: string, opts: { refs?: boolean } = {}) => {
+    if (clause) for (const p of operatorProblems(clause, opts)) problems.push(`${where}.${p}`);
+  };
   const arg = (toolName: string, name: string, where: string) => {
     const t = tools.get(toolName);
     // Own keys only: `in` would also find Object.prototype members such as toString or constructor.
@@ -76,10 +80,14 @@ export function validateDomain(d: Domain): string[] {
   for (const t of d.tools) {
     if (seenTools.has(t.name)) problems.push(`tools: duplicate tool "${t.name}"`);
     seenTools.add(t.name);
-    t.checks.forEach((c, i) => table(c.table, `tools.${t.name}.checks[${i}]`));
+    t.checks.forEach((c, i) => {
+      table(c.table, `tools.${t.name}.checks[${i}]`);
+      operators(c.where, `tools.${t.name}.checks[${i}].where`, { refs: true });
+    });
     t.ops.forEach((op, i) => {
       const name = "get" in op ? op.get : "list" in op ? op.list : "create" in op ? op.create : "update" in op ? op.update : undefined;
       if (name) table(name, `tools.${t.name}.ops[${i}]`);
+      if ("list" in op) operators(op.where, `tools.${t.name}.ops[${i}].where`, { refs: true });
     });
     const unresolved = (value: unknown, where: string) => {
       for (const { ref, name } of references(value)) {
@@ -107,6 +115,7 @@ export function validateDomain(d: Domain): string[] {
       tool(inv.require.tool, where);
       table(inv.require.table, where);
       arg(inv.require.tool, inv.require.key_arg, where);
+      operators(inv.require.where, `${where}.require.where`);
     } else if ("limit" in inv) {
       tool(inv.limit.tool, where);
       arg(inv.limit.tool, inv.limit.arg, where);
@@ -132,6 +141,7 @@ export function validateDomain(d: Domain): string[] {
       }
     } else {
       tool(inv.never.tool, where);
+      operators(inv.never.when, `${where}.never.when`);
     }
   }
 
@@ -142,7 +152,11 @@ export function validateDomain(d: Domain): string[] {
     if (taskIds.has(task.id)) problems.push(`${where}: duplicate task id`);
     taskIds.add(task.id);
     if (task.persona && !personas.has(task.persona)) problems.push(`${where}: unknown persona "${task.persona}"`);
-    task.expect.state.forEach((a, i) => table(a.table, `${where}.expect.state[${i}]`));
+    task.expect.state.forEach((a, i) => {
+      table(a.table, `${where}.expect.state[${i}]`);
+      operators(a.where, `${where}.expect.state[${i}].where`);
+      operators(a.fields, `${where}.expect.state[${i}].fields`);
+    });
     task.reference?.forEach((c, i) => tool(c.tool, `${where}.reference[${i}]`));
     if (task.given) problems.push(...givenProblems(d, task.given, `${where}.given`, tables));
     for (const list of ["called", "not_called"] as const) {
@@ -150,7 +164,7 @@ export function validateDomain(d: Domain): string[] {
         tool(expectedTool(e), `${where}.expect`);
         if (typeof e === "string") return;
         for (const name of Object.keys(e.args)) arg(e.tool, name, `${where}.expect.${list}[${i}]`);
-        for (const p of operatorProblems(e.args)) problems.push(`${where}.expect.${list}[${i}].args.${p}`);
+        operators(e.args, `${where}.expect.${list}[${i}].args`);
       });
     }
   }
