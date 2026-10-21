@@ -25,7 +25,7 @@ h1{font-size:22px;line-height:32px;margin:0 0 8px}h2{font-size:16px;margin:32px 
 table{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border:1px solid var(--line);border-radius:4px;overflow:hidden}
 th,td{text-align:left;padding:8px 16px;border-bottom:1px solid var(--line);vertical-align:top}th{font-size:12px;color:var(--muted);font-weight:600}
 tr:last-child td{border-bottom:0}
-.dot{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:4px;cursor:pointer;border:0;padding:0}
+.dots{white-space:nowrap}.dot{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:4px;cursor:pointer;border:0;padding:0}
 .ok{background:var(--ok)}.bad{background:var(--bad)}
 .okt{color:var(--ok)}.badt{color:var(--bad-text)}
 .chip{display:inline-block;background:var(--chip);border-radius:2px;padding:2px 8px;font-size:12px;line-height:16px;margin:2px 4px 2px 0}
@@ -91,7 +91,7 @@ $("kpis").innerHTML = hats.map(([j, v]) => '<div class="kpi"><b>' + pct(v) + '</
   '<div class="kpi"><b>' + R.tasks.reduce((n, t) => n + t.trials.length, 0) + '</b><span>trials</span></div>';
 $("tasks").innerHTML = R.tasks.map((t, ti) => {
   const failed = [...new Set(t.trials.flatMap((tr) => tr.checks.filter((c) => !c.passed).map((c) => c.id)))];
-  return "<tr><td><b>" + esc(t.id) + "</b><div class='meta'>" + esc(t.description) + "</div></td><td>" +
+  return "<tr><td><b>" + esc(t.id) + "</b><div class='meta'>" + esc(t.description) + "</div></td><td class='dots'>" +
     t.trials.map((tr, i) => '<button class="dot ' + (tr.passed ? "ok" : "bad") + '" title="trial ' + (i + 1) + '" onclick="show(' + ti + "," + i + ')"></button>').join("") +
     "</td><td class='" + (t.passes === t.trials.length ? "okt" : "badt") + "'>" + t.passes + "/" + t.trials.length + "</td><td>" +
     failed.map((f) => '<span class="chip">' + esc(f) + "</span>").join("") + "</td></tr>";

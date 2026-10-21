@@ -14,6 +14,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 - `sandtable leaderboard`: `leaderboard.html` uses the sandtable brand in light and dark, like the HTML report: warm neutrals, terracotta only for a model that failed to run, Fira Sans when installed, square-cornered tables and the logo in the header. It still loads no fonts or other files ([#253](https://github.com/sandtable-ai/sandtable/issues/253)).
 - **Logo**: sandtable has a logo, a 3×3 grid of squares with one terracotta cell for one failed trial among passes, at the head of the README, as the docs site's logo and favicon (replacing the isometric sand table) and on the social card. The card also shows the freight example's current numbers: 50 calls, with the naive agent at pass^1 10.0% ([#256](https://github.com/sandtable-ai/sandtable/issues/256)).
 
+### Fixed
+
+- **HTML report**: a task's trial squares stay on one line. With 4 trials and long task descriptions, the fourth square wrapped under the first three ([#261](https://github.com/sandtable-ai/sandtable/issues/261)).
+
 ## [0.1.1] - 2026-10-21
 
 A bug-fix release with no breaking changes: names like `toString` are checked like any other in tool arguments and invariants, `init --openapi` drafts OpenAPI 3.1 nullable fields, a closed pipe exits 141 instead of crashing, and `leaderboard` names unreadable stored files and keeps a full board's crashed run during a quick check.
