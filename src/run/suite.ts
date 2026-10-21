@@ -12,6 +12,8 @@ export interface TaskSummary {
   id: string;
   description?: string;
   tags: string[];
+  /** Set only on a critical task: any failed trial fails `sandtable run`. */
+  critical?: true;
   trials: TrialResult[];
   passes: number;
 }
@@ -142,7 +144,14 @@ export function summarize(
 ): Pick<SuiteResult, "tasks" | "passHat" | "failureModes" | "byTag" | "soft"> {
   const summaries: TaskSummary[] = tasks.map((task) => {
     const trials = results.filter((r) => r.taskId === task.id).sort((a, b) => a.trial - b.trial);
-    return { id: task.id, description: task.description, tags: task.tags, trials, passes: trials.filter((t) => t.passed).length };
+    return {
+      id: task.id,
+      description: task.description,
+      tags: task.tags,
+      ...(task.critical ? { critical: true as const } : {}),
+      trials,
+      passes: trials.filter((t) => t.passed).length,
+    };
   });
   const outcomes = summaries.map((s) => s.trials.map((t) => t.passed));
   const passHat: Record<string, number> = {};
@@ -154,6 +163,14 @@ export function summarize(
     byTag: tagScores(summaries, k),
     soft: softScores(domain, results),
   };
+}
+
+/**
+ * The critical tasks with at least one failed trial, in spec order. Any one of them fails `sandtable run`,
+ * whatever pass^k and `--fail-under` say.
+ */
+export function criticalFailures(result: Pick<SuiteResult, "tasks">): TaskSummary[] {
+  return result.tasks.filter((t) => t.critical && t.passes < t.trials.length);
 }
 
 /**

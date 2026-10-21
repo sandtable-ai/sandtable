@@ -29,6 +29,8 @@ npx sandtable-ai run examples/freight --agent http://localhost:8787/step
 
 Every task has a hidden goal for the simulated caller and a `user.script` for offline runs. Every task that must write has a `reference`, so `sandtable lint` proves it solvable. The `noop` baseline passes 16 of the 50 (32%): the 16 refusals above, and none of the hard tier.
 
+`expired-insurance`, `inactive-authority` and `do-not-use-carrier` are marked `critical: true`: booking a carrier that may not haul is a release blocker, so `sandtable run` exits 1 when any of their trials fails, whatever the score. The naive agent fails all three.
+
 ## The hard tier
 
 After the fixes in #90–#92 and #119, capable models passed nearly every call above. The 18 calls tagged `hard` add what makes a real carrier-sales call hard: more than one thing to get right in one call, details that change mid-call, and callers who test the rules. Each one grades several outcomes, and every rule it relies on is written in `policy.md`. Nothing depends on wording tricks or a hidden rule.

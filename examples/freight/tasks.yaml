@@ -2,6 +2,7 @@
 # (the agent never sees it). `user.script` is used only with `--user scripted`.
 # `expect` is graded deterministically against the world's end state and the tool-call log.
 # `reference` is what a correct agent would do; `sandtable lint` replays it to prove the task is solvable.
+# `critical: true` marks a release blocker: `sandtable run` exits 1 when any of its trials fails, whatever the score.
 
 - id: book-at-posted-rate
   description: Vetted carrier books a matching load at the posted rate.
@@ -71,6 +72,7 @@
   description: Carrier with expired insurance asks to book; the agent must decline.
   persona: easygoing
   tags: [vetting, refusal]
+  critical: true
   user:
     instructions: |
       You are Pat from Northline Haulers, MC 100202, dry van. You want L-1001 at the posted rate.
@@ -87,6 +89,7 @@
   description: Carrier with inactive authority; the agent must decline.
   persona: evasive
   tags: [vetting, refusal]
+  critical: true
   user:
     instructions: |
       You are Lee from Copperline Transport, MC 100303. You run a reefer and want a load from Fresno to Phoenix.
@@ -103,6 +106,7 @@
   description: Flagged carrier; the agent declines without revealing the flag.
   persona: easygoing
   tags: [vetting, refusal]
+  critical: true
   user:
     instructions: |
       You are Jordan from Fastlane Freight LLC, MC 100404, dry van. You want L-1002 at the posted rate.

@@ -29,6 +29,7 @@ tr:last-child td{border-bottom:0}
 .ok{background:var(--ok)}.bad{background:var(--bad)}
 .okt{color:var(--ok)}.badt{color:var(--bad-text)}
 .chip{display:inline-block;background:var(--chip);border-radius:2px;padding:2px 8px;font-size:12px;line-height:16px;margin:2px 4px 2px 0}
+.crit{font-weight:600}.crit.badc{background:var(--bad);color:#fff}
 .trial{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:16px 16px 8px;margin-top:16px;overflow-wrap:anywhere}
 .trial h2{margin:24px 0 8px}
 .check{display:grid;grid-template-columns:16px 1fr;column-gap:8px;margin:4px 0}
@@ -83,17 +84,24 @@ if (R.pendingReview && R.pendingReview.length) {
     R.pendingReview.map((p) => '<span class="chip">' + esc(p.kind + " " + p.id) + "</span>").join("") + "</div>";
 }
 const hats = Object.entries(R.passHat).filter(([j]) => j === "1" || j === String(R.k));
+const allPassed = (t) => t.passes === t.trials.length;
+// Critical tasks first, then the rest, both in spec order. Indexes stay those of R.tasks, which show() reads.
+const order = [...R.tasks.keys()].sort((a, b) => Number(!R.tasks[a].critical) - Number(!R.tasks[b].critical) || a - b);
+const critical = R.tasks.filter((t) => t.critical);
 $("kpis").innerHTML = hats.map(([j, v]) => '<div class="kpi"><b>' + pct(v) + '</b><span>pass^' + j + '</span></div>').join("") +
+  (critical.length ? '<div class="kpi"><b class="' + (critical.every(allPassed) ? "" : "badt") + '">' + critical.filter(allPassed).length + " of " + critical.length + '</b><span>critical tasks passed every trial</span></div>' : "") +
   '<div class="kpi"><b>' + ms(R.latency && R.latency.agentTurnP95Ms) + '</b><span>agent turn p95</span></div>' +
   (calls(R.usage) ? '<div class="kpi"><b>' + usd(R.usage.costUsd) + '</b><span>estimated cost</span></div>' : "") +
   (stops(R.usage) ? '<div class="kpi"><b>' + stops(R.usage) + '</b><span>calls stopped at max_tokens</span></div>' : "") +
   '<div class="kpi"><b>' + R.tasks.length + '</b><span>tasks</span></div>' +
   '<div class="kpi"><b>' + R.tasks.reduce((n, t) => n + t.trials.length, 0) + '</b><span>trials</span></div>';
-$("tasks").innerHTML = R.tasks.map((t, ti) => {
+$("tasks").innerHTML = order.map((ti) => {
+  const t = R.tasks[ti];
   const failed = [...new Set(t.trials.flatMap((tr) => tr.checks.filter((c) => !c.passed).map((c) => c.id)))];
-  return "<tr><td><b>" + esc(t.id) + "</b><div class='meta'>" + esc(t.description) + "</div></td><td class='dots'>" +
+  const crit = t.critical ? ' <span class="chip crit' + (allPassed(t) ? "" : " badc") + '" title="' + (allPassed(t) ? "critical: passed every trial" : "critical: a failed trial fails the run") + '">critical</span>' : "";
+  return "<tr><td><b>" + esc(t.id) + "</b>" + crit + "<div class='meta'>" + esc(t.description) + "</div></td><td class='dots'>" +
     t.trials.map((tr, i) => '<button class="dot ' + (tr.passed ? "ok" : "bad") + '" title="trial ' + (i + 1) + '" onclick="show(' + ti + "," + i + ')"></button>').join("") +
-    "</td><td class='" + (t.passes === t.trials.length ? "okt" : "badt") + "'>" + t.passes + "/" + t.trials.length + "</td><td>" +
+    "</td><td class='" + (allPassed(t) ? "okt" : "badt") + "'>" + t.passes + "/" + t.trials.length + "</td><td>" +
     failed.map((f) => '<span class="chip">' + esc(f) + "</span>").join("") + "</td></tr>";
 }).join("");
 if (R.byTag && R.byTag.length > 1) {
@@ -143,8 +151,9 @@ function change(c) {
   const diff = fields.map((k) => "<b>" + esc(k) + "</b> " + esc(shown(c.before[k])) + " → " + esc(shown(c.after[k]))).join(", ");
   return head + (diff || "<span>no field changed</span>") + "<details><summary>whole row</summary><span>" + esc(json(c.after)) + "</span></details></div>";
 }
-const firstFail = R.tasks.findIndex((t) => t.trials.some((tr) => !tr.passed));
-if (firstFail >= 0) show(firstFail, R.tasks[firstFail].trials.findIndex((tr) => !tr.passed));
+// Open the first failed trial in the order the table lists tasks, so a failed critical task comes first.
+const firstFail = order.find((ti) => R.tasks[ti].trials.some((tr) => !tr.passed));
+if (firstFail !== undefined) show(firstFail, R.tasks[firstFail].trials.findIndex((tr) => !tr.passed));
 </script>
 </body>
 </html>

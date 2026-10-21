@@ -211,6 +211,8 @@ export const TaskSpec = z
     description: z.string().optional(),
     persona: z.string().optional(),
     tags: z.array(z.string()).default([]),
+    /** A release blocker: `sandtable run` exits 1 when any of its trials fails, whatever the score and `--fail-under`. */
+    critical: z.boolean().optional(),
     review: Review,
     source: Source,
     user: z

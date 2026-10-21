@@ -21,14 +21,16 @@ It passes exactly the tasks whose success is "nothing happened": refusals, hando
 sandtable · freight-carrier-sales · agent noop · user scripted · k=1
 
   task                                trials  pass
+  expired-insurance                   ✓       1/1  critical
+  inactive-authority                  ✓       1/1  critical
+  do-not-use-carrier                  ✓       1/1  critical
   book-at-posted-rate                 ✗       0/1
   negotiate-within-ceiling            ✗       0/1
   walk-away-above-ceiling             ✓       1/1
-  expired-insurance                   ✓       1/1
-  inactive-authority                  ✓       1/1
   ...
 
   pass^1 32.0%
+  critical 3 of 3 passed every trial
   ...
   By tag
   hard          18 tasks  pass^1   0.0%
@@ -37,6 +39,8 @@ sandtable · freight-carrier-sales · agent noop · user scripted · k=1
 ```
 
 So read any agent's score on this suite against that floor, not against zero. The per-tag scores show where the floor comes from: noop gets 82% on `refusal` for free, and nothing on the `hard` tier, whose refusals all require a lookup or a handoff.
+
+noop also passes all three [critical tasks](/reference/spec#critical-tasks), because each is a refusal: a critical task stops an agent that books an ineligible carrier, not one that does nothing. Gate on the score too, with `--fail-under`.
 
 <Tip>
 Make refusal tasks discriminate. "Nothing was booked" is passed by an agent that never does anything. Add what a correct refusal requires, such as `called: [verify_carrier]` (it looked the carrier up before declining), and the do-nothing agent fails it. See [Write tasks that discriminate](/guides/write-tasks).

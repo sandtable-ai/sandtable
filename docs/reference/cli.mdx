@@ -131,6 +131,8 @@ npx sandtable-ai run ./my-domain --agent http://localhost:8787/step -k 4 --fail-
 
 The run prints a summary (per-task results, pass^k, latency, cost, per-tag scores, the rate of each soft invariant and the top failure modes) and the paths of the files it wrote. See [results.json](/reference/results-schema).
 
+[Critical tasks](/reference/spec#critical-tasks) are listed first and marked `critical`, with a line such as `critical 2 of 3 passed every trial` under pass^k. When any trial of a critical task fails, `run` names those tasks and exits 1, with or without `--fail-under`. When both fail, it prints both.
+
 ## leaderboard
 
 Rank several agents on one domain under the same simulated users, next to a do-nothing baseline.
@@ -265,5 +267,5 @@ The hash covers what sandtable's own adapters give a model. A custom agent adapt
 | Code | When |
 |---|---|
 | `0` | success |
-| `1` | an error (invalid domain, unknown agent or user spec, missing credentials or package), `validate --strict` with pending items, `lint` errors, `run` below `--fail-under`, a `run` or `demo --live` in which every trial ended in an error (missing credentials or package, an unreachable agent), or a `leaderboard` on which every model failed or crashed |
+| `1` | an error (invalid domain, unknown agent or user spec, missing credentials or package), `validate --strict` with pending items, `lint` errors, `run` below `--fail-under`, a `run` in which any trial of a critical task failed, a `run` or `demo --live` in which every trial ended in an error (missing credentials or package, an unreachable agent), or a `leaderboard` on which every model failed or crashed |
 | `141` | the output was piped into a reader that stopped early, such as `head` or a `less` quit before the end: the command stops there quietly, without finishing, with the status a shell reports for a Unix tool stopped by `SIGPIPE` (128 + 13) |
