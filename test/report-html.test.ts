@@ -2,6 +2,7 @@ import path from "node:path";
 import vm from "node:vm";
 import { describe, expect, it } from "vitest";
 import { freightScriptedAgent } from "../src/demo/freight-agents.ts";
+import { MARK_SVG } from "../src/report/brand.ts";
 import { renderHtml } from "../src/report/html.ts";
 import { runSuite } from "../src/run/suite.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
@@ -48,5 +49,14 @@ describe("HTML report world changes", () => {
     };
     const html = openTrial(renderHtml(r as never), 0, 0);
     expect(html).toContain("<b>note</b> &quot;x&quot; → (unset), <b>hold</b> (unset) → true<details>");
+  });
+});
+
+describe("HTML report page", () => {
+  it("is one self-contained file: the logo is inline and nothing is fetched, fonts included", async () => {
+    const r = await runSuite({ domain: await loadDomain(path.resolve("examples/freight")), agent: freightScriptedAgent("careful"), user: scriptedUser(), taskIds: ["book-at-posted-rate"] });
+    const html = renderHtml(r);
+    expect(html).toContain(`<div class="head">${MARK_SVG}<h1>`);
+    expect(html).not.toMatch(/@import|@font-face|url\(|<link|\ssrc=/);
   });
 });

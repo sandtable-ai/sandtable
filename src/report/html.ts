@@ -1,4 +1,5 @@
 import type { SuiteResult } from "../run/suite.ts";
+import { BRAND_CSS, MARK_SVG } from "./brand.ts";
 
 /**
  * Self-contained HTML report: one file you can attach to a pull request or send to the
@@ -13,44 +14,43 @@ export function renderHtml(r: SuiteResult): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sandtable report · ${escape(r.domain)}</title>
 <style>
-:root{--bg:#fbfaf8;--fg:#1d1d1b;--muted:#6b6a66;--card:#fff;--line:#e6e3dd;--ok:#1f7a4d;--bad:#b42318;--chip:#f2efe9;--agent:#eef4ff;--user:#f7f5f0;--tool:#fdf7e7}
-@media (prefers-color-scheme:dark){:root{--bg:#141413;--fg:#ecebe7;--muted:#9c9a94;--card:#1d1d1b;--line:#33322f;--ok:#4cc38a;--bad:#ff6b5e;--chip:#2a2926;--agent:#1c2433;--user:#22211f;--tool:#2b2615}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+${BRAND_CSS}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 var(--sans)}
 main{max-width:1040px;margin:0 auto;padding:32px 16px 64px}
-h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:32px 0 12px}
+h1{font-size:22px;line-height:32px;margin:0 0 8px}h2{font-size:16px;margin:32px 0 16px}
 .meta{color:var(--muted);font-size:13px}
-.kpis{display:flex;gap:12px;flex-wrap:wrap;margin:20px 0}
-.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 16px;min-width:140px}
-.kpi b{display:block;font-size:26px;font-variant-numeric:tabular-nums}.kpi span{color:var(--muted);font-size:12px}
-table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
-th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}th{font-size:12px;color:var(--muted);font-weight:600}
+.kpis{display:flex;gap:8px;flex-wrap:wrap;margin:24px 0}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:8px 16px;min-width:144px}
+.kpi b{display:block;font-size:26px;line-height:32px;font-variant-numeric:tabular-nums}.kpi span{color:var(--muted);font-size:12px;line-height:16px}
+table{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border:1px solid var(--line);border-radius:4px;overflow:hidden}
+th,td{text-align:left;padding:8px 16px;border-bottom:1px solid var(--line);vertical-align:top}th{font-size:12px;color:var(--muted);font-weight:600}
 tr:last-child td{border-bottom:0}
-.dot{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:3px;cursor:pointer;border:0;padding:0}
+.dot{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:4px;cursor:pointer;border:0;padding:0}
 .ok{background:var(--ok)}.bad{background:var(--bad)}
-.okt{color:var(--ok)}.badt{color:var(--bad)}
-.chip{display:inline-block;background:var(--chip);border-radius:6px;padding:1px 7px;font-size:12px;margin:2px 4px 2px 0}
-.trial{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 16px 8px;margin-top:16px;overflow-wrap:anywhere}
+.okt{color:var(--ok)}.badt{color:var(--bad-text)}
+.chip{display:inline-block;background:var(--chip);border-radius:2px;padding:2px 8px;font-size:12px;line-height:16px;margin:2px 4px 2px 0}
+.trial{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:16px 16px 8px;margin-top:16px;overflow-wrap:anywhere}
 .trial h2{margin:24px 0 8px}
 .check{display:grid;grid-template-columns:16px 1fr;column-gap:8px;margin:4px 0}
-.change{font:13px/20px ui-monospace,"SF Mono",Menlo,Consolas,monospace;margin:4px 0}.change span{color:var(--muted)}.change b{font-weight:600}
+.change{font:13px/20px var(--mono);margin:4px 0}.change span{color:var(--muted)}.change b{font-weight:600}
 .change details{display:inline;margin-left:8px}.change summary{display:inline;cursor:pointer;color:var(--muted);font-size:12px}.change details[open] span{display:block}
 .change summary::before{content:"▸ "}.change details[open]>summary::before{content:"▾ "}
-.ev{border-radius:8px;padding:8px 12px;margin:8px 0;white-space:pre-wrap}
-.ev small{display:block;color:var(--muted);font:12px/16px ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;margin-bottom:4px}
+.ev{border:1px solid transparent;border-radius:4px;padding:8px 16px;margin:8px 0;white-space:pre-wrap}
+.ev small{display:block;color:var(--muted);font:12px/16px var(--sans);margin-bottom:4px}
 .ev small b{font-weight:600;text-transform:uppercase;letter-spacing:.04em}.ev small code{font-size:1em}
-.user{background:var(--user)}.agent{background:var(--agent)}.tool{background:var(--tool);font:13px/20px ui-monospace,"SF Mono",Menlo,Consolas,monospace}
-.viol{color:var(--bad);font-weight:600}.viol code{font-weight:600}.softv{color:var(--muted);font-weight:600}
-code{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.867em}
+.user{background:var(--chip)}.agent{background:var(--card);border-color:var(--line)}.tool{background:var(--tool);font:13px/20px var(--mono)}
+.viol{color:var(--bad-text);font-weight:600}.viol code{font-weight:600}.softv{color:var(--muted);font-weight:600}
+code{font-family:var(--mono);font-size:.867em}code,.change,.tool{font-variant-ligatures:none}
 .wrap{overflow-x:auto}
-.explain{color:var(--muted);font-size:13px;max-width:760px;margin:10px 0 0}
+.explain{color:var(--muted);font-size:13px;max-width:760px;margin:8px 0 0}
 footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--line)}
 a{color:inherit}
-.warn{background:var(--tool);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-top:16px}
+.warn{background:var(--chip);border:1px solid var(--line);border-radius:4px;padding:8px 16px;margin-top:16px}
 </style>
 </head>
 <body>
 <main>
-<h1>Sandtable report: <span id="domain"></span></h1>
+<div class="head">${MARK_SVG}<h1>Sandtable report: <span id="domain"></span></h1></div>
 <div class="meta" id="meta"></div>
 <p class="explain">Each task is a simulated conversation, run k times on a fresh copy of the world. A trial passes only if the records end in the expected state and no rule was broken on any tool call or message. No AI judge decides pass or fail. <b>pass^k</b> is the share of tasks where every one of k trials passed.</p>
 <div id="pending"></div>

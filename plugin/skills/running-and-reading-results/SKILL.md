@@ -96,7 +96,7 @@ npx sandtable-ai leaderboard ./sandtable -m models.yaml -k 4 --provider bedrock 
 Add `.sandtable/` to the project's `.gitignore` unless the engineer wants runs committed.
 
 In the terminal summary and the report:
-- a yellow **provisional** line or banner: drafted items are still pending review, so the score is not yet a claim about the customer's rules.
+- a **provisional** line (yellow in the terminal) or banner: drafted items are still pending review, so the score is not yet a claim about the customer's rules.
 - per task, one mark per trial (✓ ✗) and passes/trials. Mixed marks mean a flaky task: the reliability gap pass^k exists to show.
 - **By tag**: pass^1 and pass^k per tag. A high `refusal` score next to a low `happy-path` one is what a too-cautious agent looks like.
 - **Soft rules**, when the domain has `soft: true` invariants: how often each was broken, out of the trials where it applied. They never fail a trial, so read them next to pass^k: in the freight example, `counter-at-ceiling` is how often the agent's counter-offers reached the price ceiling.
