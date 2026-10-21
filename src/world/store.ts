@@ -1,4 +1,4 @@
-import type { Domain } from "../spec/schema.ts";
+import type { Domain, Task } from "../spec/schema.ts";
 import { matches, pruneUndefined, type Row } from "./match.ts";
 
 export type Snapshot = Record<string, Row[]>;
@@ -17,6 +17,31 @@ interface Table {
   key: string;
   rows: Map<string, Row>;
   nextId: number;
+}
+
+/**
+ * The seed a task starts from: the domain's rows with the task's `given.rows` merged in by each table's key.
+ * A row whose key is seeded patches that row's fields (the given fields win, the others stay); a new key
+ * adds a row after the seeded ones. Without `given.rows`, the domain's own seed.
+ */
+export function seedFor(domain: Domain, task?: Pick<Task, "given">): Domain["world"] {
+  const patch = task?.given?.rows;
+  if (!patch) return domain.world;
+  const tables = Object.fromEntries(
+    Object.entries(domain.world.tables).map(([name, t]) => {
+      const given = patch[name];
+      if (!given?.length) return [name, t];
+      const rows = new Map(t.rows.map((r) => [String(r[t.key]), r]));
+      for (const row of given) rows.set(String(row[t.key]), { ...rows.get(String(row[t.key])), ...row });
+      return [name, { ...t, rows: [...rows.values()] }];
+    }),
+  );
+  return { tables };
+}
+
+/** A fresh World for one trial of `task`: the domain's seed, patched by the task's `given.rows`. */
+export function worldFor(domain: Domain, task?: Pick<Task, "given">): World {
+  return new World(seedFor(domain, task));
 }
 
 /** In-memory, resettable copy of the customer's records. Every episode gets a fresh World. */

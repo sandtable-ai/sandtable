@@ -18,7 +18,7 @@ The agent under test is whatever answers the simulated user. Whichever adapter y
 | `./my-agent.js`, `./my-agent.ts` | Your agent is a JS/TS function: default-export an [`AgentAdapter`](#your-agent-as-a-js-or-ts-module). |
 | `noop` | Baseline: never calls a tool and declines everything. See [the noop baseline](/concepts/baselines). |
 
-The model adapters (`claude`, `bedrock:`, `openai:`) all receive the same default system prompt (the domain description and policy) and the same tools, so their scores compare. Your own agent receives that prompt too and may ignore it.
+The model adapters (`claude`, `bedrock:`, `openai:`) all receive the same default system prompt (the domain description and policy) and the same tools, so their scores compare. Your own agent receives that prompt too and may ignore it. A task can also give the agent [call context](/reference/spec#per-task-world-and-context), such as a caller ID: it follows the policy in the default prompt, and an agent with its own prompt reads it as `context`.
 
 If your agent is built with a framework, such as the Vercel AI SDK, the OpenAI Agents SDK, the Claude Agent SDK, Pipecat or LiveKit Agents, start from a worked example: see [Rehearse an agent built with a framework](/guides/frameworks).
 
@@ -194,7 +194,7 @@ for (const model of ["openai/gpt-4.1", "google/gemini-2.5-flash", "meta-llama/ll
 
 ## Your agent over HTTP
 
-If your agent runs as a service, in any language, give `--agent` its URL. sandtable sends one POST per step: a new user message, or the results of the tool calls your agent asked for. Your agent answers with a reply, or with more tool calls for sandtable to run against the simulated world.
+If your agent runs as a service, in any language, give `--agent` its URL. sandtable sends one POST per step: a new user message, or the results of the tool calls your agent asked for. Your agent answers with a reply, or with more tool calls for sandtable to run against the simulated world. When the task sets `given.context`, every POST also carries it as `context`.
 
 ```bash
 npx sandtable-ai run ./my-domain --agent http://localhost:8787/step -k 4
@@ -215,9 +215,10 @@ import type { AgentAdapter } from "sandtable-ai";
 
 const agent: AgentAdapter = {
   name: "my-agent",
-  async createSession({ system, tools, sessionId, recordUsage }) {
+  async createSession({ system, tools, sessionId, context, recordUsage }) {
     // system: sandtable's default prompt (domain description + policy); use your own if you have one
     // tools: JSON-schema tool definitions, in the shape most model APIs accept
+    // context: the task's given.context (a caller ID, a trigger payload), or undefined
     return {
       async reply(userMessage, callTool) {
         // run your own loop; every callTool() hits the simulated world and is graded

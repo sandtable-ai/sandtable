@@ -1,9 +1,9 @@
 import { gradeTrial, type CheckResult } from "../grade/expectations.ts";
 import { checkTranscript, invariantTool, type CallRecord, type Violation } from "../grade/invariants.ts";
 import type { Domain, Task } from "../spec/schema.ts";
-import { agentSystemPrompt } from "../sim/prompts.ts";
+import { agentSystemPrompt, taskContext } from "../sim/prompts.ts";
 import type { AgentAdapter, CallTool, UserSimulator } from "../sim/types.ts";
-import { diffSnapshots, World, type Change, type Snapshot } from "../world/store.ts";
+import { diffSnapshots, worldFor, type Change, type Snapshot, type World } from "../world/store.ts";
 import { toolSchema } from "../world/tools.ts";
 import { createToolRunner, type ToolEvent, type ToolRunner } from "./tool-runner.ts";
 import { costOf, recordInto, type Usage } from "./usage.ts";
@@ -66,7 +66,7 @@ export async function runEpisode(input: {
 }): Promise<TrialResult> {
   const { domain, task, agent, user, trial } = input;
   const started = performance.now();
-  const world = new World(domain.world);
+  const world = worldFor(domain, task);
   const initial = world.snapshot();
   const events: TrajectoryEvent[] = [];
   const agentMessages: string[] = [];
@@ -75,6 +75,7 @@ export async function runEpisode(input: {
   const callTool: CallTool = async (name, rawArgs) => runner.call(name, rawArgs);
 
   const persona = domain.personas.find((p) => p.id === task.persona);
+  const context = taskContext(task);
   const maxTurns = task.max_turns ?? domain.max_turns;
   let endReason: EndReason = "max_turns";
   let turns = 0;
@@ -83,9 +84,10 @@ export async function runEpisode(input: {
   try {
     const session = await agent.createSession({
       domain,
-      system: agentSystemPrompt(domain),
+      system: agentSystemPrompt(domain, task),
       tools: domain.tools.map(toolSchema),
       sessionId: `${input.runId ? `${input.runId}/` : ""}${task.id}#${trial}`,
+      ...(context ? { context } : {}),
       recordUsage: (model, u) => recordInto(usage.agent, model, u),
     });
     const sim = await user.createSession({ domain, task, persona, recordUsage: (model, u) => recordInto(usage.user, model, u) });
@@ -154,7 +156,7 @@ export function gradeEpisode(input: {
   error?: string;
 }): Pick<TrialResult, "passed" | "checks" | "violations" | "soft"> {
   const { domain, task, world, runner, events, agentMessages, error } = input;
-  const said = checkTranscript(domain, world, runner.calls, events);
+  const said = checkTranscript(domain, world, runner.calls, events, agentSystemPrompt(domain, task));
   const violations: Violation[] = [...runner.violations, ...said.filter((v) => !v.soft)];
   const soft = softChecks(domain, runner.calls, agentMessages.length, [...runner.soft, ...said.filter((v) => v.soft)]);
   const { passed, checks } = gradeTrial({ task, world, calls: runner.calls, agentMessages, violations, error });

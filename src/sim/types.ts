@@ -7,10 +7,15 @@ export type CallTool = (name: string, args: unknown) => Promise<ToolOutcome>;
 
 export interface AgentContext {
   domain: Domain;
-  /** Sandtable's default system prompt (domain description + policy). Your agent may use its own. */
+  /** Sandtable's default system prompt (domain description + policy, then the task's context). Your agent may use its own. */
   system: string;
   tools: ToolSchema[];
   sessionId: string;
+  /**
+   * The task's `given.context`: what the system that connected the conversation knows, such as a caller ID
+   * or a trigger payload. Absent when the task sets none. An agent with its own prompt reads it here.
+   */
+  context?: Record<string, unknown>;
   /** Report model usage so runs can show tokens and cost. Optional for custom adapters. */
   recordUsage?: UsageRecorder;
 }

@@ -4,9 +4,9 @@ import YAML from "yaml";
 import { z } from "zod";
 import { expectedTool } from "../grade/expectations.ts";
 import { mentions, protectedValues } from "../grade/invariants.ts";
-import { agentSystemPrompt } from "../sim/prompts.ts";
+import { agentSystemPrompt, taskContext } from "../sim/prompts.ts";
 import { operatorProblems, substitute } from "../world/match.ts";
-import { DomainSpec, type Domain, type Tool } from "./schema.ts";
+import { DomainSpec, type Domain, type Given, type Tool } from "./schema.ts";
 
 export const DOMAIN_FILE = "sandtable.yaml";
 
@@ -144,6 +144,7 @@ export function validateDomain(d: Domain): string[] {
     if (task.persona && !personas.has(task.persona)) problems.push(`${where}: unknown persona "${task.persona}"`);
     task.expect.state.forEach((a, i) => table(a.table, `${where}.expect.state[${i}]`));
     task.reference?.forEach((c, i) => tool(c.tool, `${where}.reference[${i}]`));
+    if (task.given) problems.push(...givenProblems(d, task.given, `${where}.given`, tables));
     for (const list of ["called", "not_called"] as const) {
       task.expect[list].forEach((e, i) => {
         tool(expectedTool(e), `${where}.expect`);
@@ -152,6 +153,30 @@ export function validateDomain(d: Domain): string[] {
         for (const p of operatorProblems(e.args)) problems.push(`${where}.expect.${list}[${i}].args.${p}`);
       });
     }
+  }
+  return problems;
+}
+
+/** What's wrong with a task's `given`: rows for a table the world doesn't have or without its key, or nothing given at all. */
+function givenProblems(d: Domain, given: Given, where: string, tables: Set<string>): string[] {
+  const problems: string[] = [];
+  const rows = Object.entries(given.rows ?? {});
+  if (!rows.some(([, r]) => r.length) && !Object.keys(given.context ?? {}).length) {
+    problems.push(`${where}: gives nothing: add rows or context, or remove it`);
+  }
+  for (const [name, list] of rows) {
+    if (!tables.has(name)) {
+      problems.push(`${where}.rows: unknown table "${name}"`);
+      continue;
+    }
+    const key = d.world.tables[name]!.key;
+    const keys = new Set<string>();
+    list.forEach((row, i) => {
+      const k = row[key];
+      if (k === undefined) problems.push(`${where}.rows.${name}[${i}]: missing key field "${key}"`);
+      else if (keys.has(String(k))) problems.push(`${where}.rows.${name}: duplicate key ${String(k)}`);
+      else keys.add(String(k));
+    });
   }
   return problems;
 }
@@ -188,17 +213,18 @@ function undetectable(d: Domain, table: string, field: string): string | undefin
 /**
  * What `validate` warns about: likely mistakes that still leave a valid domain. A `never_disclose` value counts
  * only once the agent has been shown it, so a field that no tool returns and sandtable's default system prompt
- * doesn't state can never fire. A custom agent may learn it another way, so this is a warning, not an error.
+ * doesn't state, for any task, can never fire. A custom agent may learn it another way, so this is a warning, not an error.
  */
 export function domainWarnings(d: Domain): string[] {
   const warnings: string[] = [];
-  const prompt = agentSystemPrompt(d);
+  // The default prompt, and each task's prompt that states a `given.context`.
+  const prompts = [agentSystemPrompt(d), ...d.tasks.filter((t) => taskContext(t)).map((t) => agentSystemPrompt(d, t))];
   for (const inv of d.invariants) {
     if (!("never_disclose" in inv)) continue;
     const { table, field } = inv.never_disclose;
     if (undetectable(d, table, field) || d.tools.some((t) => returnsTable(t, table))) continue;
     const values = protectedValues(d.world.tables[table]?.rows ?? [], field);
-    if ([...values].some((v) => mentions(prompt, v))) continue;
+    if ([...values].some((v) => prompts.some((p) => mentions(p, v)))) continue;
     warnings.push(
       `invariants.${inv.id}: never_disclose on ${table}.${field} can never fail a trial: no tool returns a ${table} record and the policy states none of its values, ` +
         `so the agent is never shown one. Return ${table} from a tool, or state the value in the policy if your agent's own prompt holds it.`,
