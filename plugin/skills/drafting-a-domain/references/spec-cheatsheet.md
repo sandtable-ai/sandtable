@@ -1,6 +1,6 @@
 # Domain spec cheat sheet
 
-A condensed, checked copy of `docs/reference/spec.mdx` in the sandtable repository, with the gotchas that cost time. Examples use the bundled, fictional freight carrier-sales domain.
+A condensed, checked copy of `docs/reference/spec.mdx` in the sandtable repository, as of the CLI release with this plugin's version, with the gotchas that cost time. Examples use the bundled, fictional freight carrier-sales domain. If `validate` rejects a key shown here, the installed CLI is another version: check `npx sandtable-ai --version` and trust `validate`.
 
 ## Contents
 - [Top level](#top-level)

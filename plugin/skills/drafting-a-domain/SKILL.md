@@ -9,6 +9,8 @@ A domain is a directory holding `sandtable.yaml` (world tables, tools, invariant
 
 Run the CLI as `npx sandtable-ai <command>`. It uses the project's copy when `sandtable-ai` is a dependency. Inside the sandtable repository itself, run `node src/cli.ts <command>`. If a flag below is rejected, trust `npx sandtable-ai <command> --help` over this file.
 
+This plugin's version matches the CLI release it documents. To know what the installed CLI supports, read `npx sandtable-ai --version`, `npx sandtable-ai <command> --help` and `validate`'s errors. Never read a copy under `~/.npm/_npx`: npx caches several versions there, and the first one you find may not be the one that runs.
+
 ## Ask before spending money
 
 | Free and deterministic: run any time | Calls a model: get the engineer's go-ahead first |

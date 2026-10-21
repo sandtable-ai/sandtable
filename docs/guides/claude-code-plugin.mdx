@@ -31,10 +31,10 @@ The sandtable repository is also a Claude Code plugin marketplace. Its `sandtabl
 Type `/sandtable:` in a session to check: the skills appear as `/sandtable:drafting-a-domain`, `/sandtable:writing-good-tasks` and `/sandtable:running-and-reading-results`.
 
 - **For a team**, install at project scope: `claude plugin install sandtable@sandtable --scope project` records the plugin in `.claude/settings.json`, which you commit. Each collaborator runs the same command once to download it.
-- **Updates.** Claude Code doesn't auto-update third-party marketplaces by default. Run `claude plugin update sandtable@sandtable`, or turn on auto-update for the `sandtable` marketplace in the **Marketplaces** tab of `/plugin`.
+- **Updates.** The marketplace installs the plugin as of the latest sandtable release, so its skills describe the CLI that `npx sandtable-ai` runs, never features that are only on `main`. Claude Code doesn't auto-update third-party marketplaces by default: after a release, run `/plugin marketplace update sandtable` in a session, or `claude plugin update sandtable@sandtable` from your shell, or turn on auto-update for the `sandtable` marketplace in the **Marketplaces** tab of `/plugin`.
 - **What it needs.** The skills run the CLI as `npx sandtable-ai <command>`, which uses the project's copy when `sandtable-ai` is a dependency. The machine needs Node.js 20 or later. Commands that call a model need `ANTHROPIC_API_KEY`, or AWS credentials with `--provider bedrock`.
 
-The plugin is installed from GitHub. It is not part of the `sandtable-ai` npm package, and its version matches the CLI release it was written for. See Claude Code's [plugin docs](https://code.claude.com/docs/en/discover-plugins) for scopes and the `/plugin` panel.
+The plugin is installed from GitHub, from the `plugin/` folder at the latest release's tag. It is not part of the `sandtable-ai` npm package, and its version matches the CLI release it documents: check it against `npx sandtable-ai --version`. To try the skills as they are on `main` or in a clone, start Claude Code with `claude --plugin-dir ./plugin` from the repository; for that session it replaces the installed plugin. See Claude Code's [plugin docs](https://code.claude.com/docs/en/discover-plugins) for scopes and the `/plugin` panel.
 
 ## What's inside
 

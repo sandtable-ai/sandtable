@@ -8,7 +8,12 @@
   "plugins": [
     {
       "name": "sandtable",
-      "source": "./plugin",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/sandtable-ai/sandtable.git",
+        "path": "plugin",
+        "ref": "v0.1.2"
+      },
       "description": "Draft a sandtable domain from a customer's OpenAPI spec, SOP and transcripts, resolve review notes, write reference calls, lint, run against an agent, and read failing trajectories.",
       "category": "testing",
       "tags": ["agent-testing", "evals", "simulation", "tau-bench", "pass-k"]

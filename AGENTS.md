@@ -26,7 +26,7 @@ npm run check   # typecheck, build, tests (the package contents too), version an
                 # lint both examples and run their careful scripted agents offline at --fail-under 100
 ```
 
-Also run these when you touch the area: `claude plugin validate . --strict` (`plugin/`, `.claude-plugin/`), `cd docs && npx mint broken-links` (`docs/`), `uv build python --out-dir python/dist` (`python/`).
+Also run these when you touch the area: `claude plugin validate . --strict` and `claude plugin validate ./plugin --strict` (`plugin/`, `.claude-plugin/`), `cd docs && npx mint broken-links` (`docs/`), `uv build python --out-dir python/dist` (`python/`).
 
 Ask before running anything that calls a model, because it needs keys and costs money. That covers `run` or `leaderboard` with a `claude`, `openai:` or `bedrock:` agent, `demo --live`, `init --sop` and `init --transcripts`. The default simulated user is Claude, so an offline run always passes `--user scripted`. Runs write to `.sandtable/runs/` (gitignored) unless you pass `-o`.
 
@@ -102,17 +102,17 @@ Update these in the same PR as the code change:
 2. `npm version <patch|minor|prerelease --preid alpha> --no-git-tag-version`. This:
    - refuses if `[Unreleased]` is empty
    - moves `[Unreleased]` into `## [X.Y.Z] - <date>`
-   - syncs `python/` and `plugin/`
+   - syncs `python/`, `plugin/` and, for a stable version, the release tag in `.claude-plugin/marketplace.json` that the plugin is installed from (a pre-release keeps the last stable tag)
 3. Open the new section with a one-sentence summary, and check every **Breaking:** entry. A release that changes the project's status, such as 1.0 leaving beta, also updates every place the status row above lists.
 4. Commit `chore(release): vX.Y.Z`, open a PR, wait for CI, then squash-merge.
-5. On the merged main, run `git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z`.
+5. On the merged main, run `git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z` right away: the merged marketplace already installs the plugin from that tag, so installs fail until it exists.
 6. The `release` workflow then:
    - checks everything, and refuses a tag that has no matching CHANGELOG section
    - stages npm (pre-releases under `next`)
    - waits for that npm version to go live, then publishes to PyPI
    - creates the GitHub release from that section
    - for a stable release, moves npm's `next` tag to it once it is live, unless `next` is a newer pre-release
-7. Approve the staged npm release on npmjs.com, or with `npm stage approve <id>`. PyPI and the GitHub release follow within a minute. If you approve more than 2 hours after the tag, re-run the workflow's failed jobs.
+7. Approve the staged npm release on npmjs.com, or with `npm stage approve <id>`, soon after the tag: from the tag on, the plugin's skills describe the new release, which `npx sandtable-ai` serves only once it is approved. PyPI and the GitHub release follow within a minute. If you approve more than 2 hours after the tag, re-run the workflow's failed jobs.
 
 ## Map
 

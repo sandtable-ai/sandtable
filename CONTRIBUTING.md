@@ -39,7 +39,9 @@ Development needs Node ≥ 22.18, which runs `src/*.ts` directly (type stripping
 
 ## Changing the CLI or the spec
 
-The Claude Code plugin in `plugin/` teaches coding agents exact commands and YAML. When you change a command, a flag or the spec, update its skills and the docs pages too. `test/plugin.test.ts` checks every `npx sandtable-ai` command and flag in them against `--help`, and every YAML snippet against the schema. If you have Claude Code, also run `claude plugin validate . --strict`.
+The Claude Code plugin in `plugin/` teaches coding agents exact commands and YAML. When you change a command, a flag or the spec, update its skills and the docs pages too. `test/plugin.test.ts` checks every `npx sandtable-ai` command and flag in them against `--help`, and every YAML snippet against the schema. If you have Claude Code, also run `claude plugin validate . --strict` (the marketplace) and `claude plugin validate ./plugin --strict` (the plugin's own files).
+
+The marketplace installs `plugin/` from the latest release's tag, so users get skills that match the CLI they run, and your changes reach them with the next release. To try your working copy, start Claude Code with `claude --plugin-dir ./plugin`: for that session it replaces an installed `sandtable` plugin. Don't point `.claude-plugin/marketplace.json` back at `./plugin`; `npm version` moves its tag.
 
 ## Docs
 
