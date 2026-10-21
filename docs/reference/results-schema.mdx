@@ -10,7 +10,7 @@ keywords: ["results.json", "output format", "SuiteResult", "TrialResult", "repor
 - `results.json`: a `SuiteResult`, described below. It is the source of truth for a run.
 - `report.html`: a self-contained rendering of it, with no external assets, that you can attach to a pull request or send to a customer. `npx sandtable-ai report results.json` re-renders it.
 
-The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`, `CheckResult` and the rest). While sandtable is alpha, fields may still be added or change; `version` will change when the format breaks.
+The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`, `CheckResult` and the rest). Until 1.0, fields may still be added or change; `version` will change when the format breaks.
 
 ## SuiteResult
 

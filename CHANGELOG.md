@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ### Changed
 
+- **Status**: the README, the docs and the PyPI classifier describe sandtable as beta instead of early alpha. It works and is tested, and the spec and outputs may still change before 1.0 ([#267](https://github.com/sandtable-ai/sandtable/issues/267)).
 - **Leaderboard docs**: the freight board's history includes its re-render at v0.1.2, which ran no model and changed no verdict, and `leaderboard.json` is described as recording 0.1.2 at `eb4cfd2` ([#260](https://github.com/sandtable-ai/sandtable/issues/260)).
 
 ## [0.1.2] - 2026-10-21

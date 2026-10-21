@@ -7,7 +7,7 @@ license = "MIT"
 requires-python = ">=3.9"
 keywords = ["ai-agents", "evals", "agent-testing", "simulation", "tau-bench", "pass^k"]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 4 - Beta",
   "Environment :: Console",
   "Intended Audience :: Developers",
   "Operating System :: OS Independent",
