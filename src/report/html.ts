@@ -38,7 +38,7 @@ tr:last-child td{border-bottom:0}
 .ev{border:1px solid transparent;border-radius:4px;padding:8px 16px;margin:8px 0;white-space:pre-wrap}
 .ev small{display:block;color:var(--muted);font:12px/16px var(--sans);margin-bottom:4px}
 .ev small b{font-weight:600;text-transform:uppercase;letter-spacing:.04em}.ev small code{font-size:1em}
-.user{background:var(--chip)}.agent{background:var(--card);border-color:var(--line)}.tool{background:var(--tool);font:13px/20px var(--mono)}
+.user{background:var(--chip)}.agent{background:var(--card);border-color:var(--line)}.tool{background:transparent;border:1px dashed var(--line);font:13px/20px var(--mono)}
 .viol{color:var(--bad-text);font-weight:600}.viol code{font-weight:600}.softv{color:var(--muted);font-weight:600}
 code{font-family:var(--mono);font-size:.867em}code,.change,.tool{font-variant-ligatures:none}
 .wrap{overflow-x:auto}

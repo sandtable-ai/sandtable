@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ### Changed
 
-- **HTML report**: uses the sandtable brand in light and dark: warm neutrals, ink instead of green for passed trials, one terracotta accent for failures and rule violations, square trial marks and the logo in the header. Caller, agent and tool messages are told apart by fill, outline and monospace type instead of blue and yellow, and the report still loads no fonts or other files ([#252](https://github.com/sandtable-ai/sandtable/issues/252)).
+- **HTML report**: uses the sandtable brand in light and dark: warm neutrals, ink instead of green for passed trials, one terracotta accent for failures and rule violations, square trial marks and the logo in the header. Instead of blue and yellow, caller messages are filled, agent messages outlined and tool calls dashed in monospace, and the report still loads no fonts or other files ([#252](https://github.com/sandtable-ai/sandtable/issues/252)).
 
 ## [0.1.1] - 2026-10-21
 
