@@ -77,6 +77,38 @@ jobs:
         with:
           packages-dir: python/dist
 
+  # A stable release also moves npm's `next` tag to itself, so `npx sandtable-ai@next` never installs
+  # an older version than `latest`. It runs once the version is live (the pypi job waits for that) and
+  # needs "Allow npm dist-tag" on this repository's trusted publisher on npmjs.com. Without it, the job
+  # warns with the command to run by hand instead of failing the release.
+  npm-next:
+    needs: [check, pypi]
+    if: needs.check.outputs.prerelease != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # npm trusted publishing, for dist-tag
+    steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm install -g npm@^12.2.0   # dist-tag over OIDC needs npm 12.2.0
+      - name: Point next at this release
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          next="$(npm view sandtable-ai dist-tags.next)"
+          # Never move next back below a newer pre-release, e.g. to 1.0.1 while next is 1.1.0-alpha.1.
+          if [ "$(printf '%s\n' "${next%%-*}" "${version}" | sort -V | tail -n 1)" != "${version}" ]; then
+            echo "next is ${next}, ahead of ${version}: left as it is"
+            exit 0
+          fi
+          if npm dist-tag add "sandtable-ai@${version}" next; then
+            npm dist-tag ls sandtable-ai
+          else
+            echo "::warning::next still points to ${next}. Turn on \"Allow npm dist-tag\" for this repository's trusted publisher on npmjs.com, then run: npm dist-tag add sandtable-ai@${version} next"
+          fi
+
   github-release:
     needs: [check, npm, pypi] # the needs context only holds direct dependencies, and this job reads needs.check
     runs-on: ubuntu-latest

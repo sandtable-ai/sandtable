@@ -110,6 +110,7 @@ Update these in the same PR as the code change:
    - stages npm (pre-releases under `next`)
    - waits for that npm version to go live, then publishes to PyPI
    - creates the GitHub release from that section
+   - for a stable release, moves npm's `next` tag to it once it is live, unless `next` is a newer pre-release
 7. Approve the staged npm release on npmjs.com, or with `npm stage approve <id>`. PyPI and the GitHub release follow within a minute. If you approve more than 2 hours after the tag, re-run the workflow's failed jobs.
 
 ## Map
