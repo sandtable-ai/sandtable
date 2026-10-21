@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 - `world`: a tool argument named like a built-in JavaScript property, such as `toString` or `constructor`, is now rejected as an unknown argument like any other name the tool doesn't have, and a tool param with such a name that the agent omits counts as missing (its default applies) instead of failing with "must be a string" ([#233](https://github.com/sandtable-ai/sandtable/issues/233)).
 - `init --openapi`: a body field, query or path param with an OpenAPI 3.1 nullable type such as `type: [string, "null"]` becomes a param of its other type, as a 3.0 `nullable: true` one does, instead of being skipped as not a scalar. `[object, "null"]` bodies and `[array, "null"]` responses are read too, and a nullable enum's `null` is left out of the param's `enum`, so the draft validates ([#232](https://github.com/sandtable-ai/sandtable/issues/232)).
+- **CLI**: piping any command's output into a reader that stops early, such as `head` or a `less` quit before the end, now stops the command quietly with exit 141, as Unix tools such as `git` do (128 + `SIGPIPE`), instead of crashing with an `EPIPE` stack trace and exit 1 ([#214](https://github.com/sandtable-ai/sandtable/issues/214)).
 
 ## [0.1.0] - 2026-10-20
 

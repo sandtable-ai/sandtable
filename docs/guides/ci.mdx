@@ -27,6 +27,8 @@ Every command exits 1 when it should block a merge, so they work as plain CI ste
 
 In `run`, when only some trials end in an error, each counts as a failed trial, not a skipped one. In `leaderboard`, any crashed trial turns that model into an error row instead of a score, and the board exits 1 only when every model is one. Reporting infrastructure errors separately is planned ([#27](https://github.com/sandtable-ai/sandtable/issues/27)).
 
+Don't pipe a gate's output into `head`: a command whose reader stops early stops there without finishing and exits 141, as Unix tools do. Under `set -o pipefail` the step then fails; without it, a pipeline's status is its last command's, so the gate's result is lost. To keep a log, use `tee`, which reads to the end.
+
 ## A GitHub Actions workflow
 
 This assumes the domain lives in `./sandtable`, `sandtable-ai` is pinned in your `devDependencies`, and your agent can be started as a local service on port 8787.
