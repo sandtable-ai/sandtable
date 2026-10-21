@@ -9,6 +9,7 @@ import { scriptedUser } from "../sim/scripted.ts";
 import { DEFAULT_AGENT_EFFORT, type Effort, type Provider } from "../sim/claude.ts";
 import type { AgentAdapter, UserSimulator } from "../sim/types.ts";
 import { changedVerdicts, RegradeError, regradeSuite } from "./regrade.ts";
+import { parseJson, parseResults } from "./read.ts";
 import { runSuite, type SuiteResult } from "./suite.ts";
 import { costOf, totalTokens } from "./usage.ts";
 import { writeFileAtomic } from "./write.ts";
@@ -318,11 +319,35 @@ export function toRow(entry: LeaderboardEntry, r: SuiteResult, baseline = false)
 /** A model's stored results, graded again under the current rules when they can stand in for this run, or why they can't. */
 type Stored = { stored: SuiteResult; result: SuiteResult; stale?: undefined } | { stored: SuiteResult; result?: undefined; stale: string };
 
+/** A stored file that exists but can't be read as what its name says, so nothing tells whether its results can be reused. */
+class UnreadableStoredFile extends Error {}
+
+/** A model's stored file, parsed, or undefined when there is none. */
+async function readStoredFile<T>(file: string, parse: (text: string, file: string) => T): Promise<T | undefined> {
+  let text: string;
+  try {
+    text = await readFile(file, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw new UnreadableStoredFile(`${file} can't be read: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  try {
+    return parse(text, file);
+  } catch (err) {
+    throw new UnreadableStoredFile(err instanceof Error ? err.message : String(err));
+  }
+}
+
+function parseRunJson(text: string, file: string): RunKey & Partial<RunInfo> {
+  const r = parseJson(text, file) as Partial<RunKey> | null;
+  if (!r || typeof r !== "object" || Array.isArray(r) || typeof r.agent !== "string") throw new Error(`${file} is not a run.json written by \`sandtable leaderboard\``);
+  return r as RunKey & Partial<RunInfo>;
+}
+
 async function readStored(dir: string, key: RunKey, where: Where | undefined, domain: Domain, want: { k: number; user: string; taskIds: string[] }): Promise<Stored | undefined> {
-  const file = path.join(dir, "results.json");
-  if (!(await exists(file))) return undefined;
-  const stored = JSON.parse(await readFile(file, "utf8")) as SuiteResult;
-  const storedKey = await readFile(path.join(dir, "run.json"), "utf8").then((t) => JSON.parse(t) as RunKey & Partial<RunInfo>, () => undefined);
+  const stored = await readStoredFile(path.join(dir, "results.json"), parseResults);
+  if (!stored) return undefined;
+  const storedKey = await readStoredFile(path.join(dir, "run.json"), parseRunJson);
   const stale =
     changedRunKey(storedKey, key) ??
     (storedKey && where ? changedWhere(storedKey, where) : undefined) ??
@@ -377,11 +402,29 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
   const reused = new Map<LeaderboardEntry, { stored: SuiteResult; result: SuiteResult }>();
   if (opts.resume ?? true) {
     const kept: string[] = [];
+    const unreadable: string[] = [];
     for (const entry of entries) {
       if (entry.agent === "noop") continue;
-      const s = await readStored(folderOf(entry), runKey(entry), whereOf(entry), domain, { k, user: user.name, taskIds });
+      let s: Stored | undefined;
+      try {
+        s = await readStored(folderOf(entry), runKey(entry), whereOf(entry), domain, { k, user: user.name, taskIds });
+      } catch (err) {
+        if (!(err instanceof UnreadableStoredFile)) throw err;
+        unreadable.push(`  - ${entry.label}: ${err.message}`);
+        continue;
+      }
       if (s?.stale !== undefined) kept.push(`  - ${entry.label}, in ${folderOf(entry)} (${s.stored.tasks.length} task(s) at k=${s.stored.k}): ${s.stale}`);
       else if (s) reused.set(entry, s);
+    }
+    // Every broken file at once: a board of many models shouldn't take a run per file to find them all.
+    if (unreadable.length) {
+      throw new Error(
+        [
+          `${unreadable.length} model(s) have stored files the board can't read:`,
+          ...unreadable,
+          `Nothing ran. Fix each file, or move that model's folder out of ${outDir} and run the board again to rerun the model. --no-resume reruns every model and replaces all their results.`,
+        ].join("\n"),
+      );
     }
     if (kept.length) {
       throw new Error(

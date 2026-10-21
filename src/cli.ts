@@ -10,6 +10,7 @@ import { formatPercent, renderTerminal } from "./report/terminal.ts";
 import { renderHtml } from "./report/html.ts";
 import { everyTrialFailed, runSuite, type SuiteResult } from "./run/suite.ts";
 import { changedVerdicts, RegradeError, regradeSuite } from "./run/regrade.ts";
+import { parseResults } from "./run/read.ts";
 import { writeFileAtomic } from "./run/write.ts";
 import { claudeAgent, claudeUser, providerOf, type ClaudeOptions, type Provider } from "./sim/claude.ts";
 import { registerPrices } from "./run/usage.ts";
@@ -114,21 +115,6 @@ function failIfNothingGraded(result: SuiteResult): boolean {
   console.error(`\n✗ Every trial ended in an error, so this run says nothing about the agent. The first error:\n  ${error}`);
   process.exitCode = 1;
   return true;
-}
-
-/** Parse a results.json written by `run`, or say what the file is not. */
-function parseResults(text: string, file: string): SuiteResult {
-  let data: unknown;
-  try {
-    data = JSON.parse(text);
-  } catch (err) {
-    throw new Error(`${file} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
-  }
-  const r = data as Partial<SuiteResult> | null;
-  if (!r || typeof r !== "object" || !Array.isArray(r.tasks) || typeof r.passHat !== "object" || typeof r.domain !== "string") {
-    throw new Error(`${file} is not a results.json written by \`sandtable run\` (a leaderboard has one per model, in its folder)`);
-  }
-  return r as SuiteResult;
 }
 
 async function loadPrices(file?: string): Promise<PricesFile | undefined> {

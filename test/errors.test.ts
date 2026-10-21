@@ -97,5 +97,14 @@ describe.skipIf(!process.features.typescript)("CLI errors", () => {
     const { code, stderr } = await fail(["report", path.join(dir, "leaderboard.json")]);
     expect(code).toBe(1);
     expect(stderr).toContain("is not a results.json written by `sandtable run`");
+    expect(stderr).toContain("it is a leaderboard's leaderboard.json: each model's results.json is in its folder");
+  });
+
+  it("report names a results.json that is not valid JSON", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "sandtable-report-"));
+    writeFileSync(path.join(dir, "results.json"), '{"domain": "freight-carrier-sales", "tasks": [');
+    const { code, stderr } = await fail(["report", path.join(dir, "results.json")]);
+    expect(code).toBe(1);
+    expect(stderr).toContain(`${path.join(dir, "results.json")} is not valid JSON: `);
   });
 });
