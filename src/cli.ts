@@ -11,7 +11,7 @@ import { renderHtml } from "./report/html.ts";
 import { criticalFailures, everyTrialFailed, runSuite, skippedTrials, trialStatus, type SuiteResult } from "./run/suite.ts";
 import { changedVerdicts, RegradeError, regradeSuite } from "./run/regrade.ts";
 import { baselineSnapshot, checkBaseline } from "./run/compare.ts";
-import { parseResults } from "./run/read.ts";
+import { readResults, readUserFile, readUserText, userPathError } from "./run/read.ts";
 import { writeFileAtomic } from "./run/write.ts";
 import { claudeAgent, claudeUser, providerOf, type ClaudeOptions, type Provider } from "./sim/claude.ts";
 import { registerPrices } from "./run/usage.ts";
@@ -134,11 +134,22 @@ const STATUS_MARK = { passed: "✓", failed: "✗", skipped: "○" } as const;
 
 async function loadPrices(file?: string): Promise<PricesFile | undefined> {
   if (!file) return undefined;
-  const bytes = await readFile(file);
+  const bytes = await readUserFile(file, { from: "--prices" });
   const added = registerPrices(JSON.parse(bytes.toString("utf8")));
   console.log(`  prices: ${added.length} model(s) from ${file}`);
   // Real paths on both sides, so a symlinked working directory (macOS /var -> /private/var) still reads as inside.
   return pricesFile(await realpath(file), bytes, await realpath(process.cwd()));
+}
+
+/** The transcripts `init --transcripts` drafts from: the file itself, or each .txt and .md file in the directory. */
+async function readTranscripts(p: string): Promise<{ file: string; text: string }[]> {
+  const how = { from: "--transcripts", what: "file or directory" };
+  const info = await stat(p).catch(async (err: unknown) => {
+    throw await userPathError(err, p, how);
+  });
+  const files = info.isDirectory() ? (await readdir(p)).filter((f) => /\.(txt|md)$/i.test(f)).sort().map((f) => path.join(p, f)) : [p];
+  if (files.length === 0) throw new Error(`--transcripts: no .txt or .md file in ${p}`);
+  return Promise.all(files.map(async (f) => ({ file: path.basename(f), text: await readUserText(f, how) })));
 }
 
 // Printed next steps use `npx sandtable-ai`: every way of installing sandtable needs Node.js and npm
@@ -183,10 +194,13 @@ withProviderFlags(program
   .option("--force", "overwrite existing files when drafting from --openapi")
   .action(async (o: { openapi?: string; sop?: string; transcripts?: string; out: string; model?: string; force?: boolean } & ProviderFlags) => {
     if (!o.openapi && !o.sop && !o.transcripts) throw new Error("pass at least one of --openapi, --sop, --transcripts");
-    const sopText = o.sop ? await readFile(o.sop, "utf8") : undefined;
+    // Read every input before drafting anything, so a wrong path fails before a file is written or a model is called.
+    const sopText = o.sop ? await readUserText(o.sop, { from: "--sop" }) : undefined;
+    const transcripts = o.transcripts ? await readTranscripts(o.transcripts) : undefined;
+    const openapiText = o.openapi ? await readUserText(o.openapi, { from: "--openapi" }) : undefined;
     let fields: Record<string, string[]> = {};
-    if (o.openapi) {
-      const spec = YAML.parse(await readFile(o.openapi, "utf8")) as Record<string, unknown>;
+    if (o.openapi && openapiText !== undefined) {
+      const spec = YAML.parse(openapiText) as Record<string, unknown>;
       const problem = openApiProblem(spec);
       if (problem) throw new Error(`${o.openapi} ${problem}. Nothing was written.`);
       const draft = draftFromOpenApi(spec);
@@ -223,11 +237,7 @@ withProviderFlags(program
       console.log(`  ${res.invariants.length} invariant(s) drafted (review: pending), ${res.softRules.length} soft rule(s) noted in ${file}`);
       for (const w of res.warnings) console.log(`  ! ${w}`);
     }
-    if (o.transcripts) {
-      const files = (await stat(o.transcripts)).isDirectory()
-        ? (await readdir(o.transcripts)).filter((f) => /\.(txt|md)$/i.test(f)).sort().map((f) => path.join(o.transcripts!, f))
-        : [o.transcripts];
-      const transcripts = await Promise.all(files.map(async (f) => ({ file: path.basename(f), text: await readFile(f, "utf8") })));
+    if (transcripts) {
       console.log(`Drafting tasks from ${transcripts.length} transcript(s) (PII scrubbed locally first)...`);
       const res = await draftTasksFromTranscripts({
         domain: await loadDomain(o.out),
@@ -319,7 +329,7 @@ withProviderFlags(program
     // Read the baseline before any trial runs, so a wrong file costs no model calls.
     let baseline: SuiteResult | undefined;
     if (o.baseline !== undefined) {
-      baseline = parseResults(await readFile(o.baseline, "utf8"), o.baseline);
+      baseline = await readResults(o.baseline, "--baseline");
       checkBaseline(baseline, domain.name, o.baseline);
     }
     const agent = await resolveAgent(o.agent, providerOpts(o), o.openaiBaseUrl);
@@ -377,7 +387,7 @@ withProviderFlags(program
   .action(async (domainPath: string, o: { models: string; user?: string; trials?: number; tasks?: string; concurrency: number; openaiBaseUrl?: string; out?: string; resume: boolean; prices?: string } & ProviderFlags) => {
     const prices = await loadPrices(o.prices);
     const domain = await loadDomain(await resolveDomain(domainPath));
-    const parsed = ModelsFile.safeParse(YAML.parse(await readFile(o.models, "utf8")));
+    const parsed = ModelsFile.safeParse(YAML.parse(await readUserText(o.models, { from: "--models" })));
     if (!parsed.success) throw new Error(`${o.models}:\n${z.prettifyError(parsed.error)}`);
     const cfg = parsed.data;
     const userSpec = o.user ?? cfg.user ?? "claude";
@@ -477,8 +487,10 @@ program
   .description("re-render the HTML report for a past run")
   .option("-o, --out <file>", "output HTML path (default: next to results.json)")
   .action(async (resultsPath: string, o: { out?: string }) => {
-    const result = parseResults(await readFile(resultsPath, "utf8"), resultsPath);
+    const result = await readResults(resultsPath, "report");
     const out = o.out ?? path.join(path.dirname(resultsPath), "report.html");
+    // Like run's and regrade's -o, a directory that doesn't exist yet is created.
+    await mkdir(path.dirname(out), { recursive: true });
     await writeFile(out, renderHtml(result));
     console.log(out);
   });
@@ -494,7 +506,7 @@ program
   .option("-o, --out <dir>", "output directory for results.json and report.html (default: the results' own directory, replacing them)")
   .option("--no-html", "skip the HTML report")
   .action(async (resultsPath: string, o: { domain: string; out?: string; html: boolean }) => {
-    const stored = parseResults(await readFile(resultsPath, "utf8"), resultsPath);
+    const stored = await readResults(resultsPath, "regrade");
     const domain = await loadDomain(await resolveDomain(o.domain));
     let result: SuiteResult;
     try {

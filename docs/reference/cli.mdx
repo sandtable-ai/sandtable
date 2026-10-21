@@ -240,7 +240,7 @@ npx sandtable-ai report .sandtable/runs/<run>/results.json [-o report.html]
 | Argument / option | Description |
 |---|---|
 | `<results>` | path to a `results.json` |
-| `-o, --out <file>` | output HTML path. Default: `report.html` next to `results.json` |
+| `-o, --out <file>` | output HTML path; a directory that doesn't exist yet is created. Default: `report.html` next to `results.json` |
 
 It prints the path it wrote. A run made with `--baseline` keeps its changes since the baseline, without the baseline's file.
 

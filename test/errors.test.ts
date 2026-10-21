@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -98,6 +98,69 @@ describe.skipIf(!process.features.typescript)("CLI errors", () => {
     expect(code).toBe(1);
     expect(stderr).toContain("is not a results.json written by `sandtable run`");
     expect(stderr).toContain("it is a leaderboard's leaderboard.json: each model's results.json is in its folder");
+  });
+
+  describe("a path that names nothing says which option or argument it came from", () => {
+    const tmp = () => mkdtempSync(path.join(tmpdir(), "sandtable-missing-"));
+    const RESULTS_HINT = "(pass the results.json a run wrote: `sandtable run` writes to .sandtable/runs/ unless -o says otherwise)";
+    const cases: [string, string[], string][] = [
+      ["report", ["report", "nope/results.json"], `report: no file at nope/results.json ${RESULTS_HINT}`],
+      ["regrade", ["regrade", "nope/results.json", "-d", "examples/freight"], `regrade: no file at nope/results.json ${RESULTS_HINT}`],
+      ["run --prices", ["run", "examples/freight", "--agent", "noop", "--user", "scripted", "--prices", "nope.json"], "--prices: no file at nope.json"],
+      ["run --baseline", ["run", "examples/freight", "--agent", "noop", "--user", "scripted", "--baseline", "nope/results.json"], `--baseline: no file at nope/results.json ${RESULTS_HINT}`],
+      ["leaderboard -m", ["leaderboard", "examples/freight", "-m", "nope.yaml"], "--models: no file at nope.yaml"],
+      ["leaderboard --prices", ["leaderboard", "examples/freight", "-m", "nope.yaml", "--prices", "nope.json"], "--prices: no file at nope.json"],
+      ["init --openapi", ["init", "--openapi", "nope.yaml"], "--openapi: no file at nope.yaml"],
+      ["init --sop", ["init", "--sop", "nope.md"], "--sop: no file at nope.md"],
+      ["init --transcripts", ["init", "--transcripts", "nope/"], "--transcripts: no file or directory at nope/"],
+    ];
+    for (const [name, args, message] of cases) {
+      it(name, async () => {
+        const out = path.join(tmp(), "out");
+        const { code, stderr } = await fail([...args, "-o", out]);
+        expect(code).toBe(1);
+        expect(stderr.trim()).toBe(message);
+        // Nothing was drafted, run or written before the path was read.
+        expect(existsSync(out)).toBe(false);
+      });
+    }
+
+    it("init --transcripts fails before --openapi writes anything or --sop calls a model", async () => {
+      const out = path.join(tmp(), "out");
+      const sop = path.join(tmp(), "sop.md");
+      writeFileSync(sop, "Always verify the carrier before booking.");
+      const { code, stderr } = await fail(["init", "--openapi", "examples/freight/sandtable.yaml", "--sop", sop, "--transcripts", "nope/", "-o", out]);
+      expect(code).toBe(1);
+      expect(stderr.trim()).toBe("--transcripts: no file or directory at nope/");
+      expect(existsSync(out)).toBe(false);
+    });
+
+    it("init --transcripts names a directory with no transcript in it", async () => {
+      const dir = tmp();
+      writeFileSync(path.join(dir, "notes.pdf"), "");
+      const { code, stderr } = await fail(["init", "--transcripts", dir, "-o", path.join(tmp(), "out")]);
+      expect(code).toBe(1);
+      expect(stderr.trim()).toBe(`--transcripts: no .txt or .md file in ${dir}`);
+    });
+
+    it("report -o creates the directory it writes into, as run -o does", async () => {
+      const dir = tmp();
+      await promisify(execFile)(process.execPath, [cli, "run", "examples/freight", "-t", "book-at-posted-rate", "--agent", "scripted:careful", "--user", "scripted", "--no-html", "-o", dir]);
+      const out = path.join(dir, "new", "report.html");
+      const { stdout } = await promisify(execFile)(process.execPath, [cli, "report", path.join(dir, "results.json"), "-o", out]);
+      expect(stdout.trim()).toBe(out);
+      expect(existsSync(out)).toBe(true);
+    });
+
+    it("a directory where a file is expected says so, and points at the results.json inside it", async () => {
+      const run = tmp();
+      expect((await fail(["report", run])).stderr.trim()).toBe(`report: ${run} is a directory, not a file`);
+      writeFileSync(path.join(run, "results.json"), "{}");
+      expect((await fail(["report", run])).stderr.trim()).toBe(`report: ${run} is a directory, not a file: did you mean ${path.join(run, "results.json")}?`);
+      const spec = tmp();
+      mkdirSync(path.join(spec, "api.yaml"));
+      expect((await fail(["init", "--openapi", path.join(spec, "api.yaml"), "-o", path.join(tmp(), "out")])).stderr.trim()).toBe(`--openapi: ${path.join(spec, "api.yaml")} is a directory, not a file`);
+    });
   });
 
   it("report names a results.json that is not valid JSON", async () => {
