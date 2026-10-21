@@ -1,4 +1,9 @@
-# sandtable
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://github.com/sandtable-ai/sandtable/raw/main/assets/brand/lockup-dark.svg">
+    <img src="https://github.com/sandtable-ai/sandtable/raw/main/assets/brand/lockup.svg" width="185" height="48" alt="sandtable">
+  </picture>
+</h1>
 
 **Rehearse your AI agent on a sand table of your customer's world before it goes live.**
 

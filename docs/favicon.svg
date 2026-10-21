@@ -1,10 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="1 1 30 30" width="32" height="32">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="32" height="32">
   <title>sandtable</title>
-  <path d="M2 14 16 21 16 25 2 18Z" fill="#C4914A"/>
-  <path d="M16 21 30 14 30 18 16 25Z" fill="#A9772F"/>
-  <path d="M16 7 30 14 16 21 2 14Z" fill="#E9C98B" stroke="#8A5F22" stroke-width=".8" stroke-linejoin="round"/>
-  <path d="M20.67 9.33 6.67 16.33M25.33 11.67 11.33 18.67M11.33 9.33 25.33 16.33M6.67 11.67 20.67 18.67" stroke="#8A5F22" stroke-width=".7" stroke-opacity=".55" fill="none"/>
-  <path d="M11.33 10.5 16 12.83 16 16.33 11.33 14Z" fill="#B84E29"/>
-  <path d="M16 12.83 20.67 10.5 20.67 14 16 16.33Z" fill="#9C3F20"/>
-  <path d="M16 8.17 20.67 10.5 16 12.83 11.33 10.5Z" fill="#E0703F"/>
+  <style>.i{fill:#1E1A16}.a{fill:#B4532A}</style>
+  <rect class="i" x="0" y="0" width="4" height="4" rx=".75"/>
+  <rect class="i" x="6" y="0" width="4" height="4" rx=".75"/>
+  <rect class="i" x="12" y="0" width="4" height="4" rx=".75"/>
+  <rect class="i" x="0" y="6" width="4" height="4" rx=".75"/>
+  <rect class="i" x="6" y="6" width="4" height="4" rx=".75"/>
+  <rect class="a" x="12" y="6" width="4" height="4" rx=".75"/>
+  <rect class="i" x="0" y="12" width="4" height="4" rx=".75"/>
+  <rect class="i" x="6" y="12" width="4" height="4" rx=".75"/>
+  <rect class="i" x="12" y="12" width="4" height="4" rx=".75"/>
 </svg>

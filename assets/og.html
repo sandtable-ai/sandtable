@@ -6,12 +6,12 @@
   Render both: node assets/render.mjs og
 
   Every number is from the offline run on examples/freight (rule-based agents, scripted callers):
-    node src/cli.ts run examples/freight --agent scripted:naive   --user scripted   # 5/32, pass^1 15.6%
-    node src/cli.ts run examples/freight --agent scripted:careful --user scripted   # 32/32, pass^1 100%
+    node src/cli.ts run examples/freight --agent scripted:naive   --user scripted   # 5/50, pass^1 10.0%
+    node src/cli.ts run examples/freight --agent scripted:careful --user scripted   # 50/50, pass^1 100%
   data-calls lists the tasks in tasks.yaml order, 1 = passed. The violation counts are the top
   three invariant failure modes of the naive run. If the example changes, update them from a new run.
 
-  Layout: 8 px grid; margins 80 px at 1280 wide, 64 px at 1200; one accent (brand #B4532A, and
+  Layout: 8 px grid, except the call squares (12 px with 3 px gaps, so 50 fit the 760 px column); margins 80 px at 1280 wide, 64 px at 1200; one accent (brand #B4532A, and
   #9C3F20 for small text, 5.9:1 on the background).
 -->
 <html lang="en">
@@ -28,8 +28,9 @@ html,body{width:100vw;height:100vh;overflow:hidden}
 body{background:var(--paper);color:var(--ink);font-family:"Fira Sans",sans-serif;font-kerning:normal;-webkit-font-smoothing:antialiased;padding:80px;display:flex;flex-direction:column}
 .mono{font-family:"Fira Code",monospace;font-variant-ligatures:none}
 
-header{display:flex;justify-content:space-between;align-items:baseline;height:40px;line-height:40px}
-.mark{font-size:36px;font-weight:600;letter-spacing:-.01em}
+header{display:flex;justify-content:space-between;align-items:center;height:48px}
+.mark{display:flex;align-items:center;gap:16px;font-size:40px;line-height:48px;font-weight:600;letter-spacing:-.01em}
+.mark img{display:block;flex:none}
 .cmd{font-size:24px;color:var(--muted)}
 
 h1{margin-top:40px;font-size:60px;line-height:72px;font-weight:600;letter-spacing:-.02em;max-width:1040px}
@@ -41,8 +42,8 @@ h1{margin-top:40px;font-size:60px;line-height:72px;font-weight:600;letter-spacin
 .who{font-size:28px}
 .pct{font-size:40px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 .pct.bad{color:var(--accent-text)}
-.cells{display:flex;gap:8px}
-.cells i{display:inline-block;width:16px;height:16px;background:var(--ink)}
+.cells{display:flex;gap:3px}
+.cells i{display:inline-block;width:12px;height:12px;background:var(--ink)}
 .cells i.f{background:var(--accent)}
 .why{grid-column:2 / 4;font-size:24px;line-height:32px;color:var(--muted);margin-bottom:8px}
 .why{white-space:nowrap}.why span + span{margin-left:32px}.why b{font-weight:500;color:var(--accent-text)}
@@ -56,22 +57,22 @@ h1{margin-top:40px;font-size:60px;line-height:72px;font-weight:600;letter-spacin
 </head>
 <body>
 <header>
-  <span class="mark">sandtable</span>
+  <span class="mark"><img src="brand/mark.svg" width="48" height="48" alt="">sandtable</span>
   <span class="cmd mono">npx sandtable-ai demo</span>
 </header>
 <h1>Rehearse your AI agent on a simulated copy of your customer’s world.</h1>
 <section class="runs">
   <span class="cap">freight desk</span>
-  <span class="cap">32 scripted calls, graded on every tool call</span>
+  <span class="cap">50 scripted calls, graded on every tool call</span>
   <span class="cap r mono">pass^1</span>
 
   <span class="who">naive agent</span>
-  <span class="cells" data-calls="00000000110000000110000010000000"></span>
-  <span class="pct bad">15.6%</span>
-  <span class="why mono"><span><b>25×</b> verify-before-book</span><span><b>7×</b> rate-ceiling</span><span><b>7×</b> eligible-carrier</span></span>
+  <span class="cells" data-calls="00000000110000000110000010000000000000000000000000"></span>
+  <span class="pct bad">10.0%</span>
+  <span class="why mono"><span><b>43×</b> verify-before-book</span><span><b>13×</b> rate-ceiling</span><span><b>9×</b> eligible-carrier</span></span>
 
   <span class="who">careful agent</span>
-  <span class="cells" data-calls="11111111111111111111111111111111"></span>
+  <span class="cells" data-calls="11111111111111111111111111111111111111111111111111"></span>
   <span class="pct">100%</span>
 </section>
 <script>

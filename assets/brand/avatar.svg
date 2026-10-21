@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>sandtable</title>
+  <rect width="512" height="512" fill="#F6F1E8"/>
+  <g fill="#1E1A16">
+    <rect x="102" y="102" width="84" height="84" rx="14"/>
+    <rect x="214" y="102" width="84" height="84" rx="14"/>
+    <rect x="326" y="102" width="84" height="84" rx="14"/>
+    <rect x="102" y="214" width="84" height="84" rx="14"/>
+    <rect x="214" y="214" width="84" height="84" rx="14"/>
+    <rect x="102" y="326" width="84" height="84" rx="14"/>
+    <rect x="214" y="326" width="84" height="84" rx="14"/>
+    <rect x="326" y="326" width="84" height="84" rx="14"/>
+  </g>
+  <rect x="326" y="214" width="84" height="84" rx="14" fill="#B4532A"/>
+</svg>
