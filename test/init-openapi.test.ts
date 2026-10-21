@@ -408,6 +408,122 @@ describe("init from OpenAPI: examples on the media type", () => {
   });
 });
 
+describe("init from OpenAPI: 3.1 nullable types", () => {
+  // A fictional kettle rental shop that writes nullable fields the OpenAPI 3.1 way, as a type array.
+  const nullable = (type: string) => ({ type: [type, "null"] });
+  const spec = {
+    openapi: "3.1.0",
+    info: { title: "Kettle Rentals" },
+    paths: {
+      "/kettles": {
+        get: {
+          operationId: "listKettles",
+          parameters: [
+            { name: "color", in: "query", schema: nullable("string") },
+            { name: "size", in: "query", schema: { type: ["null", "integer"] } },
+          ],
+          responses: {
+            "200": {
+              content: {
+                "application/json": {
+                  schema: { type: ["array", "null"], items: { $ref: "#/components/schemas/Kettle" }, example: [{ kettleId: "K-1", label: "Copper", watts: 1800 }] },
+                },
+              },
+            },
+          },
+        },
+        post: {
+          operationId: "createKettle",
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["label"],
+                  properties: {
+                    label: nullable("string"),
+                    cordless: { type: ["boolean", "null"], default: false },
+                    finish: { type: ["string", "null"], enum: ["matte", "gloss", null] },
+                    odd: { type: ["string", "integer"] },
+                    tags: { type: ["array", "null"], items: { type: "string" } },
+                    nothing: { type: ["null"] },
+                  },
+                },
+              },
+            },
+          },
+          responses: { "201": { description: "created" } },
+        },
+      },
+      "/kettles/{kettleId}": {
+        parameters: [{ name: "kettleId", in: "path", required: true, schema: nullable("string") }],
+        patch: {
+          operationId: "updateKettle",
+          requestBody: { content: { "application/json": { schema: { type: ["object", "null"], properties: { label: nullable("string") } } } } },
+          responses: { "200": { description: "ok" } },
+        },
+      },
+    },
+    components: { schemas: { Kettle: { type: ["object", "null"], properties: { kettleId: { type: "string" }, label: nullable("string"), watts: { type: "integer" } } } } },
+  };
+
+  it("drafts a nullable scalar as its one other type", () => {
+    const byName = Object.fromEntries(draftFromOpenApi(spec).tools.map((t) => [t.name, t]));
+    expect(byName.list_kettles!.params).toEqual({ color: { type: "string", required: false }, size: { type: "integer", required: false } });
+    expect(byName.list_kettles!.ops).toEqual([{ list: "kettles", where: { color: { $contains: "$color" }, size: "$size" } }]);
+    const create = byName.create_kettle!;
+    expect(create.params.label).toEqual({ type: "string", required: true });
+    expect(create.params.cordless).toEqual({ type: "boolean", required: false, default: false });
+    // The spec lists null among a nullable enum's values: the agent can't pass it, and the draft's enum doesn't take it.
+    expect(create.params.finish).toEqual({ type: "string", required: false, enum: ["matte", "gloss"] });
+    expect(create.ops).toEqual([{ create: "kettles", values: { label: "$label", cordless: "$cordless", finish: "$finish" } }]);
+    expect(byName.update_kettle!.params.kettleId).toEqual({ type: "string", required: true });
+  });
+
+  it("still skips a field with two types besides null, or none", () => {
+    const d = draftFromOpenApi(spec);
+    const skipped = d.warnings.filter((w) => w.includes("not a scalar"));
+    expect(skipped).toEqual([
+      'POST /kettles: body field "odd" is not a scalar; skipped',
+      'POST /kettles: body field "tags" is not a scalar; skipped',
+      'POST /kettles: body field "nothing" is not a scalar; skipped',
+    ]);
+  });
+
+  it("reads an [object, null] request body and an [array, null] response", () => {
+    const d = draftFromOpenApi(spec);
+    expect(d.tables.kettles).toMatchObject({ key: "kettleId", rows: [{ kettleId: "K-1", label: "Copper", watts: 1800 }] });
+    expect(d.tables.kettles!.fields).toEqual(expect.arrayContaining(["kettleId", "label", "watts"]));
+    expect(d.tools.find((t) => t.name === "update_kettle")!.ops).toEqual([{ update: "kettles", key: "$kettleId", set: { label: "$label" } }]);
+  });
+
+  it("drops null from a 3.0 nullable enum too, and leaves the spec as it was", () => {
+    const spec30 = {
+      openapi: "3.0.3",
+      info: { title: "Kettle Rentals" },
+      paths: {
+        "/kettles": {
+          post: {
+            operationId: "createKettle",
+            requestBody: { content: { "application/json": { schema: { type: "object", properties: { finish: { type: "string", nullable: true, enum: ["matte", null] } } } } } },
+            responses: { "201": { description: "created" } },
+          },
+        },
+      },
+    };
+    expect(draftFromOpenApi(spec30).tools[0]!.params.finish).toEqual({ type: "string", required: false, enum: ["matte"] });
+    const before = JSON.stringify(spec);
+    draftFromOpenApi(spec);
+    expect(JSON.stringify(spec)).toBe(before);
+  });
+
+  it("writes a draft that validates", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-init-"));
+    await writeDraft(dir, { [DOMAIN_FILE]: renderDraft(draftFromOpenApi(spec), "openapi.yaml"), "policy.md": POLICY_PLACEHOLDER, "tasks.yaml": TASKS_PLACEHOLDER });
+    expect((await loadDomain(dir)).tools.map((t) => t.name)).toEqual(["list_kettles", "create_kettle", "update_kettle"]);
+  });
+});
+
 describe("init from OpenAPI: what it refuses", () => {
   it("accepts an OpenAPI 3.x document with paths", async () => {
     expect(openApiProblem(await freightSpec())).toBeUndefined();
