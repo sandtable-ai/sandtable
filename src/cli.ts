@@ -8,7 +8,7 @@ import { Command, InvalidArgumentError } from "commander";
 import { freightScriptedAgent } from "./demo/freight-agents.ts";
 import { formatPercent, renderTerminal } from "./report/terminal.ts";
 import { renderHtml } from "./report/html.ts";
-import { criticalFailures, everyTrialFailed, runSuite, type SuiteResult } from "./run/suite.ts";
+import { criticalFailures, everyTrialFailed, runSuite, skippedTrials, trialStatus, type SuiteResult } from "./run/suite.ts";
 import { changedVerdicts, RegradeError, regradeSuite } from "./run/regrade.ts";
 import { baselineSnapshot, checkBaseline } from "./run/compare.ts";
 import { parseResults } from "./run/read.ts";
@@ -117,6 +117,20 @@ function failIfNothingGraded(result: SuiteResult): boolean {
   process.exitCode = 1;
   return true;
 }
+
+/**
+ * A run with skipped trials is incomplete: they are left out of pass^k, so the score rests on fewer trials
+ * than asked for, and an agent that crashes on hard tasks must not pass a gate the others would fail. Exit 1.
+ */
+function failIfIncomplete(result: SuiteResult): void {
+  const skipped = skippedTrials(result);
+  if (skipped.length === 0) return;
+  const trials = result.tasks.reduce((n, t) => n + t.trials.length, 0);
+  console.error(`\n✗ ${skipped.length} of ${trials} trial(s) ended in an error before the agent broke any rule, so they were skipped and this run is incomplete. The first error:\n  ${skipped[0]!.error ?? "unknown error"}`);
+  process.exitCode = 1;
+}
+
+const STATUS_MARK = { passed: "✓", failed: "✗", skipped: "○" } as const;
 
 async function loadPrices(file?: string): Promise<PricesFile | undefined> {
   if (!file) return undefined;
@@ -321,7 +335,7 @@ withProviderFlags(program
       taskIds: o.tasks?.split(",").map((s) => s.trim()).filter(Boolean),
       onTrial: (r) => {
         done++;
-        if (process.stderr.isTTY) process.stderr.write(`\r  ${done}/${total} trials  ${r.passed ? "✓" : "✗"} ${r.taskId}`.padEnd(70));
+        if (process.stderr.isTTY) process.stderr.write(`\r  ${done}/${total} trials  ${STATUS_MARK[trialStatus(r)]} ${r.taskId}`.padEnd(70));
       },
     });
     if (process.stderr.isTTY) process.stderr.write("\r".padEnd(72) + "\r");
@@ -331,10 +345,11 @@ withProviderFlags(program
     console.log(`\n  results: ${path.join(out, "results.json")}${o.html ? `\n  report:  ${path.join(out, "report.html")}` : ""}`);
     if (failIfNothingGraded(result)) return;
     if (o.open && o.html) openInBrowser(path.join(out, "report.html"));
+    failIfIncomplete(result);
     // A critical task is a release blocker: any failed trial fails the run, with or without --fail-under.
     const blockers = criticalFailures(result);
     if (blockers.length) {
-      console.error(`\n✗ ${blockers.length} critical task(s) did not pass every trial: ${blockers.map((t) => `${t.id} ${t.passes}/${t.trials.length}`).join(", ")}`);
+      console.error(`\n✗ ${blockers.length} critical task(s) did not pass every trial: ${blockers.map((t) => `${t.id} ${t.passes}/${t.graded ?? t.trials.length}`).join(", ")}`);
       process.exitCode = 1;
     }
     const score = result.passHat[String(o.trials)] ?? 0;
@@ -498,7 +513,7 @@ program
     console.log(renderTerminal(result));
     const trials = result.tasks.reduce((n, t) => n + t.trials.length, 0);
     console.log(`\n  regraded ${trials} trial(s) without calling a model: ${flipped.length} verdict(s) changed`);
-    for (const tr of flipped) console.log(`    ${tr.passed ? "✗ → ✓" : "✓ → ✗"}  ${tr.taskId} trial ${tr.trial + 1}`);
+    for (const { before, after } of flipped) console.log(`    ${STATUS_MARK[trialStatus(before)]} → ${STATUS_MARK[trialStatus(after)]}  ${after.taskId} trial ${after.trial + 1}`);
     for (const j of [...new Set(["1", String(result.k)])]) {
       if (stored.passHat[j] !== result.passHat[j]) console.log(`  pass^${j} ${formatPercent(stored.passHat[j] ?? 0)} → ${formatPercent(result.passHat[j] ?? 0)}`);
     }

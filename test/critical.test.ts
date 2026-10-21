@@ -51,6 +51,12 @@ describe("critical tasks", () => {
     expect(criticalFailures(careful)).toEqual([]);
   });
 
+  it("don't count a skipped trial as a failure: the run fails for being incomplete instead", () => {
+    const task = (id: string, passes: number, graded: number, skipped: number) => ({ ...careful.tasks[0]!, id, critical: true as const, passes, graded, skipped });
+    const r = { tasks: [task("all-skipped", 0, 0, 2), task("passed-the-rest", 1, 1, 1), task("failed-one", 1, 2, 0)] };
+    expect(criticalFailures(r).map((t) => t.id)).toEqual(["failed-one"]);
+  });
+
   it("follow the domain a run is regraded under", () => {
     const edited: Domain = { ...freight, tasks: freight.tasks.map((t) => (t.id === "book-at-posted-rate" ? { ...t, critical: true } : t.id === "expired-insurance" ? { ...t, critical: false } : t)) };
     const r = regradeSuite(edited, naive);

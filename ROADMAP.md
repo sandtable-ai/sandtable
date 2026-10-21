@@ -22,7 +22,7 @@ Issues and milestones on GitHub are the source of truth; this page is the overvi
 
 ## Next: closing the loop in CI (milestone v0.3)
 - [ ] Baseline comparison and PR comments with pass^k deltas (#12, #13)
-- [ ] Reliability verdicts: pass@k, flaky tasks, flip rate, intervals, infra errors as SKIPPED (#27)
+- [x] Reliability verdicts: pass@k, flaky tasks, flip rate, intervals, infra errors as SKIPPED (#27)
 - [ ] Critical tasks (#28), failure attribution (#29), coverage matrix (#30)
 - [ ] Customer sign-off report: rule → evidence → reliability (#31)
 - [ ] Argument matchers (#25), nested params (#26), per-task `given` overrides (#37)

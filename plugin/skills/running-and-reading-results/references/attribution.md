@@ -14,7 +14,7 @@ Fixing the wrong party is the expensive mistake. Tuning the agent's prompt to sa
 For each failing trial (see results-json.md for the queries):
 
 1. **Read the failed checks.** Note the kinds and details.
-2. **Rule out the harness.** `endReason: "error"` or a `runtime` check means the conversation did not finish normally. Read `error`. Fix and rerun before judging anything else.
+2. **Rule out the harness.** `endReason: "error"` or a `runtime` check means the conversation did not finish normally. Read `error`. When nothing else failed first, the trial is `skipped`, already left out of the scores, and the run is incomplete. Fix and rerun before judging anything else.
 3. **Read the task.** Its `user.instructions`, `expect` and `reference` in `tasks.yaml`, and the SOP sections it touches. Know what a correct conversation looks like before you read this one.
 4. **Read the transcript in order** and stop at the first divergence: the first turn where the user or the agent does something the instructions or the SOP do not call for. Later problems usually follow from it.
 5. **Ask who diverged.**

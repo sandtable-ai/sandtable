@@ -4,7 +4,7 @@ import { worldFor } from "../world/store.ts";
 import type { ToolOutcome } from "../world/tools.ts";
 import { gradeEpisode, toolEvent, worldChanges, type TrajectoryEvent, type TrialResult } from "./episode.ts";
 import { inputsFingerprint } from "./inputs.ts";
-import { summarize, type SuiteResult } from "./suite.ts";
+import { summarize, trialStatus, type SuiteResult } from "./suite.ts";
 import { createToolRunner } from "./tool-runner.ts";
 
 /** A stored run that can't be re-scored under the domain as it is now. */
@@ -35,8 +35,10 @@ export function regradeTrial(domain: Domain, trial: TrialResult): TrialResult {
     }
   }
   const agentMessages = events.flatMap((e) => (e.type === "agent" ? [e.text] : []));
+  // Whether it was skipped is decided again under the current rules, like whether it passed.
+  const { skipped: _, ...stored } = trial;
   return {
-    ...trial,
+    ...stored,
     ...gradeEpisode({ domain, task, world, runner, events, agentMessages, ...(trial.error !== undefined ? { error: trial.error } : {}) }),
     events,
     changes: worldChanges(domain, initial, world),
@@ -59,10 +61,15 @@ export function regradeBlocker(domain: Domain, stored: SuiteResult): string | un
   return undefined;
 }
 
-/** The trials of `after` whose verdict differs from the same trial in `before`. */
-export function changedVerdicts(before: SuiteResult, after: SuiteResult): TrialResult[] {
-  const was = new Map(before.tasks.flatMap((t) => t.trials.map((tr) => [`${tr.taskId}#${tr.trial}`, tr.passed] as const)));
-  return after.tasks.flatMap((t) => t.trials.filter((tr) => was.get(`${tr.taskId}#${tr.trial}`) !== tr.passed));
+/** The trials whose status (passed, failed or skipped) differs between `before` and `after`, as both had them. */
+export function changedVerdicts(before: SuiteResult, after: SuiteResult): { before: TrialResult; after: TrialResult }[] {
+  const was = new Map(before.tasks.flatMap((t) => t.trials.map((tr) => [`${tr.taskId}#${tr.trial}`, tr] as const)));
+  return after.tasks.flatMap((t) =>
+    t.trials.flatMap((tr) => {
+      const old = was.get(`${tr.taskId}#${tr.trial}`);
+      return old && trialStatus(old) !== trialStatus(tr) ? [{ before: old, after: tr }] : [];
+    }),
+  );
 }
 
 /**

@@ -57,6 +57,28 @@ describe("compareRuns", () => {
     expect(c.differences).toEqual([]);
   });
 
+  it("counts graded trials only, and calls a task with none graded in one run skipped, not broken", () => {
+    const skip = (r: SuiteResult, id: string, trial: number): SuiteResult => {
+      const tasks = r.tasks.map((t) => {
+        if (t.id !== id) return t;
+        const trials = t.trials.map((tr) => (tr.trial === trial ? { ...tr, passed: false, skipped: true as const, endReason: "error" as const, error: "429" } : tr));
+        const graded = trials.filter((tr) => !tr.skipped).length;
+        return { ...t, trials, passes: trials.filter((tr) => tr.passed).length, graded, skipped: trials.length - graded };
+      });
+      return { ...r, tasks };
+    };
+    const before = fake({ kept: [true, true], outage: [true, true] });
+    // `kept` passed its one graded trial, so it is unchanged; every trial of `outage` was skipped.
+    const now = skip(skip(skip(fake({ kept: [true, true], outage: [true, true] }), "kept", 1), "outage", 0), "outage", 1);
+    const c = compareRuns(baselineSnapshot(before), now);
+    expect(c.tasks).toEqual([
+      { id: "outage", change: "skipped", before: { passes: 2, trials: 2 }, after: { passes: 0, trials: 0 } },
+      { id: "kept", change: "same", before: { passes: 2, trials: 2 }, after: { passes: 1, trials: 1 } },
+    ]);
+    expect(baselineSnapshot(now).tasks).toEqual([{ id: "kept", passes: 1, trials: 1 }, { id: "outage", passes: 0, trials: 0 }]);
+    expect(plain(renderTerminal({ ...now, baseline: baselineSnapshot(before) }))).toContain("  ○ 1 not graded in one of the runs (outage)");
+  });
+
   it("compares pass^j only up to the smaller k, and says k changed", () => {
     const c = compareRuns(baselineSnapshot(fake({ t: [true, true, true, false] })), fake({ t: [true, false] }));
     expect(c.passHat.map((p) => p.j)).toEqual([1, 2]);

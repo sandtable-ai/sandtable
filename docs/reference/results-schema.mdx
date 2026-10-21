@@ -10,7 +10,7 @@ keywords: ["results.json", "output format", "SuiteResult", "TrialResult", "repor
 - `results.json`: a `SuiteResult`, described below. It is the source of truth for a run.
 - `report.html`: a self-contained rendering of it, with no external assets, that you can attach to a pull request or send to a customer. `npx sandtable-ai report results.json` re-renders it.
 
-The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`, `CheckResult` and the rest). Until 1.0, fields may still be added or change; `version` will change when the format breaks.
+The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`, `CheckResult` and the rest). Until 1.0, fields may still be added or change; `version` will change when the format breaks. `passAt`, `flipRate`, `flaky`, `skipped` and the task verdict fields are absent in results from before verdicts, in which every trial was graded.
 
 ## SuiteResult
 
@@ -26,8 +26,12 @@ The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`
 | `startedAt` | string | ISO 8601 start time |
 | `durationMs` | number | wall-clock duration |
 | `tasks` | `TaskSummary[]` | one entry per task, with every trial |
-| `passHat` | object | pass^j for every j from 1 to k, keyed `"1"`, `"2"`, …, as fractions from 0 to 1 |
-| `failureModes` | `FailureMode[]` | failed checks clustered across trials, most frequent first |
+| `passHat` | object | pass^j for every j from 1 to k, keyed `"1"`, `"2"`, …, as fractions from 0 to 1, over graded trials: skipped trials are left out, and so is a task with fewer than j graded trials. `null` when no task has j graded trials |
+| `passAt` | object | pass@j for every j from 1 to k, keyed and left out the same way: the chance that at least one of j trials of a task passes, averaged over tasks |
+| `flipRate` | number or `null` | the share of tasks with at least 2 graded trials whose graded trials disagree (the flaky ones), from 0 to 1; `null` when no task has 2 graded trials, as with k = 1 |
+| `flaky` | string[] | ids of the flaky tasks, in spec order |
+| `skipped` | number | trials skipped across the run; `run` exits 1 when it isn't 0 |
+| `failureModes` | `FailureMode[]` | failed checks clustered across graded trials, most frequent first; a skipped trial's error is not one |
 | `byTag` | `TagScore[]` | scores per task tag (`untagged` for tasks without tags), weakest first |
 | `soft` | `SoftScore[]` | one entry per soft invariant in the domain, in spec order; empty when there are none |
 | `usage` | `Usage` | tokens and estimated cost, summed over trials |
@@ -45,6 +49,10 @@ The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`
 | `critical` | `true` | present only on a [critical task](/reference/spec#critical-tasks): any failed trial makes `run` exit 1 |
 | `trials` | `TrialResult[]` | ordered by trial number |
 | `passes` | number | trials that passed |
+| `graded` | number | trials that were graded: all but the skipped ones |
+| `skipped` | number | trials that were skipped |
+| `verdict` | string | `passed` (every graded trial passed), `failed` (none did), `flaky` (some did) or `skipped` (no trial was graded) |
+| `interval` | object | `low` and `high`: the 95% Wilson score interval for `passes / graded`, from 0 to 1; absent when no trial was graded |
 
 ### FailureMode
 
@@ -62,8 +70,8 @@ The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`
 |---|---|---|
 | `tag` | string | the tag |
 | `tasks` | number | tasks with this tag |
-| `passHat1` | number | pass^1 over those tasks |
-| `passHatK` | number | pass^k over those tasks |
+| `passHat1` | number | pass^1 over those tasks' graded trials |
+| `passHatK` | number | pass^k over those tasks' graded trials |
 
 ### SoftScore
 
@@ -92,7 +100,7 @@ What a run made with `--baseline` keeps of the earlier run, so the terminal summ
 | `k` | number | the baseline's trials per task |
 | `inputs` | string | the baseline's `inputs` hash; absent when its `results.json` had none |
 | `passHat` | object | the baseline's own pass^1 to pass^k, over all of its tasks |
-| `tasks` | object[] | `{ id, passes, trials }` for each of the baseline's tasks, in its order |
+| `tasks` | object[] | `{ id, passes, trials }` for each of the baseline's tasks, in its order. `trials` counts graded trials: skipped ones are left out, as in pass^k |
 
 ### PendingItem
 
@@ -108,7 +116,8 @@ What a run made with `--baseline` keeps of the earlier run, so the terminal summ
 |---|---|---|
 | `taskId` | string | task id |
 | `trial` | number | trial number, from 0 |
-| `passed` | boolean | true only if every check passed |
+| `passed` | boolean | true only if every check passed; false for a skipped trial |
+| `skipped` | `true` | present when the trial ended in an error before the agent broke a hard invariant or called a tool listed in `not_called`: it was not graded, and the scores leave it out. Such an error is a rate limit or timeout that outlasted the adapter's retries, or an agent endpoint that went down. A trial in which the agent broke one of those before the error failed instead |
 | `checks` | `CheckResult[]` | every check, passed or failed |
 | `violations` | `Violation[]` | hard invariant violations; any one fails the trial |
 | `soft` | `SoftCheck[]` | each soft invariant that applied in this trial, and whether it was broken |
@@ -119,6 +128,8 @@ What a run made with `--baseline` keeps of the earlier run, so the terminal summ
 | `durationMs` | number | trial duration |
 | `usage` | `Usage` | tokens and estimated cost for this trial |
 | `error` | string | present when the trial ended with an error |
+
+A trial's status is `skipped` when `skipped` is true, else `passed` or `failed` from `passed`.
 
 ### CheckResult
 
@@ -193,11 +204,17 @@ Claude's usage is keyed by the model that served it. On the Anthropic API, that 
 ## Recipes
 
 ```bash
-# pass^k
-jq '.passHat' results.json
+# pass^k, pass@k, the flip rate and skipped trials
+jq '{passHat, passAt, flipRate, flaky, skipped}' results.json
+
+# each task's verdict, and passes out of graded trials
+jq -r '.tasks[] | "\(.verdict) \(.passes)/\(.graded) \(.id)"' results.json
+
+# skipped trials and their errors
+jq -r '.tasks[].trials[] | select(.skipped) | "\(.taskId)#\(.trial): \(.error)"' results.json
 
 # every failed trial, with its failing checks
-jq -r '.tasks[] | .id as $t | .trials[] | select(.passed | not)
+jq -r '.tasks[] | .id as $t | .trials[] | select((.passed or .skipped) | not)
   | "\($t)#\(.trial): \([.checks[] | select(.passed | not) | .id] | join(", "))"' results.json
 
 # failure modes, most frequent first
@@ -208,5 +225,5 @@ jq -r '.soft[] | "\(.id): \(.broken) of \(.applied) trials"' results.json
 
 # a run made with --baseline: each task's passes then and now
 jq -r '(.baseline.tasks | map({(.id): "\(.passes)/\(.trials)"}) | add) as $then
-  | .tasks[] | "\(.id): \($then[.id] // "-") -> \(.passes)/\(.trials | length)"' results.json
+  | .tasks[] | "\(.id): \($then[.id] // "-") -> \(.passes)/\(.graded // (.trials | length))"' results.json
 ```

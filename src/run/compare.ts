@@ -1,5 +1,5 @@
 import { passHatK } from "../grade/passk.ts";
-import type { SuiteResult } from "./suite.ts";
+import type { SuiteResult, TaskSummary } from "./suite.ts";
 
 /**
  * What a run keeps of the earlier run it was compared with (`run --baseline`): enough to show what
@@ -15,7 +15,7 @@ export interface BaselineSnapshot {
   inputs?: string;
   /** The baseline's own pass^1 .. pass^k, over all of its tasks. */
   passHat: Record<string, number>;
-  /** Trials passed and run, per task, in the baseline's order. */
+  /** Trials passed and graded per task, in the baseline's order: skipped trials are left out, as in pass^k. */
   tasks: { id: string; passes: number; trials: number }[];
 }
 
@@ -23,9 +23,10 @@ export interface BaselineSnapshot {
  * How a task's result moved since the baseline. `broken`: it passed every trial then, and fails some now.
  * `fixed`: the reverse. `worse` and `better`: its pass rate moved without crossing passing every trial.
  * `added`: only this run has it. `removed`: only the baseline has it, because the task is gone or `-t`
- * left it out.
+ * left it out. `skipped`: one of the runs graded none of its trials (each ended in an error), so there is
+ * nothing to compare.
  */
-export type TaskChange = "broken" | "worse" | "fixed" | "better" | "same" | "added" | "removed";
+export type TaskChange = "broken" | "worse" | "fixed" | "better" | "same" | "added" | "removed" | "skipped";
 
 export interface TaskDelta {
   id: string;
@@ -50,7 +51,10 @@ export interface Comparison {
   differences: string[];
 }
 
-const ORDER: TaskChange[] = ["broken", "worse", "fixed", "better", "added", "removed", "same"];
+const ORDER: TaskChange[] = ["broken", "worse", "fixed", "better", "added", "removed", "skipped", "same"];
+
+/** A task's passes out of its graded trials; results from before verdicts graded every trial. */
+const counts = (t: TaskSummary) => ({ passes: t.passes, trials: t.graded ?? t.trials.length });
 
 /** The part of a run that a later run keeps as its baseline. */
 export function baselineSnapshot(r: SuiteResult): BaselineSnapshot {
@@ -62,15 +66,16 @@ export function baselineSnapshot(r: SuiteResult): BaselineSnapshot {
     k: r.k,
     ...(r.inputs ? { inputs: r.inputs } : {}),
     passHat: r.passHat,
-    tasks: r.tasks.map((t) => ({ id: t.id, passes: t.trials.filter((tr) => tr.passed).length, trials: t.trials.length })),
+    tasks: r.tasks.map((t) => ({ id: t.id, ...counts(t) })),
   };
 }
 
-/** The share of trials passed, or NaN for a task with no trials. */
+/** The share of graded trials passed, or NaN for a task with none. */
 const rate = (x: { passes: number; trials: number }) => x.passes / x.trials;
 const allPass = (x: { passes: number; trials: number }) => x.trials > 0 && x.passes === x.trials;
 
 function change(before: { passes: number; trials: number }, after: { passes: number; trials: number }): TaskChange {
+  if (before.trials === 0 || after.trials === 0) return "skipped";
   if (allPass(before) && !allPass(after)) return "broken";
   if (!allPass(before) && allPass(after)) return "fixed";
   if (rate(after) < rate(before)) return "worse";
@@ -87,7 +92,7 @@ const outcomes = (x: { passes: number; trials: number }) => Array.from({ length:
  */
 export function compareRuns(baseline: BaselineSnapshot, now: SuiteResult): Comparison {
   const before = new Map(baseline.tasks.map((t) => [t.id, { passes: t.passes, trials: t.trials }]));
-  const after = new Map(now.tasks.map((t) => [t.id, { passes: t.trials.filter((tr) => tr.passed).length, trials: t.trials.length }]));
+  const after = new Map(now.tasks.map((t) => [t.id, counts(t)]));
   const deltas: TaskDelta[] = [];
   for (const [id, a] of after) {
     const b = before.get(id);

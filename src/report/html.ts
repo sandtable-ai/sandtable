@@ -28,8 +28,8 @@ h1{font-size:22px;line-height:32px;margin:0 0 8px}h2{font-size:16px;margin:32px 
 table{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border:1px solid var(--line);border-radius:4px;overflow:hidden}
 th,td{text-align:left;padding:8px 16px;border-bottom:1px solid var(--line);vertical-align:top}th{font-size:12px;color:var(--muted);font-weight:600}
 tr:last-child td{border-bottom:0}
-.dots{white-space:nowrap}.dot{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:4px;cursor:pointer;border:0;padding:0}
-.ok{background:var(--ok)}.bad{background:var(--bad)}
+.dots,.nw{white-space:nowrap}.dot{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:4px;cursor:pointer;border:0;padding:0}
+.ok{background:var(--ok)}.bad{background:var(--bad)}.skip{background:transparent;box-shadow:inset 0 0 0 2px var(--muted)}
 .okt{color:var(--ok)}.badt{color:var(--bad-text)}
 .chip{display:inline-block;background:var(--chip);border-radius:2px;padding:2px 8px;font-size:12px;line-height:16px;margin:2px 4px 2px 0}
 .crit{font-weight:600}.crit.badc{background:var(--bad);color:#fff}
@@ -58,12 +58,14 @@ a{color:inherit}
 <main>
 <div class="head">${MARK_SVG}<h1>Sandtable report: <span id="domain"></span></h1></div>
 <div class="meta" id="meta"></div>
-<p class="explain">Each task is a simulated conversation, run k times on a fresh copy of the world. A trial passes only if the records end in the expected state and no rule was broken on any tool call or message. No AI judge decides pass or fail. <b>pass^k</b> is the share of tasks where every one of k trials passed.</p>
+<p class="explain">Each task is a simulated conversation, run k times on a fresh copy of the world. A trial passes only if the records end in the expected state and no rule was broken on any tool call or message. No AI judge decides pass or fail. <b>pass^k</b> is the share of tasks where every one of k trials passed, and <b>pass@k</b> the share where at least one did. A trial that ended in an error before the agent broke any rule, such as a rate limit that outlasted the retries, is skipped: it is shown hollow and left out of the scores.</p>
 <div id="pending"></div>
 <div class="kpis" id="kpis"></div>
 <div id="baseline"></div>
 <h2>Tasks</h2>
-<div class="wrap"><table><thead><tr><th>Task</th><th>Trials</th><th>Pass</th><th>Failed checks</th></tr></thead><tbody id="tasks"></tbody></table></div>
+<div class="wrap"><table><thead><tr><th>Task</th><th>Trials</th><th>Pass</th><th>Verdict</th><th>Failed checks</th></tr></thead><tbody id="tasks"></tbody></table></div>
+<div id="flaky"></div>
+<div id="skipped"></div>
 <div id="tags"></div>
 <div id="soft"></div>
 <h2>Failure modes</h2>
@@ -90,13 +92,23 @@ if (R.pendingReview && R.pendingReview.length) {
   $("pending").innerHTML = '<div class="warn"><b>Provisional:</b> ' + R.pendingReview.length + " drafted item(s) are pending review: " +
     R.pendingReview.map((p) => '<span class="chip">' + esc(p.kind + " " + p.id) + "</span>").join("") + "</div>";
 }
+// Results from before verdicts have no graded count or verdict: every trial was graded then.
+const graded = (t) => t.graded ?? t.trials.length;
+const verdict = (t) => t.verdict || (t.passes === graded(t) ? "passed" : t.passes === 0 ? "failed" : "flaky");
+const status = (tr) => tr.skipped ? "skipped" : tr.passed ? "passed" : "failed";
+const interval = (i) => i ? Math.round(i.low * 100) + "%–" + Math.round(i.high * 100) + "%" : "n/a";
+const skippedTrials = R.tasks.flatMap((t) => t.trials.filter((tr) => tr.skipped));
 const hats = Object.entries(R.passHat).filter(([j]) => j === "1" || j === String(R.k));
-const allPassed = (t) => t.passes === t.trials.length;
+const allPassed = (t) => graded(t) > 0 && t.passes === graded(t);
+const critFailed = (t) => t.passes < graded(t);
 // Critical tasks first, then the rest, both in spec order. Indexes stay those of R.tasks, which show() reads.
 const order = [...R.tasks.keys()].sort((a, b) => Number(!R.tasks[a].critical) - Number(!R.tasks[b].critical) || a - b);
 const critical = R.tasks.filter((t) => t.critical);
 $("kpis").innerHTML = hats.map(([j, v]) => '<div class="kpi"><b>' + pct(v) + '</b><span>pass^' + j + '</span></div>').join("") +
   (critical.length ? '<div class="kpi"><b class="' + (critical.every(allPassed) ? "" : "badt") + '">' + critical.filter(allPassed).length + " of " + critical.length + '</b><span>critical tasks passed every trial</span></div>' : "") +
+  (R.k > 1 && R.passAt ? '<div class="kpi"><b>' + pct(R.passAt[String(R.k)] ?? null) + '</b><span>pass@' + R.k + '</span></div>' : "") +
+  (R.k > 1 && R.flipRate !== undefined ? '<div class="kpi"><b>' + pct(R.flipRate) + '</b><span>flip rate</span></div>' : "") +
+  (skippedTrials.length ? '<div class="kpi"><b>' + skippedTrials.length + '</b><span>trials skipped</span></div>' : "") +
   '<div class="kpi"><b>' + ms(R.latency && R.latency.agentTurnP95Ms) + '</b><span>agent turn p95</span></div>' +
   (calls(R.usage) ? '<div class="kpi"><b>' + usd(R.usage.costUsd) + '</b><span>estimated cost</span></div>' : "") +
   (stops(R.usage) ? '<div class="kpi"><b>' + stops(R.usage) + '</b><span>calls stopped at max_tokens</span></div>' : "") +
@@ -110,7 +122,7 @@ if (C) {
   const frac = (x) => x ? x.passes + "/" + x.trials : "–";
   const moved = C.tasks.filter((d) => d.change !== "same");
   const same = C.tasks.length - moved.length;
-  const label = { broken: "broken", worse: "worse", fixed: "fixed", better: "better", added: "added", removed: "only in the baseline" };
+  const label = { broken: "broken", worse: "worse", fixed: "fixed", better: "better", added: "added", removed: "only in the baseline", skipped: "not graded in one run" };
   const shown = C.passHat.filter((p) => p.j === 1 || p.j === C.passHat.length);
   const pts = (p) => { const d = (p.after - p.before) * 100; return Number.isNaN(d) ? "" : Math.abs(d) < 0.05 ? "no change" : (d > 0 ? "+" : "−") + Math.abs(d).toFixed(1) + " pts"; };
   $("baseline").innerHTML = "<h2>Changes since baseline</h2><p class='explain' style='margin-top:0'>Compared with run <code>" + esc(b.runId) + "</code> of " + esc(b.startedAt) +
@@ -128,13 +140,36 @@ if (C) {
 }
 $("tasks").innerHTML = order.map((ti) => {
   const t = R.tasks[ti];
-  const failed = [...new Set(t.trials.flatMap((tr) => tr.checks.filter((c) => !c.passed).map((c) => c.id)))];
-  const crit = t.critical ? ' <span class="chip crit' + (allPassed(t) ? "" : " badc") + '" title="' + (allPassed(t) ? "critical: passed every trial" : "critical: a failed trial fails the run") + '">critical</span>' : "";
+  // A skipped trial's error is listed under Skipped trials, not as the task's failure.
+  const failed = [...new Set(t.trials.filter((tr) => !tr.skipped).flatMap((tr) => tr.checks.filter((c) => !c.passed).map((c) => c.id)))];
+  const crit = t.critical ? ' <span class="chip crit' + (critFailed(t) ? " badc" : "") + '" title="' + (critFailed(t) ? "critical: a failed trial fails the run" : allPassed(t) ? "critical: passed every trial" : "critical: no trial was graded") + '">critical</span>' : "";
   return "<tr><td><b>" + esc(t.id) + "</b>" + crit + (regressed(t.id) ? ' <span class="chip regressed">' + since[t.id] + " since baseline</span>" : "") + "<div class='meta'>" + esc(t.description) + "</div></td><td class='dots'>" +
-    t.trials.map((tr, i) => '<button class="dot ' + (tr.passed ? "ok" : "bad") + '" title="trial ' + (i + 1) + '" onclick="show(' + ti + "," + i + ')"></button>').join("") +
-    "</td><td class='" + (allPassed(t) ? "okt" : "badt") + "'>" + t.passes + "/" + t.trials.length + "</td><td>" +
+    t.trials.map((tr, i) => '<button class="dot ' + ({ passed: "ok", failed: "bad", skipped: "skip" })[status(tr)] + '" title="trial ' + (i + 1) + (tr.skipped ? ": skipped" : "") + '" onclick="show(' + ti + "," + i + ')"></button>').join("") +
+    "</td><td class='nw " + (graded(t) === 0 ? "meta" : t.passes === graded(t) ? "okt" : "badt") + "'>" + t.passes + "/" + graded(t) +
+    (t.skipped ? "<div class='meta'>" + t.skipped + " skipped</div>" : "") + "</td><td class='nw'><span class='" + ({ passed: "okt", failed: "badt", flaky: "badt", skipped: "meta" })[verdict(t)] + "'>" + verdict(t) + "</span>" +
+    (t.interval ? "<div class='meta' title='95% Wilson interval for the pass rate of the graded trials'>95% " + interval(t.interval) + "</div>" : "") + "</td><td>" +
     failed.map((f) => '<span class="chip">' + esc(f) + "</span>").join("") + "</td></tr>";
 }).join("");
+const flaky = R.tasks.filter((t) => verdict(t) === "flaky");
+if (flaky.length) {
+  $("flaky").innerHTML = "<h2>Flaky tasks</h2><p class='explain' style='margin-top:0'>Passed some trials and failed others: the agent can do the task, but not every time. The interval is a 95% Wilson interval for the pass rate; few trials make it wide.</p><div class='wrap'><table><thead><tr><th>Task</th><th>Passed</th><th>95% interval</th><th>Failed checks</th></tr></thead><tbody>" +
+    flaky.map((t) => "<tr><td><b>" + esc(t.id) + "</b></td><td>" + t.passes + " of " + graded(t) + "</td><td>" + interval(t.interval) + "</td><td>" +
+      [...new Set(t.trials.filter((tr) => !tr.passed && !tr.skipped).flatMap((tr) => tr.checks.filter((c) => !c.passed).map((c) => c.id)))].map((f) => '<span class="chip">' + esc(f) + "</span>").join("") + "</td></tr>").join("") +
+    "</tbody></table></div>";
+}
+if (skippedTrials.length) {
+  // Grouped by error, like failure modes: how many trials, then which tasks.
+  const errors = new Map();
+  for (const tr of skippedTrials) {
+    const e = errors.get(tr.error || "unknown error") || { count: 0, tasks: [] };
+    e.count++;
+    if (!e.tasks.includes(tr.taskId)) e.tasks.push(tr.taskId);
+    errors.set(tr.error || "unknown error", e);
+  }
+  $("skipped").innerHTML = "<h2>Skipped trials</h2><p class='explain' style='margin-top:0'>These trials ended in an error before the agent broke any rule, so they were not graded and the scores leave them out. The run is incomplete: rerun it.</p><div class='wrap'><table><thead><tr><th>Count</th><th>Error</th><th>Tasks</th></tr></thead><tbody>" +
+    [...errors].map(([error, e]) => "<tr><td>" + e.count + "×</td><td>" + esc(error) + "</td><td>" + e.tasks.map((t) => '<span class="chip">' + esc(t) + "</span>").join("") + "</td></tr>").join("") +
+    "</tbody></table></div>";
+}
 if (R.byTag && R.byTag.length > 1) {
   $("tags").innerHTML = "<h2>By tag</h2><div class='wrap'><table><thead><tr><th>Tag</th><th>Tasks</th><th>pass^1</th>" + (R.k > 1 ? "<th>pass^" + R.k + "</th>" : "") + "</tr></thead><tbody>" +
     R.byTag.map((t) => "<tr><td><span class='chip'>" + esc(t.tag) + "</span></td><td>" + t.tasks + "</td><td>" + pct(t.passHat1) + "</td>" + (R.k > 1 ? "<td>" + pct(t.passHatK) + "</td>" : "") + "</tr>").join("") +
@@ -168,7 +203,7 @@ function show(ti, i) {
     (tr.soft || []).map((c) => '<div class="check"><span class="meta">' + (c.broken ? "~" : "·") + "</span><div><code>" + esc(c.id) + "</code> <span class='meta'>soft:</span> " + esc(c.broken ? c.violations.map((v) => v.detail).join("; ") : "not broken") + "</div></div>").join("");
   const changes = tr.changes.length ? tr.changes.map(change).join("") : "<div class='meta'>No writes.</div>";
   $("detail").innerHTML = '<div class="trial"><h2 style="margin-top:0">' + esc(t.id) + " · trial " + (i + 1) + " · " +
-    (tr.passed ? '<span class="okt">passed</span>' : '<span class="badt">failed</span>') + '</h2><div class="meta">ended: ' + tr.endReason + " · " + tr.turns + " turns · " + tr.durationMs + "ms" + (calls(tr.usage) ? " · " + usd(tr.usage.costUsd) : "") + (stops(tr.usage) ? " · " + stops(tr.usage) + " stopped at max_tokens" : "") + (tr.error ? " · " + esc(tr.error) : "") +
+    ({ passed: '<span class="okt">passed</span>', failed: '<span class="badt">failed</span>', skipped: '<span class="meta">skipped: it ended in an error before the agent broke any rule, so it was not graded</span>' })[status(tr)] + '</h2><div class="meta">ended: ' + tr.endReason + " · " + tr.turns + " turns · " + tr.durationMs + "ms" + (calls(tr.usage) ? " · " + usd(tr.usage.costUsd) : "") + (stops(tr.usage) ? " · " + stops(tr.usage) + " stopped at max_tokens" : "") + (tr.error ? " · " + esc(tr.error) : "") +
     "</div><h2>Checks</h2>" + checks + "<h2>World changes</h2>" + changes + "<h2>Transcript</h2>" + evs + "</div>";
   $("detail").scrollIntoView({ behavior: "smooth" });
 }
@@ -182,9 +217,14 @@ function change(c) {
   const diff = fields.map((k) => "<b>" + esc(k) + "</b> " + esc(shown(c.before[k])) + " → " + esc(shown(c.after[k]))).join(", ");
   return head + (diff || "<span>no field changed</span>") + "<details><summary>whole row</summary><span>" + esc(json(c.after)) + "</span></details></div>";
 }
-// Open the first failed trial in the order the table lists tasks, so a failed critical task comes first.
-const firstFail = order.find((ti) => R.tasks[ti].trials.some((tr) => !tr.passed));
-if (firstFail !== undefined) show(firstFail, R.tasks[firstFail].trials.findIndex((tr) => !tr.passed));
+// Open the first failed trial in the order the table lists tasks, so a failed critical task comes first; else the first skipped one.
+for (const want of ["failed", "skipped"]) {
+  const ti = order.find((i) => R.tasks[i].trials.some((tr) => status(tr) === want));
+  if (ti !== undefined) {
+    show(ti, R.tasks[ti].trials.findIndex((tr) => status(tr) === want));
+    break;
+  }
+}
 </script>
 </body>
 </html>

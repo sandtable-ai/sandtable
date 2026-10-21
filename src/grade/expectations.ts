@@ -107,6 +107,17 @@ function closestMismatch(calls: readonly CallRecord[], args: Row): string {
   return mismatch(closest.args, args) ?? "";
 }
 
+/**
+ * A trial that ended in an error, such as a rate limit or timeout that outlasted the adapter's retries or an
+ * agent endpoint that went down, is skipped: the conversation never finished, so it says nothing about the
+ * agent, and it is left out of pass^k. Unless the agent had already broken something that finishing the
+ * conversation could not undo, a hard invariant or a tool it must not call: then the trial failed like any
+ * other, so an agent that crashes can't hide what it broke before the crash.
+ */
+export function isSkipped(checks: readonly CheckResult[], error: string | undefined): boolean {
+  return error !== undefined && !checks.some((c) => !c.passed && (c.kind === "invariant" || c.kind === "not_called"));
+}
+
 function checkState(a: StateAssert, i: number, world: World): CheckResult {
   const id = `state:${a.table}${a.key ? `[${a.key}]` : ""}#${i + 1}`;
   if (a.key !== undefined) {

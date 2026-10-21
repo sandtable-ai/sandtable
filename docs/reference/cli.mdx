@@ -134,6 +134,8 @@ The run prints a summary (per-task results, pass^k, latency, cost, per-tag score
 
 [Critical tasks](/reference/spec#critical-tasks) are listed first and marked `critical`, with a line such as `critical 2 of 3 passed every trial` under pass^k. When any trial of a critical task fails, `run` names those tasks and exits 1, with or without `--fail-under`. When both fail, it prints both.
 
+Each task row shows one mark per trial, `✓` passed, `✗` failed or `○` skipped, then passes out of graded trials, and `flaky` when some graded trials passed and others failed. With k > 1, the headline adds pass@k and the flip rate (the share of tasks with two or more graded trials that are flaky), and **Flaky tasks** lists those tasks with a 95% interval for each one's pass rate. A trial that ended in an error before the agent broke a rule is skipped: left out of pass^k and pass@k, and listed under **Skipped trials** with its error. A run with any skipped trial exits 1, since it is incomplete; see [pass^k and reliability](/concepts/pass-k#skipped-trials).
+
 ### Compare with a baseline
 
 `--baseline` compares the run with an earlier run of the same domain, such as the last run on `main`, and answers "what changed?" task by task:
@@ -158,7 +160,7 @@ npx sandtable-ai run ./my-domain --agent http://localhost:8787/step -k 4 --basel
 
 pass^4 didn't move here, because one task broke as another was fixed: the task lines are what show the regression.
 
-Each task that ran in both is `broken` (it passed every trial before and fails one now), `worse` (fewer of its trials pass, without crossing passing every trial), `fixed`, `better` or unchanged. New failures come first. Added tasks, and tasks only the baseline ran (removed from the domain, or left out with `--tasks`), are counted on a line each, with the failing added tasks named first. pass^1 and pass^k are compared over the tasks both runs ran, up to the smaller of the two k. Under the baseline's run id, a `!` line names each other difference: the agent, the simulated user, k, or what the agent and the caller are given (the `inputs` hash), which is often the point of the change.
+Each task that ran in both is `broken` (it passed every trial before and fails one now), `worse` (fewer of its trials pass, without crossing passing every trial), `fixed`, `better` or unchanged, counting graded trials only. A task that one of the runs graded no trial of, because each was [skipped](/concepts/pass-k#skipped-trials), is listed as not graded instead. New failures come first. Added tasks, and tasks only the baseline ran (removed from the domain, or left out with `--tasks`), are counted on a line each, with the failing added tasks named first. pass^1 and pass^k are compared over the tasks both runs ran, up to the smaller of the two k. Under the baseline's run id, a `!` line names each other difference: the agent, the simulated user, k, or what the agent and the caller are given (the `inputs` hash), which is often the point of the change.
 
 The baseline is read before any trial runs, so a missing file, a file that isn't a `results.json`, or a run of another domain stops the run before it calls a model. The comparison never changes the exit code: `--fail-under` still gates on this run's pass^k alone.
 
@@ -300,5 +302,5 @@ The hash covers what sandtable's own adapters give a model. A custom agent adapt
 | Code | When |
 |---|---|
 | `0` | success |
-| `1` | an error (invalid domain, unknown agent or user spec, missing credentials or package), `validate --strict` with pending items, `lint` errors, `run` below `--fail-under`, a `run` in which any trial of a critical task failed, a `run` or `demo --live` in which every trial ended in an error (missing credentials or package, an unreachable agent), or a `leaderboard` on which every model failed or crashed |
+| `1` | an error (invalid domain, unknown agent or user spec, missing credentials or package), `validate --strict` with pending items, `lint` errors, `run` below `--fail-under`, a `run` in which any trial of a critical task failed, a `run` with a skipped trial (it ended in an error before the agent broke a rule), a `run` or `demo --live` in which every trial ended in an error (missing credentials or package, an unreachable agent), or a `leaderboard` on which every model failed or crashed |
 | `141` | the output was piped into a reader that stopped early, such as `head` or a `less` quit before the end: the command stops there quietly, without finishing, with the status a shell reports for a Unix tool stopped by `SIGPIPE` (128 + 13) |

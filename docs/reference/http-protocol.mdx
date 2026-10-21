@@ -76,7 +76,7 @@ Tool calls in one response run in order. sandtable then POSTs all their results 
 
 - **Tool calls are graded.** Every call is checked against the domain's invariants before it runs, then executed against the trial's mock world. Nothing reaches a real system.
 - **Step budget.** After 16 rounds of tool calls in one turn, the turn ends with the reply `[agent exceeded its step budget for this turn]`.
-- **Errors end the trial.** A non-2xx status (the error shows the status and body), a body that is not JSON, or a response with neither `reply` nor `tool_calls` ends the trial with a `runtime` failure. It counts as a failed trial.
+- **Errors end the trial.** A non-2xx status (the error shows the status and body), a body that is not JSON, or a response with neither `reply` nor `tool_calls` ends the trial with a `runtime` check. If the agent had already broken a rule, the trial failed. Otherwise it is skipped: left out of pass^k, and `run` exits 1 because the run is incomplete.
 - **Concurrency.** Up to `--concurrency` trials (default 4) run at once, so your service sees interleaved sessions. Key all state on `session_id`.
 - **No timeout of its own.** sandtable does not abort slow requests, so a hung endpoint stalls its trial.
 - **No end-of-session call.** Your service is not told when a trial ends.

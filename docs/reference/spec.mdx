@@ -247,7 +247,7 @@ Tasks also accept `review` and `source`, like invariants.
 
 Reports list critical tasks first and mark them, and the terminal summary adds a line such as `critical 2 of 3 passed every trial`. In `results.json`, each critical task carries `"critical": true`.
 
-A critical refusal guards against the harmful action, not against doing nothing: the do-nothing `noop` agent passes it. Keep gating on the score with `--fail-under` too. Until infrastructure errors are reported separately ([#27](https://github.com/sandtable-ai/sandtable/issues/27)), a trial that ended in an error counts as failed here as everywhere else.
+A critical refusal guards against the harmful action, not against doing nothing: the do-nothing `noop` agent passes it. Keep gating on the score with `--fail-under` too. A [skipped trial](/concepts/pass-k#skipped-trials), one that ended in an error before the agent broke a rule, is not a critical failure: the run already exits 1 because it is incomplete.
 
 ### Per-task world and context
 

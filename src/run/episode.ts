@@ -1,4 +1,4 @@
-import { gradeTrial, type CheckResult } from "../grade/expectations.ts";
+import { gradeTrial, isSkipped, type CheckResult } from "../grade/expectations.ts";
 import { checkTranscript, invariantTool, type CallRecord, type Violation } from "../grade/invariants.ts";
 import type { Domain, Task } from "../spec/schema.ts";
 import { agentSystemPrompt, taskContext } from "../sim/prompts.ts";
@@ -39,7 +39,13 @@ export interface SoftCheck {
 export interface TrialResult {
   taskId: string;
   trial: number;
+  /** False for a skipped trial too: only a graded trial can pass. */
   passed: boolean;
+  /**
+   * Present when the trial ended in an error before the agent broke a hard invariant or called a tool it must
+   * not call: it was not graded, and pass^k and pass@k leave it out. See isSkipped.
+   */
+  skipped?: true;
   checks: CheckResult[];
   /** Hard invariant violations: any one fails the trial. */
   violations: Violation[];
@@ -154,13 +160,13 @@ export function gradeEpisode(input: {
   events: readonly TrajectoryEvent[];
   agentMessages: readonly string[];
   error?: string;
-}): Pick<TrialResult, "passed" | "checks" | "violations" | "soft"> {
+}): Pick<TrialResult, "passed" | "skipped" | "checks" | "violations" | "soft"> {
   const { domain, task, world, runner, events, agentMessages, error } = input;
   const said = checkTranscript(domain, world, runner.calls, events, agentSystemPrompt(domain, task));
   const violations: Violation[] = [...runner.violations, ...said.filter((v) => !v.soft)];
   const soft = softChecks(domain, runner.calls, agentMessages.length, [...runner.soft, ...said.filter((v) => v.soft)]);
   const { passed, checks } = gradeTrial({ task, world, calls: runner.calls, agentMessages, violations, error });
-  return { passed, checks, violations, soft };
+  return { passed, ...(isSkipped(checks, error) ? { skipped: true as const } : {}), checks, violations, soft };
 }
 
 /** What a trial changed in the world, row by row. */
