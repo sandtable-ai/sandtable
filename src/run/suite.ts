@@ -93,6 +93,11 @@ export interface SuiteResult {
   flaky?: string[];
   /** Trials skipped because they ended in an error before the agent broke a rule. */
   skipped?: number;
+  /**
+   * Caller turns in which the simulated user stepped out of its role (each trial's `callerNotes`), and the
+   * trials they are in. Absent in results from before caller notes.
+   */
+  callerNotes?: { turns: number; trials: number };
   failureModes: FailureMode[];
   /** pass^1 and pass^k per task tag ("untagged" for tasks without tags). */
   byTag: TagScore[];
@@ -169,7 +174,7 @@ export function summarize(
   tasks: readonly Task[],
   results: readonly TrialResult[],
   k: number,
-): Pick<SuiteResult, "tasks" | "passHat" | "passAt" | "flipRate" | "flaky" | "skipped" | "failureModes" | "byTag" | "soft"> {
+): Pick<SuiteResult, "tasks" | "passHat" | "passAt" | "flipRate" | "flaky" | "skipped" | "callerNotes" | "failureModes" | "byTag" | "soft"> {
   const summaries: TaskSummary[] = tasks.map((task) => {
     const trials = results.filter((r) => r.taskId === task.id).sort((a, b) => a.trial - b.trial);
     const passes = trials.filter((t) => t.passed).length;
@@ -204,6 +209,10 @@ export function summarize(
     flipRate: repeated.length ? flaky.length / repeated.length : null,
     flaky,
     skipped: summaries.reduce((n, s) => n + (s.skipped ?? 0), 0),
+    callerNotes: {
+      turns: results.reduce((n, r) => n + (r.callerNotes?.length ?? 0), 0),
+      trials: results.filter((r) => r.callerNotes?.length).length,
+    },
     failureModes: failureModes(results),
     byTag: tagScores(summaries, k),
     soft: softScores(domain, results),

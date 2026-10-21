@@ -119,6 +119,11 @@ export function renderTerminal(r: SuiteResult, opts: { baseline?: string } = {})
     const trials = r.tasks.reduce((n, t) => n + t.trials.length, 0);
     lines.push(yellow(`  ${skipped.length} of ${trials} trial(s) skipped (ended in an error): left out of the scores`));
   }
+  const notes = r.tasks.flatMap((t) => t.trials.flatMap((tr) => (tr.callerNotes ?? []).map((n) => ({ task: t.id, trial: tr.trial, ...n }))));
+  if (notes.length) {
+    const trials = new Set(notes.map((n) => `${n.task}#${n.trial}`)).size;
+    lines.push(yellow(`  ${notes.length} caller turn(s) in ${trials} trial(s) stepped out of role: see Caller notes`));
+  }
   // The estimators need k graded trials of a task to count it in pass^k and pass@k.
   const short = r.tasks.filter((t) => gradedOutcomes(t).length < r.k).length;
   if (short) {
@@ -177,6 +182,16 @@ export function renderTerminal(r: SuiteResult, opts: { baseline?: string } = {})
       lines.push(`  ${yellow(`${count}×`)} ${clip(error, WIDTH - head.length)}`);
       lines.push(dim(`     ${fitList(tasks, WIDTH - 5)}`));
     }
+  }
+
+  if (notes.length) {
+    lines.push("");
+    lines.push(bold("  Caller notes") + dim(" (the simulated user stepped out of role; read these trials first)"));
+    for (const n of notes.slice(0, 8)) {
+      lines.push(clip(`  ${n.task} #${n.trial + 1} turn ${n.turn}  ${n.why}`, WIDTH));
+      lines.push(dim(clip(`     "${n.text}"`, WIDTH)));
+    }
+    if (notes.length > 8) lines.push(dim(`  … ${notes.length - 8} more in results.json and the report`));
   }
 
   if (r.failureModes.length) {

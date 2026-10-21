@@ -35,8 +35,8 @@ export function regradeTrial(domain: Domain, trial: TrialResult): TrialResult {
     }
   }
   const agentMessages = events.flatMap((e) => (e.type === "agent" ? [e.text] : []));
-  // Whether it was skipped is decided again under the current rules, like whether it passed.
-  const { skipped: _, ...stored } = trial;
+  // Whether it was skipped is decided again under the current rules, like whether it passed, and so are the caller notes.
+  const { skipped: _, callerNotes: __, ...stored } = trial;
   return {
     ...stored,
     ...gradeEpisode({ domain, task, world, runner, events, agentMessages, ...(trial.error !== undefined ? { error: trial.error } : {}) }),

@@ -24,6 +24,7 @@ SuiteResult
   flipRate                     share of tasks with 2+ graded trials that are flaky; null with k = 1
   flaky[]                      ids of flaky tasks (some graded trials passed, some failed)
   skipped                      trials skipped across the run; run exits 1 when it isn't 0
+  callerNotes                  { turns, trials }: caller turns that stepped out of role, and the trials they are in
   byTag[]                      { tag, tasks, passHat1, passHatK }; "untagged" for tasks without tags
   failureModes[]               { id, kind, count, tasks[], example }: failed checks of graded trials clustered, most
                                frequent first; skipped trials' errors are not in it
@@ -39,7 +40,9 @@ SuiteResult
                                Anthropic API by the model Claude reports
   latency                      { agentTurnP50Ms, agentTurnP95Ms }
   baseline?                    only with `run --baseline`: { runId, startedAt, agent, user, k, inputs?, passHat,
-                               tasks[]                      { id, description, tags[], critical?, passes, graded, skipped, verdict, interval?,
+                               tasks[]: { id, passes, trials } } of the run it was compared with (trials counts
+                               graded trials); reports work out what changed from it
+  tasks[]                      { id, description, tags[], critical?, passes, graded, skipped, verdict, interval?,
                                trials[] }: critical: true only on a critical task, which fails `run` when a graded
                                trial fails; verdict "passed" | "failed" | "flaky" | "skipped" over graded trials;
                                interval { low, high } is the 95% Wilson interval for passes / graded. Runs from
@@ -55,6 +58,9 @@ SuiteResult
       checks[]                 { id, kind, passed, detail }
       violations[]             { invariant, description, detail, callIndex? | messageIndex? }: hard ones only
       soft[]                   { id, broken, violations[] }: soft invariants that applied in this trial
+      callerNotes?             { turn, text, why }[]: caller turns that stepped out of role (talked about its
+                               instructions, said its goal was met, or talked about the agent instead of to it).
+                               turn counts the caller's turns from 1. Never changes passed
       events[]                 the transcript, in order:
                                  { type: "user", text }
                                  { type: "agent", text, latencyMs }
