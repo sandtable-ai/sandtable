@@ -44,7 +44,13 @@ function outputSchema(tools: string[], tables: string[]) {
   const Tool = z.enum(tools as [string, ...string[]]);
   const Table = z.enum(tables as [string, ...string[]]);
   const FieldRef = z.object({ table: Table, key_arg: z.string(), field: z.string() });
-  const Condition = z.object({ field: z.string(), op: z.enum(["eq", "ne", "gt", "gte", "lt", "lte"]), value: Scalar });
+  const Condition = z.object({
+    field: z.string(),
+    op: z.enum(["eq", "ne", "gt", "gte", "lt", "lte", "in", "nin", "exists"]),
+    value: z
+      .union([Scalar, z.array(Scalar)])
+      .describe("one value; for in and nin, the list of allowed or excluded values; for exists, true (present) or false (absent, e.g. an argument the agent left out)"),
+  });
   const Proposal = z.object({
     rule_id: z.string().describe("id of the rule in `rules` this invariant checks"),
     id: z.string().describe("kebab-case identifier, e.g. verify-before-book"),
@@ -104,7 +110,9 @@ The agent acts only through the tools listed below. Each tool call is checked ag
 - require: when \`tool\` is called, the record in \`table\` whose key is the call's \`key_arg\` argument must exist and satisfy all \`conditions\` (e.g. only book carriers whose insurance is valid).
 - limit: the numeric argument \`arg\` must be at most (lte) or at least (gte) a constant or a record field (e.g. never book above the load's max_rate).
 - match: two record fields referenced by the call must be equal (e.g. carrier equipment must match load equipment).
-- never: \`tool\` must never be called, or never with arguments satisfying \`conditions\`.
+- never: \`tool\` must never be called, or never with arguments satisfying all \`conditions\`. This is also how "a call like this must include Y" is checked: a condition on what makes the call one of those, and \`exists: false\` on Y, the argument the agent would have left out (e.g. never \`create_refund\` with \`method\` in [check, gift_card] and \`mailing_address\` exists false: a mailed refund needs the address).
+
+Conditions compare a field (a record's for require, the call's argument for never) using op eq, ne, gt, gte, lt or lte with one value; in or nin with a list of values (the field equals one of them, or none of them); or exists with true or false (the field is present, or absent).
 - never_disclose: the agent must never say any value of \`protected_field\` (an internal number or text), except a value equal to \`unless_arg\` of a successful \`unless_tool\` call. \`tool\` is ignored for this kind (repeat any tool).
 
 Work in three steps, and leave no rule out:
@@ -114,7 +122,7 @@ Work in three steps, and leave no rule out:
    - needs_date: it depends on today's date or on how long ago something happened ("within 30 days").
    - fact_not_recorded: it depends on a fact that no table field or tool argument holds (whether the customer has a receipt).
    - any_of_tools: it must come after either of several tools; \`before\` takes a single first tool.
-   - either_or: it holds when any one of several conditions does; an invariant's conditions must all hold.
+   - either_or: it holds when any one of several conditions on different fields does; an invariant's conditions must all hold. A field that may take any of several values is one condition with in, not an either/or.
    - computed_value: it compares against a value computed from others (a sum, a difference).
    - agent_says: it is about what the agent says, asks or explains (wording, tone, questions, read-backs), not about a tool call.
    - other: anything else; say what in detail.
@@ -124,6 +132,7 @@ Rules for invariants:
 - Propose an invariant only when the SOP clearly states the rule and it can be checked from tool arguments and record fields. Use only the tools, arguments, tables and fields listed. Never invent fields.
 - Copy the supporting SOP text into \`quote\` verbatim.
 - One rule per invariant. Prefer a few precise invariants over many vague ones.
+- A rule that a call must include an argument in some cases ("for a check, enter the mailing address") is a never invariant with exists: false on that argument, not a soft rule.
 - Rules about not revealing a specific internal field are never_disclose invariants. Other rules about what the agent says go into soft_rules as agent_says.`;
 
 function describeDomain(domain: Domain, fields: Record<string, string[]>): string {
@@ -152,10 +161,43 @@ export function knownFields(domain: Domain, extra: Record<string, string[]> = {}
   return out;
 }
 
+/**
+ * A where clause from drafted conditions, or why it can't be one. `in` and `nin` take a list (a single value
+ * becomes a list of one), `exists` takes true or false, and the other ops take one value. Conditions on the same
+ * field are combined, so "at least 10 and at most 100" keeps both bounds.
+ */
+export function whereOf(conds: readonly Condition[]): Record<string, unknown> | string {
+  const out: Record<string, unknown> = {};
+  for (const c of conds) {
+    let cond: unknown;
+    if (c.op === "in" || c.op === "nin") cond = { [`$${c.op}`]: Array.isArray(c.value) ? c.value : [c.value] };
+    else if (Array.isArray(c.value)) return `${c.field}: ${c.op} takes one value, not a list`;
+    else if (c.op === "exists") {
+      if (typeof c.value !== "boolean") return `${c.field}: exists takes true or false, not ${JSON.stringify(c.value)}`;
+      cond = { $exists: c.value };
+    } else cond = c.op === "eq" ? c.value : { [`$${c.op}`]: c.value };
+    if (!Object.hasOwn(out, c.field)) {
+      out[c.field] = cond;
+      continue;
+    }
+    const prev = out[c.field];
+    const ops = (v: unknown) => (typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : { $eq: v });
+    const merged = { ...ops(prev) };
+    for (const [op, v] of Object.entries(ops(cond))) {
+      if (Object.hasOwn(merged, op)) return `${c.field}: two ${op.slice(1)} conditions`;
+      merged[op] = v;
+    }
+    out[c.field] = merged;
+  }
+  return out;
+}
+
+type Condition = Proposal["conditions"][number];
+
 export function proposalToInvariant(p: Proposal, sopFile: string): Invariant | string {
   const base = { id: p.id, description: p.description, review: "pending" as const, source: { file: sopFile, quote: p.quote } };
-  const where = (conds: Proposal["conditions"]) =>
-    Object.fromEntries(conds.map((c) => [c.field, c.op === "eq" ? c.value : { [`$${c.op}`]: c.value }]));
+  const where = whereOf(p.conditions);
+  if (typeof where === "string") return where;
   let raw: unknown;
   switch (p.kind) {
     case "before":
@@ -165,7 +207,7 @@ export function proposalToInvariant(p: Proposal, sopFile: string): Invariant | s
     case "require":
       if (!p.table || !p.key_arg) return "require needs table and key_arg";
       if (!p.conditions.length) return "require needs at least one condition";
-      raw = { ...base, require: { tool: p.tool, table: p.table, key_arg: p.key_arg, where: where(p.conditions) } };
+      raw = { ...base, require: { tool: p.tool, table: p.table, key_arg: p.key_arg, where } };
       break;
     case "limit": {
       if (!p.arg || !p.bound) return "limit needs arg and bound";
@@ -179,7 +221,7 @@ export function proposalToInvariant(p: Proposal, sopFile: string): Invariant | s
       raw = { ...base, match: { tool: p.tool, left: p.left, right: p.right } };
       break;
     case "never":
-      raw = { ...base, never: { tool: p.tool, ...(p.conditions.length ? { when: where(p.conditions) } : {}) } };
+      raw = { ...base, never: { tool: p.tool, ...(p.conditions.length ? { when: where } : {}) } };
       break;
     case "never_disclose":
       if (!p.protected_field) return "never_disclose needs protected_field";
