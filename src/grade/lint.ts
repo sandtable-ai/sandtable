@@ -2,7 +2,7 @@ import { createToolRunner } from "../run/tool-runner.ts";
 import type { Domain, Task } from "../spec/schema.ts";
 import { matches } from "../world/match.ts";
 import { World } from "../world/store.ts";
-import { gradeTrial } from "./expectations.ts";
+import { expectedTool, gradeTrial } from "./expectations.ts";
 import { checkTranscript } from "./invariants.ts";
 
 export interface TaskLint {
@@ -56,7 +56,7 @@ function lintTask(domain: Domain, task: Task, changeable: Set<string>, writers: 
   // tool must be called. `key` + `fields` assertions often check that something did NOT change.
   const expectsWrite =
     task.expect.state.some((a) => a.key === undefined && (a.count === undefined || a.count > 0)) ||
-    task.expect.called.some((t) => writers.has(t));
+    task.expect.called.some((e) => writers.has(expectedTool(e)));
 
   if (!task.expect.state.length && !task.expect.called.length) {
     errors.push("nothing is graded: add state or called expectations");

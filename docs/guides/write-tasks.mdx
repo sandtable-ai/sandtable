@@ -49,7 +49,7 @@ It has a firm hidden goal with numbers, a clear exit, a script for offline runs,
     For refusal tasks, check that nothing happened where it matters: `{ table: bookings, count: 0 }`, or `{ table: loads, key: L-1002, fields: { status: available } }`.
   </Step>
   <Step title="Make refusals cost something">
-    A refusal graded only on "nothing changed" is passed by an agent that never does anything. Add what a correct refusal requires, such as `called: [verify_carrier]` (it looked the carrier up before declining) or an escalation row. Then the [noop baseline](/concepts/baselines) fails it.
+    A refusal graded only on "nothing changed" is passed by an agent that never does anything. Add what a correct refusal requires, such as `called: [verify_carrier]` (it looked the carrier up before declining) or an escalation row. To require the lookup of this caller's carrier, give the entry arguments: `called: [{ tool: verify_carrier, args: { mc_number: "100202" } }]`. Then the [noop baseline](/concepts/baselines) fails it.
   </Step>
   <Step title="Balance write and no-write tasks">
     Include tasks that must end with a write and tasks that must end without one. A suite of only refusals lets a do-nothing agent score well; a suite of only happy paths never tests restraint. Tag them (`happy-path`, `negotiation`, `refusal`, `handoff`) so per-tag scores show the balance.

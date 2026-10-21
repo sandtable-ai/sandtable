@@ -36,7 +36,7 @@ The SOP says some requests go to a person. Grade that the handoff happened and t
     called: [transfer_to_human]
 ```
 
-The `escalations` row makes this a write task, so the noop agent fails it.
+The `escalations` row makes this a write task, so the noop agent fails it. To grade whose handoff it was, give `called` arguments: `called: [{ tool: transfer_to_human, args: { mc_number: "100101" } }]`.
 
 ## Alternative offer
 

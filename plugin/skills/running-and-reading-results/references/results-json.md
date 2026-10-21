@@ -55,8 +55,8 @@ Check ids and kinds:
 |---|---|---|
 | `invariant` | `verify-before-book` (the invariant id) | a tool call or agent message broke it |
 | `state` | `state:bookings#1`, `state:loads[L-1002]#2` (table, key, position in `expect.state`) | the end state did not match |
-| `called` | `called:transfer_to_human` | the tool never succeeded |
-| `not_called` | `not_called:transfer_to_human` | the tool was attempted |
+| `called` | `called:transfer_to_human`, or `called:transfer_to_human(reason={"$contains":"billing"})` for an entry with `args` | the tool never succeeded (with `args`: no successful call matched them; the detail shows how the closest call differs) |
+| `not_called` | `not_called:transfer_to_human`, or `not_called:book_load(load_id="L-1004")` for an entry with `args` | the tool was attempted (with `args`: with matching arguments) |
 | `reply` | `reply:confirmation` | no agent message contained the phrase |
 | `runtime` | `runtime` | the trial crashed: adapter, endpoint or simulator error |
 

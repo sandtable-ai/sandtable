@@ -6,7 +6,7 @@ import { binom, passHatK } from "../src/grade/passk.ts";
 import { runEpisode } from "../src/run/episode.ts";
 import type { AgentAdapter, UserSimulator } from "../src/sim/types.ts";
 import { loadDomain } from "../src/spec/load.ts";
-import type { Domain } from "../src/spec/schema.ts";
+import { TaskSpec, type Domain } from "../src/spec/schema.ts";
 import { World } from "../src/world/store.ts";
 
 let domain: Domain;
@@ -338,6 +338,73 @@ describe("Unicode hyphens are graded like -", () => {
     const task = { ...domain.tasks[0]!, expect: { state: [], called: [], not_called: [], reply_includes: ["bookings-1"] } };
     const { checks } = gradeTrial({ task, world: new World(domain.world), calls: [], agentMessages: ["You're booked: bookings‑1."], violations: [] });
     expect(checks.filter((c) => c.kind === "reply").map((c) => c.passed)).toEqual([true]);
+  });
+});
+
+describe("expect.called and expect.not_called with argument matchers", () => {
+  const call = (index: number, name: string, args: Record<string, unknown>, ok = true): CallRecord => ({ index, name, args, ok, ...(ok ? {} : { error: "rejected" }) });
+  const grade = (expect: { called?: unknown[]; not_called?: unknown[] }, calls: CallRecord[]) => {
+    const task = TaskSpec.parse({ id: "t", user: { instructions: "x" }, expect });
+    return gradeTrial({ task, world: new World(domain.world), calls, agentMessages: [], violations: [] }).checks;
+  };
+  const handoff = (reason: string, ok = true) => call(0, "transfer_to_human", { reason }, ok);
+
+  it("passes `called` on a successful call whose arguments match, and names the check after them", () => {
+    const checks = grade({ called: [{ tool: "transfer_to_human", args: { reason: "billing dispute" } }] }, [handoff("billing dispute")]);
+    expect(checks).toEqual([{ id: 'called:transfer_to_human(reason="billing dispute")', kind: "called", passed: true, detail: "transfer_to_human succeeded with matching arguments" }]);
+  });
+
+  it("fails `called` when every successful call has other arguments, and says how the closest one differs", () => {
+    const calls = [call(0, "book_load", { load_id: "L-1002", mc_number: "100202", rate: 2100 }), call(1, "book_load", { load_id: "L-1002", mc_number: "100101", rate: 2100 })];
+    const [check] = grade({ called: [{ tool: "book_load", args: { load_id: "L-1001", mc_number: "100101" } }] }, calls);
+    expect(check).toMatchObject({ id: 'called:book_load(load_id="L-1001", mc_number="100101")', passed: false });
+    expect(check!.detail).toBe('book_load succeeded 2x, never with matching arguments: load_id is "L-1002", expected "L-1001"');
+  });
+
+  it("does not count a failed call with matching arguments as `called`", () => {
+    const [check] = grade({ called: [{ tool: "transfer_to_human", args: { reason: "billing dispute" } }] }, [handoff("billing dispute", false)]);
+    expect(check).toMatchObject({ passed: false, detail: "transfer_to_human was called 1x with matching arguments but never succeeded" });
+    const [never] = grade({ called: [{ tool: "transfer_to_human", args: { reason: "billing dispute" } }] }, []);
+    expect(never).toMatchObject({ passed: false, detail: "transfer_to_human was never called successfully" });
+  });
+
+  it("matches with where-clause operators, against coerced arguments", () => {
+    const booked = [call(0, "book_load", { load_id: "L-1001", mc_number: "100101", rate: 2100 })];
+    const called = (args: Record<string, unknown>) => grade({ called: [{ tool: "book_load", args }] }, booked)[0]!.passed;
+    expect(called({ load_id: { $in: ["L-1001", "L-1003"] }, rate: { $lte: 2100 } })).toBe(true);
+    expect(called({ rate: { $lt: 2100 } })).toBe(false);
+    expect(called({ load_id: { $nin: ["L-1001"] } })).toBe(false);
+    // A YAML number matches a string argument with the same digits, as everywhere else.
+    expect(called({ mc_number: 100101 })).toBe(true);
+    expect(grade({ called: [{ tool: "book_load", args: { rate: { $gte: 2000 } } }] }, booked)[0]!.id).toBe('called:book_load(rate={"$gte":2000})');
+  });
+
+  it("fails `not_called` on any matching call, successful or not, and ignores calls with other arguments", () => {
+    const entry = { tool: "book_load", args: { load_id: "L-1004" } };
+    const attempt = call(0, "book_load", { load_id: "L-1004", mc_number: "100101", rate: 1900 }, false);
+    expect(grade({ not_called: [entry] }, [attempt])).toEqual([
+      { id: 'not_called:book_load(load_id="L-1004")', kind: "not_called", passed: false, detail: "book_load was called 1x with matching arguments" },
+    ]);
+    const other = call(0, "book_load", { load_id: "L-1001", mc_number: "100101", rate: 2100 });
+    expect(grade({ not_called: [entry] }, [other])[0]).toMatchObject({ passed: true, detail: "book_load not called with matching arguments" });
+  });
+
+  it("keeps plain tool names working in both lists, next to argument matchers", () => {
+    const checks = grade(
+      { called: ["transfer_to_human", { tool: "transfer_to_human", args: { reason: { $contains: "billing" } } }], not_called: ["book_load"] },
+      [handoff("Billing dispute on L-1001")],
+    );
+    expect(checks.map((c) => [c.id, c.passed])).toEqual([
+      ["called:transfer_to_human", true],
+      ['called:transfer_to_human(reason={"$contains":"billing"})', true],
+      ["not_called:book_load", true],
+    ]);
+  });
+
+  it("rejects an argument matcher without conditions", () => {
+    const parsed = TaskSpec.safeParse({ id: "t", user: { instructions: "x" }, expect: { called: [{ tool: "book_load", args: {} }] } });
+    expect(parsed.success).toBe(false);
+    expect(JSON.stringify(parsed.error?.issues)).toContain("args needs at least one condition");
   });
 });
 

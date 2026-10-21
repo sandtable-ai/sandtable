@@ -7,7 +7,7 @@ import { noopAgent } from "../src/sim/noop.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
 import type { AgentAdapter } from "../src/sim/types.ts";
 import { DomainError, loadDomain, pendingReview, validateDomain } from "../src/spec/load.ts";
-import { DomainSpec } from "../src/spec/schema.ts";
+import { DomainSpec, type Task } from "../src/spec/schema.ts";
 
 const example = path.resolve("examples/freight");
 
@@ -196,6 +196,23 @@ describe("domain validation", () => {
       'invariants.c: tool "book_load" has no param "hasOwnProperty"',
       'invariants.d: tool "book_load" has no param "__proto__"',
       'invariants.e: tool "book_load" has no param "isPrototypeOf"',
+    ]);
+  });
+
+  it("checks the tool, arguments and operators of every argument matcher in called and not_called", async () => {
+    const d = await loadDomain(example);
+    const expectations: Task["expect"] = {
+      ...d.tasks[0]!.expect,
+      called: ["verify_carrier", { tool: "book_load", args: { load_id: "L-1001", price: 2100, toString: "x" } }, { tool: "hold_load", args: { load_id: "L-1001" } }],
+      not_called: [{ tool: "transfer_to_human", args: { reason: { $like: "billing" }, mc_number: { $in: "100101" } } }],
+    };
+    const broken = { ...d, tasks: [{ ...d.tasks[0]!, expect: expectations }] };
+    expect(validateDomain(broken)).toEqual([
+      'tasks.book-at-posted-rate.expect.called[1]: tool "book_load" has no param "price"',
+      'tasks.book-at-posted-rate.expect.called[1]: tool "book_load" has no param "toString"',
+      'tasks.book-at-posted-rate.expect: unknown tool "hold_load"',
+      `tasks.book-at-posted-rate.expect.not_called[0].args.reason: unknown operator "$like" (use $eq, $ne, $in, $nin, $gt, $gte, $lt, $lte, $exists, $contains)`,
+      "tasks.book-at-posted-rate.expect.not_called[0].args.mc_number: $in needs a list",
     ]);
   });
 

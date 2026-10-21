@@ -37,7 +37,7 @@ Inside tool `ops`, `checks`, invariant `where` clauses and task assertions:
 
 ## Where clauses
 
-`where`, `fields` and `when` are maps of field to condition. A plain value means equality. An object of operators means all of them must hold:
+`where`, `fields`, `when` and the `args` of a task's `called` and `not_called` entries are maps of field to condition. A plain value means equality. An object of operators means all of them must hold:
 
 | Operator | Meaning |
 |---|---|
@@ -211,6 +211,21 @@ tasks:
       not_called: [transfer_to_human]   # never attempted
       reply_includes: ["confirmation"]  # some agent message contains it (case-insensitive, U+2010/U+2011 read as -); use sparingly
 ```
+
+`called` and `not_called` take a tool's name, or `{ tool, args }` to count only the calls whose arguments match `args`, a [where clause](#where-clauses) on the arguments as the tool accepted them, with defaults filled in and numbers coerced:
+
+```yaml
+called:
+  - verify_carrier                                                        # any successful call
+  - { tool: transfer_to_human, args: { reason: { $contains: billing } } }  # a handoff for the right reason
+not_called:
+  - { tool: book_load, args: { load_id: { $in: [L-1004, L-1005] } } }     # never attempted on these loads
+```
+
+- A `called` entry with `args` passes when a successful call matches. A `not_called` entry with `args` fails on any matching call, successful or not, as a plain name fails on any attempt. A call rejected for invalid arguments has no arguments to match, so only a plain name counts it.
+- Values are literal: there is no call to take a `"$arg"` reference from.
+- `validate` fails when an entry names a tool or argument the tool doesn't have, uses an unknown operator, or gives `$in` or `$nin` something other than a list. `args` needs at least one condition: to match any call, give the tool's name alone.
+- The check id lists the conditions in order, each value as JSON: `called:transfer_to_human(reason={"$contains":"billing"})`, `not_called:book_load(load_id="L-1004")`. When no successful call matches, the detail says how the closest one differs: `book_load succeeded 2x, never with matching arguments: load_id is "L-1002", expected "L-1001"`.
 
 The simulated user ends the conversation by emitting `###STOP###` when its goal is met, impossible, or it has been handed off. If that final message also has content ("Fine, book it. Bye."), the agent gets one last turn to act on it. Trials that hit `max_turns` are still graded on the end state.
 

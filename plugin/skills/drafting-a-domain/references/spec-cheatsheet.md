@@ -32,7 +32,7 @@ tasks: ./tasks.yaml                 # any top-level value that is a relative .md
 - An argument's name is a letter or `_`, then letters, digits or `_`. Other strings stay literal, even with a leading `$` (`"$5"`, `"$/hr"`, `"$@type"`), but a whole `"$USD"` is a reference.
 - `validate` fails when a tool's `ops` or `checks` refer to a param the tool doesn't have.
 - A condition whose argument was not passed (an optional param) is dropped, so it filters nothing.
-- A plain value in `where`, `fields` or `when` means equality. An object of operators means all must hold:
+- A plain value in `where`, `fields`, `when` or a `called`/`not_called` entry's `args` means equality. An object of operators means all must hold:
 
 | Operator | Meaning |
 |---|---|
@@ -149,6 +149,8 @@ invariants:
 
 The SOP lets the agent offer a human rep here, so this task does not put `transfer_to_human` in `not_called`: forbid only what the policy forbids.
 
+When the call itself is the outcome, say which call: `called: [{ tool: transfer_to_human, args: { reason: { $contains: billing } } }]` fails a handoff for the wrong reason, and `not_called: [{ tool: book_load, args: { load_id: L-1004 } }]` forbids one load without forbidding booking. `validate` rejects an argument the tool doesn't have or an unknown operator.
+
 | `expect` entry | Passes when |
 |---|---|
 | `state: { table, where }` | at least one row matches |
@@ -156,7 +158,9 @@ The SOP lets the agent offer a human rep here, so this task does not put `transf
 | `state: { table, key, fields }` | that row exists and matches `fields` |
 | `state: { table, key, count: 0 }` | that row does not exist |
 | `called: [tool]` | each tool succeeded at least once |
+| `called: [{ tool, args }]` | some successful call of the tool has arguments matching `args` (a where clause, literal values) |
 | `not_called: [tool]` | each tool was never attempted |
+| `not_called: [{ tool, args }]` | no call of the tool, successful or not, has arguments matching `args` |
 | `reply_includes: [phrase]` | some agent message contains it (case-insensitive substring); use sparingly |
 
 ## Gotchas

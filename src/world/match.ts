@@ -62,6 +62,25 @@ export function mismatch(row: Row, where: Row): string | undefined {
   return undefined;
 }
 
+/** The operators a where clause understands, e.g. `{ rate: { $lte: 2000 } }`. */
+export const OPERATORS = ["$eq", "$ne", "$in", "$nin", "$gt", "$gte", "$lt", "$lte", "$exists", "$contains"] as const;
+
+/**
+ * Why a where clause would fail or never match at run time, one line per condition: an unknown
+ * operator (which throws mid-run), or `$in` / `$nin` without a list (which matches nothing).
+ */
+export function operatorProblems(where: Row): string[] {
+  const problems: string[] = [];
+  for (const [field, cond] of Object.entries(where)) {
+    if (!isOperatorObject(cond)) continue;
+    for (const [op, expected] of Object.entries(cond)) {
+      if (!(OPERATORS as readonly string[]).includes(op)) problems.push(`${field}: unknown operator "${op}" (use ${OPERATORS.join(", ")})`);
+      else if ((op === "$in" || op === "$nin") && !Array.isArray(expected)) problems.push(`${field}: ${op} needs a list`);
+    }
+  }
+  return problems;
+}
+
 function test(actual: unknown, cond: unknown): boolean {
   if (isOperatorObject(cond)) {
     return Object.entries(cond).every(([op, expected]) => applyOperator(op, actual, expected));

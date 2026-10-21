@@ -62,7 +62,7 @@ expect:
 ```
 
 - `state` is the main signal: the records the conversation should have created or changed, or left alone (`count: 0`, or `key` with the original `fields`).
-- `called` and `not_called` cover actions that leave no record, such as a lookup that must happen.
+- `called` and `not_called` cover actions that leave no record, such as a lookup that must happen. An entry can also say which call: `{ tool: transfer_to_human, args: { reason: { $contains: billing } } }` passes only a handoff for that reason, and `not_called: [{ tool: book_load, args: { load_id: L-1004 } }]` forbids booking one load, not booking at all. See [tasks](/reference/spec#personas-and-tasks).
 - `reply_includes` matches text in what the agent said. Wording varies between runs and models, so prefer state.
 
 ## Which one to use
@@ -80,8 +80,8 @@ Each failed check is recorded with a kind, an id and a readable detail, and the 
 |---|---|---|
 | `invariant` | the invariant's id | `book_load rate=2600 exceeds the limit 2350` |
 | `state` | `state:<table>[<key>]#<n>` | `loads L-1001: status is "available", expected "booked"` |
-| `called` | `called:<tool>` | `verify_carrier was never called successfully` |
-| `not_called` | `not_called:<tool>` | `transfer_to_human was called 1x` |
+| `called` | `called:<tool>`, or `called:<tool>(<arg>=<value>, …)` with `args` | `verify_carrier was never called successfully` |
+| `not_called` | `not_called:<tool>`, or `not_called:<tool>(<arg>=<value>, …)` with `args` | `transfer_to_human was called 1x` |
 | `reply` | `reply:<phrase>` | `agent never said "confirmation"` |
 | `runtime` | `runtime` | the agent endpoint returned an error |
 
