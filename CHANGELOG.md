@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-21
+
+A release with no breaking changes: the HTML report and `leaderboard.html` use the sandtable brand in light and dark, sandtable has a logo, and a report's trial squares stay on one line.
+
 ### Changed
 
 - **HTML report**: uses the sandtable brand in light and dark: warm neutrals, ink instead of green for passed trials, one terracotta accent for failures and rule violations, square trial marks and the logo in the header. Instead of blue and yellow, caller messages are filled, agent messages outlined and tool calls dashed in monospace, and the report still loads no fonts or other files ([#252](https://github.com/sandtable-ai/sandtable/issues/252)).
@@ -85,7 +89,8 @@ First public release. sandtable rehearses an AI agent on a simulated copy of one
 
 A rehearsal of the release pipeline (npm, PyPI and GitHub releases from one tag), published before the first public release. Everything in it is also in 0.1.0; use 0.1.0 instead.
 
-[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/sandtable-ai/sandtable/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/sandtable-ai/sandtable/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/sandtable-ai/sandtable/compare/v0.1.0-alpha.1...v0.1.0
 [0.1.0-alpha.1]: https://github.com/sandtable-ai/sandtable/releases/tag/v0.1.0-alpha.1
