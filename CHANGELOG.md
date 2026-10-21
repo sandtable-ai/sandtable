@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-21
+
+A bug-fix release with no breaking changes: names like `toString` are checked like any other in tool arguments and invariants, `init --openapi` drafts OpenAPI 3.1 nullable fields, a closed pipe exits 141 instead of crashing, and `leaderboard` names unreadable stored files and keeps a full board's crashed run during a quick check.
+
 ### Fixed
 
 - `world`: a tool argument named like a built-in JavaScript property, such as `toString` or `constructor`, is now rejected as an unknown argument like any other name the tool doesn't have, and a tool param with such a name that the agent omits counts as missing (its default applies) instead of failing with "must be a string" ([#233](https://github.com/sandtable-ai/sandtable/issues/233)).
@@ -71,6 +75,7 @@ First public release. sandtable rehearses an AI agent on a simulated copy of one
 
 A rehearsal of the release pipeline (npm, PyPI and GitHub releases from one tag), published before the first public release. Everything in it is also in 0.1.0; use 0.1.0 instead.
 
-[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/sandtable-ai/sandtable/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/sandtable-ai/sandtable/compare/v0.1.0-alpha.1...v0.1.0
 [0.1.0-alpha.1]: https://github.com/sandtable-ai/sandtable/releases/tag/v0.1.0-alpha.1
