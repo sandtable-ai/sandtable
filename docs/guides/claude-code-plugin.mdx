@@ -61,7 +61,7 @@ The **`failure-triager`** subagent reads failing trials outside the main convers
 
 ### What runs without asking
 
-The skills ask before any command that calls a model, because it needs keys and costs money:
+The skills ask before any command that calls a model, because it needs keys and costs money. Before an `init` step, they say how many model calls it makes, with which model, and an upper bound on its cost, even when you have already allowed model steps:
 
 | Free and deterministic | Calls a model: Claude asks first |
 |---|---|
