@@ -124,6 +124,15 @@ Claude reads the SOP alongside the domain's tools, params, tables and known fiel
 
 The SOP also becomes `policy.md` when the domain still has the placeholder. Pass `--model` to choose the drafting model (default `claude-opus-5-5`).
 
+`--sop` makes one Claude call, and `--transcripts` one per transcript file. After each step, `init` prints what the calls used and an estimated cost at list prices, as `run` does:
+
+```text
+  estimated cost $0.19
+    model eu.anthropic.claude-sonnet-5-5: 1 calls, 9.8k in, 14.6k out, 0 cache read, 0 cache write
+```
+
+On Bedrock, a geo inference profile such as `eu.` is priced at 1.1× the global price. A model without a known price shows `n/a`.
+
 ## From call or chat transcripts (Claude, grounded)
 
 ```bash
