@@ -61,7 +61,7 @@ npx sandtable-ai run ./sandtable --agent http://localhost:8787/step -k 4 --fail-
 - `--fail-under <pct>` exits 1 when pass^k (k = `-k`) is below the percentage. Put it in CI after `validate --strict` and `lint`.
 - `run` also exits 1, with or without `--fail-under`, when any trial of a `critical: true` task fails, and names those tasks. Reports list critical tasks first.
 - A failed gate exits 1 and an error exits 2: a usage error, a missing file, an invalid domain, an adapter that can't be built, a run in which every trial errored or some were skipped. Read a 2 as "fix the setup and rerun", not as a verdict on the agent.
-- `--baseline <results.json>` compares the run with an earlier one of the same domain: it lists the tasks that broke or got fixed, new failures first, and pass^1 and pass^k before and after, and the report opens with the same. It never changes the exit code.
+- `--baseline <results.json>` compares the run with an earlier one of the same domain: it lists the tasks that broke or got fixed, new failures first, and pass^1 and pass^k before and after, and the report opens with the same. A task whose test changed since (its prompts, tools, seed rows or grading) is `~ changed`, never credited as fixed or broken, and left out of pass^k. After editing grading, regrade the baseline under the edited domain and compare against that. It never changes the exit code.
 - A scripted user cannot react, so a scripted run with a real agent tests wiring and graders, not conversation. Failures there can be the script's fault.
 - To see sandtable work before touching a customer domain: `npx sandtable-ai demo` replays the bundled freight example offline (`--no-open` keeps the report closed). `demo --live` uses Claude as both sides, and costs money.
 

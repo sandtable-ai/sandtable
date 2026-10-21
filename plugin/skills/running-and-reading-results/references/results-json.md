@@ -40,13 +40,16 @@ SuiteResult
                                Anthropic API by the model Claude reports
   latency                      { agentTurnP50Ms, agentTurnP95Ms }
   baseline?                    only with `run --baseline`: { runId, startedAt, agent, user, k, inputs?, passHat,
-                               tasks[]: { id, passes, trials } } of the run it was compared with (trials counts
-                               graded trials); reports work out what changed from it
+                               tasks[]: { id, passes, trials, inputs?, grading? } } of the run it was compared with
+                               (trials counts graded trials); reports work out what changed from it
   tasks[]                      { id, description, tags[], critical?, passes, graded, skipped, verdict, interval?,
                                trials[] }: critical: true only on a critical task, which fails `run` when a graded
                                trial fails; verdict "passed" | "failed" | "flaky" | "skipped" over graded trials;
                                interval { low, high } is the 95% Wilson interval for passes / graded. Runs from
-                               before verdicts lack these, and graded every trial
+                               before verdicts lack these, and graded every trial. inputs? and grading? are short
+                               hashes of the task's test: what the agent and caller are given (prompts, tools,
+                               seed rows with given.rows, turn limit, script) and how it's graded (expect,
+                               critical, every invariant). `--baseline` calls a task whose hash changed `changed`
     trials[]                   sorted by trial number
       taskId, trial            trial counts from 0
       passed                   false for a skipped trial too
