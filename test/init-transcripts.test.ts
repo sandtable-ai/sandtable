@@ -5,6 +5,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
 import { freightScriptedAgent } from "../src/demo/freight-agents.ts";
 import { appendRows, appendToDomainList } from "../src/init/merge.ts";
+import { lintDomain } from "../src/grade/lint.ts";
 import { draftTasksFromTranscripts, reusedRowConflicts, scrubPii } from "../src/init/transcripts.ts";
 import { runSuite } from "../src/run/suite.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
@@ -119,6 +120,28 @@ const reusesMatching = {
   ],
 };
 
+// The calls a correct agent makes: vet the carrier, then book within the expected range.
+const args = (o: Record<string, unknown>) => Object.entries(o).map(([name, value]) => ({ name, value }));
+const withReference = {
+  ...good,
+  reference: [
+    { tool: "verify_carrier", args: args({ mc_number: "100101" }) },
+    { tool: "book_load", args: args({ load_id: "L-2001", mc_number: "100101", rate: 2300 }) },
+  ],
+};
+// A later draft on the same load whose reference books below the range its own expectation asks for.
+const referenceMisses = {
+  ...withReference,
+  id: "negotiate-reference-misses",
+  new_persona: null,
+  persona_id: "easygoing",
+  new_rows: [],
+  reference: [
+    { tool: "verify_carrier", args: args({ mc_number: "100101" }) },
+    { tool: "book_load", args: args({ load_id: "L-2001", mc_number: "100101", rate: 2200 }) },
+  ],
+};
+
 function fakeClient(outputs: unknown[]) {
   const requests: Array<{ system: string; messages: Array<{ content: string }> }> = [];
   const client = {
@@ -162,7 +185,8 @@ describe("init from transcripts", () => {
     expect(res.redactions).toBe(1);
     expect(res.tasks.map((t) => t.id)).toEqual(["negotiate-new-lane"]);
     expect(res.tasks[0]).toMatchObject({ review: "pending", source: { file: "call-1.txt" }, user: { script: good.script } });
-    expect(res.tasks[0]!.expect.state[0]!.where).toEqual({ load_id: "L-2001", mc_number: "100101", rate: { $lte: 2400 } });
+    // Both bounds of the negotiated range are kept.
+    expect(res.tasks[0]!.expect.state[0]!.where).toEqual({ load_id: "L-2001", mc_number: "100101", rate: { $gte: 2250, $lte: 2400 } });
     expect(res.personas.map((p) => p.id)).toEqual(["veteran-dispatcher"]);
     expect(res.rows.loads).toHaveLength(1);
     expect(res.warnings).toEqual([
@@ -221,6 +245,40 @@ describe("init from transcripts", () => {
     expect(res.rows.carriers).toEqual([expect.objectContaining({ mc_number: "104242", insurance_status: "expired" })]);
     expect(res.warnings).toEqual([]);
     expect(res.notes).toEqual({});
+  });
+
+  it("drafts reference calls, and keeps a task whose reference fails lint with a warning and a review note", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-tx-"));
+    await cp(path.resolve("examples/freight"), dir, { recursive: true });
+    const { client, requests } = fakeClient([withReference, referenceMisses]);
+    const res = await draftTasksFromTranscripts({ domain: await loadDomain(dir), claude: { client }, transcripts: [{ file: "call-1.txt", text: "..." }, { file: "call-2.txt", text: "..." }] });
+
+    expect(requests[0]!.system).toContain("as reference, the tool calls a correct agent makes when it follows the policy");
+    expect(requests[0]!.system).toContain("list only calls that succeed");
+    expect(res.tasks.map((t) => t.id)).toEqual(["negotiate-new-lane", "negotiate-reference-misses"]);
+    expect(res.tasks[0]!.reference).toEqual([
+      { tool: "verify_carrier", args: { mc_number: "100101" } },
+      { tool: "book_load", args: { load_id: "L-2001", mc_number: "100101", rate: 2300 } },
+    ]);
+    expect(res.warnings).toEqual([expect.stringMatching(/^call-2\.txt: negotiate-reference-misses: reference does not pass: state:bookings#1: 0 bookings row\(s\) match/)]);
+    expect(Object.keys(res.notes)).toEqual(["negotiate-reference-misses"]);
+    expect(res.notes["negotiate-reference-misses"]![0]).toMatch(/^lint: reference does not pass: state:bookings#1: .*\. Fix the expectation, the seed rows or the reference\.$/);
+
+    await appendRows(dir, res.rows);
+    await appendToDomainList(dir, "personas", res.personas);
+    await appendToDomainList(dir, "tasks", res.tasks, undefined, res.notes);
+    expect(await readFile(path.join(dir, "tasks.yaml"), "utf8")).toContain("# TODO(review): lint: reference does not pass: state:bookings#1");
+    const lint = lintDomain(await loadDomain(dir));
+    expect(lint.tasks.find((t) => t.id === "negotiate-new-lane")).toMatchObject({ solvable: true, errors: [] });
+    expect(lint.tasks.find((t) => t.id === "negotiate-reference-misses")).toMatchObject({ solvable: false });
+  });
+
+  it("leaves reference out when the draft proposes none", async () => {
+    const domain = await loadDomain(path.resolve("examples/freight"));
+    const { client } = fakeClient([{ ...good, reference: [] }]);
+    const res = await draftTasksFromTranscripts({ domain, claude: { client }, transcripts: [{ file: "call-1.txt", text: "..." }] });
+    expect(res.tasks[0]!.reference).toBeUndefined();
+    expect(res.warnings).toEqual([]);
   });
 
   it("says when a listed existing row isn't in the world", async () => {
