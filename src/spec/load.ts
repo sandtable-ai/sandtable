@@ -57,7 +57,8 @@ export function validateDomain(d: Domain): string[] {
   };
   const arg = (toolName: string, name: string, where: string) => {
     const t = tools.get(toolName);
-    if (t && !(name in t.params)) problems.push(`${where}: tool "${toolName}" has no param "${name}"`);
+    // Own keys only: `in` would also find Object.prototype members such as toString or constructor.
+    if (t && !Object.hasOwn(t.params, name)) problems.push(`${where}: tool "${toolName}" has no param "${name}"`);
   };
 
   for (const [name, t] of Object.entries(d.world.tables)) {
