@@ -5,7 +5,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
 import { freightScriptedAgent } from "../src/demo/freight-agents.ts";
 import { appendRows, appendToDomainList } from "../src/init/merge.ts";
-import { draftTasksFromTranscripts, scrubPii } from "../src/init/transcripts.ts";
+import { draftTasksFromTranscripts, reusedRowConflicts, scrubPii } from "../src/init/transcripts.ts";
 import { runSuite } from "../src/run/suite.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
 import { DOMAIN_FILE, loadDomain, pendingReview } from "../src/spec/load.ts";
@@ -53,12 +53,78 @@ const good = {
 const collides = { ...good, id: "dup-row", new_persona: null, persona_id: "easygoing", new_rows: [{ table: "loads", fields: [{ name: "load_id", value: "L-1001" }] }] };
 const ungraded = { ...good, id: "nothing-to-grade", new_persona: null, persona_id: "easygoing", new_rows: [], expect_state: [], expect_called: [] };
 
+// A later transcript about a carrier with the same name as a seeded one, but lapsed insurance and a reefer.
+const lapsed = {
+  ...good,
+  id: "lapsed-insurance-same-name",
+  description: "A carrier whose insurance lapsed asks for a load; the agent declines.",
+  new_persona: null,
+  persona_id: "easygoing",
+  instructions: "You are Rowan at Blue Mesa Trucking. Your insurance lapsed last week. You run a reefer and want L-1001.",
+  new_rows: [],
+  expect_state: [{ table: "bookings", conditions: [{ field: "load_id", op: "eq", value: "L-1001" }], count: 0 }],
+  expect_called: ["verify_carrier"],
+  expect_not_called: ["book_load"],
+};
+// The model reused the seeded carrier, whose insurance is valid and who runs a dry van.
+const reusesConflicting = {
+  ...lapsed,
+  existing_rows: [
+    {
+      table: "carriers",
+      key: "100101",
+      facts: [
+        { name: "name", value: "Blue Mesa Trucking" },
+        { name: "insurance_status", value: "expired" },
+        { name: "equipment", value: "reefer" },
+      ],
+    },
+  ],
+};
+// The model kept the transcript's facts: a new carrier with new identifiers.
+const newRowInstead = {
+  ...lapsed,
+  id: "lapsed-insurance-new-carrier",
+  instructions: "You are Rowan at Blue Mesa Freight, MC 104242. Your insurance lapsed last week. You run a reefer and want L-1001.",
+  new_rows: [
+    {
+      table: "carriers",
+      fields: [
+        { name: "mc_number", value: "104242" },
+        { name: "name", value: "Blue Mesa Freight" },
+        { name: "authority_type", value: "carrier" },
+        { name: "authority_status", value: "active" },
+        { name: "insurance_status", value: "expired" },
+        { name: "safety_rating", value: "satisfactory" },
+        { name: "equipment", value: "reefer" },
+        { name: "do_not_use", value: false },
+      ],
+    },
+  ],
+  existing_rows: [],
+};
+// A reuse whose facts all match the row, up to case; a field the row doesn't have is not a conflict.
+const reusesMatching = {
+  ...good,
+  existing_rows: [
+    {
+      table: "carriers",
+      key: "100101",
+      facts: [
+        { name: "insurance_status", value: "VALID" },
+        { name: "authority_status", value: "Active" },
+        { name: "preferred_lane", value: "Dallas to Atlanta" },
+      ],
+    },
+  ],
+};
+
 function fakeClient(outputs: unknown[]) {
-  const requests: Array<{ messages: Array<{ content: string }> }> = [];
+  const requests: Array<{ system: string; messages: Array<{ content: string }> }> = [];
   const client = {
     beta: {
       messages: {
-        parse: async (req: { messages: Array<{ content: string }> }) => {
+        parse: async (req: { system: string; messages: Array<{ content: string }> }) => {
           requests.push(req);
           return { stop_reason: "end_turn", parsed_output: outputs.shift(), content: [] };
         },
@@ -120,5 +186,47 @@ describe("init from transcripts", () => {
     expect(pendingReview(domain).map((p) => p.id)).toEqual(["negotiate-new-lane"]);
     const r = await runSuite({ domain, agent: freightScriptedAgent("careful"), user: scriptedUser(), taskIds: ["negotiate-new-lane"] });
     expect(r.tasks[0]!.passes).toBe(1);
+  });
+
+  it("tells the model to keep a transcript's facts instead of fitting them to an existing row", async () => {
+    const { client, requests } = fakeClient([good]);
+    await draftTasksFromTranscripts({ domain: await loadDomain(path.resolve("examples/freight")), claude: { client }, transcripts: [{ file: "call-1.txt", text: "..." }] });
+    expect(requests[0]!.system).toContain("Reuse an existing row only when every fact the transcript states about it matches the row");
+    expect(requests[0]!.system).toContain("Never change what the transcript says to fit an existing row");
+  });
+
+  it("warns, and notes on the task, when a reused row contradicts the transcript", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-tx-"));
+    await cp(path.resolve("examples/freight"), dir, { recursive: true });
+    const { client } = fakeClient([reusesConflicting]);
+    const res = await draftTasksFromTranscripts({ domain: await loadDomain(dir), claude: { client }, transcripts: [{ file: "call-7.txt", text: "..." }] });
+
+    // The task is kept for review, with the conflict named: the row, each field, both values.
+    expect(res.tasks.map((t) => t.id)).toEqual(["lapsed-insurance-same-name"]);
+    expect(res.warnings).toEqual([
+      'call-7.txt: lapsed-insurance-same-name reuses carriers 100101, but the transcript states insurance_status "expired" where the row has "valid", and equipment "reefer" where the row has "dry_van": keep the transcript\'s facts by giving the task its own row with new IDs, or correct the task',
+    ]);
+    await appendToDomainList(dir, "tasks", res.tasks, undefined, res.notes);
+    const tasks = await readFile(path.join(dir, "tasks.yaml"), "utf8");
+    expect(tasks).toContain(
+      '# TODO(review): Reuses carriers 100101, but the transcript states insurance_status "expired" where the row has "valid", and equipment "reefer" where the row has "dry_van". Keep the transcript\'s facts: give this task its own row with new IDs, or correct the task.\n- id: lapsed-insurance-same-name',
+    );
+  });
+
+  it("drafts a new row without a warning when the transcript's facts differ, and accepts a reuse whose facts match", async () => {
+    const domain = await loadDomain(path.resolve("examples/freight"));
+    const { client } = fakeClient([newRowInstead, reusesMatching]);
+    const res = await draftTasksFromTranscripts({ domain, claude: { client }, transcripts: [{ file: "call-7.txt", text: "..." }, { file: "call-8.txt", text: "..." }] });
+    expect(res.tasks.map((t) => t.id)).toEqual(["lapsed-insurance-new-carrier", "negotiate-new-lane"]);
+    expect(res.rows.carriers).toEqual([expect.objectContaining({ mc_number: "104242", insurance_status: "expired" })]);
+    expect(res.warnings).toEqual([]);
+    expect(res.notes).toEqual({});
+  });
+
+  it("says when a listed existing row isn't in the world", async () => {
+    const domain = await loadDomain(path.resolve("examples/freight"));
+    expect(reusedRowConflicts(domain, [{ table: "carriers", key: "100999", facts: [] }])).toEqual(["lists carriers 100999 as an existing row, but there is none"]);
+    // A key YAML read as a number still finds its row.
+    expect(reusedRowConflicts(domain, [{ table: "carriers", key: "100101", facts: [{ name: "safety_rating", value: "satisfactory" }] }])).toEqual([]);
   });
 });

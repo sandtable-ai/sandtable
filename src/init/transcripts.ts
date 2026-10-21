@@ -3,6 +3,7 @@ import { z } from "zod";
 import { validateDomain } from "../spec/load.ts";
 import { PersonaSpec, TaskSpec, type Domain, type Persona, type Task } from "../spec/schema.ts";
 import { createClient, requestBase, type ClaudeOptions } from "../sim/claude.ts";
+import { equal } from "../world/match.ts";
 
 export interface TranscriptDraft {
   tasks: Task[];
@@ -10,6 +11,8 @@ export interface TranscriptDraft {
   /** New seed rows the tasks rely on, per table. */
   rows: Record<string, Record<string, unknown>[]>;
   warnings: string[];
+  /** Review notes per task id, such as a reused row that contradicts the transcript; `init` writes them as `# TODO(review):` comments above the task. */
+  notes: Record<string, string[]>;
   redactions: number;
 }
 
@@ -54,6 +57,17 @@ function outputSchema(tools: string[], tables: string[]) {
     new_rows: z
       .array(z.object({ table: Table, fields: z.array(z.object({ name: z.string(), value: Scalar })) }))
       .describe("fictional seed rows this scenario needs that the world does not have yet (include the key field)"),
+    existing_rows: z
+      .array(
+        z.object({
+          table: Table,
+          key: z.string().describe("the reused row's key value"),
+          facts: z
+            .array(z.object({ name: z.string(), value: Scalar }))
+            .describe("each field of this row that the transcript states a value for, with the value the transcript states (in its fictional form), even where it differs from the row"),
+        }),
+      )
+      .describe("existing rows from the Tables list that this scenario uses as they are, such as the customer, account or order the transcript is about"),
     expect_state: z
       .array(z.object({ table: Table, conditions: z.array(Condition), count: z.number().int().nullable() }))
       .describe("end state if the agent follows the policy: rows matching the conditions, exactly `count` of them (null = at least one)"),
@@ -72,7 +86,9 @@ You get the company's policy, the agent's tools, the world's tables with their c
 - the end state the world must be in **if the agent follows the policy**. That is not necessarily what the human rep did: when the rep broke the policy, the expectation follows the policy;
 - the tools that must and must not be called, only when the policy makes that clear.
 
-Make everything fictional. Replace people's names, company names and identifiers with fictional ones. Reuse existing rows when they fit the scenario; otherwise propose new_rows with every field the scenario needs, including the table key, and keep them consistent with the conditions you expect. Use only the listed tables, fields and tools. Prefer exact conditions on keys (e.g. which load was booked by which carrier) and ranges for negotiated numbers.`;
+Make everything fictional. Replace people's names, company names and identifiers with fictional ones. Use only the listed tables, fields and tools. Prefer exact conditions on keys (e.g. which load was booked by which carrier) and ranges for negotiated numbers.
+
+Keep the transcript's facts. Reuse an existing row only when every fact the transcript states about it matches the row: a membership level, status, date, amount or item that differs means it is not the same record, even when the name matches (the same customer may have called before, with different facts then). Otherwise propose new_rows with new identifiers and every field the scenario needs, including the table key, consistent with the conditions you expect. Never change what the transcript says to fit an existing row, and never invent a conflict the transcript does not have. List each existing row you reuse in existing_rows, with the facts the transcript states about it.`;
 
 function describe(domain: Domain): string {
   const tools = domain.tools
@@ -83,6 +99,35 @@ function describe(domain: Domain): string {
     .join("\n");
   const personas = domain.personas.map((p) => `- ${p.id}: ${p.description}`).join("\n") || "(none)";
   return `<policy>\n${domain.policy.trim()}\n</policy>\n\nTools:\n${tools}\n\nTables:\n${tables}\n\nPersonas:\n${personas}`;
+}
+
+/** Two values that say the same thing: equal as sandtable compares them, or the same text up to case and surrounding spaces ("Gold" and "gold"). */
+function sameFact(a: unknown, b: unknown): boolean {
+  if (equal(a, b)) return true;
+  return typeof a !== "object" && typeof b !== "object" && String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+}
+
+/**
+ * Where a drafted task's reused rows contradict its transcript: for each row it lists in `existing_rows`, the
+ * fields whose value the transcript states differently from the row, or that the row doesn't exist. One line
+ * per row, for a review note. Fields the row doesn't have are left to validation.
+ */
+export function reusedRowConflicts(domain: Domain, uses: Proposal["existing_rows"]): string[] {
+  const out: string[] = [];
+  for (const use of uses) {
+    const table = domain.world.tables[use.table];
+    if (!table) continue;
+    const row = table.rows.find((r) => equal(r[table.key], use.key));
+    if (!row) {
+      out.push(`lists ${use.table} ${use.key} as an existing row, but there is none`);
+      continue;
+    }
+    const differs = use.facts
+      .filter((f) => Object.hasOwn(row, f.name) && !sameFact(row[f.name], f.value))
+      .map((f) => `${f.name} ${JSON.stringify(f.value)} where the row has ${JSON.stringify(row[f.name])}`);
+    if (differs.length) out.push(`reuses ${use.table} ${use.key}, but the transcript states ${differs.join(", and ")}`);
+  }
+  return out;
 }
 
 export function proposalToTask(p: Proposal, file: string): { task: Task; persona?: Persona; rows: Record<string, Record<string, unknown>[]> } | string {
@@ -123,7 +168,7 @@ export async function draftTasksFromTranscripts(input: {
 }): Promise<TranscriptDraft> {
   const client = await createClient(input.claude ?? {});
   const base = requestBase(input.claude ?? {}, "high");
-  const out: TranscriptDraft = { tasks: [], personas: [], rows: {}, warnings: [], redactions: 0 };
+  const out: TranscriptDraft = { tasks: [], personas: [], rows: {}, warnings: [], notes: {}, redactions: 0 };
   let domain = input.domain;
 
   for (const t of input.transcripts) {
@@ -167,6 +212,11 @@ export async function draftTasksFromTranscripts(input: {
       out.warnings.push(`${t.file}: dropped ${conv.task.id}: ${problems.join("; ")}`);
       continue;
     }
+
+    // A reused row that contradicts the transcript changes the scenario: keep the task for review, and say where.
+    const conflicts = reusedRowConflicts(candidate, response.parsed_output.existing_rows ?? []);
+    for (const c of conflicts) out.warnings.push(`${t.file}: ${conv.task.id} ${c}: keep the transcript's facts by giving the task its own row with new IDs, or correct the task`);
+    if (conflicts.length) out.notes[conv.task.id] = conflicts.map((c) => `${c[0]!.toUpperCase()}${c.slice(1)}. Keep the transcript's facts: give this task its own row with new IDs, or correct the task.`);
 
     domain = candidate;
     out.tasks.push(conv.task);
