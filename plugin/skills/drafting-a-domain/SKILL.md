@@ -128,7 +128,7 @@ Each task gets a line such as `✗ my-task  (write · NOT ready · NOT solvable 
 | Lint message | What it means | Fix |
 |---|---|---|
 | `nothing is graded: add state or called expectations` | the task can never fail | add `expect.state` (preferred) or `called` |
-| `expect.state[i] needs a <table> row that is not seeded and no tool can create or change` | unreachable | seed the row, or resolve the tool note that should create or update it |
+| `expect.state[i] needs a row in <table> that is not seeded and no tool can create or change` | unreachable | seed the row, or resolve the tool note that should create or update it |
 | `vacuous: the seed already satisfies the expected state, so a do-nothing agent passes` | the task tests nothing | tighten `where` to the row the agent must create, or fix the seed |
 | `reference[i] <tool> failed: <error>` | a call in the reference errors | fix the args, the seed rows, or the tool's `checks` |
 | `reference does not pass: <check id>: <detail>` | a correct agent would still fail | the reference, the expectation or the tool ops are wrong: decide which with the SOP |

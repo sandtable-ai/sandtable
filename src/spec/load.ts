@@ -30,6 +30,8 @@ export async function loadDomain(target: string): Promise<Domain> {
   const raw = parseYaml(text, file) as Record<string, unknown>;
   if (!raw || typeof raw !== "object") throw new DomainError(`${file} is empty or not a YAML mapping`);
 
+  // The file each top-level key came from, so a problem is reported where it can be fixed.
+  const sources = new Map<string, string>();
   for (const [key, value] of Object.entries(raw)) {
     if (typeof value !== "string" || !/\.(md|ya?ml)$/i.test(value.trim())) continue;
     const included = path.resolve(dir, value.trim());
@@ -39,13 +41,29 @@ export async function loadDomain(target: string): Promise<Domain> {
     }
     const text = await readFile(included, "utf8");
     raw[key] = /\.md$/i.test(included) ? text : parseYaml(text, included);
+    sources.set(key, path.join(path.dirname(file), value.trim()));
   }
+  const sourceOf = (key: unknown) => (typeof key === "string" && sources.get(key)) || file;
 
   const parsed = DomainSpec.safeParse(raw);
-  if (!parsed.success) throw new DomainError(`${file}:\n${z.prettifyError(parsed.error)}`);
+  if (!parsed.success) {
+    const groups = groupBy(parsed.error.issues, (issue) => sourceOf(issue.path[0]));
+    throw new DomainError([...groups].map(([f, issues]) => `${f}:\n${z.prettifyError(new z.ZodError(issues))}`).join("\n"));
+  }
   const problems = validateDomain(parsed.data);
-  if (problems.length) throw new DomainError(`${file}:\n${problems.map((p) => `  - ${p}`).join("\n")}`);
+  if (problems.length) {
+    // Each problem starts with its top-level key, such as `tasks.book-load.expect` or `tools: duplicate tool`.
+    const groups = groupBy(problems, (p) => sourceOf(/^[A-Za-z_]+/.exec(p)?.[0]));
+    throw new DomainError([...groups].map(([f, lines]) => `${f}:\n${lines.map((p) => `  - ${p}`).join("\n")}`).join("\n"));
+  }
   return parsed.data;
+}
+
+/** Items grouped by key, keys in the order they first appear. */
+function groupBy<T>(items: readonly T[], key: (item: T) => string): Map<string, T[]> {
+  const groups = new Map<string, T[]>();
+  for (const item of items) groups.set(key(item), [...(groups.get(key(item)) ?? []), item]);
+  return groups;
 }
 
 /** Cross-reference checks the schema cannot express. Returns human-readable problems. */

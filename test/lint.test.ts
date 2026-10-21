@@ -42,7 +42,7 @@ describe("sandtable lint", () => {
     const report = lintDomain(DomainSpec.parse({ ...d, tasks }));
     const errors = Object.fromEntries(report.tasks.map((t) => [t.id, t.errors.join(" | ")]));
     expect(errors.vacuous).toMatch(/vacuous/);
-    expect(errors.unreachable).toMatch(/needs a carriers row that is not seeded and no tool can create or change/);
+    expect(errors.unreachable).toMatch(/needs a row in carriers that is not seeded and no tool can create or change/);
     expect(errors["bad-reference"]).toMatch(/reference does not pass: rate-ceiling/);
     expect(report.tasks.find((t) => t.id === "bad-reference")!.solvable).toBe(false);
     expect(errors.ungraded).toMatch(/nothing is graded/);

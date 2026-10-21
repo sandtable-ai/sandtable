@@ -169,6 +169,15 @@ async function failIfUnreachable(roles: Role[], p: ClaudeOptions): Promise<void>
   if (problems.length) throw new Error(`Nothing ran: ${problems.length === 1 ? problems[0] : `${problems.length} problems:\n  - ${problems.join("\n  - ")}`}`);
 }
 
+/**
+ * Where `report` writes: `-o` names a folder, as `run -o` and `regrade -o` do, and the report goes in it as
+ * report.html; a path ending in .html (or .htm) is the file itself. Without -o, next to results.json.
+ */
+function reportPath(out: string | undefined, resultsPath: string): string {
+  if (out === undefined) return path.join(path.dirname(resultsPath), "report.html");
+  return /\.html?$/i.test(out) ? out : path.join(out, "report.html");
+}
+
 const STATUS_MARK = { passed: "✓", failed: "✗", skipped: "○" } as const;
 
 async function loadPrices(file?: string): Promise<PricesFile | undefined> {
@@ -533,10 +542,10 @@ program
   .command("report")
   .argument("<results>", "path to a results.json")
   .description("re-render the HTML report for a past run")
-  .option("-o, --out <file>", "output HTML path (default: next to results.json)")
+  .option("-o, --out <path>", "a folder to write report.html into, as run's and regrade's -o, or a path ending in .html (default: next to results.json)")
   .action(async (resultsPath: string, o: { out?: string }) => {
     const result = await readResults(resultsPath, "report");
-    const out = o.out ?? path.join(path.dirname(resultsPath), "report.html");
+    const out = reportPath(o.out, resultsPath);
     // Like run's and regrade's -o, a directory that doesn't exist yet is created.
     await mkdir(path.dirname(out), { recursive: true });
     await writeFile(out, renderHtml(result));

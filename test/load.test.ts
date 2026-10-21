@@ -69,3 +69,20 @@ describe("loadDomain YAML errors", () => {
     await expect(loadDomain(dir)).rejects.toThrow(`${path.join(dir, "tasks.yaml")}: Nested mappings are not allowed`);
   });
 });
+
+describe("loadDomain schema and cross-reference errors", () => {
+  it("name the included file an item comes from, and sandtable.yaml for its own keys", async () => {
+    const dir = copyOfClinic();
+    edit(path.join(dir, "tasks.yaml"), /^- id: /m, "- critcal: true\n  id: ");
+    edit(path.join(dir, "sandtable.yaml"), /^name: /m, "nmae: x\nname: ");
+    const message = ((await loadDomain(dir).catch((e: unknown) => e)) as Error).message;
+    expect(message).toContain(`${path.join(dir, "tasks.yaml")}:\n✖ Unrecognized key: "critcal"`);
+    expect(message).toContain(`${path.join(dir, "sandtable.yaml")}:\n✖ Unrecognized key: "nmae"`);
+  });
+
+  it("name the included tasks file for a task's cross-reference problem", async () => {
+    const dir = copyOfClinic();
+    edit(path.join(dir, "tasks.yaml"), /^ {2}persona: \S+$/m, "  persona: nobody-at-all");
+    await expect(loadDomain(dir)).rejects.toThrow(new RegExp(`^${path.join(dir, "tasks.yaml").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:\n {2}- tasks\\.[\\w-]+: unknown persona "nobody-at-all"$`));
+  });
+});
