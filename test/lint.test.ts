@@ -48,6 +48,41 @@ describe("sandtable lint", () => {
     expect(errors.ungraded).toMatch(/nothing is graded/);
   });
 
+  it("replays a reference call the API should reject, marked expect_error (#274)", async () => {
+    const d = await loadDomain(example);
+    const refusal = (id: string, reference: Task["reference"]): Task => ({
+      id,
+      tags: [],
+      user,
+      reference,
+      expect: { state: [{ table: "bookings", count: 0 }], called: [], not_called: [], reply_includes: [] },
+    });
+    const unknown = { tool: "verify_carrier", args: { mc_number: "109999" } };
+    const tasks: Task[] = [
+      refusal("any-error", [{ ...unknown, expect_error: true }]),
+      refusal("matching-error", [{ ...unknown, expect_error: "NOT FOUND" }]),
+      refusal("unmarked-failure", [unknown]),
+      refusal("expected-failure-succeeds", [{ tool: "verify_carrier", args: { mc_number: "100101" }, expect_error: true }]),
+      refusal("other-error", [{ ...unknown, expect_error: "insurance" }]),
+      refusal("invalid-arguments", [{ tool: "verify_carrier", args: {}, expect_error: true }]),
+      refusal("explicitly-succeeds", [{ tool: "verify_carrier", args: { mc_number: "100101" }, expect_error: false }]),
+    ];
+    const report = lintDomain(DomainSpec.parse({ ...d, tasks }));
+    const byId = Object.fromEntries(report.tasks.map((t) => [t.id, t]));
+    expect(byId["any-error"]).toMatchObject({ solvable: true, errors: [] });
+    expect(byId["matching-error"]).toMatchObject({ solvable: true, errors: [] });
+    expect(byId["explicitly-succeeds"]).toMatchObject({ solvable: true, errors: [] });
+    expect(byId["unmarked-failure"]!.errors).toEqual(["reference[0] verify_carrier failed: carriers 109999 not found"]);
+    expect(byId["expected-failure-succeeds"]!.errors).toEqual(["reference[0] verify_carrier succeeded, but its expect_error says the API rejects it"]);
+    expect(byId["other-error"]!.errors).toEqual([
+      'reference[0] verify_carrier failed with "carriers 109999 not found", but its expect_error wants an error containing "insurance"',
+    ]);
+    // A call the tool rejects for its arguments never counts as the API's rejection.
+    expect(byId["invalid-arguments"]!.errors).toEqual(['reference[0] verify_carrier: invalid arguments: missing required argument "mc_number"']);
+    for (const id of ["unmarked-failure", "expected-failure-succeeds", "other-error", "invalid-arguments"]) expect(byId[id]!.solvable, id).toBe(false);
+    expect(DomainSpec.safeParse({ ...d, tasks: [refusal("empty", [{ ...unknown, expect_error: " " }])] }).success).toBe(false);
+  });
+
   it("reads argument matchers: a write expected through one, and a reference replay graded against them", async () => {
     const d = await loadDomain(example);
     const reference = [

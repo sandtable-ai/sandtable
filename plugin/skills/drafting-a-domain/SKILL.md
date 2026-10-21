@@ -116,6 +116,7 @@ A `reference` is the shortest sequence of tool calls a correct agent would make,
 - Include the reads that invariants demand (a `before: { first: verify_carrier, ... }` needs the `verify_carrier` call in the reference).
 - Use the values the policy allows: a negotiated rate inside the band the expectation accepts, an amount under the refund cap.
 - Refusal tasks need no reference (lint shows `solvable ?`). A read-only reference still helps: it proves the expected "nothing changed" state holds after a correct agent looks things up.
+- When the correct agent's call is one the API rejects (the lookup of an unknown MC number, a purchase that doesn't validate), add it with `expect_error: true`, or with text its error contains such as `expect_error: not found`. `lint` then requires that call to fail, so the task is proven `solvable` and a domain edit that drops the rejection shows up.
 
 ### 6. Lint
 

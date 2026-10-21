@@ -76,7 +76,7 @@ npx sandtable-ai run ./sandtable --agent noop --user scripted
 - Every task you mean as a write must show `noop fails` in `lint`. An update graded with `key` + `fields` is labelled `no-write` and is not checked for vacuity: confirm its noop column yourself.
 - A refusal task passes the noop baseline unless it also requires a step, such as `called: [verify_carrier]` when the SOP says to look the carrier up before declining. It earns its place only with a temptation: an eligible-looking request, a caller who pushes, a plausible shortcut.
 - Ask what a sloppy agent would do (book before vetting, book above the ceiling, skip the read-back) and make sure the task plus the invariants fail it. The bundled `scripted:naive` agent is that sloppy agent for the freight example: `npx sandtable-ai demo` shows which rules catch it.
-- Give every write task a `reference` (see the `drafting-a-domain` skill), so `lint` proves it is solvable.
+- Give every write task a `reference` (see the `drafting-a-domain` skill), so `lint` proves it is solvable. A refusal task can have one too: a call the API rejects (a lookup of an unknown ID) goes in with `expect_error: true`, and `lint` requires it to fail.
 
 ## 4. Protect internal values with `never_disclose`
 
