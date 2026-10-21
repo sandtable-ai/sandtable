@@ -205,6 +205,19 @@ export const ExpectSpec = z
 
 export const PersonaSpec = z.object({ id: z.string(), description: z.string() }).strict();
 
+/**
+ * What one task changes about the world it starts in, so a scenario needs no copy of the domain.
+ * `rows` are merged into the seed by each table's key, for this task only: a row whose key is seeded
+ * patches that row's fields, a new key adds a row. `context` is what the system that connected the call
+ * already knows (a caller ID, a trigger payload): the agent is given it, the simulated user is not.
+ */
+export const GivenSpec = z
+  .object({
+    rows: z.record(z.string(), z.array(z.record(z.string(), Value))).optional(),
+    context: z.record(z.string(), Value).optional(),
+  })
+  .strict();
+
 export const TaskSpec = z
   .object({
     id: z.string(),
@@ -227,6 +240,7 @@ export const TaskSpec = z
       .strict(),
     /** Tool calls a correct agent would make; `sandtable lint` replays them to prove the task is solvable. */
     reference: z.array(z.object({ tool: z.string(), args: z.record(z.string(), Value).default({}) }).strict()).optional(),
+    given: GivenSpec.optional(),
     expect: ExpectSpec,
     max_turns: z.number().int().positive().optional(),
   })
@@ -256,3 +270,4 @@ export type StateAssert = z.infer<typeof StateAssertSpec>;
 export type CallExpect = z.infer<typeof CallExpectSpec>;
 export type FieldRefSpec = z.infer<typeof FieldRef>;
 export type Persona = z.infer<typeof PersonaSpec>;
+export type Given = z.infer<typeof GivenSpec>;

@@ -1,7 +1,7 @@
 import { createToolRunner } from "../run/tool-runner.ts";
 import type { Domain, Task } from "../spec/schema.ts";
 import { matches } from "../world/match.ts";
-import { World } from "../world/store.ts";
+import { worldFor } from "../world/store.ts";
 import { expectedTool, gradeTrial } from "./expectations.ts";
 import { checkTranscript } from "./invariants.ts";
 
@@ -51,7 +51,8 @@ export function lintDomain(domain: Domain): LintReport {
 function lintTask(domain: Domain, task: Task, changeable: Set<string>, writers: Set<string>): TaskLint {
   const errors: string[] = [];
   const warnings: string[] = [];
-  const seed = new World(domain.world);
+  // The world the task starts in: the domain's seed with the task's `given.rows` merged in.
+  const seed = worldFor(domain, task);
   // A write is expected when rows must come to exist (a `where` with a positive count) or a writing
   // tool must be called. `key` + `fields` assertions often check that something did NOT change.
   const expectsWrite =
@@ -78,7 +79,7 @@ function lintTask(domain: Domain, task: Task, changeable: Set<string>, writers: 
 
   let solvable: boolean | null = null;
   if (task.reference) {
-    const world = new World(domain.world);
+    const world = worldFor(domain, task);
     const runner = createToolRunner(domain, world);
     task.reference.forEach((c, i) => {
       const out = runner.call(c.tool, c.args);

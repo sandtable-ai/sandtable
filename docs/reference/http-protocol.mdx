@@ -20,6 +20,7 @@ npx sandtable-ai run ./my-domain --agent http://localhost:8787/step
   "session_id": "20261018T210512-k3f9/walk-away-above-ceiling#0",   // unique per trial and run: key your conversation state on it
   "system": "...",                             // sandtable's default prompt; ignore it if your agent has its own
   "tools": [{ "name": "...", "description": "...", "input_schema": { } }],
+  "context": { "caller_id": "+1-555-0148" },   // only when the task sets given.context
   "message": "I need $1,600 on that one.",     // a new user turn, or:
   "tool_results": [{ "id": "c1", "ok": true, "result": { } }]  // results of your previous tool_calls
 }
@@ -30,6 +31,7 @@ npx sandtable-ai run ./my-domain --agent http://localhost:8787/step
 | `session_id` | string | `<run-id>/<task-id>#<trial>`, with trials numbered from 0. The same for every step of one trial, and never reused by another run |
 | `system` | string | the default system prompt: the domain description and the policy |
 | `tools` | array | the domain's tools: `name`, `description` and a JSON-schema `input_schema` (`type: "object"`, `properties`, `required`, `additionalProperties: false`) |
+| `context` | object | present only when the task sets [`given.context`](/reference/spec#per-task-world-and-context): what the system that connected the call knows, such as a caller ID or a trigger payload. The same on every step of the trial. `system` states it too, after the policy |
 | `message` | string | present when the user has spoken: the start of a new turn |
 | `tool_results` | array | present when sandtable has run the tool calls from your previous response |
 

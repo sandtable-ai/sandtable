@@ -1,6 +1,6 @@
 import { pendingReview } from "../spec/load.ts";
 import type { Domain } from "../spec/schema.ts";
-import { World } from "../world/store.ts";
+import { worldFor } from "../world/store.ts";
 import type { ToolOutcome } from "../world/tools.ts";
 import { gradeEpisode, toolEvent, worldChanges, type TrajectoryEvent, type TrialResult } from "./episode.ts";
 import { inputsFingerprint } from "./inputs.ts";
@@ -14,14 +14,14 @@ const outcomeOf = (o: ToolOutcome) => JSON.stringify({ ok: o.ok, result: o.resul
 
 /**
  * Re-score one stored trial under the domain's current invariants and expectations, without calling a
- * model: replay its tool calls in order against a fresh world, then grade the conversation as a live run
- * would. The transcript, usage and timing stay as recorded. Throws a RegradeError when a call now returns
- * something other than what the agent saw, since the rest of the conversation could have gone otherwise.
+ * model: replay its tool calls in order against a fresh world for its task, then grade the conversation as
+ * a live run would. The transcript, usage and timing stay as recorded. Throws a RegradeError when a call now
+ * returns something other than what the agent saw, since the rest of the conversation could have gone otherwise.
  */
 export function regradeTrial(domain: Domain, trial: TrialResult): TrialResult {
   const task = domain.tasks.find((t) => t.id === trial.taskId);
   if (!task) throw new RegradeError(`task ${trial.taskId} is not in ${domain.name}`);
-  const world = new World(domain.world);
+  const world = worldFor(domain, task);
   const initial = world.snapshot();
   const events: TrajectoryEvent[] = [];
   const runner = createToolRunner(domain, world, (e) => events.push(toolEvent(e)));

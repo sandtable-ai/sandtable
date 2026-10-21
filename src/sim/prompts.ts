@@ -2,8 +2,18 @@ import type { Domain, Persona, Task } from "../spec/schema.ts";
 
 export const STOP_TOKEN = "###STOP###";
 
-/** Default system prompt for the reference agent: the customer's policy, verbatim. */
-export function agentSystemPrompt(domain: Domain): string {
+/** A task's `given.context`, or undefined when it sets none or an empty one. */
+export function taskContext(task?: Pick<Task, "given">): Record<string, unknown> | undefined {
+  const context = task?.given?.context;
+  return context && Object.keys(context).length ? context : undefined;
+}
+
+/**
+ * Default system prompt for the reference agent: the customer's policy, verbatim. With a task whose
+ * `given.context` is set, the context follows the policy as JSON, so the agent can read it.
+ */
+export function agentSystemPrompt(domain: Domain, task?: Pick<Task, "given">): string {
+  const context = taskContext(task);
   return [
     domain.description ? `You are the AI agent deployed for: ${domain.description}` : "You are a customer-facing AI agent.",
     "Follow the operating policy below exactly. Use the tools to read and change records; never invent IDs, prices, statuses or confirmations.",
@@ -12,6 +22,9 @@ export function agentSystemPrompt(domain: Domain): string {
     "<policy>",
     domain.policy.trim(),
     "</policy>",
+    ...(context
+      ? ["", "Context for this conversation, from the system that connected it (the caller has not said this):", "<context>", JSON.stringify(context, null, 2), "</context>"]
+      : []),
   ].join("\n");
 }
 

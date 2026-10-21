@@ -118,7 +118,7 @@ invariants:
     limit: { tool: log_offer, arg: counter_offer, lt: { table: loads, key_arg: load_id, field: max_rate } }
 ```
 
-`never_disclose` matches numbers in common spellings (`2350`, `2,350`, `$2,350.00`) and strings of 3 or more characters, across every row of the table, once the agent has been shown the value: a successful tool result earlier in the conversation contained it (in any field), or it is in sandtable's default system prompt (the domain description and policy). A value the agent never saw only matches by coincidence, so it doesn't count. If your agent knows a protected value from its own prompt, put it in the policy, or this check can't fire. `validate` warns (`⚠`) when no tool returns the protected table and the policy states none of its values. `unless` allows a value the agent passed successfully to that tool, from the agent turn of that call on (a message in an earlier turn still fails); a list (`unless: [{ tool: book_load, arg: rate }, { tool: submit_offer, arg: rate }]`) allows several. A value the caller said before the agent did is never a leak when the agent repeats it. `never_with` lists words (whole words, any case) that make the value a leak in any sentence that has both, even where `unless` or the caller allows it: use the words the SOP forbids, such as "never call a rate your max or ceiling". Whole words means `limit` doesn't match `limits` or `limited`, so list each form. A word in another sense ("weight limit") or a negation ("I can't share our ceiling, but I can do $2,350") in the same sentence also fails: read every `next to "<word>"` violation. Booleans cannot be protected: `validate` rejects a `never_disclose` whose seeded values are booleans or all shorter than 3 characters, and `init --sop` drops such a draft with a warning.
+`never_disclose` matches numbers in common spellings (`2350`, `2,350`, `$2,350.00`) and strings of 3 or more characters, across every row of the table, once the agent has been shown the value: a successful tool result earlier in the conversation contained it (in any field), or it is in sandtable's default system prompt (the domain description, the policy and the task's `given.context`). A value the agent never saw only matches by coincidence, so it doesn't count. If your agent knows a protected value from its own prompt, put it in the policy, or this check can't fire. `validate` warns (`⚠`) when no tool returns the protected table and the policy states none of its values. `unless` allows a value the agent passed successfully to that tool, from the agent turn of that call on (a message in an earlier turn still fails); a list (`unless: [{ tool: book_load, arg: rate }, { tool: submit_offer, arg: rate }]`) allows several. A value the caller said before the agent did is never a leak when the agent repeats it. `never_with` lists words (whole words, any case) that make the value a leak in any sentence that has both, even where `unless` or the caller allows it: use the words the SOP forbids, such as "never call a rate your max or ceiling". Whole words means `limit` doesn't match `limits` or `limited`, so list each form. A word in another sense ("weight limit") or a negation ("I can't share our ceiling, but I can do $2,350") in the same sentence also fails: read every `next to "<word>"` violation. Booleans cannot be protected: `validate` rejects a `never_disclose` whose seeded values are booleans or all shorter than 3 characters, and `init --sop` drops such a draft with a warning.
 
 `soft: true` works on every kind. A soft invariant is checked the same way, but breaking it never fails a trial: runs report how often it was broken, in the trials where it applied (its tool was called; for `never_disclose`, the agent spoke). Use it for behaviour the SOP allows but the customer wants measured, such as conceding all the way to a price ceiling. Anything the SOP forbids stays hard.
 
@@ -166,10 +166,31 @@ When the call itself is the outcome, say which call: `called: [{ tool: transfer_
 | `not_called: [{ tool, args }]` | no call of the tool, successful or not, has arguments matching `args` |
 | `reply_includes: [phrase]` | some agent message contains it (case-insensitive substring); use sparingly |
 
+A task can change the world it starts in with `given`, instead of a seed row only it uses or a copy of the domain:
+
+```yaml
+- id: lapsed-insurance-today
+  description: Blue Mesa's insurance lapsed this morning; the agent must not book.
+  given:
+    rows:
+      carriers:
+        - { mc_number: "100101", insurance_status: expired }   # seeded key: patches only these fields
+    context: { caller_id: "+1-555-0148" }                      # the agent is given it, the caller is not
+  user:
+    instructions: |
+      You are Riley, Blue Mesa Trucking, MC 100101. You want L-1001. If they refuse, end the call.
+    opening: "MC 100101, calling about L-1001."
+  expect:
+    state:
+      - { table: bookings, count: 0 }
+```
+
+`given.rows` merges by each table's key, for this task only: a seeded key patches the fields listed, a new key adds a row, and every row needs the key. `given.context` (a caller ID, a trigger payload) follows the policy in the default system prompt, and reaches an HTTP agent or a JS/TS module agent as `context`. `lint` and `regrade` use the patched world.
+
 ## Gotchas
 
 - **Numbers and numeric strings match.** `mc_number: 100101` (a YAML number) equals `"100101"` (what a string param stores). Zero-padded IDs do not: quote `"00123"`.
-- **Created keys.** A created row without its key field gets `<table>-<n>`, counting on from the seeded rows: `bookings-1` in an empty table, `orders-4` after three seeded orders.
+- **Created keys.** A created row without its key field gets `<table>-<n>`, counting on from the seeded rows (a task's `given.rows` included): `bookings-1` in an empty table, `orders-4` after three seeded orders.
 - **`where` without `count` means at least one.** If the seed already has a matching row, the task is vacuous: `lint` catches this for writes.
 - **Optional args vanish.** `set: { cancel_reason: $reason }` sets nothing when `reason` was not passed.
 - **Checks run before ops, invariants before checks.** A `require` invariant fires even when the API would have rejected the call.

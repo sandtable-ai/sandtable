@@ -160,7 +160,7 @@ Both exceptions follow the order of the conversation:
 - An `unless` call allows its value from the agent turn it was made in. In one turn the agent's tool calls come before its reply, so "Booked at $2,350" passes in the turn that books $2,350. A message that says the value in an earlier turn still fails, even when the agent books it later: "The max we can do is $2,350" followed by a booking at $2,350 is a leak.
 - A value the caller said before the agent did is not a leak when the agent repeats it, such as a caller's ask that happens to equal the ceiling ("Can you do $2,350?" "Yes, $2,350 works"). The caller's words are matched with the same spellings. If the agent says the value first, the caller repeating it doesn't make it the caller's.
 
-A value counts only once the agent has been shown it: a successful tool result earlier in the conversation contained it, in any field or in free text (a row from `get_load`, one of the rows `search_loads` returned), or it is in sandtable's default system prompt (the domain description and policy). An agent can't leak a value it never saw, so a number that only matches by coincidence is not a leak, such as an offer of $1,050 on one load when $1,050 is the ceiling of a load the agent never looked up. If your agent knows a protected value from its own prompt, put it in the policy, or this check can't fire. `validate` warns when no tool returns the protected table and the policy states none of its values. A value the agent says first, before it was shown, is still its own: a caller repeating it doesn't clear it.
+A value counts only once the agent has been shown it: a successful tool result earlier in the conversation contained it, in any field or in free text (a row from `get_load`, one of the rows `search_loads` returned), or it is in sandtable's default system prompt (the domain description, the policy and the task's `given.context`). An agent can't leak a value it never saw, so a number that only matches by coincidence is not a leak, such as an offer of $1,050 on one load when $1,050 is the ceiling of a load the agent never looked up. If your agent knows a protected value from its own prompt, put it in the policy, or this check can't fire. `validate` warns when no tool returns the protected table and the policy states none of its values. A value the agent says first, before it was shown, is still its own: a caller repeating it doesn't clear it.
 
 `never_with` lists words that make a value a disclosure wherever it is said, such as the words a policy forbids for a ceiling: `never_with: [max, maximum, ceiling, cap, limit, budget]`. A message that says a shown value in one sentence with one of them fails even where `unless` or the caller allows the value. So "$2,350 is our max" fails after a counter-offer of $2,350 was logged, and so does "Yes, $2,350 is our ceiling" after the caller asked about it. A sentence ends at `.`, `!` or `?` followed by a space, or at a line break, so "$2,350.00. That's our max." is two sentences and passes. Words match whole and in any case, and a phrase such as `top rate` matches across any spaces. A whole word means `cap` doesn't match `capacity` or `capped`, and `limit` doesn't match `limits` or `limited`: list each form yourself. `never_with` belongs to its `never_disclose`, so it can't be soft on its own; `soft: true` applies to the whole invariant.
 
@@ -202,6 +202,9 @@ tasks:
       script: [ ... ]                  # optional fixed turns for --user scripted
     reference:                         # optional: what a correct agent would do; `sandtable lint` replays it
       - { tool: verify_carrier, args: { mc_number: "100101" } }
+    given:                             # optional: this task's changes to the world it starts in
+      rows: { carriers: [{ mc_number: "100101", insurance_status: expired }] }
+      context: { caller_id: "+1-555-0148" }
     expect:
       state:
         - { table: bookings, count: 0 }                                # exactly N rows (with optional where)
@@ -245,6 +248,24 @@ Tasks also accept `review` and `source`, like invariants.
 Reports list critical tasks first and mark them, and the terminal summary adds a line such as `critical 2 of 3 passed every trial`. In `results.json`, each critical task carries `"critical": true`.
 
 A critical refusal guards against the harmful action, not against doing nothing: the do-nothing `noop` agent passes it. Keep gating on the score with `--fail-under` too. Until infrastructure errors are reported separately ([#27](https://github.com/sandtable-ai/sandtable/issues/27)), a trial that ended in an error counts as failed here as everywhere else.
+
+### Per-task world and context
+
+`given` changes the world one task starts in, so a scenario such as "this carrier's insurance just expired" needs neither a copy of the domain nor a seed row that only one task uses.
+
+- `rows` maps a table to rows that are merged into its seed by the table's key, for this task only. A row whose key is seeded patches that row: the fields it lists replace the seeded ones, and the others stay. A row with a new key is added. Every row needs the table's key, and `validate` fails on an unknown table, a missing key or a key given twice. Other tasks, and every trial's fresh copy, keep the plain seed.
+- `context` is what the system that connected the conversation already knows, such as a caller ID, an account number or a trigger payload. The agent is given it and the simulated user is not: the default system prompt states it as JSON after the policy, an agent over [HTTP](/reference/http-protocol) receives it as `context` in every request, and a [JS or TS module agent](/guides/bring-your-agent#your-agent-as-a-js-or-ts-module) as `context` in `createSession`. A value it states counts as shown to the agent for `never_disclose`.
+
+```yaml
+  - id: expired-insurance-callback
+    given:
+      rows:
+        carriers:
+          - { mc_number: "100101", insurance_status: expired }   # patches the seeded carrier
+      context: { caller_id: "+1-555-0148", line: after-hours }
+```
+
+`lint` checks the task against its patched seed and replays its `reference` there. `regrade` replays stored trials against it too. Editing a task's `context` changes what its agent was given, so `regrade` refuses runs made before the edit; editing its `rows` doesn't, and a call that now returns something else stops the regrade.
 
 ## Related
 

@@ -98,7 +98,7 @@ invariants:
 ## 5. A balanced suite
 
 - **Mix writes and refusals.** `lint` ends with "N tasks: X expect a write, Y do not". A do-nothing agent can pass at most the Y, so keep its score well below your `--fail-under`.
-- **Pair each refusal with a success on the same data.** `expired-insurance` sits next to `book-at-posted-rate` on the same load: together they show the agent discriminates, not that it always books or always declines.
+- **Pair each refusal with a success on the same data.** `expired-insurance` sits next to `book-at-posted-rate` on the same load: together they show the agent discriminates, not that it always books or always declines. To turn a success into a refusal, patch the one field that changes in the task's `given.rows` (the same carrier with `insurance_status: expired`) instead of adding a seed row only that task uses.
 - **Tempt every invariant at least once.** An invariant no task can provoke is never tested.
 - **Mark the few release blockers `critical: true`**: the tasks a customer would stop a launch over, such as booking an ineligible carrier or acting for an unverified caller. `run` exits 1 when any of their trials fails, whatever the score. Keep the list short, so a red critical task always means stop.
 - **Tag by behaviour** (`happy-path`, `negotiation`, `refusal`, `vetting`, `handoff`) and read per-tag pass^k: a cautious agent scores high on `refusal` and low on `happy-path`.
@@ -111,12 +111,13 @@ invariants:
 - `user.script` is replayed by `--user scripted`, whatever the agent says. Write the lines a cooperative caller would say to a correct agent. It makes the noop baseline and CI smoke runs free and deterministic. Every task needs one for those runs.
 - `user.opening` fixes the Claude user's first line, which makes trials more comparable.
 - `persona` names a `personas[]` entry (tone, patience). Reuse a few personas instead of describing tone in every task.
+- `given.context` holds what the system that connected the call already knows, such as the caller ID or a trigger payload. The agent is given it; the simulated user is not, so state in `user.instructions` anything the caller should also know.
 - `max_turns` caps user turns (domain default 20). A trial that reaches it is still graded on its end state, so set it high enough for the slowest correct conversation; lower values only save cost.
 
 ## Checklist before accepting a task
 
 - [ ] Instructions: identity, one goal, numeric limits, what to do when blocked, when to stop.
-- [ ] Every ID the user mentions exists in the seed rows.
+- [ ] Every ID the user mentions exists in the seed rows or the task's `given.rows`.
 - [ ] `expect` follows the SOP and accepts every policy-correct outcome.
 - [ ] Write tasks: `reference` present; `lint` says `solvable` and `noop fails`.
 - [ ] Refusal tasks: a real temptation; a sibling success task on the same data.
