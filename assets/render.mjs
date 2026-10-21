@@ -5,6 +5,7 @@
 //   node assets/render.mjs og        # og.html                 -> og.png (1280x640), docs/images/og.png (1200x630)
 //   node assets/render.mjs report    # offline naive run       -> report.png, report-dark.png
 //   node assets/render.mjs trial     # trial.html              -> trial.png, trial-dark.png
+//   node assets/render.mjs brand     # brand/avatar.svg        -> brand/avatar.png (512x512)
 //   node assets/render.mjs all
 //
 // og.html and trial.html load Fira Sans and Fira Code from Google Fonts, so rendering them needs
@@ -164,6 +165,11 @@ const targets = {
         out: scheme === "light" ? "trial.png" : "trial-dark.png",
       });
     }
+  },
+
+  // The GitHub organization avatar, 512x512.
+  async brand(browser) {
+    await shoot(browser, { url: fileUrl("brand/avatar.svg"), width: 512, height: 512, scale: 1, out: "brand/avatar.png" });
   },
 };
 
