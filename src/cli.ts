@@ -18,6 +18,7 @@ import { registerPrices } from "./run/usage.ts";
 import { DEFAULT_OPENAI_BASE_URL } from "./sim/openai-compat.ts";
 import { scriptedUser } from "./sim/scripted.ts";
 import { leaderboardAgent, resolveAgent, resolveUser } from "./sim/resolve.ts";
+import { reachProblems, type Role } from "./sim/preflight.ts";
 import { appendRows, appendToDomainList } from "./init/merge.ts";
 import { draftFromOpenApi, openApiProblem } from "./init/openapi.ts";
 import { draftInvariantsFromSop, knownFields, softRuleComments } from "./init/sop.ts";
@@ -156,6 +157,16 @@ async function loadForCheck(domainPath: string): Promise<Domain | undefined> {
     exitWith(EXIT_GATE);
     return undefined;
   }
+}
+
+/**
+ * Check, before the first trial, that the agent and the simulated user can start: credentials, an optional
+ * package, a region, an HTTP agent that answers. Otherwise every trial would fail the same way, after the side
+ * that works had made, and billed, its calls. Throws, so nothing runs or is written, and the CLI exits 2.
+ */
+async function failIfUnreachable(roles: Role[], p: ClaudeOptions): Promise<void> {
+  const problems = await reachProblems(roles, p);
+  if (problems.length) throw new Error(`Nothing ran: ${problems.length === 1 ? problems[0] : `${problems.length} problems:\n  - ${problems.join("\n  - ")}`}`);
 }
 
 const STATUS_MARK = { passed: "✓", failed: "✗", skipped: "○" } as const;
@@ -368,6 +379,7 @@ withProviderFlags(program
     }
     const agent = await resolveAgent(o.agent, providerOpts(o), o.openaiBaseUrl);
     const user = resolveUser(o.user, providerOpts(o), o.openaiBaseUrl);
+    await failIfUnreachable([{ role: "agent", spec: o.agent }, { role: "simulated user", spec: o.user }], providerOpts(o));
     let done = 0;
     const total = (o.tasks ? o.tasks.split(",").length : domain.tasks.length) * o.trials;
     const result = await runSuite({
@@ -485,6 +497,8 @@ withProviderFlags(program
     const domain = await loadDomain(EXAMPLE);
     if (o.live) {
       const p = providerOpts(o);
+      const spec = (model?: string) => (model ? `claude:${model}` : "claude");
+      await failIfUnreachable([{ role: "agent", spec: spec(o.agentModel) }, { role: "simulated user", spec: spec(o.userModel) }], p);
       const result = await runSuite({
         domain,
         agent: claudeAgent({ ...p, ...(o.agentModel ? { model: o.agentModel } : {}) }),
