@@ -16,8 +16,8 @@ jobs:
     outputs:
       prerelease: ${{ steps.meta.outputs.prerelease }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -37,8 +37,8 @@ jobs:
       contents: read
       id-token: write   # npm trusted publishing + provenance
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
@@ -70,8 +70,8 @@ jobs:
           done
           echo "::error::sandtable-ai@${version} is not on npm after 2 hours. Approve the staged release on npmjs.com (or npm stage approve <id>), then re-run the failed jobs."
           exit 1
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
       - run: uv build python --out-dir python/dist
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
@@ -83,7 +83,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: node scripts/changelog.mjs notes "${GITHUB_REF_NAME}" > "$RUNNER_TEMP/notes.md"
       # The curated CHANGELOG section comes first; --generate-notes appends the merged PRs,
       # first-time contributors and the compare link.

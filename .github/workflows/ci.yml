@@ -16,8 +16,8 @@ jobs:
       matrix:
         node: [20, 22, 24]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
           cache: npm
@@ -29,8 +29,8 @@ jobs:
   python-launcher:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
       - run: uv build python --out-dir python/dist
       - run: uv run --isolated --with python/dist/*.whl python -c "import sandtable_ai.cli"
       - run: uv run --isolated --with pytest --with python/dist/*.whl pytest -q python/tests
@@ -53,9 +53,9 @@ jobs:
           - { example: livekit-agents, runtime: python }
           - { example: http-service, runtime: python }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - if: matrix.runtime == 'node'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -68,6 +68,6 @@ jobs:
         working-directory: examples/frameworks/${{ matrix.example }}
         run: npm ci && npm run check
       - if: matrix.runtime == 'python'
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
       - if: matrix.runtime == 'python'
         run: uv run --directory examples/frameworks/${{ matrix.example }} python -m pytest -q
