@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **Leaderboard docs**: the freight board's history includes its re-render at v0.1.2, which ran no model and changed no verdict, and `leaderboard.json` is described as recording 0.1.2 at `eb4cfd2` ([#260](https://github.com/sandtable-ai/sandtable/issues/260)).
+
 ## [0.1.2] - 2026-10-21
 
 A release with no breaking changes: the HTML report and `leaderboard.html` use the sandtable brand in light and dark, sandtable has a logo, and a report's trial squares stay on one line.
