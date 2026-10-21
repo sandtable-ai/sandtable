@@ -4,7 +4,7 @@ Images for the README, the repository's social preview and the docs site's socia
 
 | File | What it shows | Source | Regenerate |
 |---|---|---|---|
-| `demo.gif` | `sandtable demo`: the naive agent's task table and pass^1 15.6%, its top failure modes, then the careful agent at 100% on the same 32 calls. 1600×960, about 14 s, under 2 MB | `demo.tape` | `npm run build && vhs assets/demo.tape` |
+| `demo.gif` | `sandtable demo`: the naive agent's task table and pass^1 10.0%, its top failure modes, then the careful agent at 100% on the same 50 calls. 1600×960, about 13.5 s, about 1.5 MB | `demo.tape` | `npm run build && vhs assets/demo.tape` |
 | `report.png`, `report-dark.png` | The HTML report of the offline naive run, on the `expired-insurance` trial: the failed checks, the record changes, and the `book_load` call that violates `verify-before-book` and `eligible-carrier`, up to the agent's "Booked L-1001" reply. 2× for high-DPI screens, 800 px wide at 1× | the report itself (`src/report/html.ts`) | `node assets/render.mjs report` |
 | `og.png` | The GitHub social preview, 1280×640: one row of squares per agent, one square per call | `og.html` | `node assets/render.mjs og` |
 | `../docs/images/og.png` | The same card laid out at 1200×630, the size the docs site declares in its `og:image` tags | `og.html` | (rendered with `og.png`) |

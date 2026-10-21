@@ -1,15 +1,17 @@
 # Renders assets/demo.gif: `sandtable demo`, the offline demo, where a naive and a careful rule-based
-# agent take the same 32 scripted carrier calls. No model calls. Run from the repo root:
+# agent take the same 50 scripted carrier calls. No model calls. Run from the repo root:
 #
 #   npm run build && vhs assets/demo.tape
 #
 # Sized for a README column (about 830 px): recorded at 1600 px wide with 28 px Menlo, so it shows
 # at about 14 px, crisp on high-DPI screens. The terminal is 89 columns, and every line on screen
 # fits it. The output is paged through `less -S`, which keeps one output line per screen row so the
-# Down counts below match line numbers, and scrolls in three steps:
-#   1. the naive agent's task table, then its pass^1 (line 39 of the output)
-#   2. its top failure modes (from line 56)
-#   3. the careful agent's table and its pass^1 100.0% (line 112)
+# Down counts below match line numbers. The screen shows 22 lines. It opens on the top of the naive
+# agent's task table and scrolls in three steps:
+#   1. the last 20 rows of the naive agent's table, then its pass^1 (line 57 of the output); the
+#      50-row table doesn't fit on two screens, so rows 23 to 35 only pass by in the scroll
+#   2. its top failure modes (from line 80)
+#   3. the same 20 rows of the careful agent's table and its pass^1 100.0% (line 154)
 # The Down counts below follow those line numbers. If the freight example's output changes, check
 # them against `node dist/cli.js demo --no-open | cat -n`.
 #
@@ -47,36 +49,36 @@ Enter
 # 1. The naive agent: most calls fail.
 Sleep 2.5s
 Hide
-Down@1ms 8
-Sleep 150ms
-Show
-Sleep 66ms
-Hide
-Down@1ms 9
-Sleep 150ms
-Show
-Sleep 2s
-
-# 2. Why: the rule each failing tool call broke.
-Hide
-Down@1ms 19
-Sleep 150ms
-Show
-Sleep 66ms
-Hide
-Down@1ms 19
-Sleep 150ms
-Show
-Sleep 4.5s
-
-# 3. The careful agent on the same calls.
-Hide
 Down@1ms 17
 Sleep 150ms
 Show
 Sleep 66ms
 Hide
 Down@1ms 18
+Sleep 150ms
+Show
+Sleep 2s
+
+# 2. Why: the rule each failing tool call broke.
+Hide
+Down@1ms 22
+Sleep 150ms
+Show
+Sleep 66ms
+Hide
+Down@1ms 22
+Sleep 150ms
+Show
+Sleep 4.5s
+
+# 3. The careful agent on the same calls.
+Hide
+Down@1ms 26
+Sleep 150ms
+Show
+Sleep 66ms
+Hide
+Down@1ms 27
 Sleep 150ms
 Show
 Sleep 3.5s
