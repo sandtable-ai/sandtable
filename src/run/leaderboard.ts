@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { renderHtml } from "../report/html.ts";
@@ -182,18 +182,28 @@ async function exists(p: string): Promise<boolean> {
   return (await stat(p).catch(() => undefined)) !== undefined;
 }
 
-/**
- * Why stored results cannot stand in for this run, or undefined when they can. Results are
- * comparable only under the same domain, k, simulated caller and tasks, and a crashed trial
- * (throttling, expired credentials) is not a result.
- */
-export function staleReason(r: SuiteResult, want: { domain: string; k: number; user: string; taskIds: string[] }): string | undefined {
+/** What a run covers: results are comparable only under the same domain, k, simulated caller and tasks. */
+type RunScope = { domain: string; k: number; user: string; taskIds: string[] };
+
+/** Why results are of another run than `want` (another domain, k, caller or tasks), or undefined when they are of the same one. */
+function otherRun(r: SuiteResult, want: RunScope): string | undefined {
   if (r.domain !== want.domain) return `they are for domain ${r.domain}, not ${want.domain}`;
   if (r.k !== want.k) return `they are for k=${r.k}, not k=${want.k}`;
   if (r.user !== want.user) return `the caller was ${r.user}, not ${want.user}`;
   const had = r.tasks.map((t) => t.id).sort();
   const want_ = [...want.taskIds].sort();
   if (had.length !== want_.length || had.some((id, i) => id !== want_[i])) return "they cover different tasks";
+  return undefined;
+}
+
+/**
+ * Why stored results cannot stand in for this run, or undefined when they can. Results are
+ * comparable only under the same domain, k, simulated caller and tasks, and a crashed trial
+ * (throttling, expired credentials) is not a result.
+ */
+export function staleReason(r: SuiteResult, want: RunScope): string | undefined {
+  const other = otherRun(r, want);
+  if (other) return other;
   const crashed = r.tasks.reduce((n, t) => n + t.trials.filter((tr) => tr.endReason === "error").length, 0);
   if (crashed) return `${crashed} trial(s) crashed`;
   return undefined;
@@ -371,6 +381,50 @@ async function writeRun(dir: string, result: SuiteResult, info: object): Promise
   await writeFileAtomic(path.join(dir, "report.html"), renderHtml(result));
 }
 
+/** A model's crashed runs are kept inside its folder: `crashed/`, then `crashed-2/`, `crashed-3/`… */
+const crashedName = (i: number) => (i === 1 ? "crashed" : `crashed-${i}`);
+
+/** The crashed runs kept in a model's folder, in order. */
+async function crashedDirs(dir: string): Promise<string[]> {
+  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+  const index = (name: string) => Number(name.slice("crashed-".length)) || 1;
+  return entries
+    .filter((e) => e.isDirectory() && /^crashed(-[1-9]\d*)?$/.test(e.name))
+    .map((e) => e.name)
+    .sort((a, b) => index(a) - index(b))
+    .map((name) => path.join(dir, name));
+}
+
+/**
+ * Why the crashed run kept in `dir` is not one of this run, or undefined when it is. A results.json that is missing
+ * or can't be read never matches, so its folder is never removed or replaced.
+ */
+async function otherCrashedRun(dir: string, want: RunScope): Promise<string | undefined> {
+  try {
+    const other = otherRun(JSON.parse(await readFile(path.join(dir, "results.json"), "utf8")) as SuiteResult, want);
+    return other && `whose results are of another run (${other})`;
+  } catch {
+    return "whose results.json can't be read";
+  }
+}
+
+/** The crashed runs in a model's folder: this run's, and the others with why each isn't this run's. */
+async function crashedRuns(dir: string, want: RunScope): Promise<{ same: string[]; other: { dir: string; why: string }[] }> {
+  const same: string[] = [];
+  const other: { dir: string; why: string }[] = [];
+  for (const d of await crashedDirs(dir)) {
+    const why = await otherCrashedRun(d, want);
+    if (why) other.push({ dir: d, why });
+    else same.push(d);
+  }
+  return { same, other };
+}
+
+/** "kept the earlier crashed run in <dir>, whose …" for each crashed run of another run. */
+function keptNote(other: { dir: string; why: string }[]): string {
+  return other.map((o) => `kept the earlier crashed run in ${o.dir}, ${o.why}`).join("; ");
+}
+
 /**
  * Run several agents on one domain under the same simulated users, plus a do-nothing
  * baseline, and rank them by pass^k. Each entry's full results are kept next to the
@@ -446,13 +500,17 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
     }
     const dir = folderOf(entry);
     const file = path.join(dir, "results.json");
-    // A crashed rerun is kept here, beside the stored results, until the model next runs without a crash.
-    const crashedDir = path.join(dir, "crashed");
     const reuse = reused.get(entry);
     if (reuse) {
       const { stored, result } = reuse;
-      // Reused results keep an earlier crashed run beside them: say so, since publishing the folder would ship it.
-      const leftover = (await exists(crashedDir)) ? `an earlier crashed run is still in ${crashedDir}: delete it before publishing this folder` : undefined;
+      // Reused results keep earlier crashed runs beside them: say so, since publishing the folder would ship them.
+      const crashed = await crashedDirs(dir);
+      const leftover =
+        crashed.length === 0
+          ? undefined
+          : crashed.length === 1
+            ? `an earlier crashed run is still in ${crashed[0]}: delete it before publishing this folder`
+            : `earlier crashed runs are still in ${crashed.join(", ")}: delete them before publishing this folder`;
       if (JSON.stringify(result) === JSON.stringify(stored)) opts.onEntry?.(entry.label, "cached", leftover);
       else {
         // The current rules grade the stored conversations differently: rewrite their files. These hold the
@@ -481,23 +539,37 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
     // A crashed trial (credentials, throttling) says nothing about the model: show the row as an
     // error instead of ranking it, and let the next run retry the model.
     const message = crashOf(result);
+    // This run supersedes an earlier crashed run of the same run. A crashed run of another run, such as a full
+    // board's under a quick check, may hold the only copy of paid conversations: it is never removed or replaced.
+    const crashed = await crashedRuns(dir, { domain: domain.name, k, user: user.name, taskIds });
     if (message) {
       // The stored files may be the only copy of paid conversations: a crashed rerun goes beside them, never over them.
+      // It replaces this run's earlier crashed run, or else goes in the first free crashed folder.
+      let crashedDir = crashed.same[0];
+      for (let i = 1; !crashedDir; i++) {
+        const free = path.join(dir, crashedName(i));
+        if (!(await exists(free))) crashedDir = free;
+      }
       await writeRun(crashedDir, result, { ...key, ...info });
-      opts.onEntry?.(entry.label, "failed", `${message}; the crashed run is in ${crashedDir}${(await exists(file)) ? ", and the stored results are kept" : ""}`);
+      const kept = crashed.other.length ? `; ${keptNote(crashed.other)}` : "";
+      opts.onEntry?.(entry.label, "failed", `${message}; the crashed run is in ${crashedDir}${(await exists(file)) ? ", and the stored results are kept" : ""}${kept}`);
       rows.push(errorRow(entry, message));
       continue;
     }
     await writeRun(dir, result, { ...key, ...info });
-    // A good run supersedes an earlier crashed one, which would otherwise be published with these results.
+    // A good run supersedes an earlier crashed one of the same run, which would otherwise be published with these results.
     // A folder that can't be removed (a locked file on Windows) is reported, never fatal: this model's run is saved.
-    const removal = !(await exists(crashedDir))
-      ? undefined
-      : await rm(crashedDir, { recursive: true, force: true, maxRetries: 3 }).then(
-          () => `removed the earlier crashed run in ${crashedDir}`,
-          (err: Error) => `could not remove the earlier crashed run in ${crashedDir}: ${err.message}`,
-        );
-    opts.onEntry?.(entry.label, "ran", removal);
+    const notes: string[] = [];
+    for (const d of crashed.same) {
+      notes.push(
+        await rm(d, { recursive: true, force: true, maxRetries: 3 }).then(
+          () => `removed the earlier crashed run in ${d}`,
+          (err: Error) => `could not remove the earlier crashed run in ${d}: ${err.message}`,
+        ),
+      );
+    }
+    if (crashed.other.length) notes.push(`${keptNote(crashed.other)}: delete ${crashed.other.length === 1 ? "it" : "them"} before publishing this folder`);
+    opts.onEntry?.(entry.label, "ran", notes.length ? notes.join("; ") : undefined);
     rows.push(toRow(entry, result));
   }
 

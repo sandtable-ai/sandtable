@@ -381,6 +381,93 @@ describe("leaderboard", () => {
     expect((await run(broken, true)).seen).toEqual(["cached: undefined"]);
   });
 
+  describe("a crashed run of other tasks, another k or caller", () => {
+    /** The careful agent, except that every `every`th conversation crashes, as throttling would (1: every one). */
+    const flaky = (every: number): AgentAdapter => {
+      const careful = freightScriptedAgent("careful");
+      let n = 0;
+      return {
+        name: "flaky",
+        createSession: async (ctx) => {
+          const crash = ++n % every === 0;
+          const session = await careful.createSession(ctx);
+          return { reply: async (message, callTool) => (crash ? Promise.reject(new Error("throttled")) : session.reply(message, callTool)) };
+        },
+      };
+    };
+    const quick = ["book-at-posted-rate", "negotiate-within-ceiling"];
+    const board = async (dir: string, agent: AgentAdapter, k: number, taskIds?: string[], resume = true) => {
+      const seen: string[] = [];
+      const domain = await loadDomain(example);
+      await runLeaderboard({ domain, entries: [{ label: "Flaky", agent: "flaky" }], user: scriptedUser(), k, taskIds, outDir: dir, resume, resolveAgent: async () => agent, onEntry: (_l, status, note) => seen.push(`${status}: ${note}`) });
+      return seen;
+    };
+    const files = async (dir: string) => Object.fromEntries(await Promise.all((await readdir(dir)).sort().map(async (f) => [f, await readFile(path.join(dir, f), "utf8")])));
+    const results = async (dir: string) => JSON.parse(await readFile(path.join(dir, "results.json"), "utf8")) as { k: number; tasks: { trials: { endReason: string }[] }[] };
+
+    it("is kept by a good quick check of the same model, which says so", async () => {
+      const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+      const crashed = path.join(dir, "flaky", "crashed");
+      // A full board whose model has no stored results crashes partway: its good trials are only in crashed/.
+      expect((await board(dir, flaky(5), 2))[0]).toMatch(/^failed: 20 of 100 trial\(s\) crashed: throttled; the crashed run is in .*crashed$/);
+      const full = await files(crashed);
+      expect(await board(dir, flaky(Infinity), 1, quick)).toEqual([
+        `ran: kept the earlier crashed run in ${crashed}, whose results are of another run (they are for k=2, not k=1): delete it before publishing this folder`,
+      ]);
+      expect(await files(crashed)).toEqual(full);
+      expect((await results(path.join(dir, "flaky"))).tasks).toHaveLength(2);
+      // While the quick check's results are reused, the output still points at the crashed run beside them.
+      expect(await board(dir, flaky(Infinity), 1, quick)).toEqual([`cached: an earlier crashed run is still in ${crashed}: delete it before publishing this folder`]);
+    });
+
+    it("is never overwritten by a crashing quick check, which goes beside it", async () => {
+      const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+      const [crashed, crashed2] = [path.join(dir, "flaky", "crashed"), path.join(dir, "flaky", "crashed-2")];
+      await board(dir, flaky(5), 2);
+      const full = await files(crashed);
+      const besideFull = `kept the earlier crashed run in ${crashed}, whose results are of another run (they are for k=2, not k=1)`;
+      expect(await board(dir, flaky(1), 1, quick)).toEqual([`failed: 2 of 2 trial(s) crashed: throttled; the crashed run is in ${crashed2}; ${besideFull}`]);
+      expect(await files(crashed)).toEqual(full);
+      expect(await results(crashed2)).toMatchObject({ k: 1, tasks: [{}, {}] });
+      // The same quick check crashing again replaces its own crashed run, and still leaves the full board's alone.
+      await writeFile(path.join(crashed2, "results.json"), JSON.stringify({ ...(await results(crashed2)), stale: true }));
+      expect(await board(dir, flaky(1), 1, quick)).toEqual([`failed: 2 of 2 trial(s) crashed: throttled; the crashed run is in ${crashed2}; ${besideFull}`]);
+      expect(await results(crashed2)).not.toHaveProperty("stale");
+      expect(await files(crashed)).toEqual(full);
+      // A good quick check removes only its own crashed run.
+      expect(await board(dir, flaky(Infinity), 1, quick)).toEqual([`ran: removed the earlier crashed run in ${crashed2}; ${besideFull}: delete it before publishing this folder`]);
+      await expect(stat(crashed2)).rejects.toThrow();
+      expect(await files(crashed)).toEqual(full);
+      // A forced rerun that crashes goes beside both the stored results and the full board's crashed run.
+      expect(await board(dir, flaky(1), 1, quick, false)).toEqual([`failed: 2 of 2 trial(s) crashed: throttled; the crashed run is in ${crashed2}, and the stored results are kept; ${besideFull}`]);
+      expect(await board(dir, flaky(1), 1, quick)).toEqual([`cached: earlier crashed runs are still in ${crashed}, ${crashed2}: delete them before publishing this folder`]);
+      expect(await files(crashed)).toEqual(full);
+    });
+
+    it("of the same run is replaced by a crashing rerun and removed by a good one, as before", async () => {
+      const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+      const crashed = path.join(dir, "flaky", "crashed");
+      await board(dir, flaky(5), 2);
+      expect(await board(dir, flaky(1), 2)).toEqual([`failed: 100 of 100 trial(s) crashed: throttled; the crashed run is in ${crashed}`]);
+      expect((await results(crashed)).tasks.flatMap((t) => t.trials).every((t) => t.endReason === "error")).toBe(true);
+      expect(await board(dir, flaky(Infinity), 2)).toEqual([`ran: removed the earlier crashed run in ${crashed}`]);
+      await expect(stat(crashed)).rejects.toThrow();
+    });
+
+    it("is never removed or overwritten when its results.json can't be read", async () => {
+      const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+      const [crashed, crashed2] = [path.join(dir, "flaky", "crashed"), path.join(dir, "flaky", "crashed-2")];
+      await board(dir, flaky(5), 2);
+      await writeFile(path.join(crashed, "results.json"), '{"domain": "freight-carrier-sa');
+      const corrupt = await files(crashed);
+      const unread = `kept the earlier crashed run in ${crashed}, whose results.json can't be read`;
+      expect(await board(dir, flaky(5), 2)).toEqual([`failed: 20 of 100 trial(s) crashed: throttled; the crashed run is in ${crashed2}; ${unread}`]);
+      expect(await files(crashed)).toEqual(corrupt);
+      expect(await board(dir, flaky(Infinity), 2)).toEqual([`ran: removed the earlier crashed run in ${crashed2}; ${unread}: delete it before publishing this folder`]);
+      expect(await files(crashed)).toEqual(corrupt);
+    });
+  });
+
   it("rejects two labels that would share a folder before running anything", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
     const entries = [
