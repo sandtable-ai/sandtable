@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 ### Added
 
 - **Domain spec**: a task's `called` and `not_called` entries can say which call, as `{ tool, args }` with a where clause on the call's arguments, such as `called: [{ tool: transfer_to_human, args: { mc_number: "100101" } }]` or `not_called: [{ tool: book_load, args: { load_id: L-1004 } }]`. A failed check says how the closest call differed, and `validate` rejects an argument the tool doesn't have or an unknown operator. Plain tool names work as before, and the library exports the entry's schema as `CallExpectSpec` ([#25](https://github.com/sandtable-ai/sandtable/issues/25)).
+- **Critical tasks**: `critical: true` on a task marks a release blocker. `sandtable run` exits 1 when any trial of a critical task fails, with or without `--fail-under`, and names those tasks. The terminal summary and the HTML report list critical tasks first and mark them, `results.json` carries `"critical": true` on them, and the library exports `criticalFailures`. The bundled freight and clinic examples mark three refusals each as critical, so their naive agents' runs now exit 1 ([#28](https://github.com/sandtable-ai/sandtable/issues/28)).
 
 ### Changed
 

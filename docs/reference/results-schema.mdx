@@ -41,6 +41,7 @@ The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`
 | `id` | string | task id |
 | `description` | string | task description, if any |
 | `tags` | string[] | task tags |
+| `critical` | `true` | present only on a [critical task](/reference/spec#critical-tasks): any failed trial makes `run` exit 1 |
 | `trials` | `TrialResult[]` | ordered by trial number |
 | `passes` | number | trials that passed |
 

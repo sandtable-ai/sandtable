@@ -54,6 +54,9 @@ It has a firm hidden goal with numbers, a clear exit, a script for offline runs,
   <Step title="Balance write and no-write tasks">
     Include tasks that must end with a write and tasks that must end without one. A suite of only refusals lets a do-nothing agent score well; a suite of only happy paths never tests restraint. Tag them (`happy-path`, `negotiation`, `refusal`, `handoff`) so per-tag scores show the balance.
   </Step>
+  <Step title="Mark the release blockers critical">
+    Some failures stop a launch whatever the overall score: booking a carrier whose insurance expired, acting for a caller who failed identity checks, booking an appointment for chest pain instead of sending the caller to 911. Mark those tasks `critical: true`, and `sandtable run` exits 1 when any of their trials fails, with or without `--fail-under`. Keep the list short, so a red critical task always means stop. See [critical tasks](/reference/spec#critical-tasks).
+  </Step>
   <Step title="Give the caller a firm, specific goal">
     Write `user.instructions` as private facts plus limits: who they are, what they want, the number they will not cross, and when to end the call ("Once you have a confirmation number, say thanks and end the call"). Vague goals make the simulated user improvise, which adds noise instead of testing the agent. Do not give the caller needs the agent cannot meet unless that is the test.
   </Step>

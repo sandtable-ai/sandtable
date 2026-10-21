@@ -59,6 +59,7 @@ npx sandtable-ai run ./sandtable --agent http://localhost:8787/step -k 4 --fail-
 - Runs with a model-backed agent or user cost money: say how many trials (tasks × k) and get the engineer's go-ahead. For Claude, the terminal shows an estimated cost at list prices after each run; use it to size the next one.
 - `-t, --tasks a,b` reruns only some tasks. `-c, --concurrency <n>` (default 4) lowers parallelism when the API rate-limits.
 - `--fail-under <pct>` exits 1 when pass^k (k = `-k`) is below the percentage. Put it in CI after `validate --strict` and `lint`.
+- `run` also exits 1, with or without `--fail-under`, when any trial of a `critical: true` task fails, and names those tasks. Reports list critical tasks first.
 - A scripted user cannot react, so a scripted run with a real agent tests wiring and graders, not conversation. Failures there can be the script's fault.
 - To see sandtable work before touching a customer domain: `npx sandtable-ai demo` replays the bundled freight example offline (`--no-open` keeps the report closed). `demo --live` uses Claude as both sides, and costs money.
 

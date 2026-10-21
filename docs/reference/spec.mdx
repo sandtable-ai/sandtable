@@ -193,6 +193,7 @@ tasks:
     description: Shown in reports.
     persona: haggler
     tags: [negotiation, refusal]
+    critical: true                     # optional: a release blocker, see below
     max_turns: 12                      # overrides the domain default
     user:
       instructions: |                  # hidden goal + private facts; the agent never sees this
@@ -232,6 +233,18 @@ The simulated user ends the conversation by emitting `###STOP###` when its goal 
 The scripted user (`--user scripted`) replays `user.script` line by line, then stops. A task without `script` falls back to `opening` alone; a task with neither cannot run with the scripted user.
 
 Tasks also accept `review` and `source`, like invariants.
+
+### Critical tasks
+
+`critical: true` marks a task as a release blocker, such as booking a carrier whose insurance expired or cancelling an appointment for a caller who failed identity checks. `sandtable run` exits 1 when any trial of a critical task fails, with or without `--fail-under` and whatever the score, and says which ones:
+
+```text
+✗ 1 critical task(s) did not pass every trial: expired-insurance 3/4
+```
+
+Reports list critical tasks first and mark them, and the terminal summary adds a line such as `critical 2 of 3 passed every trial`. In `results.json`, each critical task carries `"critical": true`.
+
+A critical refusal guards against the harmful action, not against doing nothing: the do-nothing `noop` agent passes it. Keep gating on the score with `--fail-under` too. Until infrastructure errors are reported separately ([#27](https://github.com/sandtable-ai/sandtable/issues/27)), a trial that ended in an error counts as failed here as everywhere else.
 
 ## Related
 

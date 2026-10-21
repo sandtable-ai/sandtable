@@ -8,7 +8,7 @@ import { Command, InvalidArgumentError } from "commander";
 import { freightScriptedAgent } from "./demo/freight-agents.ts";
 import { formatPercent, renderTerminal } from "./report/terminal.ts";
 import { renderHtml } from "./report/html.ts";
-import { everyTrialFailed, runSuite, type SuiteResult } from "./run/suite.ts";
+import { criticalFailures, everyTrialFailed, runSuite, type SuiteResult } from "./run/suite.ts";
 import { changedVerdicts, RegradeError, regradeSuite } from "./run/regrade.ts";
 import { parseResults } from "./run/read.ts";
 import { writeFileAtomic } from "./run/write.ts";
@@ -322,6 +322,12 @@ withProviderFlags(program
     console.log(`\n  results: ${path.join(out, "results.json")}${o.html ? `\n  report:  ${path.join(out, "report.html")}` : ""}`);
     if (failIfNothingGraded(result)) return;
     if (o.open && o.html) openInBrowser(path.join(out, "report.html"));
+    // A critical task is a release blocker: any failed trial fails the run, with or without --fail-under.
+    const blockers = criticalFailures(result);
+    if (blockers.length) {
+      console.error(`\n✗ ${blockers.length} critical task(s) did not pass every trial: ${blockers.map((t) => `${t.id} ${t.passes}/${t.trials.length}`).join(", ")}`);
+      process.exitCode = 1;
+    }
     const score = result.passHat[String(o.trials)] ?? 0;
     if (o.failUnder !== undefined && !(score >= o.failUnder)) {
       console.error(`\n✗ pass^${o.trials} ${formatPercent(score)} is below --fail-under ${formatPercent(o.failUnder)}`);

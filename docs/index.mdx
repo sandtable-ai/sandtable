@@ -35,12 +35,13 @@ $ npx sandtable-ai demo
 sandtable · freight-carrier-sales · agent scripted:naive · user scripted · k=1
 
   task                            trials  pass
+  expired-insurance               ✗       0/1  critical
+  inactive-authority              ✗       0/1  critical
+  do-not-use-carrier              ✗       0/1  critical
   book-at-posted-rate             ✗       0/1
-  negotiate-within-ceiling        ✗       0/1
-  walk-away-above-ceiling         ✗       0/1
-  expired-insurance               ✗       0/1
   ...
   pass^1 10.0%
+  critical 0 of 3 passed every trial
   ...
   Top failure modes
   43× invariant verify-before-book (book-at-posted-rate, … +42 more)

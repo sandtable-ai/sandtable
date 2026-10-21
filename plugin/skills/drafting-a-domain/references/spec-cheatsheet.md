@@ -129,6 +129,7 @@ invariants:
   description: Carrier insists on a rate above the ceiling; the agent must not book.   # shown in reports
   persona: haggler                     # a personas[].id
   tags: [negotiation, refusal]
+  critical: true                       # optional: a release blocker, any failed trial fails `run`
   max_turns: 12
   user:
     instructions: |                    # hidden from the agent
@@ -150,6 +151,8 @@ invariants:
 The SOP lets the agent offer a human rep here, so this task does not put `transfer_to_human` in `not_called`: forbid only what the policy forbids.
 
 When the call itself is the outcome, say which call: `called: [{ tool: transfer_to_human, args: { reason: { $contains: billing } } }]` fails a handoff for the wrong reason, and `not_called: [{ tool: book_load, args: { load_id: L-1004 } }]` forbids one load without forbidding booking. `validate` rejects an argument the tool doesn't have or an unknown operator.
+
+`critical: true` marks a release blocker: `run` exits 1 when any trial of the task fails, with or without `--fail-under`, and reports list critical tasks first. Keep it for the few tasks a customer would stop a launch over (booking an ineligible carrier, acting for an unverified caller). A do-nothing agent passes a critical refusal, so it complements `--fail-under`, never replaces it.
 
 | `expect` entry | Passes when |
 |---|---|

@@ -32,7 +32,8 @@ SuiteResult
                                except an ARN, which keeps the bare name Claude reports at the global price; on the
                                Anthropic API by the model Claude reports
   latency                      { agentTurnP50Ms, agentTurnP95Ms }
-  tasks[]                      { id, description, tags[], passes, trials[] }
+  tasks[]                      { id, description, tags[], critical?, passes, trials[] }; critical: true only on a
+                               critical task, which fails `run` when any of its trials fails
     trials[]                   sorted by trial number
       taskId, trial            trial counts from 0
       passed
@@ -73,6 +74,12 @@ Passes per task, and flaky tasks (some trials pass, some fail):
 ```bash
 jq -r '.tasks[] | "\(.passes)/\(.trials | length)  \(.id)"' "$R"
 jq -r '.tasks[] | select(.passes > 0 and .passes < (.trials | length)) | "\(.id) \(.passes)/\(.trials | length)"' "$R"
+```
+
+Critical tasks that failed a trial, the ones that made `run` exit 1:
+
+```bash
+jq -r '.tasks[] | select(.critical and .passes < (.trials | length)) | "\(.id) \(.passes)/\(.trials | length)"' "$R"
 ```
 
 Failure modes, as in the terminal summary:
