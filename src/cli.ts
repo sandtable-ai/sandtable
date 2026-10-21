@@ -27,6 +27,15 @@ import { bedrockRegion, bedrockUse, ModelsFile, pricesFile, renderLeaderboardMar
 import { z } from "zod";
 import YAML from "yaml";
 
+// A reader that stops early (`| head`, `less` quit before the end) closes the pipe: stop quietly, as other
+// CLIs do, instead of crashing with an EPIPE stack trace. Any other write error still crashes.
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EPIPE") process.exit(0);
+    throw err;
+  });
+}
+
 // The examples ship in the npm package, one level above both src/cli.ts and dist/cli.js.
 const BUNDLED_EXAMPLES = fileURLToPath(new URL("../examples/", import.meta.url));
 const EXAMPLE = path.join(BUNDLED_EXAMPLES, "freight");

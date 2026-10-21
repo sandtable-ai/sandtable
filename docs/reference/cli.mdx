@@ -264,5 +264,5 @@ The hash covers what sandtable's own adapters give a model. A custom agent adapt
 
 | Code | When |
 |---|---|
-| `0` | success |
+| `0` | success, or the output was piped into a reader that stopped early, such as `head` or a `less` quit before the end: the command stops quietly there, without finishing |
 | `1` | an error (invalid domain, unknown agent or user spec, missing credentials or package), `validate --strict` with pending items, `lint` errors, `run` below `--fail-under`, a `run` or `demo --live` in which every trial ended in an error (missing credentials or package, an unreachable agent), or a `leaderboard` on which every model failed or crashed |
