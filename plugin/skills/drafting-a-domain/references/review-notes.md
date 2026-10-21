@@ -138,7 +138,12 @@ Each one quotes the SOP in `source.quote`. For each:
    - `never_disclose`: should a legitimately agreed value be allowed through `unless`?
 4. **The data supports it.** Every field it reads must be in the seed rows, or the rule silently never fires.
 
-`Soft rule` comments are rules about wording, tone or read-backs that tool calls cannot show. Keep them as notes for the engineer; they are not graded, and they are not `soft: true` invariants, which tool calls do check.
+`Soft rule, not checked` comments list every rule of the SOP that no drafted invariant checks, with its quote and a `why:` line. They are not graded, and they are not `soft: true` invariants, which tool calls do check. Read them before the invariants: they are where the draft is blind.
+
+- `about what the agent says`: wording, questions, read-backs. Keep as a note.
+- `needs today's date`, `depends on a fact no record holds`, `needs an either/or condition`, `needs a computed value`, `needs either of several tools first`: a real rule the spec or the records can't express yet. Tell the engineer: it may be the rule the customer cares about most, such as who may cancel without a fee. Sometimes a field fixes it (a `has_doctors_note` on the appointment makes a `require` possible); otherwise someone checks it by hand.
+- `its drafted invariant was dropped (...)`: the draft tried and failed validation. Fix the invariant by hand if the reason is a wrong name.
+- `not classified by the draft`: the drafting model listed the rule but mapped it nowhere. Decide yourself.
 
 ## Drafted tasks
 

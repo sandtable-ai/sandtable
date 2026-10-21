@@ -20,7 +20,7 @@ import { scriptedUser } from "./sim/scripted.ts";
 import { leaderboardAgent, resolveAgent, resolveUser } from "./sim/resolve.ts";
 import { appendRows, appendToDomainList } from "./init/merge.ts";
 import { draftFromOpenApi, openApiProblem } from "./init/openapi.ts";
-import { draftInvariantsFromSop, knownFields } from "./init/sop.ts";
+import { draftInvariantsFromSop, knownFields, softRuleComments } from "./init/sop.ts";
 import { draftTasksFromTranscripts } from "./init/transcripts.ts";
 import { DOMAIN_FILE, isPolicyPlaceholder, POLICY_PLACEHOLDER, renderDraft, TASKS_PLACEHOLDER, writeDraft } from "./init/render.ts";
 import { DomainError, domainWarnings, loadDomain, pendingReview } from "./spec/load.ts";
@@ -232,8 +232,7 @@ withProviderFlags(program
         fields: knownFields(domain, fields),
         claude: { ...providerOpts(o), ...(o.model ? { model: o.model } : {}) },
       });
-      const soft = res.softRules.map((r) => ` Soft rule (not checkable from tool calls yet): ${r.rule}\n   "${r.quote}"`).join("\n");
-      const file = await appendToDomainList(o.out, "invariants", res.invariants, soft || undefined);
+      const file = await appendToDomainList(o.out, "invariants", res.invariants, softRuleComments(res.softRules));
       console.log(`  ${res.invariants.length} invariant(s) drafted (review: pending), ${res.softRules.length} soft rule(s) noted in ${file}`);
       for (const w of res.warnings) console.log(`  ! ${w}`);
     }

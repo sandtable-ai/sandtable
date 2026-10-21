@@ -104,7 +104,17 @@ Claude reads the SOP alongside the domain's tools, params, tables and known fiel
 - Every invariant must **quote** the SOP. A quote that does not appear verbatim gets a warning.
 - Proposals that reference an unknown tool, param, table or field, or that are incomplete, are **dropped**, and the reason is printed.
 - Survivors are appended to the domain (existing comments are kept) with `review: pending` and `source: { file, quote }`.
-- Rules that cannot be checked from tool calls and records (wording, tone, read-backs) are written as **soft rule** comments, for the planned LLM-judged checks ([#16](https://github.com/sandtable-ai/sandtable/issues/16)). They are notes, not `soft: true` invariants.
+- Every rule the SOP states ends up as an invariant, a **soft rule** comment, or both. Claude first lists the SOP's rules, then maps each one. A rule that no invariant checks, or checks only in part, is written as a comment after the invariants, with its quote and why it isn't checked:
+
+  ```yaml
+    # Soft rule, not checked: A patient may cancel without a fee up to 24 hours before the visit, or later with a doctor's note.
+    #   "Cancellations are free until 24 hours before the appointment, or later with a doctor's note."
+    #   why: needs today's date; depends on a fact no record holds; needs an either/or condition: no record says whether there is a note
+  ```
+
+  The reason names what is missing: `needs today's date` (see [#38](https://github.com/sandtable-ai/sandtable/issues/38)), `depends on a fact no record holds`, `needs either of several tools first` (a `before` takes one first tool), `needs an either/or condition`, `needs a computed value`, or `about what the agent says` (wording, questions, read-backs, for the planned LLM-judged checks, [#16](https://github.com/sandtable-ai/sandtable/issues/16)). Read these first: they are the rules you check by hand, or rewrite your domain to make checkable, such as adding a `has_doctors_note` field.
+- A rule whose drafted invariant was dropped is listed too, with the reason it was dropped. A rule Claude listed but mapped to neither is listed as `not classified by the draft`, with a warning.
+- Soft rule comments are notes. They are not `soft: true` [soft invariants](/reference/spec#soft-invariants), which tool calls do check.
 
 The SOP also becomes `policy.md` when the domain still has the placeholder. Pass `--model` to choose the drafting model (default `claude-opus-5-5`).
 
