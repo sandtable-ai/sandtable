@@ -45,9 +45,14 @@ Accept an item by changing its `review: pending` to `review: accepted` (or delet
     - Is it as strict as the SOP, and no stricter? An over-strict rule fails correct agents in every task.
     - Does it point at the right table, field and tool argument?
     - Does it need an exception, such as `unless` on a `never_disclose` for the value the agent legitimately agreed to?
+    - Does it guard the decision or only a step? A rule that requires a lookup the agent can skip while still deciding correctly fails correct agents: make it `soft: true`, or check the decision itself.
   </Accordion>
   <Accordion title="Tasks">
+    - Does it keep its transcript's facts and outcome: the caller, their membership, the item, the dates, and whether the request should succeed?
+    - Does every row it touches agree with the transcript, such as an order that holds the item the caller asks about?
+    - Do the caller's instructions state every fact the agent will ask about or the policy makes decisive, such as a receipt or a purchase date?
     - Does the expected end state follow the **policy**, even where the human rep in the transcript did something else?
+    - Where the policy is ambiguous, ask the customer, and until then grade only what every reading agrees on.
     - Is the hidden goal firm enough to test something ("will not go below $1,600"), and does it avoid needs the agent cannot meet?
     - Are seed rows and names fictional?
     - Does `sandtable lint` say it is ready, solvable and non-vacuous?

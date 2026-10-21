@@ -137,6 +137,7 @@ Each one quotes the SOP in `source.quote`. For each:
    - `never`: does `when` narrow it to exactly the forbidden case? Without `when`, the tool may never be called at all.
    - `never_disclose`: should a legitimately agreed value be allowed through `unless`?
 4. **The data supports it.** Every field it reads must be in the seed rows, or the rule silently never fires.
+5. **It guards a decision, not a step.** "Check the customer's tier with `get_tier_benefits` before a return" drafted as `before: { first: get_tier_benefits, then: approve_return, same: [] }` fails an agent that read the tier from the account it already looked up and applied the right rule. When the agent can reach the right decision without the step, make the rule `soft: true` (reported, never failing), or check the decision itself with a `require` on the fields that make it right. Do the same when `same` can't tie the two calls together because the tools share no argument: the rule then only proves that some lookup happened.
 
 `Soft rule, not checked` comments list every rule of the SOP that no drafted invariant checks, with its quote and a `why:` line. They are not graded, and they are not `soft: true` invariants, which tool calls do check. Read them before the invariants: they are where the draft is blind.
 
@@ -147,8 +148,12 @@ Each one quotes the SOP in `source.quote`. For each:
 
 ## Drafted tasks
 
-Each one quotes the transcript in `source`. For each:
+Each one quotes the transcript in `source`. Read each task next to its own transcript. For each:
 
+- **It keeps its transcript's facts and outcome**: who the caller is, their tier or membership, the item, the dates, and whether the request should succeed. Take most care where it reuses a row another task created, such as a customer with the same name: a draft can turn one caller's approved return into another's refusal.
+- **Every row it touches agrees with the transcript.** The order holds the item the caller talks about, at the price and date they give. A task about adding a rain jacket to a refund, on an order that holds only hiking boots, fails the careful agent that notices.
+- **The caller's instructions state every fact the agent will ask about, or that the SOP makes decisive**, such as a receipt, the original packaging or the purchase date. Where they are silent, the simulated caller says "I'm not sure" instead of guessing, so the agent can't reach the expected outcome and the task fails in every trial, measuring the gap instead of the agent.
+- **An ambiguous case in the SOP is a question for the customer.** When the SOP doesn't say which section covers a case, such as a "returns" section, a "refunds" section and a caller who wants to "return it for a refund", ask the engineer to ask the customer. Until they answer, grade only what every reading agrees on: here, a refund of at most the item's price to the original payment method, with no `called` for the step one reading skips.
 - The expected end state follows the **SOP**. If the human rep booked above the ceiling, the task expects no booking above it.
 - `user.instructions` holds a hidden goal with hard limits and a stop condition (see the `writing-good-tasks` skill).
 - Names, companies, phone numbers and emails are fictional. Short identifiers such as order or MC numbers may be kept, and must match seed rows.
