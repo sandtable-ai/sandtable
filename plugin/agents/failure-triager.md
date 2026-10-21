@@ -29,6 +29,9 @@ Return, in this order:
 2. A table, most frequent root cause first: `task#trial | owner | check that failed | evidence (quoted event) | proposed fix`.
 3. Counts per owner.
 4. Proposed fixes as concrete edits: for the agent, the prompt or code change; for the task spec, the YAML diff and the SOP sentence that justifies it; for the simulated user, the rewritten `user.instructions`; for the harness, the setting or adapter change.
-5. The exact command that would confirm the fixes, with the run's agent and k: `npx sandtable-ai run <domain> --agent <agent> --tasks <ids> -k <k>`.
+5. The exact command that would confirm each group of fixes, chosen per fix:
+   - a fix that changes only grading (an invariant, an `expect` entry, a `never_disclose` rule): `npx sandtable-ai regrade <results.json> -d <domain> -o <dir>`, which re-scores the stored trials without a model call;
+   - a fix that changes what the agent or the caller is given (`policy.md`, a tool, a task's `user` block, persona, `given.context` or turn limit, the agent's prompt or code): `npx sandtable-ai run <domain> --agent <agent> --tasks <ids> -k <k>`, with the run's agent and k.
+   When both kinds apply, list the regrade first: `regrade` refuses the whole run once any task's caller prompt changed.
 
 Never propose deleting a failing task, loosening an expectation the SOP supports, or lowering k or `--fail-under` to raise the score.

@@ -56,7 +56,7 @@ The **`failure-triager`** subagent reads failing trials outside the main convers
   - a table of task, trial, owner, failed check, evidence and proposed fix
   - counts per owner
   - concrete edits
-  - the `run` command that would confirm them
+  - the command that would confirm them: `regrade` for a fix that changes only grading, which calls no model, and a `run` of the affected tasks for anything the agent or the caller sees
 - **Limits:** it only reads. It has `Read`, `Grep`, `Glob` and `Bash`, doesn't edit files, and doesn't run anything that calls a model. It never proposes deleting a failing task, loosening an expectation the SOP supports, or lowering k or `--fail-under`.
 
 ### What runs without asking
@@ -170,9 +170,10 @@ This session drafts a domain from the fictional freight brokerage's sources that
   <Step title="Triage the failures">
     > Why did those trials fail?
 
-    With more than a few failing trials, Claude hands `results.json` and the domain directory to `failure-triager`. It gets back the owner table, the counts and the proposed edits. It changes the agent's prompt or code for failures owned by the agent, and proposes a YAML change citing the SOP for task-spec failures, which you approve. Then it reruns the affected tasks at the same k:
+    With more than a few failing trials, Claude hands `results.json` and the domain directory to `failure-triager`. It gets back the owner table, the counts and the proposed edits. It changes the agent's prompt or code for failures owned by the agent, and proposes a YAML change citing the SOP for task-spec failures, which you approve. Then it confirms them. A fix to an invariant or an expectation is regraded for free: `regrade` re-scores the stored trials without a model call. A fix to what the agent or the caller is given needs a rerun of the affected tasks at the same k, and Claude fixes grading and regrades before it changes a caller's instructions, since `regrade` refuses a run once any caller prompt changed:
 
     ```bash
+    npx sandtable-ai regrade .sandtable/runs/<run>/results.json -d examples/freight -o .sandtable/runs/regraded
     npx sandtable-ai run examples/freight --agent http://localhost:8787/step --tasks walk-away-above-ceiling,expired-insurance -k 4
     ```
   </Step>
