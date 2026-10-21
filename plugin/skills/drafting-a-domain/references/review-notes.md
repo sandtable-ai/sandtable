@@ -148,6 +148,7 @@ Each one quotes the transcript in `source`. For each:
 - `user.instructions` holds a hidden goal with hard limits and a stop condition (see the `writing-good-tasks` skill).
 - Names, companies, phone numbers and emails are fictional. Short identifiers such as order or MC numbers may be kept, and must match seed rows.
 - The seed rows added for it are plausible and do not change what other tasks expect.
+- A `# TODO(review):` comment above it means a row it reuses contradicts its transcript (another membership level, status or order under the same name). Read the transcript: give the task its own row with new IDs when the transcript is about another record, or correct the task when the draft changed the transcript's facts. Then delete the comment.
 - It is not a near-duplicate of a task you already have.
 
 ## Accepting

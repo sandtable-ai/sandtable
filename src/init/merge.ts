@@ -6,14 +6,15 @@ import type { Invariant, Persona, Task } from "../spec/schema.ts";
 
 /**
  * Append drafted items to a list in a domain, editing the YAML document in place so
- * existing comments and formatting survive. Follows `key: ./file.yaml` includes.
- * Returns the file that was edited.
+ * existing comments and formatting survive. Follows `key: ./file.yaml` includes. `notes` holds review
+ * notes by item id, written as `# TODO(review):` comments above the item. Returns the file that was edited.
  */
 export async function appendToDomainList(
   domainDir: string,
   key: "invariants" | "tasks" | "personas",
   items: (Invariant | Task | Persona)[],
   trailingComment?: string,
+  notes: Record<string, string[]> = {},
 ): Promise<string> {
   const main = path.join(domainDir, DOMAIN_FILE);
   const mainDoc = YAML.parseDocument(await readFile(main, "utf8"));
@@ -53,6 +54,8 @@ export async function appendToDomainList(
         pair.value.flow = true;
       }
     }
+    const itemNotes = Object.hasOwn(notes, item.id) ? notes[item.id]! : [];
+    if (itemNotes.length) node.commentBefore = itemNotes.map((n) => ` TODO(review): ${n}`).join("\n");
     list.items.push(node);
   }
   if (trailingComment) list.comment = [list.comment, trailingComment].filter(Boolean).join("\n");
