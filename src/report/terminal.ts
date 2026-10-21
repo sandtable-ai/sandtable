@@ -1,3 +1,4 @@
+import { comparisonOf, type Comparison, type TaskChange } from "../run/compare.ts";
 import { criticalFailures, type SoftScore, type SuiteResult } from "../run/suite.ts";
 import { totalTokens, type UsageByModel } from "../run/usage.ts";
 
@@ -56,7 +57,11 @@ export function softLine(x: SoftScore): string {
   return `${formatPercent(x.rate).padStart(6)}  ${dim(`${x.broken} of ${x.applied} ${x.tool ? `trials that called ${x.tool}` : "trials"}`)}`;
 }
 
-export function renderTerminal(r: SuiteResult): string {
+/**
+ * The run's summary. A run compared with a baseline ends with what changed since; `baseline` names the
+ * file it came from (else the block names the baseline's run id).
+ */
+export function renderTerminal(r: SuiteResult, opts: { baseline?: string } = {}): string {
   const lines: string[] = [];
   lines.push(bold(`sandtable · ${r.domain}`) + dim(` · agent ${r.agent} · user ${r.user} · k=${r.k}`));
   if (r.pendingReview?.length) {
@@ -120,5 +125,66 @@ export function renderTerminal(r: SuiteResult): string {
       lines.push(dim(clip(`     e.g. ${m.example}`, WIDTH)));
     }
   }
+
+  const comparison = comparisonOf(r);
+  if (comparison) lines.push("", ...renderComparison(comparison, opts.baseline));
   return lines.join("\n");
+}
+
+const CHANGE_MARK: Partial<Record<TaskChange, string>> = { broken: red("✗"), worse: red("↓"), fixed: green("✓"), better: green("↑") };
+
+/** "(−90.0 pts)", "(+2.5 pts)" or "(no change)" at the precision the percentages are shown. */
+function pointsDelta(before: number, after: number): string {
+  if (Number.isNaN(before) || Number.isNaN(after)) return "";
+  const pts = ((after - before) * 100).toFixed(1);
+  if (Number(pts) === 0) return dim("(no change)");
+  return pts.startsWith("-") ? red(`(−${pts.slice(1)} pts)`) : green(`(+${pts} pts)`);
+}
+
+/**
+ * What changed since the baseline, regressions first: one line per task whose result moved, the added,
+ * removed and unchanged tasks counted on a line each, then pass^1 and pass^k before and after.
+ */
+function renderComparison(c: Comparison, source: string | undefined): string[] {
+  const b = c.baseline;
+  const lines = [bold(`  Compared with ${source ?? "the baseline run"}`), dim(`  run ${b.runId} · started ${b.startedAt}`)];
+  // The agent, the caller and k are this run's (in the first line of the summary) unless a line says otherwise.
+  for (const d of c.differences) lines.push(`  ${yellow("!")} ${clip(d, WIDTH - 4)}`);
+  if (!c.differences.length) lines.push(dim("  same agent, simulated user and k"));
+
+  const moved = c.tasks.filter((d) => CHANGE_MARK[d.change]);
+  const frac = (x?: { passes: number; trials: number }) => (x ? `${x.passes}/${x.trials}` : "–");
+  const fracs = moved.map((d) => `${frac(d.before)} → ${frac(d.after)}`);
+  const fracWidth = Math.max(0, ...fracs.map((f) => f.length));
+  // "  ✗ broken  <id>  1/1 → 0/1": the id column takes what the label and the fractions leave of 80.
+  const idWidth = Math.min(Math.max(0, ...moved.map((d) => d.id.length)), WIDTH - 2 - 2 - 7 - 1 - 2 - fracWidth);
+  if (moved.length) lines.push("");
+  moved.forEach((d, i) => {
+    const regressed = d.change === "broken" || d.change === "worse";
+    const after = regressed ? red(fracs[i]!) : green(fracs[i]!);
+    lines.push(`  ${CHANGE_MARK[d.change]} ${d.change.padEnd(7)} ${clip(d.id, idWidth).padEnd(idWidth)}  ${after}`);
+  });
+  const ids = (change: TaskChange) => c.tasks.filter((d) => d.change === change).map((d) => d.id);
+  // Added tasks that fail come first: they are new failures too, with nothing to compare them with.
+  const failing = c.tasks.filter((d) => d.change === "added" && d.after!.passes < d.after!.trials).map((d) => d.id);
+  const added = [...failing, ...ids("added").filter((id) => !failing.includes(id))];
+  const removed = ids("removed");
+  const same = ids("same").length;
+  if (added.length) {
+    const head = `  + ${added.length} added${failing.length ? `, ${failing.length} failing` : ""} `;
+    lines.push(`${head.replace(/\d+ failing/, (m) => red(m))}${dim(fitList(added, WIDTH - head.length))}`);
+  }
+  if (removed.length) lines.push(`  − ${removed.length} only in the baseline ${dim(fitList(removed, WIDTH - 27 - String(removed.length).length))}`);
+  if (same) lines.push(dim(`  = ${same} unchanged`));
+
+  lines.push("");
+  if (c.shared === 0) lines.push(dim("  no task ran in both runs, so there is no pass^k to compare"));
+  else {
+    if (!c.sameTasks) lines.push(dim(`  over the ${c.shared} task${c.shared === 1 ? "" : "s"} both runs ran:`));
+    const shown = c.passHat.filter((p) => p.j === 1 || p.j === c.passHat.length);
+    for (const p of shown) {
+      lines.push(`  ${bold(`pass^${p.j}`)} ${formatPercent(p.before)} → ${formatPercent(p.after)}  ${pointsDelta(p.before, p.after)}`);
+    }
+  }
+  return lines;
 }

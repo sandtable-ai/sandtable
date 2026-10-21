@@ -1,3 +1,4 @@
+import { comparisonOf } from "../run/compare.ts";
 import type { SuiteResult } from "../run/suite.ts";
 import { BRAND_CSS, MARK_SVG } from "./brand.ts";
 
@@ -7,6 +8,8 @@ import { BRAND_CSS, MARK_SVG } from "./brand.ts";
  */
 export function renderHtml(r: SuiteResult): string {
   const data = JSON.stringify(r).replaceAll("<", "\\u003c");
+  // What changed since the baseline is computed here, so the page holds no comparison logic of its own.
+  const comparison = JSON.stringify(comparisonOf(r) ?? null).replaceAll("<", "\\u003c");
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -47,6 +50,8 @@ code{font-family:var(--mono);font-size:.867em}code,.change,.tool{font-variant-li
 footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--line)}
 a{color:inherit}
 .warn{background:var(--chip);border:1px solid var(--line);border-radius:4px;padding:8px 16px;margin-top:16px}
+.regressed{color:var(--bad-text);border:1px solid var(--bad);background:transparent;font-weight:600}
+.notes{margin:8px 0 16px;padding-left:20px;color:var(--muted);font-size:13px}
 </style>
 </head>
 <body>
@@ -56,6 +61,7 @@ a{color:inherit}
 <p class="explain">Each task is a simulated conversation, run k times on a fresh copy of the world. A trial passes only if the records end in the expected state and no rule was broken on any tool call or message. No AI judge decides pass or fail. <b>pass^k</b> is the share of tasks where every one of k trials passed.</p>
 <div id="pending"></div>
 <div class="kpis" id="kpis"></div>
+<div id="baseline"></div>
 <h2>Tasks</h2>
 <div class="wrap"><table><thead><tr><th>Task</th><th>Trials</th><th>Pass</th><th>Failed checks</th></tr></thead><tbody id="tasks"></tbody></table></div>
 <div id="tags"></div>
@@ -67,6 +73,7 @@ a{color:inherit}
 </main>
 <script>
 const R = ${data};
+const C = ${comparison};
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const pct = (x) => Number.isNaN(x) || x === null ? "n/a" : (x * 100).toFixed(1) + "%";
@@ -95,11 +102,35 @@ $("kpis").innerHTML = hats.map(([j, v]) => '<div class="kpi"><b>' + pct(v) + '</
   (stops(R.usage) ? '<div class="kpi"><b>' + stops(R.usage) + '</b><span>calls stopped at max_tokens</span></div>' : "") +
   '<div class="kpi"><b>' + R.tasks.length + '</b><span>tasks</span></div>' +
   '<div class="kpi"><b>' + R.tasks.reduce((n, t) => n + t.trials.length, 0) + '</b><span>trials</span></div>';
+// Since the baseline: what changed, regressions first, then the scores before and after.
+const since = C ? Object.fromEntries(C.tasks.map((d) => [d.id, d.change])) : {};
+const regressed = (id) => since[id] === "broken" || since[id] === "worse";
+if (C) {
+  const b = C.baseline;
+  const frac = (x) => x ? x.passes + "/" + x.trials : "–";
+  const moved = C.tasks.filter((d) => d.change !== "same");
+  const same = C.tasks.length - moved.length;
+  const label = { broken: "broken", worse: "worse", fixed: "fixed", better: "better", added: "added", removed: "only in the baseline" };
+  const shown = C.passHat.filter((p) => p.j === 1 || p.j === C.passHat.length);
+  const pts = (p) => { const d = (p.after - p.before) * 100; return Number.isNaN(d) ? "" : Math.abs(d) < 0.05 ? "no change" : (d > 0 ? "+" : "−") + Math.abs(d).toFixed(1) + " pts"; };
+  $("baseline").innerHTML = "<h2>Changes since baseline</h2><p class='explain' style='margin-top:0'>Compared with run <code>" + esc(b.runId) + "</code> of " + esc(b.startedAt) +
+    ": agent " + esc(b.agent) + ", user " + esc(b.user) + ", k=" + b.k + ". Regressions come first.</p>" +
+    (C.differences.length ? "<ul class='notes'>" + C.differences.map((d) => "<li>" + esc(d) + "</li>").join("") + "</ul>" : "") +
+    (C.shared ? "<div class='wrap'><table><thead><tr><th>Score" + (C.sameTasks ? "" : " (over the " + C.shared + " tasks both runs ran)") + "</th><th>Baseline</th><th>Now</th><th>Change</th></tr></thead><tbody>" +
+      shown.map((p) => "<tr><td>pass^" + p.j + "</td><td>" + pct(p.before) + "</td><td>" + pct(p.after) + "</td><td class='" + ((p.after - p.before) * 100 <= -0.05 ? "badt" : "") + "'>" + pts(p) + "</td></tr>").join("") +
+      "</tbody></table></div>" : "<p class='meta'>No task ran in both runs, so there is no pass^k to compare.</p>") +
+    (moved.length ? "<div class='wrap' style='margin-top:16px'><table><thead><tr><th>Change</th><th>Task</th><th>Baseline</th><th>Now</th></tr></thead><tbody>" +
+      moved.map((d) => {
+        const cls = regressed(d.id) ? "badt" : d.change === "fixed" || d.change === "better" ? "okt" : "meta";
+        return "<tr><td class='" + cls + "'>" + (regressed(d.id) ? "<b>" + label[d.change] + "</b>" : label[d.change]) + "</td><td><code>" + esc(d.id) + "</code></td><td>" + frac(d.before) + "</td><td class='" + cls + "'>" + frac(d.after) + "</td></tr>";
+      }).join("") + "</tbody></table></div>" : "") +
+    "<p class='meta'>" + (moved.length ? same + " task" + (same === 1 ? "" : "s") + " unchanged." : "No task changed: all " + same + " have the same result as in the baseline.") + "</p>";
+}
 $("tasks").innerHTML = order.map((ti) => {
   const t = R.tasks[ti];
   const failed = [...new Set(t.trials.flatMap((tr) => tr.checks.filter((c) => !c.passed).map((c) => c.id)))];
   const crit = t.critical ? ' <span class="chip crit' + (allPassed(t) ? "" : " badc") + '" title="' + (allPassed(t) ? "critical: passed every trial" : "critical: a failed trial fails the run") + '">critical</span>' : "";
-  return "<tr><td><b>" + esc(t.id) + "</b>" + crit + "<div class='meta'>" + esc(t.description) + "</div></td><td class='dots'>" +
+  return "<tr><td><b>" + esc(t.id) + "</b>" + crit + (regressed(t.id) ? ' <span class="chip regressed">' + since[t.id] + " since baseline</span>" : "") + "<div class='meta'>" + esc(t.description) + "</div></td><td class='dots'>" +
     t.trials.map((tr, i) => '<button class="dot ' + (tr.passed ? "ok" : "bad") + '" title="trial ' + (i + 1) + '" onclick="show(' + ti + "," + i + ')"></button>').join("") +
     "</td><td class='" + (allPassed(t) ? "okt" : "badt") + "'>" + t.passes + "/" + t.trials.length + "</td><td>" +
     failed.map((f) => '<span class="chip">' + esc(f) + "</span>").join("") + "</td></tr>";

@@ -60,6 +60,7 @@ npx sandtable-ai run ./sandtable --agent http://localhost:8787/step -k 4 --fail-
 - `-t, --tasks a,b` reruns only some tasks. `-c, --concurrency <n>` (default 4) lowers parallelism when the API rate-limits.
 - `--fail-under <pct>` exits 1 when pass^k (k = `-k`) is below the percentage. Put it in CI after `validate --strict` and `lint`.
 - `run` also exits 1, with or without `--fail-under`, when any trial of a `critical: true` task fails, and names those tasks. Reports list critical tasks first.
+- `--baseline <results.json>` compares the run with an earlier one of the same domain: it lists the tasks that broke or got fixed, new failures first, and pass^1 and pass^k before and after, and the report opens with the same. It never changes the exit code.
 - A scripted user cannot react, so a scripted run with a real agent tests wiring and graders, not conversation. Failures there can be the script's fault.
 - To see sandtable work before touching a customer domain: `npx sandtable-ai demo` replays the bundled freight example offline (`--no-open` keeps the report closed). `demo --live` uses Claude as both sides, and costs money.
 
@@ -130,7 +131,7 @@ npx sandtable-ai run ./sandtable --agent http://localhost:8787/step --tasks walk
 npx sandtable-ai run ./sandtable --agent http://localhost:8787/step -k 4 --fail-under 90
 ```
 
-One passing rerun of a flaky task proves little. Report pass^1 and pass^k before and after, at the same k.
+One passing rerun of a flaky task proves little. Report pass^1 and pass^k before and after, at the same k: pass the run from before the fix as `--baseline <results.json>`, and the summary lists which tasks broke or got fixed.
 
 ## References
 

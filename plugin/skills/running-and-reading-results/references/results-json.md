@@ -32,6 +32,9 @@ SuiteResult
                                except an ARN, which keeps the bare name Claude reports at the global price; on the
                                Anthropic API by the model Claude reports
   latency                      { agentTurnP50Ms, agentTurnP95Ms }
+  baseline?                    only with `run --baseline`: { runId, startedAt, agent, user, k, inputs?, passHat,
+                               tasks[]: { id, passes, trials } } of the run it was compared with; reports work out
+                               what changed from it
   tasks[]                      { id, description, tags[], critical?, passes, trials[] }; critical: true only on a
                                critical task, which fails `run` when any of its trials fails
     trials[]                   sorted by trial number
@@ -132,7 +135,14 @@ Trials that ran out of turns or crashed:
 jq -r '.tasks[].trials[] | select(.endReason != "user_stop") | "\(.taskId)#\(.trial) \(.endReason) \(.error // "")"' "$R"
 ```
 
-Compare two runs task by task (same k and tasks):
+A run made with `--baseline`: each task's passes in the baseline and now (the terminal summary and the report already list what broke and what got fixed):
+
+```bash
+jq -r '(.baseline.tasks | map({(.id): "\(.passes)/\(.trials)"}) | add) as $then
+  | .tasks[] | "\(.id): \($then[.id] // "-") -> \(.passes)/\(.trials | length)"' "$R"
+```
+
+Compare two runs task by task without rerunning (same k and tasks):
 
 ```bash
 jq -rn --slurpfile a before/results.json --slurpfile b after/results.json '

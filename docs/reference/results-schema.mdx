@@ -33,6 +33,7 @@ The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`
 | `usage` | `Usage` | tokens and estimated cost, summed over trials |
 | `pendingReview` | `PendingItem[]` | drafted items not yet accepted; while non-empty, the run is provisional |
 | `latency` | object | `agentTurnP50Ms` and `agentTurnP95Ms`: time the agent took per user turn, tool calls included (`null` with no turns) |
+| `baseline` | `BaselineSnapshot` | present only in a run made with [`--baseline`](/reference/cli#compare-with-a-baseline): what it keeps of the run it was compared with |
 
 ### TaskSummary
 
@@ -78,6 +79,20 @@ How often a soft invariant (`soft: true`) was broken. Soft invariants never fail
 | `rate` | number or `null` | `broken / applied`, from 0 to 1; `null` when it never applied |
 | `tasks` | string[] | tasks with at least one trial that broke it |
 | `example` | string | the detail of the first violation, when there is one |
+
+### BaselineSnapshot
+
+What a run made with `--baseline` keeps of the earlier run, so the terminal summary, `report` and `regrade` can show what changed without the earlier file. The comparison itself is not stored: it is worked out from this and the run's own tasks whenever it is shown. The library exports `compareRuns(baseline, result)`, which returns it.
+
+| Field | Type | Description |
+|---|---|---|
+| `runId` | string | the baseline's `runId` |
+| `startedAt` | string | the baseline's `startedAt` |
+| `agent`, `user` | string | the baseline's agent and simulated user |
+| `k` | number | the baseline's trials per task |
+| `inputs` | string | the baseline's `inputs` hash; absent when its `results.json` had none |
+| `passHat` | object | the baseline's own pass^1 to pass^k, over all of its tasks |
+| `tasks` | object[] | `{ id, passes, trials }` for each of the baseline's tasks, in its order |
 
 ### PendingItem
 
@@ -190,4 +205,8 @@ jq -r '.failureModes[] | "\(.count)x \(.kind) \(.id)"' results.json
 
 # soft invariants: how often each was broken
 jq -r '.soft[] | "\(.id): \(.broken) of \(.applied) trials"' results.json
+
+# a run made with --baseline: each task's passes then and now
+jq -r '(.baseline.tasks | map({(.id): "\(.passes)/\(.trials)"}) | add) as $then
+  | .tasks[] | "\(.id): \($then[.id] // "-") -> \(.passes)/\(.trials | length)"' results.json
 ```

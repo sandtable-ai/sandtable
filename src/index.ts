@@ -23,5 +23,6 @@ export { agentSystemPrompt, userSystemPrompt, STOP_TOKEN } from "./sim/prompts.t
 export { runEpisode, type TrialResult, type TrajectoryEvent, type EndReason, type SoftCheck } from "./run/episode.ts";
 export { runSuite, criticalFailures, type SuiteOptions, type SuiteResult, type TaskSummary, type FailureMode, type SoftScore } from "./run/suite.ts";
 export { regradeSuite, regradeTrial, RegradeError } from "./run/regrade.ts";
+export { compareRuns, baselineSnapshot, type Comparison, type TaskDelta, type TaskChange, type BaselineSnapshot } from "./run/compare.ts";
 export { renderTerminal } from "./report/terminal.ts";
 export { renderHtml } from "./report/html.ts";
