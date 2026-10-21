@@ -167,7 +167,7 @@ Nearby tools do other jobs better. LangWatch Scenario puts agent tests with a ju
 
 ## Status
 
-Early alpha. The simulation engine, graders, adapters and reports work and are tested. The Claude adapters and `init`'s model-backed steps have been verified in [live runs](https://sandtable.dev/results). The OpenAI-compatible and Bedrock Converse adapters are newer. The spec may still change before 1.0; every breaking change is marked in the [changelog](https://github.com/sandtable-ai/sandtable/blob/main/CHANGELOG.md). Text only for now: no audio, timing or interruption testing. See the [roadmap](https://github.com/sandtable-ai/sandtable/blob/main/ROADMAP.md).
+Beta. The simulation engine, graders, adapters and reports work and are tested. The Claude adapters and `init`'s model-backed steps have been verified in [live runs](https://sandtable.dev/results). The OpenAI-compatible and Bedrock Converse adapters are newer. The spec may still change before 1.0; every breaking change is marked in the [changelog](https://github.com/sandtable-ai/sandtable/blob/main/CHANGELOG.md). Text only for now: no audio, timing or interruption testing. See the [roadmap](https://github.com/sandtable-ai/sandtable/blob/main/ROADMAP.md).
 
 ## Contributing
 

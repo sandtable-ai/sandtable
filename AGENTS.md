@@ -92,6 +92,7 @@ Update these in the same PR as the code change:
 | `results.json` | `docs/reference/results-schema.mdx`, `plugin/skills/running-and-reading-results/references/results-json.md` |
 | the HTTP step protocol (`src/sim/http.ts`) | `docs/reference/http-protocol.mdx` |
 | the set of skills | `test/plugin.test.ts` (its skill list), the README skill table, `docs/guides/claude-code-plugin.mdx` |
+| the project's status (beta until 1.0) | the README's Status section, the banner and assistant prompt in `docs/docs.json`, `docs/index.mdx`, `docs/roadmap.mdx`, `docs/compare/overview.mdx`, `docs/compare/hosted-platforms.mdx`, `docs/guides/ci.mdx`, `docs/reference/results-schema.mdx`, and the `Development Status` classifier in `python/pyproject.toml` |
 
 `test/plugin.test.ts` fails when a skill uses a command or flag that `--help` doesn't list, or a YAML snippet that the schema rejects. Take flags from `npm run sandtable -- <command> --help`, never from memory.
 
@@ -102,7 +103,7 @@ Update these in the same PR as the code change:
    - refuses if `[Unreleased]` is empty
    - moves `[Unreleased]` into `## [X.Y.Z] - <date>`
    - syncs `python/` and `plugin/`
-3. Open the new section with a one-sentence summary, and check every **Breaking:** entry.
+3. Open the new section with a one-sentence summary, and check every **Breaking:** entry. A release that changes the project's status, such as 1.0 leaving beta, also updates every place the status row above lists.
 4. Commit `chore(release): vX.Y.Z`, open a PR, wait for CI, then squash-merge.
 5. On the merged main, run `git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z`.
 6. The `release` workflow then:
