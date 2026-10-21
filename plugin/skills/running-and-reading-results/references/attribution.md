@@ -41,6 +41,7 @@ The world did not end as expected. Read `changes` and the transcript:
 
 ### `called` / `not_called`
 - `called` failed: did the agent skip the step, or did the conversation never reach it because the user hung up?
+- `called` with `args` failed: the detail shows how the closest successful call differs. Other arguments the SOP forbids (the wrong load, the wrong carrier) → **agent**. Other arguments the SOP allows (a different but valid reason, a rate inside the band) → **task spec**: loosen the matcher with an operator or drop the condition.
 - `not_called` failed: does the SOP really forbid that call in this situation? An over-broad `not_called` (forbidding a handoff the SOP allows) is a **task spec** problem.
 
 ### `reply`

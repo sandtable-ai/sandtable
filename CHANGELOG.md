@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Domain spec**: a task's `called` and `not_called` entries can say which call, as `{ tool, args }` with a where clause on the call's arguments, such as `called: [{ tool: transfer_to_human, args: { mc_number: "100101" } }]` or `not_called: [{ tool: book_load, args: { load_id: L-1004 } }]`. A failed check says how the closest call differed, and `validate` rejects an argument the tool doesn't have or an unknown operator. Plain tool names work as before, and the library exports the entry's schema as `CallExpectSpec` ([#25](https://github.com/sandtable-ai/sandtable/issues/25)).
+
 ### Changed
 
 - **Status**: the README, the docs and the PyPI classifier describe sandtable as beta instead of early alpha. It works and is tested, and the spec and outputs may still change before 1.0 ([#267](https://github.com/sandtable-ai/sandtable/issues/267)).

@@ -180,11 +180,25 @@ export const StateAssertSpec = z
   })
   .strict();
 
+/**
+ * A tool in `called` or `not_called`: its name, or `{ tool, args }` to count only calls whose arguments
+ * match `args`, a where clause on the coerced arguments (literal values; no "$arg" references).
+ */
+export const CallExpectSpec = z.union([
+  z.string(),
+  z
+    .object({
+      tool: z.string(),
+      args: Where.refine((w) => Object.keys(w).length > 0, "args needs at least one condition: to match any call, give the tool's name alone"),
+    })
+    .strict(),
+]);
+
 export const ExpectSpec = z
   .object({
     state: z.array(StateAssertSpec).default([]),
-    called: z.array(z.string()).default([]),
-    not_called: z.array(z.string()).default([]),
+    called: z.array(CallExpectSpec).default([]),
+    not_called: z.array(CallExpectSpec).default([]),
     reply_includes: z.array(z.string()).default([]),
   })
   .strict();
@@ -237,5 +251,6 @@ export type Op = z.infer<typeof OpSpec>;
 export type Invariant = z.infer<typeof InvariantSpec>;
 export type Task = z.infer<typeof TaskSpec>;
 export type StateAssert = z.infer<typeof StateAssertSpec>;
+export type CallExpect = z.infer<typeof CallExpectSpec>;
 export type FieldRefSpec = z.infer<typeof FieldRef>;
 export type Persona = z.infer<typeof PersonaSpec>;

@@ -2,9 +2,10 @@ import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
 import { z } from "zod";
+import { expectedTool } from "../grade/expectations.ts";
 import { mentions, protectedValues } from "../grade/invariants.ts";
 import { agentSystemPrompt } from "../sim/prompts.ts";
-import { substitute } from "../world/match.ts";
+import { operatorProblems, substitute } from "../world/match.ts";
 import { DomainSpec, type Domain, type Tool } from "./schema.ts";
 
 export const DOMAIN_FILE = "sandtable.yaml";
@@ -143,7 +144,14 @@ export function validateDomain(d: Domain): string[] {
     if (task.persona && !personas.has(task.persona)) problems.push(`${where}: unknown persona "${task.persona}"`);
     task.expect.state.forEach((a, i) => table(a.table, `${where}.expect.state[${i}]`));
     task.reference?.forEach((c, i) => tool(c.tool, `${where}.reference[${i}]`));
-    for (const name of [...task.expect.called, ...task.expect.not_called]) tool(name, `${where}.expect`);
+    for (const list of ["called", "not_called"] as const) {
+      task.expect[list].forEach((e, i) => {
+        tool(expectedTool(e), `${where}.expect`);
+        if (typeof e === "string") return;
+        for (const name of Object.keys(e.args)) arg(e.tool, name, `${where}.expect.${list}[${i}]`);
+        for (const p of operatorProblems(e.args)) problems.push(`${where}.expect.${list}[${i}].args.${p}`);
+      });
+    }
   }
   return problems;
 }

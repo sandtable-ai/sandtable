@@ -1,5 +1,5 @@
-import type { StateAssert, Task } from "../spec/schema.ts";
-import { matches, mismatch } from "../world/match.ts";
+import type { CallExpect, StateAssert, Task } from "../spec/schema.ts";
+import { matches, mismatch, type Row } from "../world/match.ts";
 import type { World } from "../world/store.ts";
 import { asciiHyphens, type CallRecord, type Violation } from "./invariants.ts";
 
@@ -35,25 +35,8 @@ export function gradeTrial(input: {
 
   task.expect.state.forEach((a, i) => checks.push(checkState(a, i, world)));
 
-  for (const name of task.expect.called) {
-    const ok = calls.some((c) => c.name === name && c.ok);
-    checks.push({
-      id: `called:${name}`,
-      kind: "called",
-      passed: ok,
-      detail: ok ? `${name} succeeded` : `${name} was never called successfully`,
-    });
-  }
-
-  for (const name of task.expect.not_called) {
-    const n = calls.filter((c) => c.name === name).length;
-    checks.push({
-      id: `not_called:${name}`,
-      kind: "not_called",
-      passed: n === 0,
-      detail: n === 0 ? `${name} not called` : `${name} was called ${n}x`,
-    });
-  }
+  for (const e of task.expect.called) checks.push(checkCalled(e, calls));
+  for (const e of task.expect.not_called) checks.push(checkNotCalled(e, calls));
 
   for (const phrase of task.expect.reply_includes) {
     const ok = agentMessages.some((m) => asciiHyphens(m).toLowerCase().includes(asciiHyphens(phrase).toLowerCase()));
@@ -66,6 +49,62 @@ export function gradeTrial(input: {
   }
 
   return { passed: checks.every((c) => c.passed), checks };
+}
+
+/** The tool a `called` or `not_called` entry names. */
+export function expectedTool(e: CallExpect): string {
+  return typeof e === "string" ? e : e.tool;
+}
+
+/**
+ * The check id of a `called` or `not_called` entry: `called:<tool>` for a name, and for `{ tool, args }`
+ * each condition in spec order as `field=<JSON>`, e.g. `called:transfer_to_human(reason="billing")`.
+ */
+export function callCheckId(kind: "called" | "not_called", e: CallExpect): string {
+  if (typeof e === "string") return `${kind}:${e}`;
+  return `${kind}:${e.tool}(${Object.entries(e.args).map(([field, cond]) => `${field}=${JSON.stringify(cond)}`).join(", ")})`;
+}
+
+function checkCalled(e: CallExpect, calls: readonly CallRecord[]): CheckResult {
+  const id = callCheckId("called", e);
+  const tool = expectedTool(e);
+  const ok = calls.filter((c) => c.name === tool && c.ok);
+  if (typeof e === "string") {
+    const passed = ok.length > 0;
+    return { id, kind: "called", passed, detail: passed ? `${tool} succeeded` : `${tool} was never called successfully` };
+  }
+  if (ok.some((c) => matches(c.args, e.args))) return { id, kind: "called", passed: true, detail: `${tool} succeeded with matching arguments` };
+  const failed = calls.filter((c) => c.name === tool && !c.ok && matches(c.args, e.args)).length;
+  const detail =
+    ok.length > 0
+      ? `${tool} succeeded ${ok.length}x, never with matching arguments: ${closestMismatch(ok, e.args)}`
+      : failed > 0
+        ? `${tool} was called ${failed}x with matching arguments but never succeeded`
+        : `${tool} was never called successfully`;
+  return { id, kind: "called", passed: false, detail };
+}
+
+function checkNotCalled(e: CallExpect, calls: readonly CallRecord[]): CheckResult {
+  const id = callCheckId("not_called", e);
+  const tool = expectedTool(e);
+  if (typeof e === "string") {
+    const n = calls.filter((c) => c.name === tool).length;
+    return { id, kind: "not_called", passed: n === 0, detail: n === 0 ? `${tool} not called` : `${tool} was called ${n}x` };
+  }
+  const n = calls.filter((c) => c.name === tool && matches(c.args, e.args)).length;
+  return {
+    id,
+    kind: "not_called",
+    passed: n === 0,
+    detail: n === 0 ? `${tool} not called with matching arguments` : `${tool} was called ${n}x with matching arguments`,
+  };
+}
+
+/** The first failing condition of the call that fails the fewest, the earliest on a tie. */
+function closestMismatch(calls: readonly CallRecord[], args: Row): string {
+  const failing = (c: CallRecord) => Object.entries(args).filter(([field, cond]) => !matches(c.args, { [field]: cond })).length;
+  const closest = calls.reduce((best, c) => (failing(c) < failing(best) ? c : best));
+  return mismatch(closest.args, args) ?? "";
 }
 
 function checkState(a: StateAssert, i: number, world: World): CheckResult {

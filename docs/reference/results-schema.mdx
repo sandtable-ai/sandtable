@@ -108,7 +108,7 @@ How often a soft invariant (`soft: true`) was broken. Soft invariants never fail
 
 | Field | Type | Description |
 |---|---|---|
-| `id` | string | invariant id, `state:<table>[<key>]#<n>`, `called:<tool>`, `not_called:<tool>`, `reply:<phrase>` or `runtime` |
+| `id` | string | invariant id, `state:<table>[<key>]#<n>`, `called:<tool>`, `not_called:<tool>` (with an entry's `args` as `called:<tool>(<arg>=<JSON>, …)`), `reply:<phrase>` or `runtime` |
 | `kind` | string | `invariant`, `state`, `called`, `not_called`, `reply` or `runtime` |
 | `passed` | boolean | whether it passed |
 | `detail` | string | a readable explanation, such as `book_load rate=2600 exceeds the limit 2350` |

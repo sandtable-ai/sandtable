@@ -59,6 +59,7 @@ Derive the expected end state from the SOP. When a transcript shows the human re
 - **Accept every policy-correct outcome.** If the SOP allows a band, grade the band (`rate: { $gte: 2250, $lte: 2350 }`), not the one number a transcript happened to reach.
 - **Refusals check nothing changed, precisely**: `{ table: bookings, count: 0 }`, plus the row that must stay untouched, `{ table: loads, key: L-1002, fields: { status: available } }`.
 - **`called`** when the call is itself the outcome (a handoff) or the SOP requires the step in every case. **`not_called`** only for what the SOP forbids in that situation. Forbidding a handoff the SOP allows makes a correct agent fail.
+- **Say which call when it matters**: `called: [{ tool: transfer_to_human, args: { mc_number: "100101" } }]` passes only a handoff for this caller, and `not_called: [{ tool: book_load, args: { load_id: L-1004 } }]` forbids one load, not booking. `args` is a where clause on the call's arguments, with literal values; match on IDs and enums, not on free text the agent words its own way.
 - **Rules that hold in every conversation belong in invariants**, not in each task's `expect`. Invariants already run on every call of every task.
 - **Numbers and numeric strings match**: `mc_number: 100101` equals a stored `"100101"`. Zero-padded IDs still need quotes (`"00123"` is not `123`).
 
