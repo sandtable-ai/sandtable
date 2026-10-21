@@ -11,6 +11,29 @@ Run the CLI as `npx sandtable-ai <command>`. It uses the project's copy when `sa
 
 This plugin's version matches the CLI release it documents. To know what the installed CLI supports, read `npx sandtable-ai --version`, `npx sandtable-ai <command> --help` and `validate`'s errors. Never read a copy under `~/.npm/_npx`: npx caches several versions there, and the first one you find may not be the one that runs.
 
+## Install the CLI and its optional packages
+
+Prefer one install in the project: it pins the version, and it is the only place the CLI finds its optional packages. A package installed anywhere else is invisible to `npx sandtable-ai`.
+
+```bash
+npm install --save-dev sandtable-ai @anthropic-ai/bedrock-sdk   # the CLI, plus Claude on Bedrock
+npx sandtable-ai --version                                       # runs the project's copy
+```
+
+| You run | Install next to `sandtable-ai` |
+|---|---|
+| Claude on Bedrock: `--provider bedrock` for `init --sop`, `init --transcripts`, `run` | `@anthropic-ai/bedrock-sdk` |
+| a non-Claude Bedrock agent: `--agent bedrock:<model-id>` | `@aws-sdk/client-bedrock-runtime` |
+| either one with `--aws-profile` | `@aws-sdk/credential-providers` |
+
+Claude on the Anthropic API (`ANTHROPIC_API_KEY`) needs none of them. Always name the package, `sandtable-ai`: npm's `sandtable` is an unrelated package. Without a project install, name every package with `-p`. The command is then the package's bin, `sandtable`: `sandtable-ai` after `-p` fails with "command not found".
+
+```bash
+npx -p sandtable-ai -p @anthropic-ai/bedrock-sdk sandtable init --sop ./discovery/sop.md -o ./sandtable --provider bedrock --region eu-west-1
+```
+
+Keep runs in the project: `run` writes to `.sandtable/runs/` unless `-o` names another directory. Give `-o` a path inside the project, never your session's scratch directory, which is cleaned up with the session.
+
 ## Ask before spending money
 
 | Free and deterministic: run any time | Calls a model: get the engineer's go-ahead first |
@@ -18,7 +41,7 @@ This plugin's version matches the CLI release it documents. To know what the ins
 | `init --openapi`, `validate`, `review`, `lint`, `report` | `init --sop`, `init --transcripts` (Claude) |
 | `run --agent noop --user scripted`, `demo` | `run` with a model agent (`claude`, `openai:`, `bedrock:`) or a model user (the default `claude`, `openai:`), `demo --live` |
 
-The `init` drafting steps use Claude: `ANTHROPIC_API_KEY`, or `--provider bedrock` with AWS credentials (`--region`, `--aws-profile`). Do not paste customer documents into your own prompts or commit them to a public repository: `init --transcripts` scrubs emails, phone numbers and card numbers locally before anything is sent, and you should not undo that.
+The `init` drafting steps use Claude: `ANTHROPIC_API_KEY`, or `--provider bedrock` with AWS credentials (`--region`, `--aws-profile`) and `@anthropic-ai/bedrock-sdk` installed as above. Do not paste customer documents into your own prompts or commit them to a public repository: `init --transcripts` scrubs emails, phone numbers and card numbers locally before anything is sent, and you should not undo that.
 
 ## Workflow
 
