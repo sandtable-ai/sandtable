@@ -240,7 +240,8 @@ npx sandtable-ai run ./my-domain --agent ./my-agent.ts --user scripted
 
 - `callTool(name, args)` resolves to `{ ok, result?, error? }`. Invalid arguments and failed checks come back as `ok: false` with an error your agent can show the model.
 - Call `recordUsage(model, { input, output, cacheRead, cacheWrite })` after each model call if you want tokens and cost in the report. It is optional. Add `maxTokensStops: 1` for a call whose reply stopped at the model's output-token limit, so the report counts it.
-- A `.ts` module needs Node 22.18 or later, which strips types natively. On older Node, compile it to `.js` first.
+- The module must be an ES module, since it uses `export`. In a project whose package.json has no `"type": "module"` (`npm init` writes `"type": "commonjs"`), name it `my-agent.mts` (or `.mjs` for JavaScript), or set `"type": "module"` in that package.json. Otherwise Node reads it as CommonJS and fails with `Unexpected token 'export'`, and sandtable says which fix applies.
+- A `.ts` or `.mts` module needs Node 22.18 or later, which strips types natively. On older Node, compile it to `.mjs` first.
 
 A complete minimal example ships in the repo: [`examples/custom-agent.ts`](https://github.com/sandtable-ai/sandtable/blob/main/examples/custom-agent.ts).
 

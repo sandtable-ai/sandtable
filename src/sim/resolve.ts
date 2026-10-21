@@ -50,13 +50,33 @@ export async function resolveAgent(spec: string, p: ClaudeOptions = {}, openaiBa
     );
   }
   const mod = (await import(pathToFileURL(file).href).catch((err: unknown) => {
-    throw new Error(`could not load the agent module ${spec}: ${err instanceof Error ? err.message : String(err)}`);
+    throw agentModuleError(spec, file, err);
   })) as { default?: unknown };
   const exported = typeof mod.default === "function" ? await (mod.default as () => unknown)() : mod.default;
   if (!exported || typeof (exported as AgentAdapter).createSession !== "function") {
     throw new Error(`${spec} must default-export an AgentAdapter (or a function returning one)`);
   }
   return exported as AgentAdapter;
+}
+
+// Node's messages for a module with `export` or `import` that it loaded as CommonJS.
+const ESM_AS_COMMONJS = /Unexpected token '(?:export|import)'|Cannot use import statement outside a module/;
+
+/**
+ * Why an agent module didn't load, with what to do when the cause is how Node reads the file: ES module syntax in
+ * a `.ts` or `.js` file that the nearest package.json (`npm init` writes `"type": "commonjs"`) makes CommonJS, or a
+ * TypeScript file on a Node too old to strip types.
+ */
+export function agentModuleError(spec: string, file: string, err: unknown): Error {
+  const message = err instanceof Error ? err.message : String(err);
+  const ext = path.extname(file).toLowerCase();
+  let hint = "";
+  if ((err as NodeJS.ErrnoException | undefined)?.code === "ERR_UNKNOWN_FILE_EXTENSION" && [".ts", ".mts", ".cts"].includes(ext)) {
+    hint = ` Loading a TypeScript agent needs Node 22.18 or later, which strips types itself, and this is Node ${process.versions.node}: upgrade Node, or compile the agent to .mjs.`;
+  } else if (ESM_AS_COMMONJS.test(message) && (ext === ".ts" || ext === ".js")) {
+    hint = ` Node read it as CommonJS, but it uses ES module syntax: rename it to ${ext === ".ts" ? ".mts" : ".mjs"}, or set "type": "module" in the package.json nearest to it.`;
+  }
+  return new Error(`could not load the agent module ${spec}: ${message}${hint}`);
 }
 
 export function resolveUser(spec: string, p: ClaudeOptions = {}, openaiBaseUrl?: string): UserSimulator {
