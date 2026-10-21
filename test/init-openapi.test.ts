@@ -540,7 +540,7 @@ describe("init from OpenAPI: what it refuses", () => {
     expect(openApiProblem(["not", "a", "mapping"])).toMatch(/^is not an OpenAPI document/);
   });
 
-  it.skipIf(!process.features.typescript)("writes nothing for a Swagger 2.0 spec and exits 1", async () => {
+  it.skipIf(!process.features.typescript)("writes nothing for a Swagger 2.0 spec and exits 2", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-init-"));
     const spec = path.join(dir, "swagger.yaml");
     await writeFile(spec, 'swagger: "2.0"\ninfo: { title: legacy, version: "1" }\npaths: {}\n');
@@ -549,7 +549,7 @@ describe("init from OpenAPI: what it refuses", () => {
       () => undefined,
       (e: { code: number; stderr: string }) => e,
     );
-    expect(err?.code).toBe(1);
+    expect(err?.code).toBe(2);
     expect(err?.stderr).toContain("is Swagger 2.0; init reads OpenAPI 3.x");
     await expect(readdir(out)).rejects.toThrow(/ENOENT/);
   });

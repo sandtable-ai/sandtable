@@ -87,7 +87,7 @@ describe.skipIf(!process.features.typescript)("CLI errors", () => {
 
   it("an unknown --agent lists the valid forms", async () => {
     const { code, stderr } = await fail(["run", "examples/freight", "--agent", "cluade", "--user", "scripted"]);
-    expect(code).toBe(1);
+    expect(code).toBe(2);
     expect(stderr).toMatch(/^unknown agent "cluade": use claude, claude:<model>, .* or the path of a JS\/TS module \(there is no file at /);
   });
 
@@ -95,7 +95,7 @@ describe.skipIf(!process.features.typescript)("CLI errors", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "sandtable-report-"));
     writeFileSync(path.join(dir, "leaderboard.json"), JSON.stringify({ version: 1, rows: [] }));
     const { code, stderr } = await fail(["report", path.join(dir, "leaderboard.json")]);
-    expect(code).toBe(1);
+    expect(code).toBe(2);
     expect(stderr).toContain("is not a results.json written by `sandtable run`");
     expect(stderr).toContain("it is a leaderboard's leaderboard.json: each model's results.json is in its folder");
   });
@@ -118,7 +118,7 @@ describe.skipIf(!process.features.typescript)("CLI errors", () => {
       it(name, async () => {
         const out = path.join(tmp(), "out");
         const { code, stderr } = await fail([...args, "-o", out]);
-        expect(code).toBe(1);
+        expect(code).toBe(2);
         expect(stderr.trim()).toBe(message);
         // Nothing was drafted, run or written before the path was read.
         expect(existsSync(out)).toBe(false);
@@ -130,7 +130,7 @@ describe.skipIf(!process.features.typescript)("CLI errors", () => {
       const sop = path.join(tmp(), "sop.md");
       writeFileSync(sop, "Always verify the carrier before booking.");
       const { code, stderr } = await fail(["init", "--openapi", "examples/freight/sandtable.yaml", "--sop", sop, "--transcripts", "nope/", "-o", out]);
-      expect(code).toBe(1);
+      expect(code).toBe(2);
       expect(stderr.trim()).toBe("--transcripts: no file or directory at nope/");
       expect(existsSync(out)).toBe(false);
     });
@@ -139,7 +139,7 @@ describe.skipIf(!process.features.typescript)("CLI errors", () => {
       const dir = tmp();
       writeFileSync(path.join(dir, "notes.pdf"), "");
       const { code, stderr } = await fail(["init", "--transcripts", dir, "-o", path.join(tmp(), "out")]);
-      expect(code).toBe(1);
+      expect(code).toBe(2);
       expect(stderr.trim()).toBe(`--transcripts: no .txt or .md file in ${dir}`);
     });
 
@@ -167,7 +167,7 @@ describe.skipIf(!process.features.typescript)("CLI errors", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "sandtable-report-"));
     writeFileSync(path.join(dir, "results.json"), '{"domain": "freight-carrier-sales", "tasks": [');
     const { code, stderr } = await fail(["report", path.join(dir, "results.json")]);
-    expect(code).toBe(1);
+    expect(code).toBe(2);
     expect(stderr).toContain(`${path.join(dir, "results.json")} is not valid JSON: `);
   });
 });

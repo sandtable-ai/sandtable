@@ -51,7 +51,7 @@ Each task also gets a verdict over its graded trials: **passed** (every trial pa
 
 A trial that ends in an error, such as a rate limit or a timeout that outlasted the adapter's retries or an agent endpoint that went down, is **skipped** when the agent had broken no rule yet: the conversation never finished, so it says nothing about the agent. Skipped trials are left out of pass^k and pass@k, and a task with fewer than k graded trials is left out of pass^k; the summary says when that happened. A trial in which the agent broke a hard invariant or called a tool it must not call before the error still fails, so an agent that crashes can't hide what it broke first.
 
-A run with skipped trials is incomplete, so `run` exits 1 even without `--fail-under` (see [Use it in CI](/guides/ci#exit-codes)). Rerun it once the cause is fixed.
+A run with skipped trials is incomplete, so `run` exits 2 even without `--fail-under` (see [Use it in CI](/guides/ci#exit-codes)). Rerun it once the cause is fixed.
 
 ## Choosing k
 

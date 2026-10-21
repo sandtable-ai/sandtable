@@ -237,7 +237,7 @@ describe("regrade and report keep the comparison", () => {
     await writeFile(base, JSON.stringify(fake({ t: [true] }, { domain: "freight-carrier-sales" })));
     const out = path.join(dir, "out");
     const err = await promisify(execFile)(process.execPath, [cli, "run", "examples/clinic", "--agent", "scripted:clinic-careful", "--user", "scripted", "-o", out, "--baseline", base]).catch((e: { code: number; stdout: string; stderr: string }) => e);
-    expect(err).toMatchObject({ code: 1, stdout: "" });
+    expect(err).toMatchObject({ code: 2, stdout: "" });
     expect((err as { stderr: string }).stderr).toContain(`${base} is a run of freight-carrier-sales, not clinic-front-desk, so it can't be this run's baseline: pass a results.json of clinic-front-desk`);
     expect(await stat(out).catch(() => undefined)).toBeUndefined();
 

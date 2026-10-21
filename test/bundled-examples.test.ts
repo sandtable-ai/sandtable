@@ -39,10 +39,10 @@ describe.skipIf(!process.features.typescript)("bundled examples", () => {
     const broken = mkdtempSync(path.join(tmpdir(), "sandtable-local-"));
     mkdirSync(path.join(broken, "examples", "freight"), { recursive: true });
     const noSpec = await run(["validate", "examples/freight"], broken);
-    expect(noSpec.code).toBe(1);
+    expect(noSpec.code).toBe(2);
     expect(noSpec.stderr).toContain("no sandtable.yaml found at examples/freight");
     const missing = await run(["validate", "examples/nope"], empty);
-    expect(missing.code).toBe(1);
+    expect(missing.code).toBe(2);
     expect(missing.stderr).toContain("no sandtable.yaml found at examples/nope");
   });
 

@@ -134,7 +134,7 @@ The run prints a summary (per-task results, pass^k, latency, cost, per-tag score
 
 [Critical tasks](/reference/spec#critical-tasks) are listed first and marked `critical`, with a line such as `critical 2 of 3 passed every trial` under pass^k. When any trial of a critical task fails, `run` names those tasks and exits 1, with or without `--fail-under`. When both fail, it prints both.
 
-Each task row shows one mark per trial, `✓` passed, `✗` failed or `○` skipped, then passes out of graded trials, and `flaky` when some graded trials passed and others failed. With k > 1, the headline adds pass@k and the flip rate (the share of tasks with two or more graded trials that are flaky), and **Flaky tasks** lists those tasks with a 95% interval for each one's pass rate. A trial that ended in an error before the agent broke a rule is skipped: left out of pass^k and pass@k, and listed under **Skipped trials** with its error. A run with any skipped trial exits 1, since it is incomplete; see [pass^k and reliability](/concepts/pass-k#skipped-trials).
+Each task row shows one mark per trial, `✓` passed, `✗` failed or `○` skipped, then passes out of graded trials, and `flaky` when some graded trials passed and others failed. With k > 1, the headline adds pass@k and the flip rate (the share of tasks with two or more graded trials that are flaky), and **Flaky tasks** lists those tasks with a 95% interval for each one's pass rate. A trial that ended in an error before the agent broke a rule is skipped: left out of pass^k and pass@k, and listed under **Skipped trials** with its error. A run with any skipped trial exits 2, since it is incomplete; see [pass^k and reliability](/concepts/pass-k#skipped-trials).
 
 ### Compare with a baseline
 
@@ -299,8 +299,11 @@ The hash covers what sandtable's own adapters give a model. A custom agent adapt
 
 ## Exit codes
 
+As `grep` and `diff` do, a failed gate exits 1 and an error exits 2. See [Use it in CI](/guides/ci#exit-codes) for each case.
+
 | Code | When |
 |---|---|
-| `0` | success |
-| `1` | an error (invalid domain, unknown agent or user spec, missing credentials or package), `validate --strict` with pending items, `lint` errors, `run` below `--fail-under`, a `run` in which any trial of a critical task failed, a `run` with a skipped trial (it ended in an error before the agent broke a rule), a `run` or `demo --live` in which every trial ended in an error (missing credentials or package, an unreachable agent), or a `leaderboard` on which every model failed or crashed |
+| `0` | the command did its job and every gate passed; also `--help` and `--version` |
+| `1` | a gate failed on a complete result: `run` below `--fail-under`, a `run` in which any trial of a critical task failed, `validate` or `lint` on a domain that exists but is invalid, `validate --strict` with pending items, or `lint` errors |
+| `2` | the command couldn't do its job: a usage error (an unknown command or option, a missing argument, an invalid value, or no command at all), a missing or unreadable file, no domain at the path, an invalid domain for any command but `validate` and `lint`, an unknown agent or user spec, missing credentials or package, a `run` with a skipped trial (it ended in an error before the agent broke a rule, so the run is incomplete, even when a gate failed too), a `run` or `demo --live` in which every trial ended in an error, or a `leaderboard` on which every model failed or crashed |
 | `141` | the output was piped into a reader that stopped early, such as `head` or a `less` quit before the end: the command stops there quietly, without finishing, with the status a shell reports for a Unix tool stopped by `SIGPIPE` (128 + 13) |
