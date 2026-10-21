@@ -9,7 +9,7 @@
 # Down counts below match line numbers. The screen shows 22 lines. It opens on the top of the naive
 # agent's task table and scrolls in three steps:
 #   1. the last 20 rows of the naive agent's table, then its pass^1 (line 57 of the output); the
-#      50-row table doesn't fit on two screens, so rows 23 to 35 only pass by in the scroll
+#      50-row table doesn't fit on two screens, so lines 23 to 35 only pass by in the scroll
 #   2. its top failure modes (from line 80)
 #   3. the same 20 rows of the careful agent's table and its pass^1 100.0% (line 154)
 # The Down counts below follow those line numbers. If the freight example's output changes, check
