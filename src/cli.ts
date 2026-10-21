@@ -23,8 +23,9 @@ import { draftFromOpenApi, openApiProblem } from "./init/openapi.ts";
 import { draftInvariantsFromSop, knownFields, softRuleComments } from "./init/sop.ts";
 import { draftTasksFromTranscripts } from "./init/transcripts.ts";
 import { DOMAIN_FILE, isPolicyPlaceholder, POLICY_PLACEHOLDER, renderDraft, TASKS_PLACEHOLDER, writeDraft } from "./init/render.ts";
-import { DomainError, domainWarnings, loadDomain, pendingReview } from "./spec/load.ts";
+import { DomainError, DomainNotFoundError, domainWarnings, loadDomain, pendingReview } from "./spec/load.ts";
 import { lintDomain } from "./grade/lint.ts";
+import type { Domain } from "./spec/schema.ts";
 import { bedrockRegion, bedrockUse, ModelsFile, pricesFile, renderLeaderboardMarkdown, runLeaderboard, type PricesFile, type RunInfo } from "./run/leaderboard.ts";
 import { z } from "zod";
 import YAML from "yaml";
@@ -33,6 +34,17 @@ import YAML from "yaml";
 // the status a shell reports for a Unix tool killed by SIGPIPE (128 + 13), instead of crashing with an EPIPE
 // stack trace. Node ignores SIGPIPE, so the CLI exits with that status itself. Any other write error still crashes.
 const SIGPIPE_STATUS = 141;
+// Exit statuses, as grep and diff use them. 1: a gate failed on a complete result, such as --fail-under, a
+// critical task, lint errors, an invalid domain under validate or lint, or pending items under validate --strict.
+// 2: the command couldn't do its job, such as a usage error, a missing file, an invalid domain for any other
+// command, an adapter that can't be built, or a run that graded nothing or skipped trials.
+const EXIT_GATE = 1;
+const EXIT_ERROR = 2;
+
+/** Set the exit status, keeping the more serious one: an error (2) over a failed gate (1). */
+function exitWith(status: typeof EXIT_GATE | typeof EXIT_ERROR): void {
+  if (status > Number(process.exitCode ?? 0)) process.exitCode = status;
+}
 for (const stream of [process.stdout, process.stderr]) {
   stream.on("error", (err: NodeJS.ErrnoException) => {
     if (err.code === "EPIPE") process.exit(SIGPIPE_STATUS);
@@ -109,25 +121,41 @@ function openInBrowser(file: string): void {
   }
 }
 
-/** A run where every trial ended in an error graded nothing: say so and exit 1, whatever the score. */
+/** A run where every trial ended in an error graded nothing: say so and exit 2, whatever the score. */
 function failIfNothingGraded(result: SuiteResult): boolean {
   const error = everyTrialFailed(result);
   if (error === undefined) return false;
   console.error(`\n✗ Every trial ended in an error, so this run says nothing about the agent. The first error:\n  ${error}`);
-  process.exitCode = 1;
+  exitWith(EXIT_ERROR);
   return true;
 }
 
 /**
  * A run with skipped trials is incomplete: they are left out of pass^k, so the score rests on fewer trials
- * than asked for, and an agent that crashes on hard tasks must not pass a gate the others would fail. Exit 1.
+ * than asked for, and an agent that crashes on hard tasks must not pass a gate the others would fail. Exit 2,
+ * as for any run that couldn't do its job, even when a gate failed too: the fix is to rerun it.
  */
 function failIfIncomplete(result: SuiteResult): void {
   const skipped = skippedTrials(result);
   if (skipped.length === 0) return;
   const trials = result.tasks.reduce((n, t) => n + t.trials.length, 0);
-  console.error(`\n✗ ${skipped.length} of ${trials} trial(s) ended in an error before the agent broke any rule, so they were skipped and this run is incomplete. The first error:\n  ${skipped[0]!.error ?? "unknown error"}`);
-  process.exitCode = 1;
+  console.error(`\n✗ ${skipped.length} of ${trials} trial(s) ended in an error before the agent broke any rule, so they were skipped and this run is incomplete: rerun it. The first error:\n  ${skipped[0]!.error ?? "unknown error"}`);
+  exitWith(EXIT_ERROR);
+}
+
+/**
+ * The domain `validate` or `lint` checks. A domain that exists but is invalid is their check's negative result:
+ * say why and return undefined, for exit 1. A path with no domain at it throws, for exit 2.
+ */
+async function loadForCheck(domainPath: string): Promise<Domain | undefined> {
+  try {
+    return await loadDomain(await resolveDomain(domainPath));
+  } catch (err) {
+    if (!(err instanceof DomainError) || err instanceof DomainNotFoundError) throw err;
+    console.error(`Invalid domain: ${err.message}`);
+    exitWith(EXIT_GATE);
+    return undefined;
+  }
 }
 
 const STATUS_MARK = { passed: "✓", failed: "✗", skipped: "○" } as const;
@@ -181,7 +209,11 @@ function sandtableCommit(): { commit?: string; dirty?: boolean } {
 const program = new Command()
   .name("sandtable")
   .description("Rehearse an AI agent on a simulated copy of a customer's world before it goes live.")
-  .version(version);
+  .version(version)
+  // Help and --version exit 0. A usage error (an unknown command or option, a missing argument, an invalid
+  // value, or no command at all, which prints the help) exits 2, as grep and diff do; commander would exit 1.
+  // Set before the commands are added, so each one inherits it.
+  .exitOverride((err) => process.exit(err.exitCode === 0 ? 0 : EXIT_ERROR));
 
 withProviderFlags(program
   .command("init"))
@@ -259,13 +291,14 @@ program
   .description("check a domain spec for schema and cross-reference errors")
   .option("--strict", "also fail while drafted items are pending review")
   .action(async (domainPath: string, o: { strict?: boolean }) => {
-    const d = await loadDomain(await resolveDomain(domainPath));
+    const d = await loadForCheck(domainPath);
+    if (!d) return;
     console.log(`✓ ${d.name}: ${Object.keys(d.world.tables).length} tables, ${d.tools.length} tools, ${d.invariants.length} invariants, ${d.tasks.length} tasks`);
     for (const w of domainWarnings(d)) console.log(`⚠ ${w}`);
     const pending = pendingReview(d);
     if (pending.length) {
       console.log(`⚠ ${pending.length} drafted item(s) pending review (${NEXT} review ${domainPath})`);
-      if (o.strict) process.exitCode = 1;
+      if (o.strict) exitWith(EXIT_GATE);
     }
   });
 
@@ -274,7 +307,9 @@ program
   .argument("<domain>", "domain directory (with sandtable.yaml) or file")
   .description("prove every task is ready, solvable, non-vacuous and graded, without any model call")
   .action(async (domainPath: string) => {
-    const report = lintDomain(await loadDomain(await resolveDomain(domainPath)));
+    const domain = await loadForCheck(domainPath);
+    if (!domain) return;
+    const report = lintDomain(domain);
     for (const t of report.tasks) {
       const solvable = t.solvable === null ? "solvable ?" : t.solvable ? "solvable" : "NOT solvable";
       const kind = t.expectsWrite ? "write" : "no-write";
@@ -287,7 +322,7 @@ program
     const noopPasses = report.tasks.filter((t) => t.noopPasses).length;
     console.log(`\n${report.tasks.length} tasks: ${report.tasks.length - noWrite} expect a write, ${noWrite} do not; a do-nothing agent passes ${noopPasses} of ${report.tasks.length}.`);
     console.log(`${report.errors} error(s), ${report.warnings} warning(s)`);
-    if (report.errors) process.exitCode = 1;
+    if (report.errors) exitWith(EXIT_GATE);
   });
 
 program
@@ -359,12 +394,12 @@ withProviderFlags(program
     const blockers = criticalFailures(result);
     if (blockers.length) {
       console.error(`\n✗ ${blockers.length} critical task(s) did not pass every trial: ${blockers.map((t) => `${t.id} ${t.passes}/${t.graded ?? t.trials.length}`).join(", ")}`);
-      process.exitCode = 1;
+      exitWith(EXIT_GATE);
     }
     const score = result.passHat[String(o.trials)] ?? 0;
     if (o.failUnder !== undefined && !(score >= o.failUnder)) {
       console.error(`\n✗ pass^${o.trials} ${formatPercent(score)} is below --fail-under ${formatPercent(o.failUnder)}`);
-      process.exitCode = 1;
+      exitWith(EXIT_GATE);
     }
   });
 
@@ -433,7 +468,7 @@ withProviderFlags(program
     const models = result.rows.filter((r) => !r.baseline);
     if (models.length > 0 && models.every((r) => r.error !== undefined)) {
       console.error(`\n✗ Every model failed, so this board ranks none of them: the ✗ failed lines above give each model's error (missing credentials or package, the wrong provider or region, throttling, an agent that isn't running).`);
-      process.exitCode = 1;
+      exitWith(EXIT_ERROR);
     }
   });
 
@@ -533,6 +568,6 @@ program
   });
 
 program.parseAsync().catch((err: unknown) => {
-  console.error(err instanceof DomainError ? `Invalid domain: ${err.message}` : err instanceof Error ? err.message : err);
-  process.exit(1);
+  console.error(err instanceof DomainNotFoundError ? err.message : err instanceof DomainError ? `Invalid domain: ${err.message}` : err instanceof Error ? err.message : err);
+  process.exit(EXIT_ERROR);
 });

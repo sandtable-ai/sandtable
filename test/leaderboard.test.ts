@@ -693,7 +693,7 @@ describe("leaderboard provenance", () => {
     const out = path.join(dir, "board");
     const args = [path.resolve("src/cli.ts"), "leaderboard", example, "-m", models, "-u", "scripted", "-k", "1", "-t", "no-mc-number", "-o", out];
     const failed = await promisify(execFile)(process.execPath, args, { cwd: dir, env }).then(() => undefined, (e: { code: number; stderr: string }) => e);
-    expect(failed?.code).toBe(1);
+    expect(failed?.code).toBe(2);
     expect(failed?.stderr).toContain("no AWS region for Bedrock: pass --region, or set AWS_REGION or a region in the AWS profile");
     await expect(readdir(out)).rejects.toThrow();
   });
@@ -817,10 +817,10 @@ describe("sandtable leaderboard exit code", () => {
     return { ...ran, dir };
   };
 
-  it.skipIf(!process.features.typescript)("exits 1 when every model failed or crashed, and says what to check", async () => {
+  it.skipIf(!process.features.typescript)("exits 2 when every model failed or crashed, and says what to check", async () => {
     // One agent spec that doesn't resolve, and one agent whose every trial crashes.
     const { code, stderr, dir } = await board("models:\n  - { label: Unknown, agent: nope }\n  - { label: Crashing, agent: ./crash-agent.mjs }\n");
-    expect(code).toBe(1);
+    expect(code).toBe(2);
     expect(stderr).toContain("Every model failed");
     expect(stderr).toContain("the ✗ failed lines above give each model's error");
     // The board is still written, so each model's error can be read.

@@ -14,20 +14,23 @@ The goal is simple: a prompt tweak, model swap or tool change that breaks a cust
 
 ## Exit codes
 
-Every command exits 1 when it should block a merge, so they work as plain CI steps:
+Every command exits with a status a CI step can act on, as `grep` and `diff` do: `0` when it did its job and every gate passed, `1` when a gate failed, and `2` when it couldn't do its job. A red build from `1` is for the agent or the domain to fix. One from `2` is for the pipeline: credentials, a path, an agent that isn't running.
 
-| Command | Exits 1 when |
-|---|---|
-| `validate --strict` | the domain is invalid, or a drafted item is still `review: pending` |
-| `lint` | any task is not graded, not ready, vacuous or not solvable |
-| `run --fail-under <pct>` | pass^k, with k = `--trials`, is below `pct` |
-| `run` | any trial of a task marked [`critical: true`](/reference/spec#critical-tasks) failed, whatever the score. This holds without `--fail-under` too, and the output names each such task |
-| `run`, `demo --live` | every trial ended in an error, so nothing was graded: missing credentials or package, or an agent that isn't running. This holds without `--fail-under` too |
-| `run` | any trial was skipped: it ended in an error (throttling or a timeout that outlasted the retries, an agent endpoint that went down) before the agent broke a rule, so the run is incomplete. This holds without `--fail-under` too |
-| `leaderboard` | every model is an error row, so the board ranks none of them: its agent couldn't be built, or any of its trials crashed (missing credentials or package, the wrong provider or region, throttling, an agent that isn't running). The do-nothing baseline doesn't count |
-| any command | the domain cannot be loaded, an adapter cannot be built, or another error stops it |
+| Status | Command | When |
+|---|---|---|
+| `1` | `run --fail-under <pct>` | pass^k, with k = `--trials`, is below `pct` |
+| `1` | `run` | any trial of a task marked [`critical: true`](/reference/spec#critical-tasks) failed, whatever the score. This holds without `--fail-under` too, and the output names each such task |
+| `1` | `validate`, `lint` | the domain exists but is invalid: a schema, cross-reference or YAML error |
+| `1` | `validate --strict` | a drafted item is still `review: pending` |
+| `1` | `lint` | any task is not graded, not ready, vacuous or not solvable |
+| `2` | `run` | any trial was skipped: it ended in an error (throttling or a timeout that outlasted the retries, an agent endpoint that went down) before the agent broke a rule, so the run is incomplete. This holds without `--fail-under` too, and wins over a failed gate |
+| `2` | `run`, `demo --live` | every trial ended in an error, so nothing was graded: missing credentials or package, or an agent that isn't running |
+| `2` | `leaderboard` | every model is an error row, so the board ranks none of them: its agent couldn't be built, or any of its trials crashed (missing credentials or package, the wrong provider or region, throttling, an agent that isn't running). The do-nothing baseline doesn't count |
+| `2` | any command | a usage error (an unknown command or option, a missing argument, an invalid value), a missing or unreadable file, no domain at the path, an invalid domain for any command but `validate` and `lint`, an adapter that can't be built, or another error that stops it |
 
-In `run`, a trial that ends in an error is skipped, not failed, unless the agent had already broken a hard invariant or called a tool it must not call: an outage is not the agent's failure, but a crash can't hide what it broke first. Skipped trials are left out of pass^k, which `--fail-under` judges, and listed under **Skipped trials** with their error. The run still exits 1, since its score rests on fewer trials than you asked for: rerun it, and if one host keeps throttling, lower `--concurrency`. In `leaderboard`, any crashed trial turns that model into an error row instead of a score, and the board exits 1 only when every model is one. A skipped trial of a critical task is not a critical failure: the run already exits 1 because it is incomplete.
+In `run`, a trial that ends in an error is skipped, not failed, unless the agent had already broken a hard invariant or called a tool it must not call: an outage is not the agent's failure, but a crash can't hide what it broke first. Skipped trials are left out of pass^k, which `--fail-under` judges, and listed under **Skipped trials** with their error. The run exits 2, since its score rests on fewer trials than you asked for: rerun it, and if one host keeps throttling, lower `--concurrency`. When a gate failed too, the output says so, and the status is still 2. In `leaderboard`, any crashed trial turns that model into an error row instead of a score, and the board exits 2 only when every model is one. A skipped trial of a critical task is not a critical failure.
+
+A step that treats any non-zero status as a failure needs nothing more. To let a failed gate through while an error still stops the job, as a step that renders a report for a failing agent does, accept only `1`: `npx sandtable-ai run ... || [ $? -eq 1 ]`.
 
 Don't pipe a gate's output into `head`: a command whose reader stops early stops there without finishing and exits 141, as Unix tools do. Under `set -o pipefail` the step then fails; without it, a pipeline's status is its last command's, so the gate's result is lost. To keep a log, use `tee`, which reads to the end.
 

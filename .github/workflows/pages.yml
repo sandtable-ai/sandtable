@@ -26,11 +26,12 @@ jobs:
       - run: npm ci
       - run: npm run build
       - name: Render the sample reports
-        # The naive agents fail critical tasks, so their runs exit 1 after writing the report: keep going when it exists.
+        # The naive agents fail critical tasks, so their runs exit 1, a failed gate, after writing the report: keep going
+        # then. Any other status, such as 2 for an error, fails the step.
         run: |
-          node dist/cli.js run examples/freight --agent scripted:naive --user scripted -o site/freight-naive || test -f site/freight-naive/report.html
+          node dist/cli.js run examples/freight --agent scripted:naive --user scripted -o site/freight-naive || [ $? -eq 1 ]
           node dist/cli.js run examples/freight --agent scripted:careful --user scripted -o site/freight-careful
-          node dist/cli.js run examples/clinic --agent scripted:clinic-naive --user scripted -o site/clinic-naive || test -f site/clinic-naive/report.html
+          node dist/cli.js run examples/clinic --agent scripted:clinic-naive --user scripted -o site/clinic-naive || [ $? -eq 1 ]
           node dist/cli.js run examples/clinic --agent scripted:clinic-careful --user scripted -o site/clinic-careful
           cat > site/index.html <<'EOF'
           <!doctype html>

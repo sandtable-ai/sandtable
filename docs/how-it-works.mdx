@@ -61,7 +61,7 @@ flowchart LR
 `sandtable run` repeats every task *k* times (`-k`), four trials in parallel by default (`-c`), and reports:
 
 - **pass^k** for every j up to k: the chance that all j trials of a task succeed, averaged over tasks, next to **pass@k**, the chance that at least one does. See [pass^k and reliability](/concepts/pass-k).
-- **Verdicts**: each task passed, failed, is flaky (some trials passed) or was skipped, with a 95% interval for its pass rate, and the run's flip rate. A trial that ended in an error before the agent broke a rule, such as a rate limit that outlasted the retries, is skipped and left out of the scores, and the run exits 1 as incomplete.
+- **Verdicts**: each task passed, failed, is flaky (some trials passed) or was skipped, with a 95% interval for its pass rate, and the run's flip rate. A trial that ended in an error before the agent broke a rule, such as a rate limit that outlasted the retries, is skipped and left out of the scores, and the run exits 2 as incomplete.
 - **Failure modes**: failed checks clustered across trials, most frequent first, each with an example.
 - **Scores by tag**, so a weak area (negotiation, vetting, handoffs) stands out.
 - **Usage**: tokens per model, an estimated cost at list prices (Claude models, plus any model whose prices you pass with `--prices`; others show `n/a`), and p50/p95 agent turn latency.

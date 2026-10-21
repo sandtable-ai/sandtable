@@ -30,7 +30,7 @@ The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`
 | `passAt` | object | pass@j for every j from 1 to k, keyed and left out the same way: the chance that at least one of j trials of a task passes, averaged over tasks |
 | `flipRate` | number or `null` | the share of tasks with at least 2 graded trials whose graded trials disagree (the flaky ones), from 0 to 1; `null` when no task has 2 graded trials, as with k = 1 |
 | `flaky` | string[] | ids of the flaky tasks, in spec order |
-| `skipped` | number | trials skipped across the run; `run` exits 1 when it isn't 0 |
+| `skipped` | number | trials skipped across the run; `run` exits 2 when it isn't 0 |
 | `callerNotes` | object | `{ turns, trials }`: how many caller turns stepped out of role (see each trial's [`callerNotes`](#callernote)), and in how many trials. Absent in results from before caller notes |
 | `failureModes` | `FailureMode[]` | failed checks clustered across graded trials, most frequent first; a skipped trial's error is not one |
 | `byTag` | `TagScore[]` | scores per task tag (`untagged` for tasks without tags), weakest first |

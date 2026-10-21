@@ -23,7 +23,7 @@ SuiteResult
   passAt                       pass@1 .. pass@k, the same way: at least one of j trials passes
   flipRate                     share of tasks with 2+ graded trials that are flaky; null with k = 1
   flaky[]                      ids of flaky tasks (some graded trials passed, some failed)
-  skipped                      trials skipped across the run; run exits 1 when it isn't 0
+  skipped                      trials skipped across the run; run exits 2 when it isn't 0
   callerNotes                  { turns, trials }: caller turns that stepped out of role, and the trials they are in
   byTag[]                      { tag, tasks, passHat1, passHatK }; "untagged" for tasks without tags
   failureModes[]               { id, kind, count, tasks[], example }: failed checks of graded trials clustered, most

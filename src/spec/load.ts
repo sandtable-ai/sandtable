@@ -12,6 +12,9 @@ export const DOMAIN_FILE = "sandtable.yaml";
 
 export class DomainError extends Error {}
 
+/** No domain at the path: no sandtable.yaml there, or it can't be read. Unlike an invalid domain, there is nothing to check. */
+export class DomainNotFoundError extends DomainError {}
+
 /**
  * Load a domain from a directory containing sandtable.yaml (or the file itself).
  * Any top-level value that is a relative path to a .md/.yaml/.yml file is inlined,
@@ -22,7 +25,7 @@ export async function loadDomain(target: string): Promise<Domain> {
   const file = (await isDir(target)) ? path.join(target, DOMAIN_FILE) : target;
   const dir = path.dirname(file);
   const text = await readFile(file, "utf8").catch(() => {
-    throw new DomainError(`no ${DOMAIN_FILE} found at ${target} (create one, or draft it with \`npx sandtable-ai init\`)`);
+    throw new DomainNotFoundError(`no ${DOMAIN_FILE} found at ${target} (create one, or draft it with \`npx sandtable-ai init\`)`);
   });
   const raw = parseYaml(text, file) as Record<string, unknown>;
   if (!raw || typeof raw !== "object") throw new DomainError(`${file} is empty or not a YAML mapping`);

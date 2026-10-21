@@ -167,7 +167,7 @@ describe("regrade", () => {
     await writeFile(policy, `${await readFile(policy, "utf8")}\n- Always upsell.\n`);
 
     const err = await promisify(execFile)(process.execPath, [cli, "regrade", file, "--domain", domainDir]).catch((e: { code: number; stderr: string }) => e);
-    expect(err).toMatchObject({ code: 1 });
+    expect(err).toMatchObject({ code: 2 });
     expect((err as { stderr: string }).stderr).toMatch(/^can't regrade .*results\.json: the agent or the caller would be given something else now: .*Rerun it with `npx sandtable-ai run` instead\./);
     expect(await readFile(file, "utf8")).toBe(JSON.stringify(run));
   });
@@ -180,7 +180,7 @@ describe("regrade", () => {
 
     const clinic = path.resolve("examples/clinic");
     const err = await promisify(execFile)(process.execPath, [cli, "regrade", file, "--domain", clinic]).catch((e: { code: number; stderr: string }) => e);
-    expect(err).toMatchObject({ code: 1 });
+    expect(err).toMatchObject({ code: 2 });
     const { stderr } = err as { stderr: string };
     expect(stderr).toContain(`can't regrade ${file}: it is a run of freight-carrier-sales, not clinic-front-desk, so --domain ${clinic} is likely not the domain the run used.`);
     // How to tell which domain the run used: results.json names it, as its sandtable.yaml does.
@@ -195,7 +195,7 @@ describe("regrade", () => {
     const yaml = await readFile(spec, "utf8");
     await writeFile(spec, yaml.replace("name: freight-carrier-sales\n", "name: freight-desk\n"));
     const renamed = await promisify(execFile)(process.execPath, [cli, "regrade", file, "--domain", domainDir]).catch((e: { code: number; stderr: string }) => e);
-    expect(renamed).toMatchObject({ code: 1 });
+    expect(renamed).toMatchObject({ code: 2 });
     expect((renamed as { stderr: string }).stderr).toContain("it is a run of freight-carrier-sales, not freight-desk");
     expect((renamed as { stderr: string }).stderr).toContain("If you renamed the domain since the run, restore its `name:`");
     await writeFile(spec, yaml);

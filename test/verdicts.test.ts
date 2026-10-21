@@ -194,7 +194,7 @@ describe("a run with passed, failed, flaky and skipped trials", () => {
 });
 
 describe("`run` with a skipped trial", () => {
-  it.skipIf(!process.features.typescript)("exits 1 and says the run is incomplete, even without --fail-under", async () => {
+  it.skipIf(!process.features.typescript)("exits 2 and says the run is incomplete, even without --fail-under", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "sandtable-skipped-"));
     const agent = path.join(dir, "agent.mjs");
     const demo = path.resolve("src/demo/freight-agents.ts");
@@ -216,7 +216,7 @@ export default {
       () => undefined,
       (e: { code: number; stdout: string; stderr: string }) => e,
     );
-    expect(err?.code).toBe(1);
+    expect(err?.code).toBe(2);
     expect(err?.stderr).toContain("1 of 2 trial(s) ended in an error before the agent broke any rule, so they were skipped and this run is incomplete");
     expect(err?.stderr).toContain("429 Too Many Requests");
     expect(err?.stderr).not.toContain("Every trial ended in an error");

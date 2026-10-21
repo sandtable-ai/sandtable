@@ -33,7 +33,7 @@ describe("a run where every trial ended in an error", () => {
     expect(everyTrialFailed(r)).toBeUndefined();
   });
 
-  it.skipIf(!process.features.typescript)("makes `run` exit 1 and print the error, even without --fail-under", async () => {
+  it.skipIf(!process.features.typescript)("makes `run` exit 2 and print the error, even without --fail-under", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "sandtable-setup-"));
     const agent = path.join(dir, "agent.mjs");
     writeFileSync(agent, 'export default { name: "broken", async createSession() { throw new Error("no credentials"); } };\n');
@@ -42,7 +42,7 @@ describe("a run where every trial ended in an error", () => {
       () => undefined,
       (e: { code: number; stderr: string }) => e,
     );
-    expect(err?.code).toBe(1);
+    expect(err?.code).toBe(2);
     expect(err?.stderr).toContain("Every trial ended in an error");
     expect(err?.stderr).toContain("no credentials");
   });
