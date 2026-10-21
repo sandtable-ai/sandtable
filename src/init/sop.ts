@@ -4,10 +4,32 @@ import { validateDomain } from "../spec/load.ts";
 import { InvariantSpec, type Domain, type Invariant } from "../spec/schema.ts";
 import { createClient, requestBase, type ClaudeOptions } from "../sim/claude.ts";
 
+/**
+ * A rule the SOP states that no drafted invariant checks (or checks only in part). It is written as a
+ * `Soft rule` comment for the reviewer: a note, not a `soft: true` invariant, which tool calls do check.
+ */
 export interface SoftRule {
   rule: string;
   quote: string;
+  /** Why no invariant checks it: what the spec or the records lack, or why sandtable dropped the drafted invariant. */
+  reason: string;
 }
+
+/**
+ * Why a rule the SOP states can't be an invariant (yet), as the drafting model classifies it. Each names
+ * what the spec or the records lack, so a reviewer knows what to check by hand and which gap matters.
+ */
+export const SOFT_RULE_REASONS = {
+  needs_date: "needs today's date",
+  fact_not_recorded: "depends on a fact no record holds",
+  any_of_tools: "needs either of several tools first",
+  either_or: "needs an either/or condition",
+  computed_value: "needs a computed value",
+  agent_says: "about what the agent says",
+  other: "other",
+} as const;
+
+type SoftRuleReason = keyof typeof SOFT_RULE_REASONS;
 
 export interface SopDraft {
   invariants: Invariant[];
@@ -24,6 +46,7 @@ function outputSchema(tools: string[], tables: string[]) {
   const FieldRef = z.object({ table: Table, key_arg: z.string(), field: z.string() });
   const Condition = z.object({ field: z.string(), op: z.enum(["eq", "ne", "gt", "gte", "lt", "lte"]), value: Scalar });
   const Proposal = z.object({
+    rule_id: z.string().describe("id of the rule in `rules` this invariant checks"),
     id: z.string().describe("kebab-case identifier, e.g. verify-before-book"),
     description: z.string().describe("one sentence stating the rule"),
     quote: z.string().describe("the exact sentence(s) from the SOP this rule comes from, copied verbatim"),
@@ -50,10 +73,25 @@ function outputSchema(tools: string[], tables: string[]) {
     unless_arg: z.string().nullable().describe("never_disclose: the argument of unless_tool; otherwise null"),
   });
   return z.object({
+    rules: z
+      .array(
+        z.object({
+          id: z.string().describe("short id in SOP order: r1, r2, ..."),
+          rule: z.string().describe("one sentence stating the rule"),
+          quote: z.string().describe("the exact sentence(s) from the SOP this rule comes from, copied verbatim"),
+        }),
+      )
+      .describe("every rule the SOP states, in order, whether or not it can be checked"),
     invariants: z.array(Proposal),
     soft_rules: z
-      .array(z.object({ rule: z.string(), quote: z.string() }))
-      .describe("rules that matter but cannot be checked from tool calls and records (wording, tone, disclosure, read-backs)"),
+      .array(
+        z.object({
+          rule_id: z.string().describe("id of a rule in `rules` that no invariant checks, or checks only in part"),
+          reasons: z.array(z.enum(Object.keys(SOFT_RULE_REASONS) as [SoftRuleReason, ...SoftRuleReason[]])).describe("why no invariant can check it (yet)"),
+          detail: z.string().describe("what exactly is missing, in a few words, e.g. 'no record says whether the customer has a receipt'; empty when the reasons say it all"),
+        }),
+      )
+      .describe("the rules, or parts of rules, that cannot be checked from tool calls and records"),
   });
 }
 
@@ -69,11 +107,24 @@ The agent acts only through the tools listed below. Each tool call is checked ag
 - never: \`tool\` must never be called, or never with arguments satisfying \`conditions\`.
 - never_disclose: the agent must never say any value of \`protected_field\` (an internal number or text), except a value equal to \`unless_arg\` of a successful \`unless_tool\` call. \`tool\` is ignored for this kind (repeat any tool).
 
-Rules:
+Work in three steps, and leave no rule out:
+1. rules: list every rule the SOP states, in order, one per entry: each thing the agent must or must not do, ask, check or say, what it must do before something else, and who qualifies for what under which conditions. Split a sentence that states several rules. List a rule even when it looks impossible to check: that is decided in the next steps.
+2. invariants: for each rule, or the part of a rule, that tool arguments and record fields can show, propose invariants as described above, each with the rule's id in rule_id.
+3. soft_rules: every rule that no invariant checks, and every rule an invariant checks only in part, with its rule_id and the reasons it can't be checked (yet):
+   - needs_date: it depends on today's date or on how long ago something happened ("within 30 days").
+   - fact_not_recorded: it depends on a fact that no table field or tool argument holds (whether the customer has a receipt).
+   - any_of_tools: it must come after either of several tools; \`before\` takes a single first tool.
+   - either_or: it holds when any one of several conditions does; an invariant's conditions must all hold.
+   - computed_value: it compares against a value computed from others (a sum, a difference).
+   - agent_says: it is about what the agent says, asks or explains (wording, tone, questions, read-backs), not about a tool call.
+   - other: anything else; say what in detail.
+Every rule in \`rules\` must end up in invariants, in soft_rules, or in both.
+
+Rules for invariants:
 - Propose an invariant only when the SOP clearly states the rule and it can be checked from tool arguments and record fields. Use only the tools, arguments, tables and fields listed. Never invent fields.
 - Copy the supporting SOP text into \`quote\` verbatim.
 - One rule per invariant. Prefer a few precise invariants over many vague ones.
-- Rules about not revealing a specific internal field are never_disclose invariants. Other rules about what the agent says (tone, read-backs, confirmations) go into soft_rules with their quote.`;
+- Rules about not revealing a specific internal field are never_disclose invariants. Other rules about what the agent says go into soft_rules as agent_says.`;
 
 function describeDomain(domain: Domain, fields: Record<string, string[]>): string {
   const tools = domain.tools
@@ -181,31 +232,82 @@ export async function draftInvariantsFromSop(input: {
   const invariants: Invariant[] = [];
   const sopText = normalize(sop);
   const ids = new Set(domain.invariants.map((i) => i.id));
+  // Per rule id: whether a kept invariant checks it, and why each of its dropped invariants was dropped.
+  const checked = new Set<string>();
+  const dropped = new Map<string, string[]>();
+  const drop = (p: Proposal, why: string) => {
+    warnings.push(`dropped ${p.id}: ${why}`);
+    dropped.set(p.rule_id, [...(dropped.get(p.rule_id) ?? []), `${p.id}: ${why}`]);
+  };
   for (const p of out.invariants) {
     const inv = proposalToInvariant(p, sopFile);
     if (typeof inv === "string") {
-      warnings.push(`dropped ${p.id}: ${inv}`);
+      drop(p, inv);
       continue;
     }
     if (ids.has(inv.id)) {
-      warnings.push(`dropped ${inv.id}: an invariant with that id already exists`);
+      drop(p, "an invariant with that id already exists");
       continue;
     }
     const problems = validateDomain({ ...domain, invariants: [inv] }).filter((x) => x.startsWith("invariants."));
     if (problems.length) {
-      warnings.push(`dropped ${inv.id}: ${problems.join("; ")}`);
+      drop(p, problems.join("; "));
       continue;
     }
     const unknownFields = referencedFields(inv).filter(([t, f]) => fields[t] && fields[t]!.length > 1 && !fields[t]!.includes(f));
     if (unknownFields.length) {
-      warnings.push(`dropped ${inv.id}: unknown field(s) ${unknownFields.map(([t, f]) => `${t}.${f}`).join(", ")}`);
+      drop(p, `unknown field(s) ${unknownFields.map(([t, f]) => `${t}.${f}`).join(", ")}`);
       continue;
     }
     if (!sopText.includes(normalize(p.quote))) warnings.push(`${inv.id}: quote not found verbatim in ${sopFile}; check it`);
     ids.add(inv.id);
+    checked.add(p.rule_id);
     invariants.push(inv);
   }
-  return { invariants, softRules: out.soft_rules, warnings };
+  return { invariants, softRules: softRules(out, checked, dropped, warnings), warnings };
+}
+
+/**
+ * Every rule the SOP states that no kept invariant checks fully, in SOP order: the ones the model listed as
+ * soft rules, with its reasons, and the ones it left out of both lists or whose every invariant was dropped,
+ * so the reviewer sees each rule the draft doesn't check. Warns about the ones the model left out.
+ */
+function softRules(
+  out: { rules: { id: string; rule: string; quote: string }[]; soft_rules: { rule_id: string; reasons: SoftRuleReason[]; detail: string }[] },
+  checked: ReadonlySet<string>,
+  dropped: ReadonlyMap<string, string[]>,
+  warnings: string[],
+): SoftRule[] {
+  const listed = new Map<string, { reasons: SoftRuleReason[]; detail: string }>();
+  for (const s of out.soft_rules) {
+    if (!out.rules.some((r) => r.id === s.rule_id)) warnings.push(`a soft rule refers to rule ${s.rule_id}, which the draft's list of rules doesn't have; it was left out`);
+    else if (!listed.has(s.rule_id)) listed.set(s.rule_id, s);
+  }
+  return out.rules.flatMap((r): SoftRule[] => {
+    const soft = listed.get(r.id);
+    const base = { rule: r.rule, quote: r.quote };
+    if (soft) return [{ ...base, reason: reasonText(soft.reasons, soft.detail) }];
+    if (checked.has(r.id)) return [];
+    const why = dropped.get(r.id);
+    if (why) return [{ ...base, reason: `its drafted invariant was dropped (${why.join("; ")})` }];
+    warnings.push(`rule ${r.id} ("${r.rule}") was drafted neither as an invariant nor as a soft rule: it is listed as a soft rule, check whether it needs an invariant`);
+    return [{ ...base, reason: "not classified by the draft: check whether it needs an invariant" }];
+  });
+}
+
+function reasonText(reasons: readonly SoftRuleReason[], detail: string): string {
+  const labels = [...new Set(reasons)].filter((r) => r !== "other" || !detail.trim()).map((r) => SOFT_RULE_REASONS[r]);
+  return [labels.join("; "), detail.trim()].filter(Boolean).join(": ") || SOFT_RULE_REASONS.other;
+}
+
+/**
+ * The YAML comment `init --sop` writes after the drafted invariants: each rule no invariant checks, its quote,
+ * and why. Undefined when there are none.
+ */
+export function softRuleComments(rules: readonly SoftRule[]): string | undefined {
+  const line = (s: string) => s.replace(/\s+/g, " ").trim();
+  if (!rules.length) return undefined;
+  return rules.map((r) => ` Soft rule, not checked: ${line(r.rule)}\n   "${line(r.quote)}"\n   why: ${line(r.reason)}`).join("\n");
 }
 
 function referencedFields(inv: Invariant): [string, string][] {

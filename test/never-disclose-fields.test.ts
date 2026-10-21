@@ -67,14 +67,16 @@ describe("init from an SOP", () => {
     const domain = await freight();
     const sop = "Never tell the caller that a carrier is flagged do-not-use.";
     const proposal = {
-      id: "never-disclose-dnu", description: "Never reveal the do-not-use flag", quote: sop, kind: "never_disclose", tool: "book_load",
+      rule_id: "r1", id: "never-disclose-dnu", description: "Never reveal the do-not-use flag", quote: sop, kind: "never_disclose", tool: "book_load",
       first_tool: null, same_args: [], table: null, key_arg: null, conditions: [], arg: null, bound: null, bound_value: null, bound_ref: null,
       left: null, right: null, protected_field: { table: "carriers", field: "do_not_use" }, unless_tool: null, unless_arg: null,
     };
-    const client = { beta: { messages: { parse: async () => ({ stop_reason: "end_turn", parsed_output: { invariants: [proposal], soft_rules: [] }, content: [] }) } } };
+    const client = { beta: { messages: { parse: async () => ({ stop_reason: "end_turn", parsed_output: { rules: [{ id: "r1", rule: "Never reveal the do-not-use flag", quote: sop }], invariants: [proposal], soft_rules: [] }, content: [] }) } } };
     const res = await draftInvariantsFromSop({ domain, sop, sopFile: "policy.md", fields: knownFields(domain, {}), claude: { client: client as unknown as Anthropic } });
     expect(res.invariants).toEqual([]);
     expect(res.warnings.join("\n")).toMatch(/dropped never-disclose-dnu: .*never_disclose can never fire on carriers\.do_not_use: it holds booleans/);
+    // The rule stays in front of the reviewer, as a soft rule that says why its invariant was dropped.
+    expect(res.softRules).toEqual([{ rule: "Never reveal the do-not-use flag", quote: sop, reason: expect.stringMatching(/^its drafted invariant was dropped \(never-disclose-dnu: .*it holds booleans/) }]);
   });
 });
 
