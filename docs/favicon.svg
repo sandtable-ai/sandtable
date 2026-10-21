@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="32" height="32">
   <title>sandtable</title>
-  <style>.i{fill:#1E1A16}.a{fill:#B4532A}@media (prefers-color-scheme:dark){.i{fill:#E9E3D8}}</style>
+  <style>.i{fill:#1E1A16}.a{fill:#B4532A}</style>
   <rect class="i" x="0" y="0" width="4" height="4" rx=".75"/>
   <rect class="i" x="6" y="0" width="4" height="4" rx=".75"/>
   <rect class="i" x="12" y="0" width="4" height="4" rx=".75"/>

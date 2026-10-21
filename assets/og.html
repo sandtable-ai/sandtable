@@ -11,7 +11,7 @@
   data-calls lists the tasks in tasks.yaml order, 1 = passed. The violation counts are the top
   three invariant failure modes of the naive run. If the example changes, update them from a new run.
 
-  Layout: 8 px grid; margins 80 px at 1280 wide, 64 px at 1200; one accent (brand #B4532A, and
+  Layout: 8 px grid, except the call squares (12 px with 3 px gaps, so 50 fit the 760 px column); margins 80 px at 1280 wide, 64 px at 1200; one accent (brand #B4532A, and
   #9C3F20 for small text, 5.9:1 on the background).
 -->
 <html lang="en">
@@ -30,7 +30,7 @@ body{background:var(--paper);color:var(--ink);font-family:"Fira Sans",sans-serif
 
 header{display:flex;justify-content:space-between;align-items:center;height:48px}
 .mark{display:flex;align-items:center;gap:16px;font-size:40px;line-height:48px;font-weight:600;letter-spacing:-.01em}
-.mark svg{display:block;flex:none}
+.mark img{display:block;flex:none}
 .cmd{font-size:24px;color:var(--muted)}
 
 h1{margin-top:40px;font-size:60px;line-height:72px;font-weight:600;letter-spacing:-.02em;max-width:1040px}
@@ -57,7 +57,7 @@ h1{margin-top:40px;font-size:60px;line-height:72px;font-weight:600;letter-spacin
 </head>
 <body>
 <header>
-  <span class="mark"><svg viewBox="0 0 48 48" width="48" height="48" aria-hidden="true"><g fill="currentColor"><rect x="2" y="2" width="12" height="12" rx="2"/><rect x="18" y="2" width="12" height="12" rx="2"/><rect x="34" y="2" width="12" height="12" rx="2"/><rect x="2" y="18" width="12" height="12" rx="2"/><rect x="18" y="18" width="12" height="12" rx="2"/><rect x="2" y="34" width="12" height="12" rx="2"/><rect x="18" y="34" width="12" height="12" rx="2"/><rect x="34" y="34" width="12" height="12" rx="2"/></g><rect x="34" y="18" width="12" height="12" rx="2" style="fill:var(--accent)"/></svg>sandtable</span>
+  <span class="mark"><img src="brand/mark.svg" width="48" height="48" alt="">sandtable</span>
   <span class="cmd mono">npx sandtable-ai demo</span>
 </header>
 <h1>Rehearse your AI agent on a simulated copy of your customer’s world.</h1>
