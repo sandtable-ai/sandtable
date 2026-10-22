@@ -1,7 +1,7 @@
 ---
 type: regex
 target: trace
-# With model steps authorized, it states the estimate and goes on: an estimate, then a model-backed init command.
-pattern: '\{"type":"assistant"[^\n]*?"type":"text","text":"(?=(?:[^"\\\n]|\\.)*?\$\s?[0-9])(?=(?:[^"\\\n]|\\.)*?\bcalls?\b)[\s\S]*?"command":"[^"]*init[^"]*--(?:sop|transcripts)'
+# With model steps authorized, it goes on after the plan: a dry run of the model-backed init, then the init itself.
+pattern: '"command":"(?=(?:[^"\\]|\\.)*--dry-run)(?:[^"\\]|\\.)*\binit\b(?:[^"\\]|\\.)*--(?:sop|transcripts)[\s\S]*?"command":"(?!(?:[^"\\]|\\.)*--dry-run)(?:[^"\\]|\\.)*\binit\b(?:[^"\\]|\\.)*--(?:sop|transcripts)'
 match: contains
 ---

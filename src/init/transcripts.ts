@@ -98,6 +98,9 @@ Make everything fictional. Replace people's names, company names and identifiers
 
 Keep the transcript's facts. Reuse an existing row only when every fact the transcript states about it matches the row: a membership level, status, date, amount or item that differs means it is not the same record, even when the name matches (the same customer may have called before, with different facts then). Otherwise propose new_rows with new identifiers and every field the scenario needs, including the table key, consistent with the conditions you expect. Never change what the transcript says to fit an existing row, and never invent a conflict the transcript does not have. List each existing row you reuse in existing_rows, with the facts the transcript states about it.`;
 
+/** The drafting system prompt, for `init --dry-run`'s size estimate. */
+export const TRANSCRIPTS_SYSTEM_PROMPT = SYSTEM;
+
 function describe(domain: Domain): string {
   const tools = describeTools(domain);
   const tables = Object.entries(domain.world.tables)

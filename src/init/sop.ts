@@ -144,6 +144,9 @@ Rules for invariants:
 - A rule that a call must include an argument in some cases ("for a check, enter the mailing address") is a never invariant with exists: false on that argument, not a soft rule.
 - Rules about not revealing a specific internal field are never_disclose invariants. Other rules about what the agent says go into soft_rules as agent_says.`;
 
+/** The drafting system prompt, for `init --dry-run`'s size estimate. */
+export const SOP_SYSTEM_PROMPT = SYSTEM;
+
 /**
  * The agent's tools as both drafting steps show them to the model: each param with its type, `?` when it is
  * optional, and its allowed values when it has an enum, then the params' descriptions. Without the allowed values,

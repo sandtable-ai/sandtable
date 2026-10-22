@@ -85,7 +85,7 @@ describe("the plugin eval suite's cases", () => {
   });
 
   it("fail a case that reads sandtable's own code to learn what the CLI supports, and not one that runs or asks the CLI", () => {
-    for (const c of ["check-cli-features", "draft-from-sources"]) {
+    for (const c of ["check-cli-features", "draft-from-sources", "draft-preauthorized"]) {
       const reads = new RegExp(front(path.join(evals, c, "graders", "no-reading-sandtable-code.md")).pattern as string);
       const bash = (command: string) => JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", name: "Bash", input: { command } }] } });
       const grep = (p: string) => JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", name: "Grep", input: { pattern: "bedrock", path: p } }] } });
@@ -100,27 +100,36 @@ describe("the plugin eval suite's cases", () => {
     }
   });
 
-  it("tell, in draft-preauthorized, an estimate stated before the model-backed init from one stated after", () => {
+  it("tell, in draft-preauthorized, a dry run before the model-backed init from a run without one", () => {
     const grader = (name: string) => new RegExp(front(path.join(evals, "draft-preauthorized", "graders", `${name}.md`)).pattern as string);
+    const dryRunFirst = grader("dry-run-before-paid-init");
+    const dryRunThenInit = grader("estimate-then-init");
     const initBeforeEstimate = grader("no-paid-init-before-estimate");
-    const estimateThenInit = grader("estimate-then-init");
     // Trace lines as the eval writes them: one JSON event per line.
     const event = (type: "assistant" | "user", ...content: object[]) => JSON.stringify({ type, message: { role: type, content } });
     const say = (text: string) => event("assistant", { type: "text", text });
     const bash = (command: string) => event("assistant", { type: "tool_use", id: "t", name: "Bash", input: { command } });
-    const skill = event("user", { type: "text", text: "Base directory for this skill: … at most about $0.36 a call …" });
-    const paid = "npx sandtable-ai init --sop discovery/sop.md --transcripts discovery/transcripts -o sandtable --provider bedrock -m claude-sonnet-5-5";
+    const result = (text: string) => event("user", { type: "tool_result", tool_use_id: "t", content: text });
+    const skill = event("user", { type: "text", text: "Base directory for this skill: … `init … --dry-run` prints a plan line …" });
+    const paid = 'npx sandtable-ai init --sop "discovery/sop.md" --transcripts discovery/transcripts -o sandtable --provider bedrock -m claude-sonnet-5-5';
+    const dry = `${paid} --dry-run`;
+    const plan = "Plan: 5 model calls (1 for the SOP, 4 for transcripts) to claude-sonnet-5-5 on Bedrock (eu-west-1); at most about $0.94 at list prices";
+    const openapiDry = "npx sandtable-ai init --openapi discovery/openapi.yaml -o sandtable --dry-run";
     const trace = (...lines: string[]) => `${lines.join("\n")}\n`;
-    const cases: [string, string, boolean, boolean][] = [
-      ["an estimate, then the run", trace(skill, say('5 model calls on Claude Sonnet 5.5 via Bedrock, at most about $0.90, as "authorized".'), bash(paid)), false, true],
-      ["the run, then the cost", trace(skill, bash(paid), say("Done: 5 calls cost $0.46.")), true, false],
-      ["an estimate and a question, no run", trace(skill, say("This would make 5 calls, about $0.90. Go ahead?")), false, false],
-      ["a free step that 'costs nothing', then the run", trace(skill, say("--openapi costs nothing, so I ran it first."), bash(paid)), true, false],
-      ["a dollar amount from the SOP, then the run", trace(skill, say("The SOP says refunds over $50 need a manager."), bash(paid)), true, false],
+    // [name, trace, dry run first, dry run then the paid init, paid init with no estimate said before it]
+    const cases: [string, string, boolean, boolean, boolean][] = [
+      ["dry run, the plan said, then the run", trace(skill, bash(dry), result(plan), say(`${plan}. Authorized, so I'm running it.`), bash(paid)), true, true, false],
+      ["dry run, then the run, nothing said", trace(skill, bash(dry), result(plan), bash(paid)), true, true, true],
+      ["dry run and a question, no run", trace(skill, bash(dry), result(plan), say(`${plan}. Go ahead?`)), true, false, false],
+      ["the run with no dry run", trace(skill, bash(paid), say("Done: 5 calls cost $0.46.")), false, false, true],
+      ["an estimate said, then the run, no dry run", trace(skill, say("5 model calls, at most about $0.94."), bash(paid)), false, false, false],
+      ["the run, then a dry run", trace(skill, bash(paid), bash(dry)), false, false, true],
+      ["only --openapi dry-run, then the run", trace(skill, bash(openapiDry), bash(paid)), false, false, true],
     ];
-    for (const [name, t, before, then] of cases) {
-      expect(initBeforeEstimate.test(t), name).toBe(before);
-      expect(estimateThenInit.test(t), name).toBe(then);
+    for (const [name, t, first, then, unannounced] of cases) {
+      expect(dryRunFirst.test(t), name).toBe(first);
+      expect(dryRunThenInit.test(t), name).toBe(then);
+      expect(initBeforeEstimate.test(t), name).toBe(unannounced);
     }
   });
 

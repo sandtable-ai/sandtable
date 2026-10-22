@@ -1,6 +1,6 @@
 ---
 plugins: ["../../plugin"]
-description: With model steps authorized up front, drafting still states the calls, model and cost before the first model-backed init step, then goes on.
+description: With model steps authorized up front, drafting still dry-runs the model-backed init and states its plan (calls, model, cost bound) before running it, then goes on.
 tags: [drafting, skill-296]
 max_turns: 30
 timeout_seconds: 900
