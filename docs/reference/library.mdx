@@ -32,7 +32,7 @@ For an agent that runs its own tool loop, or a test of a tool's behavior.
 
 | Export | What it does |
 |---|---|
-| `World` | The in-memory store of a domain's tables: `new World(domain.world)`, then `get(table, key)`, `list(table, where?, limit?)`, `insert`, `update`, `snapshot()` and `restore(snapshot)`. Each trial gets a fresh one. |
+| `World` | The in-memory store of a domain's tables: `new World(domain.world)`, then `get(table, key)`, `list(table, where?, limit?)`, `insert`, `update`, `snapshot()` and `restore(snapshot)`, plus `keyOf(table)`, a table's key field, and `hasTable(table)`. Each trial gets a fresh one. |
 | `toolSchema(tool): ToolSchema` | The tool as the agent sees it: name, description and a JSON Schema of its parameters. |
 | `coerceArgs(tool, raw)` | Checks and coerces a call's arguments as sandtable does before running a tool: `{ args }`, or `{ error }` for an unknown or missing argument or a wrong type. |
 | `executeTool(tool, world, args): ToolOutcome` | Runs the tool's checks and operations against the world, all or nothing: `{ ok: true, result }` or `{ ok: false, error }`. |
