@@ -1,0 +1,45 @@
+# Tasks for the fictional Wrenfield Outfitters returns desk.
+
+- id: return-boots-silver
+  description: A silver member returns rain boots bought 32 days ago; the agent starts the return.
+  user:
+    instructions: |
+      You are Orrin Petch, account A-502. You want to return the rain boots from order O-2002 because they are the wrong size.
+      Once the return is started, thank the agent and end the chat.
+  reference:
+    - { tool: lookup_account, args: { account_id: A-502 } }
+    - { tool: get_order, args: { order_id: O-2002 } }
+    - { tool: start_return, args: { order_id: O-2002, reason: wrong_size } }
+  expect:
+    state:
+      - { table: returns, where: { order_id: O-2002 }, count: 1 }
+
+- id: jacket-not-on-order
+  description: A silver member returns a trail jacket from order O-2004; the agent starts the return.
+  user:
+    instructions: |
+      You are Bram Holloway, account A-504. You want to return the trail jacket from order O-2004 because it is the wrong size.
+      Once the return is started, thank the agent and end the chat.
+  expect:
+    state:
+      - { table: returns, where: { order_id: O-2004 }, count: 1 }
+
+- id: guest-receipt
+  description: A guest returns a camp stove bought 13 days ago, without a receipt; the agent declines and starts nothing.
+  user:
+    instructions: |
+      You are Linnea Quarry, account A-503. You want to return the camp stove from order O-2003 because you changed your mind.
+      If the agent says you can't return it, accept that and end the chat.
+  expect:
+    state:
+      - { table: returns, count: 0 }
+
+- id: return-jacket-gold
+  description: A gold member returns a damaged trail jacket, giving the order before the account; the agent starts the return.
+  user:
+    instructions: |
+      You are Tamsin Vale, account A-501. Your trail jacket from order O-2001 arrived damaged and you want to return it.
+      Start by giving the order number; give your account ID when asked. Once the return is started, thank the agent and end the chat.
+  expect:
+    state:
+      - { table: returns, where: { order_id: O-2001 }, count: 1 }

@@ -1,0 +1,10 @@
+[Fictional support chat, provided as discovery material]
+
+AGENT: Hi, thanks for contacting Wrenfield Outfitters. How can I help?
+CUSTOMER: Hi, I'd like to return a tent I bought, it's the wrong size for us.
+AGENT: Sure. Can I have your account ID?
+CUSTOMER: It's A-519. Linnea Quarry.
+AGENT: Thanks, Linnea. I see you're a gold member. And the order number?
+CUSTOMER: O-2019.
+AGENT: Got it, the two-person tent from September. Gold members can return at any time, so I've started the return. A prepaid label is on its way to your email.
+CUSTOMER: Perfect, thank you!

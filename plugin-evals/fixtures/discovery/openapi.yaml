@@ -1,0 +1,80 @@
+# Wrenfield Outfitters' order service, as a (fictional) customer would hand it over. Everything here is made up.
+openapi: 3.0.3
+info:
+  title: Wrenfield Order Service
+  version: 1.4.0
+paths:
+  /accounts/{account_id}:
+    get:
+      operationId: getAccount
+      summary: A customer account and its membership level
+      parameters:
+        - { name: account_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Account" } } } }
+        "404": { description: Unknown account }
+  /orders/{order_id}:
+    get:
+      operationId: getOrder
+      summary: An order, its item and purchase date
+      parameters:
+        - { name: order_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Order" } } } }
+        "404": { description: Unknown order }
+  /orders/{order_id}/returns:
+    post:
+      operationId: startReturn
+      summary: Start a return for an order and email the customer a prepaid label
+      parameters:
+        - { name: order_id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, enum: [wrong_size, damaged, changed_mind] }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Return" } } } }
+        "404": { description: Unknown order }
+  /handoffs:
+    post:
+      operationId: transferToHuman
+      summary: Transfer the chat to a person
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        "202": { description: Accepted }
+components:
+  schemas:
+    Account:
+      type: object
+      properties:
+        account_id: { type: string }
+        name: { type: string }
+        membership: { type: string, enum: [gold, silver, guest] }
+      example: { account_id: A-501, name: Tamsin Vale, membership: gold }
+    Order:
+      type: object
+      properties:
+        order_id: { type: string }
+        account_id: { type: string }
+        item: { type: string }
+        purchase_date: { type: string, format: date }
+        original_packaging: { type: boolean }
+        status: { type: string, enum: [delivered, return_started] }
+      example: { order_id: O-2001, account_id: A-501, item: trail jacket, purchase_date: "2026-06-14", original_packaging: false, status: delivered }
+    Return:
+      type: object
+      properties:
+        return_id: { type: string }
+        order_id: { type: string }
+        reason: { type: string }

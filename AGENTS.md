@@ -28,7 +28,7 @@ npm run check   # typecheck, build, tests (the package contents too), version an
 
 Also run these when you touch the area: `claude plugin validate . --strict` and `claude plugin validate ./plugin --strict` (`plugin/`, `.claude-plugin/`), `cd docs && npx mint broken-links` (`docs/`), `uv build python --out-dir python/dist` (`python/`).
 
-Ask before running anything that calls a model, because it needs keys and costs money. That covers `run` or `leaderboard` with a `claude`, `openai:` or `bedrock:` agent, `demo --live`, `init --sop` and `init --transcripts`. The default simulated user is Claude, so an offline run always passes `--user scripted`. Runs write to `.sandtable/runs/` (gitignored) unless you pass `-o`.
+Ask before running anything that calls a model, because it needs keys and costs money. That covers `run` or `leaderboard` with a `claude`, `openai:` or `bedrock:` agent, `demo --live`, `init --sop`, `init --transcripts` and `npm run evals:plugin` (the plugin's eval suite, `plugin-evals/`). The default simulated user is Claude, so an offline run always passes `--user scripted`. Runs write to `.sandtable/runs/` (gitignored) unless you pass `-o`.
 
 ## Workflow
 

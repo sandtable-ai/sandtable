@@ -1,0 +1,619 @@
+{
+  "version": 1,
+  "runId": "20261102T090000-wrfd",
+  "domain": "wrenfield-returns",
+  "agent": "http://localhost:8787/step",
+  "user": "claude:claude-haiku-5-5",
+  "k": 1,
+  "inputs": "298e5aa0c11efaec",
+  "startedAt": "2026-11-02T09:00:00.000Z",
+  "durationMs": 9600,
+  "tasks": [
+    {
+      "id": "return-boots-silver",
+      "description": "A silver member returns rain boots bought 32 days ago; the agent starts the return.",
+      "tags": [],
+      "trials": [
+        {
+          "taskId": "return-boots-silver",
+          "trial": 0,
+          "passed": true,
+          "checks": [
+            {
+              "id": "state:returns#1",
+              "kind": "state",
+              "passed": true,
+              "detail": "1 returns row(s) match {\"order_id\":\"O-2002\"} (expected 1)"
+            }
+          ],
+          "violations": [],
+          "soft": [],
+          "events": [
+            {
+              "type": "user",
+              "text": "Hi, I'm Orrin Petch, account A-502. I want to return the rain boots from order O-2002, they're the wrong size."
+            },
+            {
+              "type": "tool",
+              "index": 0,
+              "name": "lookup_account",
+              "args": {
+                "account_id": "A-502"
+              },
+              "ok": true,
+              "result": {
+                "account_id": "A-502",
+                "name": "Orrin Petch",
+                "membership": "silver"
+              },
+              "violations": []
+            },
+            {
+              "type": "tool",
+              "index": 1,
+              "name": "get_order",
+              "args": {
+                "order_id": "O-2002"
+              },
+              "ok": true,
+              "result": {
+                "order_id": "O-2002",
+                "account_id": "A-502",
+                "item": "rain boots",
+                "purchase_date": "2026-10-01",
+                "original_packaging": true,
+                "status": "delivered"
+              },
+              "violations": []
+            },
+            {
+              "type": "tool",
+              "index": 2,
+              "name": "start_return",
+              "args": {
+                "order_id": "O-2002",
+                "reason": "wrong_size"
+              },
+              "ok": true,
+              "result": {
+                "order_id": "O-2002",
+                "reason": "wrong_size",
+                "return_id": "returns-1"
+              },
+              "violations": []
+            },
+            {
+              "type": "agent",
+              "text": "Your return for the rain boots is started, and a prepaid label is on its way to your email.",
+              "latencyMs": 800
+            },
+            {
+              "type": "user",
+              "text": "Great, thanks!"
+            },
+            {
+              "type": "agent",
+              "text": "You're welcome. Is there anything else I can help with?",
+              "latencyMs": 800
+            }
+          ],
+          "changes": [
+            {
+              "table": "orders",
+              "key": "O-2002",
+              "kind": "update",
+              "before": {
+                "order_id": "O-2002",
+                "account_id": "A-502",
+                "item": "rain boots",
+                "purchase_date": "2026-10-01",
+                "original_packaging": true,
+                "status": "delivered"
+              },
+              "after": {
+                "order_id": "O-2002",
+                "account_id": "A-502",
+                "item": "rain boots",
+                "purchase_date": "2026-10-01",
+                "original_packaging": true,
+                "status": "return_started"
+              }
+            },
+            {
+              "table": "returns",
+              "key": "returns-1",
+              "kind": "insert",
+              "after": {
+                "order_id": "O-2002",
+                "reason": "wrong_size",
+                "return_id": "returns-1"
+              }
+            }
+          ],
+          "endReason": "user_stop",
+          "turns": 2,
+          "durationMs": 2400,
+          "usage": {
+            "agent": {},
+            "user": {},
+            "costUsd": 0
+          }
+        }
+      ],
+      "passes": 1,
+      "graded": 1,
+      "skipped": 0,
+      "verdict": "passed",
+      "interval": {
+        "low": 0.20654329147389294,
+        "high": 1
+      },
+      "inputs": "3aacb5aeba7bdafe",
+      "grading": "92f35e5b43895b2c"
+    },
+    {
+      "id": "jacket-not-on-order",
+      "description": "A silver member returns a trail jacket from order O-2004; the agent starts the return.",
+      "tags": [],
+      "trials": [
+        {
+          "taskId": "jacket-not-on-order",
+          "trial": 0,
+          "passed": false,
+          "checks": [
+            {
+              "id": "state:returns#1",
+              "kind": "state",
+              "passed": false,
+              "detail": "0 returns row(s) match {\"order_id\":\"O-2004\"} (expected 1)"
+            }
+          ],
+          "violations": [],
+          "soft": [],
+          "events": [
+            {
+              "type": "user",
+              "text": "Hi, this is Bram Holloway, account A-504. I want to return the trail jacket from order O-2004, it's the wrong size."
+            },
+            {
+              "type": "tool",
+              "index": 0,
+              "name": "lookup_account",
+              "args": {
+                "account_id": "A-504"
+              },
+              "ok": true,
+              "result": {
+                "account_id": "A-504",
+                "name": "Bram Holloway",
+                "membership": "silver"
+              },
+              "violations": []
+            },
+            {
+              "type": "tool",
+              "index": 1,
+              "name": "get_order",
+              "args": {
+                "order_id": "O-2004"
+              },
+              "ok": true,
+              "result": {
+                "order_id": "O-2004",
+                "account_id": "A-504",
+                "item": "down vest",
+                "purchase_date": "2026-07-02",
+                "original_packaging": true,
+                "status": "delivered"
+              },
+              "violations": []
+            },
+            {
+              "type": "agent",
+              "text": "Order O-2004 shows a down vest, not a trail jacket, so I can't start a return for the trail jacket on it. Could you check the order number?",
+              "latencyMs": 800
+            },
+            {
+              "type": "user",
+              "text": "Oh, okay. Thanks anyway."
+            },
+            {
+              "type": "agent",
+              "text": "You're welcome. Is there anything else I can help with?",
+              "latencyMs": 800
+            }
+          ],
+          "changes": [],
+          "endReason": "user_stop",
+          "turns": 2,
+          "durationMs": 2400,
+          "usage": {
+            "agent": {},
+            "user": {},
+            "costUsd": 0
+          }
+        }
+      ],
+      "passes": 0,
+      "graded": 1,
+      "skipped": 0,
+      "verdict": "failed",
+      "interval": {
+        "low": 0,
+        "high": 0.7934567085261071
+      },
+      "inputs": "8dc0fd8e9abf8d9e",
+      "grading": "8df10df362a6373c"
+    },
+    {
+      "id": "guest-receipt",
+      "description": "A guest returns a camp stove bought 13 days ago, without a receipt; the agent declines and starts nothing.",
+      "tags": [],
+      "trials": [
+        {
+          "taskId": "guest-receipt",
+          "trial": 0,
+          "passed": false,
+          "checks": [
+            {
+              "id": "state:returns#1",
+              "kind": "state",
+              "passed": false,
+              "detail": "1 returns row(s) match {} (expected 0)"
+            }
+          ],
+          "violations": [],
+          "soft": [],
+          "events": [
+            {
+              "type": "user",
+              "text": "Hi, I'm Linnea Quarry, account A-503. I want to return the camp stove from order O-2003, I changed my mind."
+            },
+            {
+              "type": "tool",
+              "index": 0,
+              "name": "lookup_account",
+              "args": {
+                "account_id": "A-503"
+              },
+              "ok": true,
+              "result": {
+                "account_id": "A-503",
+                "name": "Linnea Quarry",
+                "membership": "guest"
+              },
+              "violations": []
+            },
+            {
+              "type": "tool",
+              "index": 1,
+              "name": "get_order",
+              "args": {
+                "order_id": "O-2003"
+              },
+              "ok": true,
+              "result": {
+                "order_id": "O-2003",
+                "account_id": "A-503",
+                "item": "camp stove",
+                "purchase_date": "2026-10-20",
+                "original_packaging": false,
+                "status": "delivered"
+              },
+              "violations": []
+            },
+            {
+              "type": "agent",
+              "text": "Do you have the receipt for it?",
+              "latencyMs": 800
+            },
+            {
+              "type": "user",
+              "text": "Yes, I have the receipt right here."
+            },
+            {
+              "type": "tool",
+              "index": 2,
+              "name": "start_return",
+              "args": {
+                "order_id": "O-2003",
+                "reason": "changed_mind"
+              },
+              "ok": true,
+              "result": {
+                "order_id": "O-2003",
+                "reason": "changed_mind",
+                "return_id": "returns-1"
+              },
+              "violations": []
+            },
+            {
+              "type": "agent",
+              "text": "Your return for the camp stove is started, and a prepaid label is on its way to your email.",
+              "latencyMs": 800
+            },
+            {
+              "type": "user",
+              "text": "Thanks!"
+            },
+            {
+              "type": "agent",
+              "text": "You're welcome. Is there anything else I can help with?",
+              "latencyMs": 800
+            }
+          ],
+          "changes": [
+            {
+              "table": "orders",
+              "key": "O-2003",
+              "kind": "update",
+              "before": {
+                "order_id": "O-2003",
+                "account_id": "A-503",
+                "item": "camp stove",
+                "purchase_date": "2026-10-20",
+                "original_packaging": false,
+                "status": "delivered"
+              },
+              "after": {
+                "order_id": "O-2003",
+                "account_id": "A-503",
+                "item": "camp stove",
+                "purchase_date": "2026-10-20",
+                "original_packaging": false,
+                "status": "return_started"
+              }
+            },
+            {
+              "table": "returns",
+              "key": "returns-1",
+              "kind": "insert",
+              "after": {
+                "order_id": "O-2003",
+                "reason": "changed_mind",
+                "return_id": "returns-1"
+              }
+            }
+          ],
+          "endReason": "user_stop",
+          "turns": 3,
+          "durationMs": 2400,
+          "usage": {
+            "agent": {},
+            "user": {},
+            "costUsd": 0
+          }
+        }
+      ],
+      "passes": 0,
+      "graded": 1,
+      "skipped": 0,
+      "verdict": "failed",
+      "interval": {
+        "low": 0,
+        "high": 0.7934567085261071
+      },
+      "inputs": "7e228acc7503aa7a",
+      "grading": "eca2b91f7496f3b0"
+    },
+    {
+      "id": "return-jacket-gold",
+      "description": "A gold member returns a damaged trail jacket, giving the order before the account; the agent starts the return.",
+      "tags": [],
+      "trials": [
+        {
+          "taskId": "return-jacket-gold",
+          "trial": 0,
+          "passed": false,
+          "checks": [
+            {
+              "id": "account-before-order",
+              "kind": "invariant",
+              "passed": false,
+              "detail": "get_order(order_id=\"O-2001\") was called without a prior successful lookup_account"
+            },
+            {
+              "id": "state:returns#1",
+              "kind": "state",
+              "passed": true,
+              "detail": "1 returns row(s) match {\"order_id\":\"O-2001\"} (expected 1)"
+            }
+          ],
+          "violations": [
+            {
+              "invariant": "account-before-order",
+              "description": "Look up the account before looking up any order.",
+              "detail": "get_order(order_id=\"O-2001\") was called without a prior successful lookup_account",
+              "callIndex": 0
+            }
+          ],
+          "soft": [],
+          "events": [
+            {
+              "type": "user",
+              "text": "Hi, I want to return order O-2001, the trail jacket arrived damaged."
+            },
+            {
+              "type": "tool",
+              "index": 0,
+              "name": "get_order",
+              "args": {
+                "order_id": "O-2001"
+              },
+              "ok": true,
+              "result": {
+                "order_id": "O-2001",
+                "account_id": "A-501",
+                "item": "trail jacket",
+                "purchase_date": "2026-06-14",
+                "original_packaging": false,
+                "status": "delivered"
+              },
+              "violations": [
+                "account-before-order"
+              ]
+            },
+            {
+              "type": "agent",
+              "text": "I can help with that. What's your account ID?",
+              "latencyMs": 800
+            },
+            {
+              "type": "user",
+              "text": "Sure, it's A-501, Tamsin Vale."
+            },
+            {
+              "type": "tool",
+              "index": 1,
+              "name": "lookup_account",
+              "args": {
+                "account_id": "A-501"
+              },
+              "ok": true,
+              "result": {
+                "account_id": "A-501",
+                "name": "Tamsin Vale",
+                "membership": "gold"
+              },
+              "violations": []
+            },
+            {
+              "type": "tool",
+              "index": 2,
+              "name": "start_return",
+              "args": {
+                "order_id": "O-2001",
+                "reason": "damaged"
+              },
+              "ok": true,
+              "result": {
+                "order_id": "O-2001",
+                "reason": "damaged",
+                "return_id": "returns-1"
+              },
+              "violations": []
+            },
+            {
+              "type": "agent",
+              "text": "Your return for the trail jacket is started, and a prepaid label is on its way to your email.",
+              "latencyMs": 800
+            },
+            {
+              "type": "user",
+              "text": "Thank you!"
+            },
+            {
+              "type": "agent",
+              "text": "You're welcome. Is there anything else I can help with?",
+              "latencyMs": 800
+            }
+          ],
+          "changes": [
+            {
+              "table": "orders",
+              "key": "O-2001",
+              "kind": "update",
+              "before": {
+                "order_id": "O-2001",
+                "account_id": "A-501",
+                "item": "trail jacket",
+                "purchase_date": "2026-06-14",
+                "original_packaging": false,
+                "status": "delivered"
+              },
+              "after": {
+                "order_id": "O-2001",
+                "account_id": "A-501",
+                "item": "trail jacket",
+                "purchase_date": "2026-06-14",
+                "original_packaging": false,
+                "status": "return_started"
+              }
+            },
+            {
+              "table": "returns",
+              "key": "returns-1",
+              "kind": "insert",
+              "after": {
+                "order_id": "O-2001",
+                "reason": "damaged",
+                "return_id": "returns-1"
+              }
+            }
+          ],
+          "endReason": "user_stop",
+          "turns": 3,
+          "durationMs": 2400,
+          "usage": {
+            "agent": {},
+            "user": {},
+            "costUsd": 0
+          }
+        }
+      ],
+      "passes": 0,
+      "graded": 1,
+      "skipped": 0,
+      "verdict": "failed",
+      "interval": {
+        "low": 0,
+        "high": 0.7934567085261071
+      },
+      "inputs": "fdc2468758cd0ef0",
+      "grading": "926865752a8fd733"
+    }
+  ],
+  "passHat": {
+    "1": 0.25
+  },
+  "passAt": {
+    "1": 0.25
+  },
+  "flipRate": null,
+  "flaky": [],
+  "skipped": 0,
+  "callerNotes": {
+    "turns": 0,
+    "trials": 0
+  },
+  "failureModes": [
+    {
+      "id": "state:returns#1",
+      "kind": "state",
+      "count": 2,
+      "tasks": [
+        "jacket-not-on-order",
+        "guest-receipt"
+      ],
+      "example": "0 returns row(s) match {\"order_id\":\"O-2004\"} (expected 1)"
+    },
+    {
+      "id": "account-before-order",
+      "kind": "invariant",
+      "count": 1,
+      "tasks": [
+        "return-jacket-gold"
+      ],
+      "example": "get_order(order_id=\"O-2001\") was called without a prior successful lookup_account"
+    }
+  ],
+  "byTag": [
+    {
+      "tag": "untagged",
+      "tasks": 4,
+      "passHat1": 0.25,
+      "passHatK": 0.25
+    }
+  ],
+  "soft": [],
+  "usage": {
+    "agent": {},
+    "user": {},
+    "costUsd": 0
+  },
+  "pendingReview": [],
+  "latency": {
+    "agentTurnP50Ms": 800,
+    "agentTurnP95Ms": 800
+  }
+}
