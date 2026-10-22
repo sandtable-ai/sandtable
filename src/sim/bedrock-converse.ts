@@ -1,4 +1,5 @@
 import { importOptional } from "./optional.ts";
+import { hasReasoning, hasUnclosedReasoning, stripReasoning } from "./reasoning.ts";
 import type { AgentAdapter } from "./types.ts";
 
 /** The slice of BedrockRuntimeClient this adapter uses; injectable for tests. */
@@ -59,16 +60,16 @@ async function makeClient(opts: BedrockConverseOptions): Promise<{ client: Conve
 
 /**
  * gpt-oss on Bedrock usually sends its reasoning in reasoningContent blocks, but now and then inside the
- * text as <reasoning>…</reasoning>, sometimes with no closing tag. The caller must never hear it.
+ * text, as <reasoning>…</reasoning> or <analysis>…</analysis>, sometimes with no closing tag. The caller must
+ * never hear it: stripReasoning removes it.
  */
-const REASONING = /<reasoning>[\s\S]*?<\/reasoning>/g;
 const MALFORMED_RETRIES = 2;
 
-const textOf = (content: ConverseBlock[]) =>
-  content
-    .map((b) => b.text ?? "")
-    .join("")
-    .replace(REASONING, "");
+/** The reply's text blocks as returned; reasoningContent blocks are never among them. */
+const rawTextOf = (content: ConverseBlock[]) => content.map((b) => b.text ?? "").join("");
+
+/** What the reply says out loud: its text without reasoning. */
+const textOf = (content: ConverseBlock[]) => stripReasoning(rawTextOf(content));
 
 /** The result for a tool call that was not run, because the reply that made it ended some other way than with a call. */
 const notRun = (toolUseId: string, stopReason: string | undefined): ConverseBlock => ({
@@ -83,7 +84,7 @@ const RUNS_TOOLS = new Set(["tool_use", "end_turn"]);
 /** A reply whose reasoning was never closed: the reasoning and the answer can't be told apart. */
 const unclosedReasoning = (res: ConverseResponse) => {
   const content = res.output?.message?.content ?? [];
-  return !content.some((b) => b.toolUse) && textOf(content).includes("<reasoning>");
+  return !content.some((b) => b.toolUse) && hasUnclosedReasoning(rawTextOf(content));
 };
 
 /**
@@ -155,7 +156,8 @@ export function bedrockConverseAgent(opts: BedrockConverseOptions): AgentAdapter
             );
             const u = res.usage;
             const cut = res.stopReason === "max_tokens";
-            if (u || cut) {
+            const reasoning = hasReasoning(rawTextOf(res.output?.message?.content ?? []));
+            if (u || cut || reasoning) {
               ctx.recordUsage?.(opts.modelId, {
                 input: u?.inputTokens ?? 0,
                 output: u?.outputTokens ?? 0,
@@ -163,6 +165,8 @@ export function bedrockConverseAgent(opts: BedrockConverseOptions): AgentAdapter
                 cacheWrite: u?.cacheWriteInputTokens ?? 0,
                 // The reply hit maxTokens: what the agent says next may be cut off or empty.
                 ...(cut ? { maxTokensStops: 1 } : {}),
+                // Reasoning in the text, removed before the caller hears it.
+                ...(reasoning ? { reasoningStripped: 1 } : {}),
               });
             }
             return res;

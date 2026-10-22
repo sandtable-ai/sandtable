@@ -58,6 +58,17 @@ describe("usage accounting", () => {
     expect(sumUsage([{ agent: { m: { calls: 1, input: 1, output: 1, cacheRead: 0, cacheWrite: 0 } }, user: {}, costUsd: null }]).agent.m).not.toHaveProperty("maxTokensStops");
   });
 
+  it("counts calls whose reasoning was removed, with no count until one has", () => {
+    const g: UsageByModel = {};
+    recordInto(g, "m", { output: 10 });
+    expect(g.m).not.toHaveProperty("reasoningStripped");
+    recordInto(g, "m", { output: 10, reasoningStripped: 1 });
+    expect(g.m).toMatchObject({ calls: 2, reasoningStripped: 1 });
+    const trial = { agent: g, user: {}, costUsd: null };
+    expect(sumUsage([trial, trial]).agent.m).toMatchObject({ calls: 4, reasoningStripped: 2 });
+    expect(totalTokens({ a: g.m!, b: { calls: 1, input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } })).toMatchObject({ calls: 3, reasoningStripped: 1 });
+  });
+
   it("computes nearest-rank percentiles", () => {
     expect(percentile([], 50)).toBeNull();
     expect(percentile([5, 1, 3, 2, 4], 50)).toBe(3);

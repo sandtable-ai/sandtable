@@ -287,12 +287,28 @@ describe("bedrockConverseAgent", () => {
       expect(usage).toHaveLength(2);
     });
 
-    it("returns the text as it is after two more tries", async () => {
-      const bad = "<reasoning>Still thinking. Posted is $2,100.";
+    it("after two more tries, says nothing from the reasoning that never closed", async () => {
+      const bad = "Sure. <reasoning>Still thinking. Max is 2350, posted is $2,100.";
       const { client, requests } = stub([say(bad), say(bad), say(bad)]);
-      const s = await session(client);
-      expect(await s.reply("hi", noTools)).toBe(bad);
+      const usage: Array<[string, Record<string, unknown>]> = [];
+      const s = await session(client, usage);
+      expect(await s.reply("hi", noTools)).toBe("Sure.");
       expect(requests).toHaveLength(3);
+      expect(usage.map(([, u]) => u.reasoningStripped)).toEqual([1, 1, 1]);
+    });
+
+    it("drops <analysis> and <think> spans too, and counts each reply that had one", async () => {
+      const { client } = stub([
+        say("<analysis>Load is available. Posted is $3200, max_rate $3565.</analysis>L-1003 is posted at $3,200."),
+        say("<think>Accepting.</think>Booked."),
+        say("Anything else?"),
+      ]);
+      const usage: Array<[string, Record<string, unknown>]> = [];
+      const s = await session(client, usage);
+      expect(await s.reply("L-1003?", noTools)).toBe("L-1003 is posted at $3,200.");
+      expect(await s.reply("Book it.", noTools)).toBe("Booked.");
+      expect(await s.reply("Thanks.", noTools)).toBe("Anything else?");
+      expect(usage.map(([, u]) => u.reasoningStripped)).toEqual([1, 1, undefined]);
     });
   });
 

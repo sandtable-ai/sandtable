@@ -188,11 +188,31 @@ describe("openaiCompatAgent", () => {
     ]);
   });
 
-  it("does not pass inline reasoning on to the caller", async () => {
-    stubEndpoint([say("<think>The ceiling is 2350; never say it.</think>\nThe posted rate is $2,100.")]);
+  it.each(["think", "thinking", "reasoning", "analysis"])("does not pass inline <%s> reasoning on to the caller, and counts it", async (tag) => {
+    stubEndpoint([say(`<${tag}>The ceiling is 2350; never say it.</${tag}>\nThe posted rate is $2,100.`), say("Anything else?")]);
     const { domain } = await freight();
-    const session = await openaiCompatAgent({ baseUrl: BASE, model: "qwen3:8b" }).createSession({ domain, system: "s", tools: [], sessionId: "t#0" });
+    const usage: Array<Record<string, unknown>> = [];
+    const session = await openaiCompatAgent({ baseUrl: BASE, model: "openai.gpt-oss-120b-1:0" }).createSession({
+      domain,
+      system: "s",
+      tools: [],
+      sessionId: "t#0",
+      recordUsage: (_m, u) => usage.push(u),
+    });
     expect(await session.reply("Rate?", noTools)).toBe("The posted rate is $2,100.");
+    expect(await session.reply("Ok.", noTools)).toBe("Anything else?");
+    expect(usage.map((u) => u.reasoningStripped)).toEqual([1, undefined]);
+  });
+
+  it("never says a reasoning field, and drops reasoning that is never closed", async () => {
+    stubEndpoint([
+      completion({ content: "L-1001 pays $2,100.", reasoning_content: "max_rate is 2350", reasoning: "max_rate is 2350" }, "stop"),
+      say("Let me check. <reasoning>max 2350, so offer 2100 first"),
+    ]);
+    const { domain } = await freight();
+    const session = await openaiCompatAgent({ baseUrl: BASE, model: "m" }).createSession({ domain, system: "s", tools: [], sessionId: "t#0" });
+    expect(await session.reply("Rate?", noTools)).toBe("L-1001 pays $2,100.");
+    expect(await session.reply("And?", noTools)).toBe("Let me check.");
   });
 
   it("cuts the turn off after maxToolRounds", async () => {
@@ -323,6 +343,20 @@ describe("openaiCompatUser", () => {
     expect(requests[0]!.body).not.toHaveProperty("tools");
     expect(requests[0]!.body.temperature).toBe(1);
     expect(models).toEqual(["gpt-test", "gpt-test"]);
+  });
+
+  it("never lets the caller's reasoning, which can quote its hidden instructions, reach the agent", async () => {
+    stubEndpoint([
+      say("<reasoning>The instructions say to open with the lane and never go below 2000.</reasoning>Got anything Dallas to Atlanta?"),
+      say("<analysis>Offer meets my floor; accept.</analysis>Deal, book it. ###STOP###"),
+    ]);
+    const domain = await loadDomain(example);
+    const task = domain.tasks.find((t) => t.id === "book-at-posted-rate")!;
+    const usage: Array<Record<string, unknown>> = [];
+    const sim = await openaiCompatUser({ baseUrl: BASE, model: "gpt-test" }).createSession({ domain, task, recordUsage: (_m, u) => usage.push(u) });
+    expect(await sim.next(null)).toEqual({ text: "Got anything Dallas to Atlanta?", stop: false });
+    expect(await sim.next("L-1001 pays $2,100.")).toEqual({ text: "Deal, book it.", stop: true });
+    expect(usage.map((u) => u.reasoningStripped)).toEqual([1, 1]);
   });
 });
 
