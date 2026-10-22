@@ -81,7 +81,7 @@ describe("loadDomain schema and cross-reference errors", () => {
     expect(message).toContain(`${path.join(dir, "sandtable.yaml")}:\n✖ Unrecognized key: "nmae"`);
     // Last, the installed version, so a key from a later release reads differently from a typo.
     expect(message.split("\n").at(-1)).toBe(
-      `sandtable-ai ${version} doesn't know these keys: check their spelling, or whether a later release added them (CHANGELOG.md, or \`npx sandtable-ai@latest validate\`).`,
+      `sandtable-ai ${version} doesn't know these keys: check their spelling, or whether a later release added them (CHANGELOG.md, or \`npx sandtable-ai@latest validate ${dir}\`).`,
     );
   });
 
@@ -90,6 +90,15 @@ describe("loadDomain schema and cross-reference errors", () => {
     edit(path.join(dir, "sandtable.yaml"), /^name: /m, "nmae: x\nname: ");
     const message = ((await loadDomain(dir).catch((e: unknown) => e)) as Error).message;
     expect(message).toContain(`\nsandtable-ai ${version} doesn't know this key: check its spelling, or whether a later release added it`);
+  });
+
+  it("print the validate command with the path as given, quoted when it needs to be, so it runs as printed", async () => {
+    const dir = copyOfClinic();
+    edit(path.join(dir, "sandtable.yaml"), /^name: /m, "nmae: x\nname: ");
+    const spaced = `${dir} copy`;
+    renameSync(dir, spaced);
+    const message = ((await loadDomain(spaced).catch((e: unknown) => e)) as Error).message;
+    expect(message).toContain(`\`npx sandtable-ai@latest validate '${spaced}'\``);
   });
 
   it("leave other schema errors without the version line", async () => {

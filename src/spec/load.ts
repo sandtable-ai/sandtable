@@ -50,7 +50,7 @@ export async function loadDomain(target: string): Promise<Domain> {
   if (!parsed.success) {
     const groups = groupBy(parsed.error.issues, (issue) => sourceOf(issue.path[0]));
     const unknown = parsed.error.issues.reduce((n, issue) => n + (issue.code === "unrecognized_keys" ? issue.keys.length : 0), 0);
-    throw new DomainError([...groups].map(([f, issues]) => `${f}:\n${z.prettifyError(new z.ZodError(issues))}`).join("\n") + unknownKeysNote(unknown));
+    throw new DomainError([...groups].map(([f, issues]) => `${f}:\n${z.prettifyError(new z.ZodError(issues))}`).join("\n") + unknownKeysNote(unknown, target));
   }
   const problems = validateDomain(parsed.data);
   if (problems.length) {
@@ -65,10 +65,15 @@ export async function loadDomain(target: string): Promise<Domain> {
  * After unknown keys, the installed version: a key that a later release added then reads differently from a typo,
  * for an engineer who read newer docs and for a coding agent that would otherwise go looking in node_modules.
  */
-function unknownKeysNote(count: number): string {
+function unknownKeysNote(count: number, target: string): string {
   if (count === 0) return "";
   const [these, their, them] = count === 1 ? ["this key", "its", "it"] : ["these keys", "their", "them"];
-  return `\nsandtable-ai ${version} doesn't know ${these}: check ${their} spelling, or whether a later release added ${them} (CHANGELOG.md, or \`npx sandtable-ai@latest validate\`).`;
+  return `\nsandtable-ai ${version} doesn't know ${these}: check ${their} spelling, or whether a later release added ${them} (CHANGELOG.md, or \`npx sandtable-ai@latest validate ${shellWord(target)}\`).`;
+}
+
+/** A path as one shell word, so the printed command runs as it is when the path has spaces or quotes. */
+function shellWord(s: string): string {
+  return /^[\w./@:+=,-]+$/.test(s) ? s : `'${s.replaceAll("'", `'\\''`)}'`;
 }
 
 /** Items grouped by key, keys in the order they first appear. */
