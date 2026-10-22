@@ -1,6 +1,6 @@
 import { callCheckId, expectedTool } from "../grade/expectations.ts";
 import type { TaskLint } from "../grade/lint.ts";
-import type { Task } from "../spec/schema.ts";
+import type { Invariant, Task } from "../spec/schema.ts";
 import { matches, type Row } from "../world/match.ts";
 import type { TrajectoryEvent, TrialResult } from "./episode.ts";
 
@@ -39,7 +39,7 @@ export type AttributionCounts = Record<Owner, number>;
  *   role, or a task that lint can't prove wrong (a rule stricter than the SOP, a seed row that contradicts the
  *   caller's instructions), stays with the agent until someone reads the transcript.
  */
-export function attributeTrial(trial: TrialResult, task: Task, lint: TaskLint | undefined): Attribution | undefined {
+export function attributeTrial(trial: TrialResult, task: Task, lint: TaskLint | undefined, invariants: readonly Invariant[] = []): Attribution | undefined {
   if (trial.passed) return undefined;
   if (trial.skipped) return { owner: "harness", evidence: trial.error ?? "it ended in an error before the agent broke a rule" };
   const unpassable = lint && lintProblem(lint);
@@ -50,7 +50,18 @@ export function attributeTrial(trial: TrialResult, task: Task, lint: TaskLint | 
   // The default owner: say so, so the evidence reads as nothing pointing elsewhere, not as proof.
   const failed = trial.checks.filter((c) => !c.passed);
   const first = failed.find((c) => c.kind !== "runtime") ?? failed[0];
-  return { owner: "agent", evidence: `nothing points at the caller, the task or the harness; first failed check: ${first ? `${first.id}: ${first.detail}` : "none recorded"}` };
+  const evidence = `nothing points at the caller, the task or the harness; first failed check: ${first ? `${first.id}: ${first.detail}` : "none recorded"}`;
+  return { owner: "agent", evidence: evidence + (first?.kind === "invariant" ? ruleSource(invariants.find((i) => i.id === first.id)) : "") };
+}
+
+/**
+ * For a failed rule, what to check it against before the agent is blamed: a rule stricter than the SOP fails a
+ * correct agent, and only reading the rule beside its source shows it.
+ */
+function ruleSource(rule: Invariant | undefined): string {
+  if (!rule) return "";
+  const quote = rule.source?.quote;
+  return quote ? `. Check the rule against its source before blaming the agent: "${quote}"` : ". The rule has no source quote: check it against policy.md before blaming the agent";
 }
 
 /** Each owner's count over `trials`, every owner listed. */
