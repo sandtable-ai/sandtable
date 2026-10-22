@@ -106,15 +106,11 @@ This session drafts a domain from the fictional freight brokerage's sources that
 
     ```text
     - tool create_booking
-        see the TODO(review) comments above it in sandtable.yaml
+        TODO(review): The API can answer 409 (Load is not available): encode that condition as a check with a `where`.
+        TODO(review): The description mentions a side effect ("Book a load for a carrier (tenders the load; the load becomes `booked`)"): add ops for any other table it changes.
     ```
 
-    The notes above the tool say what the spec implies but `init` could not encode:
-
-    ```text
-    # TODO(review): The API can answer 409 (Load is not available): encode that condition as a check with a `where`.
-    # TODO(review): The description mentions a side effect ("Book a load for a carrier (tenders the load; the load becomes `booked`)"): add ops for any other table it changes.
-    ```
+    `review` prints the notes `init` left above the tool in `sandtable.yaml`: what the spec implies but `init` could not encode.
 
     For each item, Claude shows you the quote, what the item will enforce and the fix it proposes. Here that is a `check` that the load is `available`, and an `update` op that sets it to `booked`. It accepts an item only after you agree. It never bulk-accepts to make `validate --strict` pass: an accepted item is a claim about the customer's rules. Then it seeds the world, gives every write task a `reference`, and lints:
 

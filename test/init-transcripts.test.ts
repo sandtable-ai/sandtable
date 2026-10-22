@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { freightScriptedAgent } from "../src/demo/freight-agents.ts";
 import { appendRows, appendToDomainList } from "../src/init/merge.ts";
 import { lintDomain } from "../src/grade/lint.ts";
+import { copiedValueNotes } from "../src/init/copied.ts";
 import { draftTasksFromTranscripts, reusedRowConflicts, scrubPii } from "../src/init/transcripts.ts";
 import { runSuite } from "../src/run/suite.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
@@ -225,6 +226,8 @@ describe("init from transcripts", () => {
     expect(res.personas.map((p) => p.id)).toEqual(["veteran-dispatcher"]);
     expect(res.rows.loads).toHaveLength(1);
     expect(res.warnings).toEqual([
+      // The chat's email was dana@…: its local part is the caller's name, which the draft kept.
+      "call-1.txt: negotiate-new-lane: 1 value(s) copied from the chat: see its TODO(review) notes",
       "call-2.txt: dropped dup-row: new loads row L-1001 collides with an existing row",
       "call-3.txt: dropped: no state or called expectations: nothing would be graded",
     ]);
@@ -370,6 +373,18 @@ describe("init from transcripts", () => {
 });
 
 describe("values a draft copied from its chat", () => {
+  it("gives an email that ends a sentence one note, without the period", () => {
+    const raw = "Customer: you can reach me at tvale42@mail.example.\nAgent: Thanks.";
+    const places = [
+      { where: "the caller's script", text: "Write to tvale42@mail.example." },
+      { where: "the caller's instructions", text: "Your email is tvale42@mail.example and you want a refund." },
+    ];
+    const notes = copiedValueNotes(raw, "chat-9.txt", places, "");
+    expect(notes.filter((n) => n.includes("@"))).toEqual([
+      `copied from chat-9.txt: replace "tvale42@mail.example" with a fictional value (in the caller's script, the caller's instructions)`,
+    ]);
+  });
+
   // A fictional chat: the scrub removes the email and phone before sending, and keeps the username.
   const chat = [
     "Agent: Thanks for calling Blue Mesa dispatch.",
@@ -422,6 +437,36 @@ describe("values a draft copied from its chat", () => {
       'copied from chat-7.txt: replace "Halvorsen" with a fictional value (in the caller\'s instructions)',
       'copied from chat-7.txt: replace "Priya Halvorsen" with a fictional value (in persona veteran-dispatcher)',
     ]);
+  });
+
+  it("finds two-letter handles, an email's local part alone, names a customer message gives, and street addresses", async () => {
+    const domain = await loadDomain(path.resolve("examples/freight"));
+    const raw = [
+      "Agent: Who am I speaking with?",
+      "Customer: Marisol Okafor",
+      "Agent: And your portal login?",
+      "User: Brennan Iyer, and my username is bi447102.",
+      "Caller: It's Tavi Lindqvist calling back. Email kito.reyes@mail.example works.",
+      "Customer: Ship it to 4417 Larkspur Dr please.",
+    ].join("\n");
+    const draft = {
+      ...good,
+      instructions: "You are Marisol Okafor, also known as Brennan Iyer (login bi447102, kito.reyes), with Tavi Lindqvist at Blue Mesa Trucking, MC 100101. You want L-2001. Ask for $2,600; accept $2,250 or more.",
+      new_rows: [...good.new_rows, { table: "carriers", fields: [{ name: "mc_number", value: "199901" }, { name: "address", value: "4417 Larkspur Drive" }] }],
+    };
+    const { client } = fakeClient([draft]);
+    const res = await draftTasksFromTranscripts({ domain, claude: { client }, transcripts: [{ file: "chat-9.txt", text: raw }] });
+    const values = (res.notes["negotiate-new-lane"] ?? []).map((n) => /replace "([^"]+)"/.exec(n)![1]);
+    expect(values.sort()).toEqual(["4417 Larkspur Drive", "Brennan Iyer", "Marisol Okafor", "Tavi Lindqvist", "bi447102", "kito.reyes"].sort());
+    expect(res.notes["negotiate-new-lane"]).toContain('copied from chat-9.txt: replace "4417 Larkspur Drive" with a fictional value (in a new carriers row)');
+  });
+
+  it("doesn't take a speaker's role, a greeting or a polite reply for a name", async () => {
+    const domain = await loadDomain(path.resolve("examples/freight"));
+    const raw = "Customer: Thanks Again.\nCustomer: Hello there\nAgent: Order Status, please.\nCustomer: Yes Please.";
+    const { client } = fakeClient([{ ...good, instructions: `${good.instructions} Thanks Again. Order Status. Yes Please.` }]);
+    const res = await draftTasksFromTranscripts({ domain, claude: { client }, transcripts: [{ file: "chat-10.txt", text: raw }] });
+    expect(res.copied).toBe(0);
   });
 
   it("doesn't take a speaker's role or a greeting for a name", async () => {

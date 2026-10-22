@@ -153,7 +153,13 @@ Each transcript becomes one task:
 Guardrails:
 
 - **PII is scrubbed locally before anything is sent**: emails, phone numbers and card-like numbers. Short identifiers such as order or MC numbers are kept. The model is told to replace names and companies with fictional ones.
-- **Copied values are flagged after drafting**, locally and with no model call. Names the caller gave (after "my name is", "this is" or "I'm", or as a speaker label such as `Customer (Jane Doe):`), usernames such as `jdoe42`, the chat's emails and phone numbers, and any email made from one of its usernames get a `# TODO(review): copied from <file>: replace "<value>" with a fictional value` note above the task that holds them, in its text, its new seed rows or its new persona, and `init` prints how many it found. Order, account and load IDs aren't flagged, nor are values the domain already had before drafting.
+- **Copied values are flagged after drafting**, locally and with no model call. The check looks for:
+  - names the caller gave: after "my name is", "this is", "I'm" or "it's", as a speaker label such as `Customer (Jane Doe):`, or as a customer's message that is only a name or starts with one, such as `Customer: Jane Doe` or `User: Doe Jane, and my username is …`;
+  - usernames such as `ap296680` or `jdoe42`, and each email's local part on its own;
+  - the chat's emails and phone numbers, and any email made from one of its usernames;
+  - street addresses such as `5203 Brushwick Dr`, whatever suffix the draft gives them.
+
+  Each value the task holds, in its text, its new seed rows or its new persona, gets a `# TODO(review): copied from <file>: replace "<value>" with a fictional value` note above it. `init` prints how many it found, and `review` lists the notes under the task. Order, account and load IDs aren't flagged, nor are values the domain already had before drafting.
 - When the world lacks rows for the scenario, the draft adds **fictional seed rows**. A row whose key collides with an existing one drops the task.
 - **A task keeps its transcript's facts.** An existing row is reused only when every fact the transcript states about it matches, so a caller who shares a name with an earlier one, but has another membership level or order, gets a row of their own. When a draft still reuses a row that contradicts its transcript, `init` keeps the task, prints a warning naming the row and each field that differs, and writes the same as a `# TODO(review):` comment above the task: give the task its own row with new IDs, or correct the task.
 - Tasks that would grade nothing (no state and no `called` expectations), or that fail validation, are dropped with the reason.
@@ -162,7 +168,7 @@ Guardrails:
 - Survivors are `review: pending`, with the transcript and a verbatim excerpt as `source`.
 
 <Tip>
-Local scrubbing and the copied-value check catch patterns, not every identifying detail: a name the caller never introduces, an address or an account detail in other words still needs a person. Read transcripts before sending them anywhere, and keep the drafted domain's seed rows fictional.
+Local scrubbing and the copied-value check catch patterns, not every identifying detail: a name the caller never introduces, a misspelled name the model corrected, or an address or account detail written another way still needs a person. Read transcripts before sending them anywhere, and keep the drafted domain's seed rows fictional.
 </Tip>
 
 ## Reviewing a draft

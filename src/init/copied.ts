@@ -9,30 +9,51 @@
 
 /** Emails, phone numbers and card numbers: the shapes `scrubPii` removes. */
 const EMAIL = /[\w.+-]+@[\w-]+\.[\w.-]+/g;
+/** The emails in a text, without the period that ends a sentence such as "write to jdoe42@example.test." */
+const emailsIn = (text: string) => [...text.matchAll(EMAIL)].map((m) => m[0].replace(/\.+$/, ""));
 const PHONE = /(?:\+?\d{1,3}[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b/g;
 const CARD = /\b(?:\d[ -]?){13,19}\b/g;
 
 /**
- * A username or handle: lowercase letters (dots and underscores allowed) then at least two digits, such as
- * `jdoe42` or `mia.k_07`. Order, account and load IDs (`O-2019`, `A-519`, `L-1004`) are uppercase with a dash and
- * never match.
+ * A username or handle: two or more lowercase letters (dots and underscores allowed) then at least two digits, such
+ * as `ap296680`, `jdoe42` or `mia.k_07`. Order, account and load IDs (`O-2019`, `A-519`, `L-1004`) are uppercase with
+ * a dash and never match.
  */
-const HANDLE = /\b[a-z][a-z._]{2,}\d{2,}\b/g;
+const HANDLE = /\b[a-z][a-z._]+\d{2,}\b/g;
+
+/** An email's local part too generic to mean a person when it stands alone in a draft. */
+const GENERIC_LOCAL_PARTS = new Set(["admin", "contact", "hello", "help", "info", "mail", "noreply", "office", "orders", "sales", "support", "team"]);
+
+/**
+ * A street address: a house number, one to three capitalized words, then a street suffix, such as `5203 Brushwick Dr`
+ * or `18 Old Mill Road.` The draft may spell the suffix another way, so it is matched on the number and the words.
+ */
+const STREET_SUFFIX = "St|Street|Dr|Drive|Ave|Avenue|Rd|Road|Ln|Lane|Blvd|Boulevard|Way|Ct|Court|Pl|Place|Ter|Terrace";
+const ADDRESS = new RegExp(`\\b(\\d{1,6})\\s+((?:[A-Z][a-z]+\\s+){1,3})(?:${STREET_SUFFIX})\\b\\.?`, "g");
 
 /** A capitalized word of a name: "Doe", "O'Neil", "Smith-Jones". */
 const WORD = "[A-Z][a-z]+(?:['-][A-Za-z][a-z]+)?";
 /** Two or three capitalized words. */
 const FULL_NAME = `${WORD}(?: ${WORD}){1,2}`;
-/** A name the caller gives: "my name is Jane Doe", "this is Jane Doe", "I'm Jane Doe", "name's Jane Doe". */
-const INTRO = new RegExp(`\\b(?:[Mm]y name is|[Mm]y name's|[Nn]ame's|[Tt]his is|I'm|I am)\\s+(${FULL_NAME})`, "g");
+/** A name the caller gives: "my name is Jane Doe", "this is Jane Doe", "I'm Jane Doe", "it's Jane Doe", "name's Jane Doe". */
+const INTRO = new RegExp(`\\b(?:[Mm]y name is|[Mm]y name's|[Nn]ame's|[Tt]his is|I'm|I am|[Ii]t's|[Ii]t is)\\s+(${FULL_NAME})`, "g");
 /** A speaker label with the name in parentheses, "Customer (Jane Doe):", or a name as the label, "Jane Doe:". */
 const LABEL_IN_PARENS = new RegExp(`\\b[A-Za-z]+\\s*\\((${FULL_NAME})\\)\\s*:`, "g");
 const LABEL = new RegExp(`^[ \\t]*(${FULL_NAME})[ \\t]*:`, "gm");
+/**
+ * The labels a customer's messages carry. A message after one that is only a name, or that starts with a name and a
+ * comma or period, gives the caller's name: "Customer: Jane Doe", "User: Doe Jane, and my username is …". The
+ * business's side (Agent, Rep, Support) isn't read this way, since its messages name products and pages, not people.
+ */
+const CUSTOMER_ROLES = ["Customer", "User", "Caller", "Client", "Guest", "Member", "Patient", "Shopper", "Buyer", "Carrier", "Driver", "Visitor"];
+const ROLE = CUSTOMER_ROLES.map((r) => `[${r[0]}${r[0]!.toLowerCase()}]${r.slice(1)}`).join("|");
+const NAME_MESSAGE = new RegExp(`^[ \\t]*(?:\\[[^\\]\\n]*\\][ \\t]*)?(?:${ROLE})[ \\t]*(?:\\([^)\\n]*\\))?[ \\t]*:[ \\t]*(${FULL_NAME})[ \\t]*(?:[,.]|$)`, "gm");
 
 /** Words that start a speaker label or a sentence and are never part of a person's name. */
 const NOT_NAMES = new Set([
   "Agent", "Assistant", "Bot", "Caller", "Customer", "Dispatch", "Dispatcher", "Human", "Operator", "Rep", "Representative",
   "Service", "Support", "System", "Team", "User", "Hello", "Hi", "Hey", "Thanks", "Thank", "Good", "Morning", "Afternoon", "Evening",
+  "Yes", "No", "Okay", "Ok", "Sure", "Please", "Sorry", "Great", "Perfect", "Bye", "Goodbye", "Again", "There", "Order", "Account", "Number",
 ]);
 
 interface Personal {
@@ -57,7 +78,7 @@ export function personalValues(raw: string, known: string): Personal[] {
 
   // A username can come back as an email the model made up from it, so it is collected first.
   const handles = new Set([...raw.matchAll(HANDLE)].map((m) => m[0].toLowerCase()));
-  const emails = [...raw.matchAll(EMAIL)].map((m) => m[0]);
+  const emails = [...new Set(emailsIn(raw))];
   for (const e of emails) handles.add(e.split("@")[0]!.toLowerCase());
   for (const email of emails) {
     add({ value: email, find: (text) => (text.toLowerCase().includes(email.toLowerCase()) ? email : undefined) });
@@ -66,12 +87,20 @@ export function personalValues(raw: string, known: string): Personal[] {
   if (handles.size) {
     add({
       value: "an email made from a username in the chat",
-      find: (text) => [...text.matchAll(EMAIL)].map((m) => m[0]).find((e) => handles.has(e.split("@")[0]!.toLowerCase()) && !knows(e)),
+      find: (text) => emailsIn(text).find((e) => handles.has(e.split("@")[0]!.toLowerCase()) && !knows(e)),
     });
   }
-  for (const handle of new Set([...raw.matchAll(HANDLE)].map((m) => m[0]))) {
+  // Usernames, and each email's local part on its own: a draft may keep `jdoe42` without its `@domain`.
+  const locals = emails.map((e) => e.split("@")[0]!).filter((l) => l.length >= 4 && !GENERIC_LOCAL_PARTS.has(l.toLowerCase()));
+  for (const handle of new Set([...[...raw.matchAll(HANDLE)].map((m) => m[0]), ...locals])) {
     const re = wordIn(handle, "i");
     add({ value: handle, find: (text) => (re.test(text) ? handle : undefined) });
+  }
+  for (const m of raw.matchAll(ADDRESS)) {
+    const words = m[2]!.trim().split(/\s+/);
+    // The number and the street's words, with whatever suffix the draft gives it.
+    const re = new RegExp(`(?<![\\w])${m[1]}\\s+${words.map(escape).join("\\s+")}(?:\\s+(?:${STREET_SUFFIX})\\b\\.?)?`, "i");
+    add({ value: m[0].trim(), find: (text) => re.exec(text)?.[0].trim() });
   }
   for (const re of [PHONE, CARD]) {
     for (const m of raw.matchAll(re)) {
@@ -80,7 +109,7 @@ export function personalValues(raw: string, known: string): Personal[] {
       add({ value: m[0].trim(), find: (text) => [...text.matchAll(PHONE), ...text.matchAll(CARD)].map((x) => x[0].trim()).find((x) => digits(x) === number) });
     }
   }
-  for (const re of [INTRO, LABEL_IN_PARENS, LABEL]) {
+  for (const re of [INTRO, LABEL_IN_PARENS, LABEL, NAME_MESSAGE]) {
     for (const m of raw.matchAll(re)) {
       const name = m[1]!.trim();
       const words = name.split(" ");
