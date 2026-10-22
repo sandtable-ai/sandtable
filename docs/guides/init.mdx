@@ -146,6 +146,7 @@ Each transcript becomes one task:
 - a scripted version of the caller's turns, so the task also runs offline
 - tags, and a new or reused persona
 - the end state the world must reach **if the agent follows the policy**. When the human rep broke the policy, the expectation follows the policy, not the rep.
+- the `reference` calls a correct agent makes, in order with their arguments, so `lint` can prove the task solvable. They list only calls that succeed: a refusal may have lookups only
 
 Guardrails:
 
@@ -153,6 +154,7 @@ Guardrails:
 - When the world lacks rows for the scenario, the draft adds **fictional seed rows**. A row whose key collides with an existing one drops the task.
 - **A task keeps its transcript's facts.** An existing row is reused only when every fact the transcript states about it matches, so a caller who shares a name with an earlier one, but has another membership level or order, gets a row of their own. When a draft still reuses a row that contradicts its transcript, `init` keeps the task, prints a warning naming the row and each field that differs, and writes the same as a `# TODO(review):` comment above the task: give the task its own row with new IDs, or correct the task.
 - Tasks that would grade nothing (no state and no `called` expectations), or that fail validation, are dropped with the reason.
+- **Each drafted task is linted** as `sandtable lint` would, replaying its `reference`. A task that fails, such as a reference that doesn't reach the expected state, is kept for review: `init` prints a warning and writes a `# TODO(review): lint: ...` comment above the task. A failing reference usually points at a wrong expectation or a missing seed row.
 - Survivors are `review: pending`, with the transcript and a verbatim excerpt as `source`.
 
 <Tip>

@@ -1,9 +1,11 @@
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
+import { lintDomain } from "../grade/lint.ts";
 import { validateDomain } from "../spec/load.ts";
 import { PersonaSpec, TaskSpec, type Domain, type Persona, type Task } from "../spec/schema.ts";
 import type { UsageByModel } from "../run/usage.ts";
 import { createClient, recordDraftUsage, requestBase, type ClaudeOptions } from "../sim/claude.ts";
+import { whereOf } from "./sop.ts";
 import { equal } from "../world/match.ts";
 
 export interface TranscriptDraft {
@@ -74,6 +76,9 @@ function outputSchema(tools: string[], tables: string[]) {
     expect_state: z
       .array(z.object({ table: Table, conditions: z.array(Condition), count: z.number().int().nullable() }))
       .describe("end state if the agent follows the policy: rows matching the conditions, exactly `count` of them (null = at least one)"),
+    reference: z
+      .array(z.object({ tool: Tool, args: z.array(z.object({ name: z.string(), value: Scalar })) }))
+      .describe("the tool calls a correct agent following the policy makes in this scenario, in order, with their arguments: only calls that succeed (leave out one the API would reject)"),
     expect_called: z.array(Tool).describe("tools that must succeed at least once"),
     expect_not_called: z.array(Tool).describe("tools that must never be called"),
   });
@@ -87,7 +92,8 @@ You get the company's policy, the agent's tools, the world's tables with their c
 - a hidden-goal instruction for a simulated caller who behaves like the real one (same goal, same pushback, same limits), written in second person;
 - the caller's turns as a script;
 - the end state the world must be in **if the agent follows the policy**. That is not necessarily what the human rep did: when the rep broke the policy, the expectation follows the policy;
-- the tools that must and must not be called, only when the policy makes that clear.
+- the tools that must and must not be called, only when the policy makes that clear;
+- as reference, the tool calls a correct agent makes when it follows the policy, in order and with their arguments, using the identifiers of the rows you reuse or add. sandtable replays them against the world to prove the scenario can be passed, so list only calls that succeed: leave out a call the API would reject, such as a lookup of an identifier that doesn't exist. A refusal may end with lookups only.
 
 Make everything fictional. Replace people's names, company names and identifiers with fictional ones. Use only the listed tables, fields and tools. Prefer exact conditions on keys (e.g. which load was booked by which carrier) and ranges for negotiated numbers.
 
@@ -134,8 +140,10 @@ export function reusedRowConflicts(domain: Domain, uses: Proposal["existing_rows
 }
 
 export function proposalToTask(p: Proposal, file: string): { task: Task; persona?: Persona; rows: Record<string, Record<string, unknown>[]> } | string {
-  const where = (conds: Proposal["expect_state"][number]["conditions"]) =>
-    Object.fromEntries(conds.map((c) => [c.field, c.op === "eq" ? c.value : { [`$${c.op}`]: c.value }]));
+  // Conditions on the same field are combined, so a range keeps both bounds.
+  const state = p.expect_state.map((s) => ({ s, where: whereOf(s.conditions) }));
+  const bad = state.find((x) => typeof x.where === "string");
+  if (bad) return `expect_state on ${bad.s.table}: ${String(bad.where)}`;
   const task = TaskSpec.safeParse({
     id: p.id,
     description: p.description,
@@ -144,8 +152,9 @@ export function proposalToTask(p: Proposal, file: string): { task: Task; persona
     review: "pending",
     source: { file, quote: p.quote },
     user: { instructions: p.instructions, ...(p.script.length ? { script: p.script } : {}) },
+    ...(p.reference?.length ? { reference: p.reference.map((c) => ({ tool: c.tool, args: Object.fromEntries(c.args.map((x) => [x.name, x.value])) })) } : {}),
     expect: {
-      state: p.expect_state.map((s) => ({ table: s.table, where: where(s.conditions), ...(s.count === null ? {} : { count: s.count }) })),
+      state: state.map(({ s, where }) => ({ table: s.table, where, ...(s.count === null ? {} : { count: s.count }) })),
       called: p.expect_called,
       not_called: p.expect_not_called,
     },
@@ -220,7 +229,13 @@ export async function draftTasksFromTranscripts(input: {
     // A reused row that contradicts the transcript changes the scenario: keep the task for review, and say where.
     const conflicts = reusedRowConflicts(candidate, response.parsed_output.existing_rows ?? []);
     for (const c of conflicts) out.warnings.push(`${t.file}: ${conv.task.id} ${c}: keep the transcript's facts by giving the task its own row with new IDs, or correct the task`);
-    if (conflicts.length) out.notes[conv.task.id] = conflicts.map((c) => `${c[0]!.toUpperCase()}${c.slice(1)}. Keep the transcript's facts: give this task its own row with new IDs, or correct the task.`);
+    const notes = conflicts.map((c) => `${c[0]!.toUpperCase()}${c.slice(1)}. Keep the transcript's facts: give this task its own row with new IDs, or correct the task.`);
+    // Lint the task as `sandtable lint` would, replaying its drafted reference: a draft that can't be passed is kept for
+    // review, with why. A failing reference usually points at a wrong expectation or a missing seed row.
+    const lint = lintDomain({ ...candidate, tasks: [conv.task] }).tasks[0]!;
+    for (const e of lint.errors) out.warnings.push(`${t.file}: ${conv.task.id}: ${e}`);
+    notes.push(...lint.errors.map((e) => `lint: ${e}. Fix the expectation, the seed rows or the reference.`));
+    if (notes.length) out.notes[conv.task.id] = notes;
 
     domain = candidate;
     out.tasks.push(conv.task);
