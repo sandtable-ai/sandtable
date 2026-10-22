@@ -30,20 +30,19 @@ Issues and milestones on GitHub are the source of truth; this page is the overvi
 - [x] A simulated caller that says it doesn't know a fact its instructions leave out, instead of inventing one (#287)
 - [x] The Claude Code plugin installs from the release tag (#301), and sandtable.dev documents the latest release (#313)
 
-## Next: 0.3.0, the last release before 1.0 (milestone v0.3)
-0.3.0 is the last release that may change the contracts 1.0 freezes, so everything that could change them lands in it.
-- [ ] Critical tasks and skipped trials in `leaderboard` and `demo --live` (#284)
-- [ ] Failure attribution: agent, simulated user, task or infrastructure (#29)
-- [ ] Nested params: objects and arrays in tool schemas (#26)
-- [ ] Readers of `results.json` check its version (#349)
-- [ ] Node 22 and Python 3.10 as the oldest supported versions (#350)
-- [ ] A last review of every contract before it freezes (#351)
-- [ ] A regression gate (#281), comparing two stored runs (#285), per-tag pass^k floors (#283)
+## In 0.3.0
+- [x] Regression gates: `run --fail-on-regression` (#281), `sandtable compare` for two stored runs (#285), per-tag pass^k floors with `--floor` (#283)
+- [x] `leaderboard` and `demo --live` treat critical tasks and skipped trials as `run` does (#284)
+- [x] Failure attribution: each trial that didn't pass names a likely owner, agent, simulated user, task spec or harness, from deterministic evidence (#29, #385)
+- [x] Nested params: objects, arrays and nullable fields in tool schemas, `$contains` and dotted fields in where clauses, and `init --openapi` mapping nested bodies (#26)
+- [x] Contracts readied for 1.0: `results.json` readers check its version and it records the sandtable-ai that wrote it (#349, #372), the library exports only its documented API (#370), reference pages kept in step with the code by tests (#371), and a stability policy (#352)
+- [x] Node.js 22 and Python 3.10 as the oldest supported versions (#350)
+- [x] Freight example fixes: callers that know their truck's availability and don't repeat the agent's numbers (#346, #383), and a made-up load ID filed under its own rule (#163)
 
-## 1.0: stable contracts (milestone v1.0)
-1.0 promises that the domain spec, `results.json`, CLI commands, flags and exit codes, the HTTP step protocol and the library's exports change only in a major release.
-- [ ] A stability policy: what is covered, semver, and the deprecation window (#352)
-- [ ] A release candidate, tested end to end before 1.0.0 (#353)
+## Next: 1.0, stable contracts (milestone v1.0)
+1.0 promises that the domain spec, `results.json`, CLI commands, flags and exit codes, the HTTP step protocol and the library's exports change only in a major release, as the stability policy says.
+- [ ] A release candidate, `1.0.0-rc.1`, tested end to end before 1.0.0 (#353)
+- [ ] The project leaves beta in the README, the docs and the PyPI classifier
 
 ## After 1.0 (milestones v1.1 and black-box)
 - [ ] PR comments with pass^k deltas (#13), coverage matrix (#30), customer sign-off report: rule → evidence → reliability (#31)

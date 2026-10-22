@@ -37,24 +37,22 @@ sandtable is in **beta**: the spec may still change before 1.0. [Issues](https:/
 - A simulated caller that says it doesn't know a fact its instructions leave out, instead of inventing one ([#287](https://github.com/sandtable-ai/sandtable/issues/287))
 - The Claude Code plugin installs from the release tag ([#301](https://github.com/sandtable-ai/sandtable/issues/301)), and sandtable.dev documents the latest release ([#313](https://github.com/sandtable-ai/sandtable/issues/313))
 
-## Next: 0.3.0, the last release before 1.0 (milestone v0.3)
+## In 0.3.0
 
-0.3.0 is the last release that may change the contracts 1.0 freezes, so everything that could change them lands in it.
+- Regression gates: `run --fail-on-regression` ([#281](https://github.com/sandtable-ai/sandtable/issues/281)), `sandtable compare` for two stored runs ([#285](https://github.com/sandtable-ai/sandtable/issues/285)), per-tag pass^k floors with `--floor` ([#283](https://github.com/sandtable-ai/sandtable/issues/283))
+- `leaderboard` and `demo --live` treat critical tasks and skipped trials as `run` does ([#284](https://github.com/sandtable-ai/sandtable/issues/284))
+- Failure attribution: each trial that didn't pass names a likely owner, agent, simulated user, task spec or harness, from deterministic evidence ([#29](https://github.com/sandtable-ai/sandtable/issues/29), [#385](https://github.com/sandtable-ai/sandtable/issues/385))
+- Nested params: objects, arrays and nullable fields in tool schemas, `$contains` and dotted fields in where clauses, and `init --openapi` mapping nested bodies ([#26](https://github.com/sandtable-ai/sandtable/issues/26))
+- Contracts readied for 1.0: `results.json` readers check its version and it records the sandtable-ai that wrote it ([#349](https://github.com/sandtable-ai/sandtable/issues/349), [#372](https://github.com/sandtable-ai/sandtable/issues/372)), the library exports only its documented API ([#370](https://github.com/sandtable-ai/sandtable/issues/370)), reference pages kept in step with the code by tests ([#371](https://github.com/sandtable-ai/sandtable/issues/371)), and a stability policy ([#352](https://github.com/sandtable-ai/sandtable/issues/352))
+- Node.js 22 and Python 3.10 as the oldest supported versions ([#350](https://github.com/sandtable-ai/sandtable/issues/350))
+- Freight example fixes: callers that know their truck's availability and don't repeat the agent's numbers ([#346](https://github.com/sandtable-ai/sandtable/issues/346), [#383](https://github.com/sandtable-ai/sandtable/issues/383)), and a made-up load ID filed under its own rule ([#163](https://github.com/sandtable-ai/sandtable/issues/163))
 
-- Critical tasks and skipped trials in `leaderboard` and `demo --live` ([#284](https://github.com/sandtable-ai/sandtable/issues/284))
-- Failure attribution: agent, simulated user, task or infrastructure ([#29](https://github.com/sandtable-ai/sandtable/issues/29))
-- Nested params: objects and arrays in tool schemas ([#26](https://github.com/sandtable-ai/sandtable/issues/26))
-- Readers of `results.json` check its version ([#349](https://github.com/sandtable-ai/sandtable/issues/349))
-- Node 22 and Python 3.10 as the oldest supported versions ([#350](https://github.com/sandtable-ai/sandtable/issues/350))
-- A last review of every contract before it freezes ([#351](https://github.com/sandtable-ai/sandtable/issues/351))
-- A regression gate ([#281](https://github.com/sandtable-ai/sandtable/issues/281)), comparing two stored runs ([#285](https://github.com/sandtable-ai/sandtable/issues/285)), per-tag pass^k floors ([#283](https://github.com/sandtable-ai/sandtable/issues/283))
+## Next: 1.0, stable contracts (milestone v1.0)
 
-## 1.0: stable contracts (milestone v1.0)
+1.0 promises that the domain spec, `results.json`, CLI commands, flags and exit codes, the HTTP step protocol and the library's exports change only in a major release, as the [stability policy](/reference/stability) says.
 
-1.0 promises that the domain spec, `results.json`, CLI commands, flags and exit codes, the HTTP step protocol and the library's exports change only in a major release.
-
-- A stability policy: what is covered, semver, and the deprecation window ([#352](https://github.com/sandtable-ai/sandtable/issues/352))
-- A release candidate, tested end to end before 1.0.0 ([#353](https://github.com/sandtable-ai/sandtable/issues/353))
+- A release candidate, `1.0.0-rc.1`, tested end to end before 1.0.0 ([#353](https://github.com/sandtable-ai/sandtable/issues/353))
+- The project leaves beta in the README, the docs and the PyPI classifier
 
 ## After 1.0 (milestones v1.1 and black-box)
 

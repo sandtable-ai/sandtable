@@ -126,10 +126,11 @@ describe("scripts/sync-version.mjs", () => {
 
   it("names each stale field under --check", async () => {
     const dir = copy();
-    setVersion(dir, "0.3.0");
+    // A version no release will have, so the copied files are always stale against it.
+    setVersion(dir, "98.7.6");
     const r = await sync(dir, "--check");
     expect(r.code).toBe(1);
     expect(r.out).toContain("python/src/sandtable_ai/__init__.py: NPM_VERSION is");
-    expect(r.out).toContain("expected 0.3.0");
+    expect(r.out).toContain("expected 98.7.6");
   });
 });
