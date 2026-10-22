@@ -133,6 +133,24 @@ describe("the plugin eval suite's cases", () => {
     }
   });
 
+  it("count, in draft-from-sources, a model-backed init as a paid step and its dry run as not one", () => {
+    // tool_used matches input_match against the tool call's input as JSON, so quotes in a command arrive escaped.
+    const paidStep = new RegExp(front(path.join(evals, "draft-from-sources", "graders", "no-paid-step-without-go-ahead.md")).input_match as string);
+    const bash = (command: string) => JSON.stringify({ command, description: "Draft from the SOP and chats" });
+    const paid = 'npx sandtable-ai init --sop "./discovery/sop.md" --transcripts ./discovery/transcripts -o ./sandtable -m claude-sonnet-5-5 --provider bedrock';
+    // The runs at d02ff40 (#342): the dry run, with --dry-run last, after the quoted SOP path.
+    expect(paidStep.test(bash(`${paid} --dry-run`))).toBe(false);
+    expect(paidStep.test(bash("npx sandtable-ai init --dry-run --transcripts ./discovery/transcripts -o ./sandtable"))).toBe(false);
+    expect(paidStep.test(bash("npx sandtable-ai init --openapi ./discovery/openapi.yaml -o ./sandtable"))).toBe(false);
+    expect(paidStep.test(bash(paid))).toBe(true);
+    expect(paidStep.test(bash("npx sandtable-ai init --transcripts ./discovery/transcripts -o ./sandtable"))).toBe(true);
+    expect(paidStep.test(bash(`npx sandtable-ai init --openapi ./discovery/openapi.yaml -o ./sandtable && ${paid}`))).toBe(true);
+    // A dry run chained before the paid init doesn't excuse it, on one line or two.
+    expect(paidStep.test(bash(`${paid} --dry-run && ${paid}`))).toBe(true);
+    expect(paidStep.test(bash(`${paid} --dry-run\n${paid}`))).toBe(true);
+    expect(paidStep.test(bash(`${paid} --dry-run; ls sandtable`))).toBe(false);
+  });
+
   it("set up their workspace with a scaffold script that bash can parse", () => {
     for (const c of cases.filter((c) => existsSync(path.join(evals, c, "case.yaml")))) {
       const meta = YAML.parse(readFileSync(path.join(evals, c, "case.yaml"), "utf8")) as { name: string; context: { scaffold_script: string } };
