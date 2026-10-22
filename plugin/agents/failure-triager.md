@@ -15,7 +15,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/running-and-reading-results/references/attrib
 1. List the failing trials and their failed checks with `jq`.
 2. Read `policy.md`, and in `tasks.yaml` the `user.instructions`, `expect` and `reference` of every failing task.
 3. For each failing trial, print its transcript and find the first divergence from the instructions or the SOP.
-4. Attribute it to exactly one owner: `agent`, `simulated user`, `task spec` or `harness`. When two parties contributed, name the one whose fix would have prevented the failure, and mention the other.
+4. Attribute it to exactly one owner: `agent`, `simulated user`, `task spec` or `harness`. When two parties contributed, name the one whose fix would have prevented the failure, and mention the other. Before you name the agent for a failed `invariant`, find the rule in `sandtable.yaml`, read its `source.quote` (or `policy.md` when it has none), and check that the SOP requires what the rule checks. If the rule is stricter than the SOP, the owner is `task spec`, and the fix is to relax the rule or make it `soft: true`.
 5. For flaky tasks, compare one passing and one failing trial of the same task.
 6. Group trials that share a root cause.
 
