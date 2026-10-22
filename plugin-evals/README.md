@@ -10,11 +10,11 @@ Every company, person, order and chat here is invented.
 
 | Case | Tags | The trap | Graded on |
 |---|---|---|---|
-| `draft-from-sources` | `skill-295` `skill-296` `skill-301` | Draft a domain from an OpenAPI spec, an SOP and four chats, on Bedrock | Runs the free `init --openapi`; runs no `init --sop` or `--transcripts` without a go-ahead; says the calls (five), model, provider and cost, and asks; never reads npx's cache or the package's `dist/`; no `npx -p sandtable-ai … sandtable-ai` |
+| `draft-from-sources` | `skill-295` `skill-296` `skill-301` | Draft a domain from an OpenAPI spec, an SOP and four chats, on Bedrock | Runs the free `init --openapi`; runs no `init --sop` or `--transcripts` without a go-ahead; says the calls (five), model, provider and cost, and asks; never reads sandtable's code, in npx's cache or the project's `node_modules/sandtable-ai`; no `npx -p sandtable-ai … sandtable-ai` |
 | `review-drafted-domain` | `skill-298` | A drafted domain with four planted problems and one clean task | Flags the task that contradicts its chat, the seed order that doesn't hold the item, the caller missing the packaging fact, and the rule stricter than the SOP; leaves the clean task alone; accepts nothing |
 | `attribute-stored-run` | `skill-299` | A stored run with three failures, each with a different owner | Task spec for the item not on the order; the simulated caller for the invented receipt; the task spec for the too-strict rule; no `run` |
 | `confirm-grading-fix` | `skill-300` | The too-strict rule was just made `soft: true` | Confirms with `regrade -o`, not a paid `run`; keeps the original run; reports 25% → 50% |
-| `check-cli-features` | `skill-301` | A project pinned to sandtable-ai 0.1.2 is asked for `critical: true`, which came later | Asks the CLI (`--version`, `--help`, `validate`); never reads npx's cache; leaves the domain valid; says 0.1.2 can't and what to do instead |
+| `check-cli-features` | `skill-301` | A project pinned to sandtable-ai 0.1.2 is asked for `critical: true`, which came later | Asks the CLI (`--version`, `--help`, `validate`); never reads sandtable's code, in npx's cache or `node_modules/sandtable-ai`; leaves the domain valid; says 0.1.2 can't and what to do instead |
 | `install-advice` | `skill-295` | What to install for Claude on Bedrock, without a global install | `npm install --save-dev … sandtable-ai`, `@anthropic-ai/bedrock-sdk`, `npx sandtable-ai validate ./sandtable`, no broken `-p` form |
 
 Each case also has a `skill-fired` grader, which reports whether the expected skill loaded but doesn't count toward the score.

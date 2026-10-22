@@ -7,7 +7,7 @@ description: Runs a sandtable domain against an agent (Claude, any OpenAI-compat
 
 `sandtable run` puts a simulated user and the agent under test in a conversation, once per task per trial, each on a fresh copy of the world. Every trial is graded deterministically: the end state of the records, the tool-call log and the domain's invariants. No model judges pass or fail.
 
-Run the CLI as `npx sandtable-ai <command>` (inside the sandtable repository: `node src/cli.ts <command>`). If a flag is rejected, trust `--help`. Only if a command fails with `node: OpenSSL configuration error` and `openssl.cnf … Operation not permitted`, Claude Code's sandbox blocked Node from reading its OpenSSL config: rerun that command with `OPENSSL_CONF=/dev/null` in front, e.g. `OPENSSL_CONF=/dev/null npx sandtable-ai validate ./sandtable`. Don't add it otherwise.
+Run the CLI as `npx sandtable-ai <command>` (inside the sandtable repository: `node src/cli.ts <command>`). If a flag is rejected, trust `--help`. Learn what the CLI supports from `--help` and `validate`, never from sandtable's code in `node_modules/sandtable-ai` or npx's cache. Only if a command fails with `node: OpenSSL configuration error` and `openssl.cnf … Operation not permitted`, Claude Code's sandbox blocked Node from reading its OpenSSL config: rerun that command with `OPENSSL_CONF=/dev/null` in front, e.g. `OPENSSL_CONF=/dev/null npx sandtable-ai validate ./sandtable`. Don't add it otherwise.
 
 ## Why it is graded this way
 
