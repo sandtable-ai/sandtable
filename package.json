@@ -40,7 +40,9 @@
     "smoke": "node dist/cli.js lint examples/freight && node dist/cli.js lint examples/clinic && node dist/cli.js run examples/freight --agent scripted:careful --user scripted --fail-under 100 --no-html && node dist/cli.js run examples/clinic --agent scripted:clinic-careful --user scripted --fail-under 100 --no-html",
     "check": "npm run typecheck && npm run build && npm test && node scripts/sync-version.mjs --check && node scripts/changelog.mjs check && npm run smoke",
     "preversion": "node scripts/changelog.mjs check --release",
-    "version": "node scripts/sync-version.mjs && node scripts/changelog.mjs release && git add python plugin .claude-plugin CHANGELOG.md"
+    "version": "node scripts/sync-version.mjs && node scripts/changelog.mjs release && git add python plugin .claude-plugin CHANGELOG.md",
+    "evals:pack": "npm run build && node -e \"require('node:fs').mkdirSync('plugin-evals/.cache', { recursive: true })\" && npm pack --silent --pack-destination plugin-evals/.cache",
+    "evals:plugin": "npm run evals:pack && claude plugin eval . --eval-dir plugin-evals --scaffold --allow-tools Bash Edit Write"
   },
   "keywords": [
     "sandtable",

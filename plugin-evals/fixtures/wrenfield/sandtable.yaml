@@ -1,0 +1,68 @@
+# A fictional outdoor-gear retailer's returns desk, used by the plugin's eval suite. Everything here is made up.
+name: wrenfield-returns
+description: Wrenfield Outfitters, a (fictional) outdoor-gear retailer. You handle return requests in chat.
+policy: ./policy.md
+tasks: ./tasks.yaml
+max_turns: 10
+
+world:
+  tables:
+    accounts:
+      key: account_id
+      rows:
+        - { account_id: A-501, name: Tamsin Vale, membership: gold }
+        - { account_id: A-502, name: Orrin Petch, membership: silver }
+        - { account_id: A-503, name: Linnea Quarry, membership: guest }
+        - { account_id: A-504, name: Bram Holloway, membership: silver }
+    orders:
+      key: order_id
+      rows:
+        - { order_id: O-2001, account_id: A-501, item: trail jacket, purchase_date: "2026-06-14", original_packaging: false, status: delivered }
+        - { order_id: O-2002, account_id: A-502, item: rain boots, purchase_date: "2026-10-01", original_packaging: true, status: delivered }
+        - { order_id: O-2003, account_id: A-503, item: camp stove, purchase_date: "2026-10-20", original_packaging: false, status: delivered }
+        - { order_id: O-2004, account_id: A-504, item: down vest, purchase_date: "2026-07-02", original_packaging: true, status: delivered }
+    returns:
+      key: return_id
+
+tools:
+  - name: lookup_account
+    description: Look up a customer account by account ID. Returns the customer's name and membership level.
+    params:
+      account_id: { type: string }
+    ops:
+      - get: accounts
+        key: $account_id
+  - name: get_order
+    description: Look up an order by order ID. Returns the account, the item, the purchase date, whether the item is in its original packaging, and the order's status.
+    params:
+      order_id: { type: string }
+    ops:
+      - get: orders
+        key: $order_id
+  - name: start_return
+    description: Start a return for an order and email the customer a prepaid label. The order's status becomes return_started.
+    params:
+      order_id: { type: string }
+      reason: { type: string, enum: [wrong_size, damaged, changed_mind] }
+    checks:
+      - { table: orders, key: $order_id, error: "order ${order_id} not found" }
+    ops:
+      - create: returns
+        values: { order_id: $order_id, reason: $reason }
+      - update: orders
+        key: $order_id
+        set: { status: return_started }
+  - name: transfer_to_human
+    description: Transfer the chat to a person.
+    params:
+      reason: { type: string }
+    ops:
+      - respond: { status: transferred }
+
+invariants:
+  - id: verify-before-return
+    description: Look up the customer's account before starting a return.
+    before: { first: lookup_account, then: start_return }
+  - id: account-before-order
+    description: Look up the account before looking up any order.
+    before: { first: lookup_account, then: get_order }

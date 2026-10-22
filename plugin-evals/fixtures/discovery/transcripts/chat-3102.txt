@@ -1,0 +1,10 @@
+[Fictional support chat, provided as discovery material]
+
+AGENT: Hi, thanks for contacting Wrenfield Outfitters. How can I help?
+CUSTOMER: I need to return a trail jacket, it's too small.
+AGENT: I can help. What's your account ID?
+CUSTOMER: A-504, Bram Holloway.
+AGENT: Thanks, Bram, you're a silver member. Which order is the jacket from?
+CUSTOMER: O-2010, I bought it about three weeks ago.
+AGENT: I see it, the trail jacket from October 12. That's within 60 days, so I've started the return. You'll get a label by email.
+CUSTOMER: Great, thanks.

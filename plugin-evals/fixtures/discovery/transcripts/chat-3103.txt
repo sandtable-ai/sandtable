@@ -1,0 +1,12 @@
+[Fictional support chat, provided as discovery material]
+
+AGENT: Hi, thanks for contacting Wrenfield Outfitters. How can I help?
+CUSTOMER: Hi, I want to send back some hiking poles. I changed my mind about them.
+AGENT: No problem. Can I have your account ID?
+CUSTOMER: A-502, Orrin Petch.
+AGENT: Thanks, Orrin. Which order are they from?
+CUSTOMER: O-2005.
+AGENT: I see them, bought July 20. That's more than 60 days ago for a silver member. Are they still in their original packaging?
+CUSTOMER: Yes, still in the box, never opened.
+AGENT: Then you can return them. I've started the return, and the label is on its way to your email.
+CUSTOMER: Thanks a lot.

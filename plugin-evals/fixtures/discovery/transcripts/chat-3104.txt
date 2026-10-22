@@ -1,0 +1,6 @@
+[Fictional support chat, provided as discovery material]
+
+AGENT: Hi, thanks for contacting Wrenfield Outfitters. How can I help?
+CUSTOMER: Hi, I'm Orrin Petch, account A-502. The rain boots from order O-2002 are the wrong size, can I return them?
+AGENT: Let me check. You're a silver member, and you bought them on October 1, within 60 days. I've started the return; the label is on its way.
+CUSTOMER: Great, thanks!

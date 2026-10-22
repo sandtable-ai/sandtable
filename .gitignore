@@ -14,3 +14,7 @@ notes/
 .claude/worktrees/
 .claude/settings.local.json
 CLAUDE.local.md
+
+# The plugin eval suite's results, packed CLI and npm cache (npm run evals:plugin)
+plugin-evals/results/
+plugin-evals/.cache/

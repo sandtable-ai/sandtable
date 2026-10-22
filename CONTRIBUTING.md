@@ -43,6 +43,16 @@ The Claude Code plugin in `plugin/` teaches coding agents exact commands and YAM
 
 The marketplace installs `plugin/` from the latest release's tag, so users get skills that match the CLI they run, and your changes reach them with the next release. To try your working copy, start Claude Code with `claude --plugin-dir ./plugin`: for that session it replaces an installed `sandtable` plugin. Don't point `.claude-plugin/marketplace.json` back at `./plugin`; `npm version` moves its tag.
 
+### Measure a skill change
+
+`plugin-evals/` is an eval suite for the plugin's skills: six jobs an engineer would ask for, in workspaces with planted traps, graded with [`claude plugin eval`](https://code.claude.com/docs/en/plugin-evals). Run it before and after a skill change, at the same model:
+
+```bash
+npm run evals:plugin -- --tag skill-298 --ablation none --model claude-sonnet-5-5
+```
+
+Each run is a real Claude Code session, so the suite costs money: about $0.60–1.20 for one issue's case at three runs, and $7–14 for the whole suite with its no-plugin baseline, on Claude Sonnet 5.5. CI doesn't run it. `test/plugin-evals.test.ts` checks its fixtures offline. [plugin-evals/README.md](plugin-evals/README.md) lists the cases and the traps, shows how to compare a branch's skills with `main`'s, and explains its limits.
+
 ## Docs
 
 The docs site is built with [Mintlify](https://mintlify.com) from `docs/`: `docs/docs.json` holds the navigation, and each page is an `.mdx` file with `title` and `description` frontmatter. The [domain spec](docs/reference/spec.mdx) and the [CLI reference](docs/reference/cli.mdx) must match the code, so update them in the same change as the code.
