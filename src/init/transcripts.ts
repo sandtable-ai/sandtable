@@ -5,7 +5,7 @@ import { validateDomain } from "../spec/load.ts";
 import { PersonaSpec, TaskSpec, type Domain, type Persona, type Task } from "../spec/schema.ts";
 import type { UsageByModel } from "../run/usage.ts";
 import { createClient, recordDraftUsage, requestBase, type ClaudeOptions } from "../sim/claude.ts";
-import { whereOf } from "./sop.ts";
+import { ConditionSpec, describeTools, whereOf } from "./sop.ts";
 import { equal } from "../world/match.ts";
 
 export interface TranscriptDraft {
@@ -47,7 +47,6 @@ const Scalar = z.union([z.string(), z.number(), z.boolean()]);
 function outputSchema(tools: string[], tables: string[]) {
   const Tool = z.enum(tools as [string, ...string[]]);
   const Table = z.enum(tables as [string, ...string[]]);
-  const Condition = z.object({ field: z.string(), op: z.enum(["eq", "ne", "gt", "gte", "lt", "lte"]), value: Scalar });
   return z.object({
     id: z.string().describe("kebab-case task id describing the scenario, e.g. negotiate-above-posted-rate"),
     description: z.string().describe("one sentence: the situation and what the agent should do"),
@@ -74,7 +73,7 @@ function outputSchema(tools: string[], tables: string[]) {
       )
       .describe("existing rows from the Tables list that this scenario uses as they are, such as the customer, account or order the transcript is about"),
     expect_state: z
-      .array(z.object({ table: Table, conditions: z.array(Condition), count: z.number().int().nullable() }))
+      .array(z.object({ table: Table, conditions: z.array(ConditionSpec), count: z.number().int().nullable() }))
       .describe("end state if the agent follows the policy: rows matching the conditions, exactly `count` of them (null = at least one)"),
     reference: z
       .array(z.object({ tool: Tool, args: z.array(z.object({ name: z.string(), value: Scalar })) }))
@@ -95,14 +94,12 @@ You get the company's policy, the agent's tools, the world's tables with their c
 - the tools that must and must not be called, only when the policy makes that clear;
 - as reference, the tool calls a correct agent makes when it follows the policy, in order and with their arguments, using the identifiers of the rows you reuse or add. sandtable replays them against the world to prove the scenario can be passed, so list only calls that succeed: leave out a call the API would reject, such as a lookup of an identifier that doesn't exist. A refusal may end with lookups only.
 
-Make everything fictional. Replace people's names, company names and identifiers with fictional ones. Use only the listed tables, fields and tools. Prefer exact conditions on keys (e.g. which load was booked by which carrier) and ranges for negotiated numbers.
+Make everything fictional. Replace people's names, company names and identifiers with fictional ones. Use only the listed tables, fields and tools. A param with values in parentheses takes exactly one of them, as written: map the transcript's wording to it ("By Mail" is by_mail). Prefer exact conditions on keys (e.g. which load was booked by which carrier) and ranges for negotiated numbers; use in for a field that may end as any of several values, and exists for a field that must be set or left unset.
 
 Keep the transcript's facts. Reuse an existing row only when every fact the transcript states about it matches the row: a membership level, status, date, amount or item that differs means it is not the same record, even when the name matches (the same customer may have called before, with different facts then). Otherwise propose new_rows with new identifiers and every field the scenario needs, including the table key, consistent with the conditions you expect. Never change what the transcript says to fit an existing row, and never invent a conflict the transcript does not have. List each existing row you reuse in existing_rows, with the facts the transcript states about it.`;
 
 function describe(domain: Domain): string {
-  const tools = domain.tools
-    .map((t) => `- ${t.name}(${Object.entries(t.params).map(([n, p]) => `${n}: ${p.type}${p.required ? "" : "?"}`).join(", ")}): ${t.description}`)
-    .join("\n");
+  const tools = describeTools(domain);
   const tables = Object.entries(domain.world.tables)
     .map(([name, t]) => `- ${name} (key ${t.key}), ${t.rows.length} row(s):\n${t.rows.slice(0, 20).map((r) => `    ${JSON.stringify(r)}`).join("\n")}`)
     .join("\n");
@@ -137,6 +134,31 @@ export function reusedRowConflicts(domain: Domain, uses: Proposal["existing_rows
     if (differs.length) out.push(`reuses ${use.table} ${use.key}, but the transcript states ${differs.join(", and ")}`);
   }
   return out;
+}
+
+/** An enum value as the transcript might spell it: lowercase, with spaces and dashes as `_` ("By Mail" → by_mail). */
+const enumForm = (v: unknown) => String(v).trim().toLowerCase().replace(/[\s-]+/g, "_");
+
+/**
+ * Fix the drafted reference arguments that miss a param's allowed values only in spelling: when the value, in
+ * enumForm, matches exactly one allowed value, use that value. Returns one line per change, for a warning. A value
+ * that matches none, or several, is left as drafted, so the draft-time lint reports it and the task gets a review note.
+ */
+export function normalizeEnumArgs(domain: Domain, task: Task): string[] {
+  const changes: string[] = [];
+  task.reference?.forEach((call, i) => {
+    const tool = domain.tools.find((t) => t.name === call.tool);
+    if (!tool) return;
+    for (const [name, value] of Object.entries(call.args)) {
+      const param = Object.hasOwn(tool.params, name) ? tool.params[name] : undefined;
+      if (!param?.enum || param.enum.some((e) => equal(e, value))) continue;
+      const matches = param.enum.filter((e) => enumForm(e) === enumForm(value));
+      if (matches.length !== 1) continue;
+      call.args[name] = matches[0];
+      changes.push(`reference[${i}] ${call.tool} ${name} ${JSON.stringify(value)} → ${String(matches[0])}`);
+    }
+  });
+  return changes;
 }
 
 export function proposalToTask(p: Proposal, file: string): { task: Task; persona?: Persona; rows: Record<string, Record<string, unknown>[]> } | string {
@@ -203,6 +225,9 @@ export async function draftTasksFromTranscripts(input: {
       out.warnings.push(`${t.file}: dropped: ${conv}`);
       continue;
     }
+
+    // A reference argument spelled as the transcript says it ("By Mail") gets the allowed value it plainly means.
+    for (const c of normalizeEnumArgs(domain, conv.task)) out.warnings.push(`${t.file}: ${conv.task.id}: ${c}`);
 
     // Validate against the domain as it would be after adding this task's rows and persona.
     const candidate: Domain = structuredClone(domain);

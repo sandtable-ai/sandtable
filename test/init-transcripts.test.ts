@@ -142,6 +142,41 @@ const referenceMisses = {
   ],
 };
 
+// The reference spells an equipment type as the caller said it, not as the API's enum writes it.
+const spelledLikeTheCall = {
+  ...withReference,
+  reference: [
+    { tool: "verify_carrier", args: args({ mc_number: "100101" }) },
+    { tool: "search_loads", args: args({ origin: "Dallas", equipment: "Dry Van" }) },
+    { tool: "book_load", args: args({ load_id: "L-2001", mc_number: "100101", rate: 2300 }) },
+  ],
+};
+// A value that matches no allowed one, in any spelling.
+const noSuchValue = {
+  ...spelledLikeTheCall,
+  reference: [
+    { tool: "verify_carrier", args: args({ mc_number: "100101" }) },
+    { tool: "search_loads", args: args({ origin: "Dallas", equipment: "Box Truck" }) },
+    { tool: "book_load", args: args({ load_id: "L-2001", mc_number: "100101", rate: 2300 }) },
+  ],
+};
+// A refusal whose end state allows either of two statuses, and a field that must stay unset.
+const withInAndExists = {
+  ...lapsed,
+  id: "load-stays-open",
+  expect_state: [
+    {
+      table: "loads",
+      conditions: [
+        { field: "load_id", op: "eq", value: "L-1001" },
+        { field: "status", op: "in", value: ["available", "pending"] },
+        { field: "booked_by", op: "exists", value: false },
+      ],
+      count: 1,
+    },
+  ],
+};
+
 function fakeClient(outputs: unknown[]) {
   const requests: Array<{ system: string; messages: Array<{ content: string }> }> = [];
   const client = {
@@ -286,5 +321,50 @@ describe("init from transcripts", () => {
     expect(reusedRowConflicts(domain, [{ table: "carriers", key: "100999", facts: [] }])).toEqual(["lists carriers 100999 as an existing row, but there is none"]);
     // A key YAML read as a number still finds its row.
     expect(reusedRowConflicts(domain, [{ table: "carriers", key: "100101", facts: [{ name: "safety_rating", value: "satisfactory" }] }])).toEqual([]);
+  });
+
+  it("shows the model each param's allowed values, optional params and descriptions", async () => {
+    const { client, requests } = fakeClient([good]);
+    await draftTasksFromTranscripts({ domain: await loadDomain(path.resolve("examples/freight")), claude: { client }, transcripts: [{ file: "call-1.txt", text: "..." }] });
+    const prompt = requests[0]!.messages[0]!.content;
+    expect(prompt).toContain("- search_loads(origin: string, destination?: string, equipment?: string (dry_van|reefer|flatbed), pickup_from?: string, pickup_to?: string)");
+    expect(prompt).toContain("\n    pickup_from: Earliest pickup date, YYYY-MM-DD");
+    expect(prompt).toContain("A param marked ? is optional. One with values in parentheses takes exactly one of them, as written.");
+    expect(requests[0]!.system).toContain('map the transcript\'s wording to it ("By Mail" is by_mail)');
+  });
+
+  it("fixes a reference value spelled as the caller said it, when it plainly means one allowed value", async () => {
+    const domain = await loadDomain(path.resolve("examples/freight"));
+    const { client } = fakeClient([spelledLikeTheCall]);
+    const res = await draftTasksFromTranscripts({ domain, claude: { client }, transcripts: [{ file: "call-1.txt", text: "..." }] });
+    expect(res.tasks[0]!.reference![1]).toEqual({ tool: "search_loads", args: { origin: "Dallas", equipment: "dry_van" } });
+    expect(res.warnings).toEqual(['call-1.txt: negotiate-new-lane: reference[1] search_loads equipment "Dry Van" → dry_van']);
+    expect(res.notes).toEqual({});
+  });
+
+  it("keeps a value that matches no allowed value, or several, for review", async () => {
+    const domain = await loadDomain(path.resolve("examples/freight"));
+    const { client } = fakeClient([noSuchValue]);
+    const res = await draftTasksFromTranscripts({ domain, claude: { client }, transcripts: [{ file: "call-1.txt", text: "..." }] });
+    expect(res.tasks[0]!.reference![1]!.args).toEqual({ origin: "Dallas", equipment: "Box Truck" });
+    expect(res.warnings).toEqual([expect.stringMatching(/^call-1\.txt: negotiate-new-lane: reference\[1\] search_loads: invalid arguments: argument "equipment" must be one of dry_van, reefer, flatbed$/)]);
+    expect(res.notes["negotiate-new-lane"]).toEqual([expect.stringMatching(/^lint: reference\[1\] search_loads: invalid arguments: .*\. Fix the expectation, the seed rows or the reference\.$/)]);
+
+    // Two allowed values that read the same: the draft can't tell which one the caller meant.
+    const twoSpellings = structuredClone(domain);
+    twoSpellings.tools.find((t) => t.name === "search_loads")!.params.equipment!.enum = ["dry_van", "dry-van", "reefer"];
+    const { client: client2 } = fakeClient([spelledLikeTheCall]);
+    const res2 = await draftTasksFromTranscripts({ domain: twoSpellings, claude: { client: client2 }, transcripts: [{ file: "call-1.txt", text: "..." }] });
+    expect(res2.tasks[0]!.reference![1]!.args).toEqual({ origin: "Dallas", equipment: "Dry Van" });
+    expect(res2.warnings.some((w) => w.includes("→"))).toBe(false);
+    expect(Object.keys(res2.notes)).toEqual(["negotiate-new-lane"]);
+  });
+
+  it("drafts end-state conditions with in and exists, as init --sop does", async () => {
+    const domain = await loadDomain(path.resolve("examples/freight"));
+    const { client } = fakeClient([withInAndExists]);
+    const res = await draftTasksFromTranscripts({ domain, claude: { client }, transcripts: [{ file: "call-1.txt", text: "..." }] });
+    expect(res.tasks.map((t) => t.id)).toEqual(["load-stays-open"]);
+    expect(res.tasks[0]!.expect.state[0]!.where).toEqual({ load_id: "L-1001", status: { $in: ["available", "pending"] }, booked_by: { $exists: false } });
   });
 });
