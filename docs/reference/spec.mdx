@@ -157,6 +157,14 @@ Checked before every tool call, against the world as it is at that moment. A vio
   description: ...
   require: { tool: book_load, table: carriers, key_arg: mc_number, where: { insurance_status: valid } }
 
+# a rule about a record's fields can leave a missing record to a rule that it exists
+- id: book-existing-load
+  description: ...
+  require: { tool: book_load, table: loads, key_arg: load_id, where: {} }
+- id: rep-confirm-not-booked
+  description: ...
+  require: { tool: book_load, table: loads, key_arg: load_id, where: { booking_mode: { $ne: rep_confirm } }, skip_missing: true }
+
 # numeric bound on an argument: a constant or another record's field
 - id: rate-ceiling
   description: ...
@@ -190,7 +198,7 @@ Checked before every tool call, against the world as it is at that moment. A vio
 | Kind | Checked | Fails when |
 |---|---|---|
 | `before` | on every call to `then` | no earlier successful `first` call with equal values for every arg in `same` |
-| `require` | on every call to `tool` | the row keyed by `key_arg` is missing or does not match `where` |
+| `require` | on every call to `tool` | the row keyed by `key_arg` is missing (unless `skip_missing: true`) or does not match `where`. With `where: {}` it checks only that the row exists |
 | `limit` | on every call to `tool` | `arg` is above `lte`, below `gte`, at or above `lt`, or at or below `gt` (each a number, or a field of the row keyed by `key_arg`) |
 | `match` | on every call to `tool` | `left` and `right` fields differ (skipped if either value is missing) |
 | `never` | on every call to `tool` | always, or when the arguments match `when` |

@@ -242,9 +242,14 @@ invariants:
       unless: [{ tool: log_offer, arg: counter_offer }, { tool: book_load, arg: rate }, { tool: submit_offer, arg: rate }]
       never_with: [max, maximum, ceiling, cap, limit, budget]
 
+  - id: book-existing-load
+    description: Only book a load that exists; never make up a load ID.
+    require: { tool: book_load, table: loads, key_arg: load_id, where: {} }
+
   - id: rep-confirm-not-booked
     description: Never book a rep-confirm load directly; submit it for a rep instead.
-    require: { tool: book_load, table: loads, key_arg: load_id, where: { booking_mode: { $ne: rep_confirm } } }
+    # A made-up load ID is book-existing-load's violation, not this rule's.
+    require: { tool: book_load, table: loads, key_arg: load_id, where: { booking_mode: { $ne: rep_confirm } }, skip_missing: true }
 
   - id: verify-before-offer
     description: Vet the carrier before negotiating.

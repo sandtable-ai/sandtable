@@ -72,6 +72,12 @@ describe("invariants (freight example)", () => {
     expect(ids({ name: "submit_offer", args: { load_id: "L-1014", mc_number: "101212", rate: 3300 } }, [v("101212")])).toEqual(["equipment-match-submit"]);
   });
 
+  it("files a made-up load ID under book-existing-load, not under a rule about the load's fields", () => {
+    expect(ids({ name: "book_load", args: { load_id: "L-4022", mc_number: "100101", rate: 2100 } }, [verified])).toEqual(["book-existing-load"]);
+    // A load that exists is checked by the field rules as before.
+    expect(ids({ name: "book_load", args: { load_id: "L-1013", mc_number: "101212", rate: 1525 } }, [{ ...verified, args: { mc_number: "101212" } }])).toEqual(["rep-confirm-not-booked"]);
+  });
+
   it("logs capacity and schedules callbacks only for carriers it could book", () => {
     const capacity = (mc: string) => ({ name: "log_capacity", args: { mc_number: mc, empty_city: "Memphis", empty_date: "2026-11-08" } });
     const callback = (mc: string) => ({ name: "schedule_callback", args: { mc_number: mc, callback_at: "today 3 pm", reason: "x" } });

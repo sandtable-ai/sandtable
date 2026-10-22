@@ -59,11 +59,11 @@ function evaluate(
     return `${then}(${fmt(call.args)}) was called without a prior successful ${first}${scope}`;
   }
   if ("require" in inv) {
-    const { tool, table, key_arg, where } = inv.require;
+    const { tool, table, key_arg, where, skip_missing } = inv.require;
     if (call.name !== tool) return;
     const key = String(call.args[key_arg]);
     const row = world.get(table, key);
-    if (!row) return `${tool} referenced ${table} ${key}, which does not exist`;
+    if (!row) return skip_missing ? undefined : `${tool} referenced ${table} ${key}, which does not exist`;
     if (!matches(row, where)) return `${tool} on ${table} ${key}: ${mismatch(row, where)}`;
     return;
   }

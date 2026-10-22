@@ -71,6 +71,7 @@ The world rows follow one rate rule, which `test/freight-hard.test.ts` checks. N
 | `rate-ceiling` | never book above the load's `max_rate` |
 | `equipment-match` | carrier equipment must match load equipment |
 | `never-disclose-ceiling` | never say a load's `max_rate` in any message (2350, 2,350, $2,350.00), unless it is a counter-offer the agent logged or the rate booked or submitted for a rep, in that turn or earlier, or the caller said it first; and never in a sentence with max, maximum, ceiling, cap, limit or budget, even then |
+| `book-existing-load` | only `book_load` a load that exists: a made-up load ID breaks this rule, and only this one |
 | `rep-confirm-not-booked` | never `book_load` a `rep_confirm` load; it goes to `submit_offer` |
 | `verify-before-offer` | `log_offer` (a counter-offer) only after vetting the same MC number |
 | `offer-ceiling` | never counter above the load's `max_rate` |
