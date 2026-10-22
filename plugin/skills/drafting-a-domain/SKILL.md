@@ -48,6 +48,12 @@ npx sandtable-ai init --sop ./discovery/sop.md --transcripts ./discovery/calls -
 # Plan: 10 model calls (1 for the SOP, 9 for transcripts) to claude-sonnet-5-5 on the Anthropic API; at most about $1.70 at list prices
 ```
 
+After the dry run, write its plan to the engineer as a message of its own: the calls, the model, the provider and the dollar bound. Then:
+- if they haven't authorized model steps, end your turn there and wait for their go-ahead (installing a package it needs, such as `@anthropic-ai/bedrock-sdk`, isn't one);
+- if they have, write the plan as one line, such as `Plan: 5 calls to claude-sonnet-5-5 on Bedrock, at most about $0.94. You authorized model steps, so I'm running it.`, and then run the model-backed `init`.
+
+The `Plan:` line in the command's output doesn't count: the engineer reads your reply, not the tool output. Never run the paid `init` straight after the dry run's output without your own plan message in between.
+
 The calls are 1 for the SOP and 1 per `.txt` or `.md` transcript. The model is `claude-opus-5-5` at effort `high` unless `-m` names another. The bound assumes every call writes its 16,000-token maximum, so a real draft usually costs a fraction of it, and `init` prints the actual tokens and cost after each step.
 
 For a first draft of many transcripts, suggest Sonnet, half the price per token: `npx sandtable-ai init --transcripts ./discovery/calls -o ./sandtable -m claude-sonnet-5-5`.
@@ -66,7 +72,7 @@ The `init` drafting steps use Claude: `ANTHROPIC_API_KEY`, or `--provider bedroc
 
 ### 1. Draft
 
-Run `--openapi` on its own first: it's free. Then run the `--sop` and `--transcripts` command with `--dry-run` added, and show the engineer its `Plan:` line. If they already authorized model steps, run the command without `--dry-run`; otherwise ask and wait. Never run a paid step without its dry run first.
+Run `--openapi` on its own first: it's free. Then run the `--sop` and `--transcripts` command with `--dry-run` added, and show the engineer its `Plan:` line. Write the plan to them as a message of your own, with the calls and the dollar bound. If they already authorized model steps, run the command without `--dry-run` after that message; otherwise end your turn there and wait for their go-ahead. Never run a paid step without its dry run first.
 
 ```bash
 npx sandtable-ai init --openapi ./discovery/openapi.yaml --sop ./discovery/sop.md --transcripts ./discovery/calls -o ./sandtable
@@ -105,7 +111,7 @@ It lists each pending tool, invariant and task, with the file and quote it came 
 - **Tasks** come from transcripts. Check each one against its chat, in this order:
   1. **The task keeps its chat's case.** The customer's account and membership level, the order and what is on it, the item, and what the customer asks for are the ones in the chat. Names and identifiers are replaced by fictional ones, consistently, and nothing else changes. A task whose seed rows or caller instructions tell a different case (a gold member drafted as a guest, another order, another item) tests something the chat doesn't show: fix its rows or instructions to match the chat, or drop it.
   2. **Then the end state.** For those facts, the expected end state is what the **SOP** requires, even when the human rep did something else. A rep who broke the SOP is a reason to expect the SOP's outcome, never a reason to change the customer's facts until the rep looks right.
-  3. Names, companies and identifiers are fictional, and seed rows added for the task are plausible. A `TODO(review): copied from <file>` note names a value `init` found copied from the chat, such as a name, username, email or phone number: replace it everywhere it appears with a fictional one, consistently, then delete the note. The check misses details worded another way, such as an address, so read the task for them too.
+  3. Names, companies and identifiers are fictional, and seed rows added for the task are plausible. A `TODO(review): copied from <file>` note names a value `init` found copied from the chat, such as a name, username, email or phone number: replace it everywhere it appears with a fictional one, consistently, then delete the note. The check misses details worded another way, such as an address with no house number or street suffix, or a name the draft spelled differently, so read the task for them too.
 
 Show the engineer each item: the quote, what it will enforce, and your proposed fix. Accept it only after they agree, by changing `review: pending` to `review: accepted` (or deleting the line) and deleting the `TODO(review)` comments you resolved. Delete items that are wrong and cannot be fixed. Never bulk-accept to make `validate --strict` pass: an accepted item is a claim that it matches the customer's rules.
 
