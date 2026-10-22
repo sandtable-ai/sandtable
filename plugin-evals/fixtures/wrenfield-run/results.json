@@ -1,5 +1,8 @@
 {
   "version": 1,
+  "sandtable": {
+    "version": "0.3.0"
+  },
   "runId": "20261102T090000-wrfd",
   "domain": "wrenfield-returns",
   "agent": "http://localhost:8787/step",

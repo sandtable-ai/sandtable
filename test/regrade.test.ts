@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { cp, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -12,6 +12,7 @@ import { runSuite, type SuiteResult } from "../src/run/suite.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
 import { loadDomain } from "../src/spec/load.ts";
 import type { Domain } from "../src/spec/schema.ts";
+import { version } from "../src/version.ts";
 
 const example = path.resolve("examples/freight");
 const cli = path.resolve("src/cli.ts");
@@ -29,8 +30,19 @@ describe("regrade", () => {
     const domain = await loadDomain(example);
     for (const mode of ["careful", "naive"] as const) {
       const run = await stored(domain, mode);
-      expect(regradeSuite(domain, run)).toEqual(run);
+      // Everything but the record of who regraded it.
+      expect(regradeSuite(domain, run)).toEqual({ ...run, sandtable: { version, regradedWith: version } });
     }
+  });
+
+  it("records the sandtable-ai that ran a run, and the one that regraded it, keeping the first", async () => {
+    const domain = await loadDomain(example);
+    const run = await stored(domain, "careful");
+    expect(run.sandtable).toEqual({ version });
+    expect(regradeSuite(domain, { ...run, sandtable: { version: "0.2.9" } }).sandtable).toEqual({ version: "0.2.9", regradedWith: version });
+    // A run from before 0.3.0 records none; regrading it says only who regraded it.
+    const { sandtable: _, ...older } = run;
+    expect(regradeSuite(domain, older).sandtable).toEqual({ regradedWith: version });
   });
 
   it("applies an edited invariant to the stored trials without calling a model", async () => {
@@ -169,7 +181,21 @@ describe("regrade", () => {
     const err = await promisify(execFile)(process.execPath, [cli, "regrade", file, "--domain", domainDir]).catch((e: { code: number; stderr: string }) => e);
     expect(err).toMatchObject({ code: 2 });
     expect((err as { stderr: string }).stderr).toMatch(/^can't regrade .*results\.json: the agent or the caller would be given something else now: .*Rerun it with `npx sandtable-ai run` instead\./);
+    // Ran with this version: only the domain can have changed, so no older version would help.
+    expect((err as { stderr: string }).stderr).not.toContain("regrades it with that version");
     expect(await readFile(file, "utf8")).toBe(JSON.stringify(run));
+
+    // Ran with another version: its prompts may be what changed, and that version still regrades it.
+    await writeFile(file, JSON.stringify({ ...run, sandtable: { version: "0.2.9" } }));
+    const older = await promisify(execFile)(process.execPath, [cli, "regrade", file, "--domain", domainDir]).catch((e: { code: number; stderr: string }) => e);
+    expect((older as { stderr: string }).stderr).toContain(`It ran on sandtable-ai 0.2.9: if the domain hasn't changed since, \`npx sandtable-ai@0.2.9 regrade ${file} -d ${domainDir}\` regrades it with that version.`);
+
+    // Paths with spaces print quoted, so the command runs as printed.
+    const spaced = path.join(dir, "my run");
+    await mkdir(spaced, { recursive: true });
+    await writeFile(path.join(spaced, "results.json"), JSON.stringify({ ...run, sandtable: { version: "0.2.9" } }));
+    const quoted = await promisify(execFile)(process.execPath, [cli, "regrade", path.join(spaced, "results.json"), "--domain", domainDir]).catch((e: { code: number; stderr: string }) => e);
+    expect((quoted as { stderr: string }).stderr).toContain(`\`npx sandtable-ai@0.2.9 regrade '${path.join(spaced, "results.json")}' -d ${domainDir}\``);
   });
 
   it.skipIf(!process.features.typescript)("sandtable regrade with another domain's --domain points at the flag, and at the name for a renamed domain", async () => {

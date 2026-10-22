@@ -512,7 +512,8 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
           : crashed.length === 1
             ? `an earlier crashed run is still in ${crashed[0]}: delete it before publishing this folder`
             : `earlier crashed runs are still in ${crashed.join(", ")}: delete them before publishing this folder`;
-      if (JSON.stringify(result) === JSON.stringify(stored)) opts.onEntry?.(entry.label, "cached", leftover);
+      // Unchanged but for the note of who regraded it: the stored files stand as they are.
+      if (JSON.stringify({ ...result, sandtable: stored.sandtable }) === JSON.stringify(stored)) opts.onEntry?.(entry.label, "cached", leftover);
       else {
         // The current rules grade the stored conversations differently: rewrite their files. These hold the
         // only copy of paid conversations, so a write is never left half done.

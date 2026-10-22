@@ -12,6 +12,8 @@ R="$RUN/results.json"
 ```text
 SuiteResult
   version: 1
+  sandtable                    { version, regradedWith? }: the sandtable-ai that ran the trials, and the one that
+                               regraded them; absent before 0.3.0. `regrade` names `version` when it refuses a run
   domain, agent, user          names, e.g. "freight-carrier-sales"; "claude:claude-opus-5-5", "openai:gpt-4.1-mini",
                                "bedrock:qwen.qwen3-32b-v1:0", "http://localhost:8787/step", "noop", "scripted"
   k                            trials per task

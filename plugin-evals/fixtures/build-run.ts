@@ -45,6 +45,8 @@ export async function buildRun(): Promise<SuiteResult> {
   return {
     ...run,
     tasks,
+    // A fixed version, so a release doesn't change the stored run.
+    sandtable: { version: "0.3.0" },
     runId: "20261102T090000-wrfd",
     agent: AGENT_LABEL,
     user: USER_LABEL,

@@ -8,6 +8,7 @@ import type { BaselineSnapshot } from "./compare.ts";
 import { runEpisode, type TrialResult } from "./episode.ts";
 import { inputsFingerprint, taskFingerprints } from "./inputs.ts";
 import { percentile, sumUsage, type Usage } from "./usage.ts";
+import { version } from "../version.ts";
 
 /**
  * A task's verdict over its graded trials: `passed` when every one passed, `failed` when none did, `flaky`
@@ -72,6 +73,11 @@ export interface SoftScore {
 
 export interface SuiteResult {
   version: 1;
+  /**
+   * The sandtable-ai that wrote this file: `version` ran the trials, and `regradedWith` re-scored them, when
+   * `sandtable regrade` did. Absent in results from before 0.3.0; `version` is absent when such a run is regraded.
+   */
+  sandtable?: { version?: string; regradedWith?: string };
   /** Unique per run; prefixes agent session ids (`<runId>/<task-id>#<trial>`). */
   runId: string;
   domain: string;
@@ -160,6 +166,7 @@ export async function runSuite(opts: SuiteOptions): Promise<SuiteResult> {
 
   return {
     version: 1,
+    sandtable: { version },
     runId,
     domain: domain.name,
     agent: agent.name,
