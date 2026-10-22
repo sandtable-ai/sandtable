@@ -111,6 +111,9 @@ invariants:
   - id: eligible-carrier               # the record keyed by an argument must exist and match `where`
     description: Only book carriers with valid insurance and no do-not-use flag.
     require: { tool: book_load, table: carriers, key_arg: mc_number, where: { insurance_status: valid, do_not_use: false } }
+    # where: {} checks only that the record exists; skip_missing: true leaves a missing record to such a rule,
+    # so an invented ID is reported once, under the rule about existing, not under every rule about fields
+
 
   - id: rate-ceiling                   # numeric bound: a constant or another record's field (lte, gte; strict lt, gt)
     description: Never book above the load's max_rate.

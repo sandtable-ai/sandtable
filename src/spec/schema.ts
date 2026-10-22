@@ -137,7 +137,16 @@ const BeforeInvariant = z
 const RequireInvariant = z
   .object({
     ...invariantBase,
-    require: z.object({ tool: z.string(), table: z.string(), key_arg: z.string(), where: Where }).strict(),
+    require: z
+      .object({
+        tool: z.string(),
+        table: z.string(),
+        key_arg: z.string(),
+        where: Where,
+        /** A call naming a row that doesn't exist doesn't break this rule: leave that to a rule about the row existing. */
+        skip_missing: z.boolean().optional(),
+      })
+      .strict(),
   })
   .strict();
 
