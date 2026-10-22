@@ -124,7 +124,7 @@ Claude reads the SOP alongside the domain's tools, params, tables and known fiel
 
 The SOP also becomes `policy.md` when the domain still has the placeholder. Pass `--model` to choose the drafting model (default `claude-opus-5-5`).
 
-`--sop` makes one Claude call, and `--transcripts` one per transcript file. After each step, `init` prints what the calls used and an estimated cost at list prices, as `run` does:
+`--sop` makes one Claude call, and `--transcripts` one per transcript file. To see what a draft will spend before it spends anything, add `--dry-run`: it prints a plan line (calls, model, provider and a cost bound at list prices) and stops, without credentials. A real run prints the same line before its first call. After each step, `init` prints what the calls used and an estimated cost at list prices, as `run` does:
 
 ```text
   estimated cost $0.19

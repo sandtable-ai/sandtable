@@ -24,6 +24,7 @@ import { appendRows, appendToDomainList } from "./init/merge.ts";
 import { draftFromOpenApi, openApiProblem } from "./init/openapi.ts";
 import { draftInvariantsFromSop, knownFields, softRuleComments } from "./init/sop.ts";
 import { draftTasksFromTranscripts } from "./init/transcripts.ts";
+import { draftPlan, planLine } from "./init/plan.ts";
 import { DOMAIN_FILE, isPolicyPlaceholder, POLICY_PLACEHOLDER, renderDraft, TASKS_PLACEHOLDER, writeDraft } from "./init/render.ts";
 import { DomainError, DomainNotFoundError, domainWarnings, loadDomain, pendingReview } from "./spec/load.ts";
 import { lintDomain } from "./grade/lint.ts";
@@ -245,13 +246,16 @@ withProviderFlags(program
   .option("-o, --out <dir>", "domain directory to create, or to add to when it already exists", "sandtable")
   .option("-m, --model <id>", "Claude model for drafting steps")
   .option("--force", "overwrite existing files when drafting from --openapi")
-  .action(async (o: { openapi?: string; sop?: string; transcripts?: string; out: string; model?: string; force?: boolean } & ProviderFlags) => {
+  .option("--dry-run", "print the plan for --sop and --transcripts (model calls, model, provider, a cost bound) and the files --openapi would write, then stop: no model call, nothing written, no credentials needed")
+  .action(async (o: { openapi?: string; sop?: string; transcripts?: string; out: string; model?: string; force?: boolean; dryRun?: boolean } & ProviderFlags) => {
     if (!o.openapi && !o.sop && !o.transcripts) throw new Error("pass at least one of --openapi, --sop, --transcripts");
     // Read every input before drafting anything, so a wrong path fails before a file is written or a model is called.
     const sopText = o.sop ? await readUserText(o.sop, { from: "--sop" }) : undefined;
     const transcripts = o.transcripts ? await readTranscripts(o.transcripts) : undefined;
     const openapiText = o.openapi ? await readUserText(o.openapi, { from: "--openapi" }) : undefined;
     let fields: Record<string, string[]> = {};
+    let draftedDomainChars: number | undefined;
+    let openapiDraft: { draft: ReturnType<typeof draftFromOpenApi>; files: Record<string, string> } | undefined;
     if (o.openapi && openapiText !== undefined) {
       const spec = YAML.parse(openapiText) as Record<string, unknown>;
       const problem = openApiProblem(spec);
@@ -266,11 +270,40 @@ withProviderFlags(program
         "policy.md": sopText ?? POLICY_PLACEHOLDER,
         "tasks.yaml": TASKS_PLACEHOLDER,
       };
+      openapiDraft = { draft, files };
+      if (o.dryRun) {
+        draftedDomainChars = JSON.stringify(YAML.parse(files[DOMAIN_FILE]!)).length + files["policy.md"].length;
+        console.log(`Would draft ${draft.name} from ${o.openapi}: ${Object.keys(draft.tables).length} tables, ${draft.tools.length} tools. No model call.`);
+        for (const [f, text] of Object.entries(files)) {
+          const target = path.join(o.out, f);
+          const exists = await stat(target).then(() => true, () => false);
+          console.log(`  would write ${target}${exists && !o.force ? " (exists: init stops unless you pass --force)" : ""} (${text.length} characters)`);
+        }
+      }
+    }
+    if (o.dryRun) {
+      if (!o.sop && !o.transcripts) {
+        console.log("Dry run: only --openapi, which calls no model. Nothing was written.");
+        return;
+      }
+      // The domain the drafting calls describe: the one --openapi would write, else the one at -o, which must exist.
+      const domainChars = draftedDomainChars ?? JSON.stringify(await loadDomain(o.out)).length;
+      console.log(planLine(draftPlan({ domainChars, ...(sopText !== undefined ? { sopChars: sopText.length } : {}), transcriptChars: (transcripts ?? []).map((t) => t.text.length), claude: { ...providerOpts(o), ...(o.model ? { model: o.model } : {}) } })));
+      console.log("Dry run: no model was called and nothing was written. Run the same command without --dry-run to draft.");
+      return;
+    }
+    if (openapiDraft) {
+      const { draft, files } = openapiDraft;
       const written = await writeDraft(o.out, files, o.force);
       const notes = draft.tools.reduce((n, t) => n + t.notes.length, 0);
       console.log(`Drafted ${draft.name}: ${Object.keys(draft.tables).length} tables, ${draft.tools.length} tools, ${notes} review notes.`);
       for (const w of draft.warnings) console.log(`  ! ${w}`);
       for (const f of written) console.log(`  wrote ${f}`);
+    }
+    if (sopText !== undefined || transcripts) {
+      // What the model steps below will spend, said before the first call, as `--dry-run` says it.
+      const domainChars = JSON.stringify(await loadDomain(o.out)).length;
+      console.log(planLine(draftPlan({ domainChars, ...(sopText !== undefined ? { sopChars: sopText.length } : {}), transcriptChars: (transcripts ?? []).map((t) => t.text.length), claude: { ...providerOpts(o), ...(o.model ? { model: o.model } : {}) } })));
     }
     if (o.sop && sopText !== undefined) {
       const domain = await loadDomain(o.out);

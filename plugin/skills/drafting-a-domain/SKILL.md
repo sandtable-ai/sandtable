@@ -38,14 +38,17 @@ Keep runs in the project: `run` writes to `.sandtable/runs/` unless `-o` names a
 
 | Free and deterministic: run any time | Calls a model: get the engineer's go-ahead first |
 |---|---|
-| `init --openapi`, `validate`, `review`, `lint`, `report` | `init --sop`, `init --transcripts` (Claude) |
+| `init --openapi`, any `init … --dry-run`, `validate`, `review`, `lint`, `report` | `init --sop`, `init --transcripts` (Claude) |
 | `run --agent noop --user scripted`, `demo` | `run` with a model agent (`claude`, `openai:`, `bedrock:`) or a model user (the default `claude`, `openai:`), `demo --live` |
 
-Before a model-backed `init`, tell the engineer what it will spend, even when they have already authorized model steps: an authorization isn't a budget.
+Before a model-backed `init`, show the engineer what it will spend, even when they have already authorized model steps: an authorization isn't a budget. Get it from the CLI: the same command with `--dry-run` prints a plan line and stops, with no model call and no credentials needed:
 
-- **Calls**: `--sop` makes 1, and `--transcripts` makes 1 per `.txt` or `.md` file. Both in one command add up.
-- **Model and provider**: `claude-opus-5-5` at effort `high` unless `-m` names another model, on the Anthropic API or, with `--provider bedrock`, on Bedrock.
-- **Cost bound**: each call reads the policy, the tools, the tables and one document, and writes at most 16,000 tokens. With a document of a few thousand words, that is at most about $0.36 a call with Claude Opus 5.5 and $0.18 with Claude Sonnet 5.5, at list prices: 20 transcripts with Opus stay under about $7.50. Give this bound before the call: `init` prints the step's actual tokens and estimated cost only after it has run.
+```bash
+npx sandtable-ai init --sop ./discovery/sop.md --transcripts ./discovery/calls -o ./sandtable -m claude-sonnet-5-5 --dry-run
+# Plan: 10 model calls (1 for the SOP, 9 for transcripts) to claude-sonnet-5-5 on the Anthropic API; at most about $1.70 at list prices
+```
+
+The calls are 1 for the SOP and 1 per `.txt` or `.md` transcript. The model is `claude-opus-5-5` at effort `high` unless `-m` names another. The bound assumes every call writes its 16,000-token maximum, so a real draft usually costs a fraction of it, and `init` prints the actual tokens and cost after each step.
 
 For a first draft of many transcripts, suggest Sonnet, half the price per token: `npx sandtable-ai init --transcripts ./discovery/calls -o ./sandtable -m claude-sonnet-5-5`.
 
@@ -62,6 +65,8 @@ The `init` drafting steps use Claude: `ANTHROPIC_API_KEY`, or `--provider bedroc
 7. Measure the do-nothing floor.
 
 ### 1. Draft
+
+Run `--openapi` on its own first: it's free. Then run the `--sop` and `--transcripts` command with `--dry-run` added, and show the engineer its `Plan:` line. If they already authorized model steps, run the command without `--dry-run`; otherwise ask and wait. Never run a paid step without its dry run first.
 
 ```bash
 npx sandtable-ai init --openapi ./discovery/openapi.yaml --sop ./discovery/sop.md --transcripts ./discovery/calls -o ./sandtable
