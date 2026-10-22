@@ -28,6 +28,7 @@ import { draftPlan, planLine } from "./init/plan.ts";
 import { DOMAIN_FILE, isPolicyPlaceholder, POLICY_PLACEHOLDER, renderDraft, TASKS_PLACEHOLDER, writeDraft } from "./init/render.ts";
 import { DomainError, DomainNotFoundError, domainWarnings, loadDomain, pendingReview } from "./spec/load.ts";
 import { shellWord } from "./shell.ts";
+import { reviewNotes } from "./spec/notes.ts";
 import { version } from "./version.ts";
 import { lintDomain } from "./grade/lint.ts";
 import type { Domain } from "./spec/schema.ts";
@@ -363,7 +364,8 @@ withProviderFlags(program
       if (res.personas.length) await appendToDomainList(o.out, "personas", res.personas);
       if (res.tasks.length) await appendToDomainList(o.out, "tasks", res.tasks, undefined, res.notes);
       const rows = Object.values(res.rows).reduce((n, r) => n + r.length, 0);
-      console.log(`  ${res.tasks.length} task(s), ${res.personas.length} persona(s), ${rows} seed row(s) drafted; ${res.redactions} PII redaction(s)`);
+      const copied = res.copied ? `; ${res.copied} value(s) copied from the chats: marked TODO(review)` : "";
+      console.log(`  ${res.tasks.length} task(s), ${res.personas.length} persona(s), ${rows} seed row(s) drafted; ${res.redactions} PII redaction(s)${copied}`);
       for (const l of draftUsageLines(res.usage)) console.log(l);
       for (const w of res.warnings) console.log(`  ! ${w}`);
     }
@@ -415,12 +417,15 @@ program
   .argument("<domain>", "domain directory (with sandtable.yaml) or file")
   .description("list drafted items that still need a person to accept them")
   .action(async (domainPath: string) => {
-    const pending = pendingReview(await loadDomain(await resolveDomain(domainPath)));
+    const target = await resolveDomain(domainPath);
+    const pending = pendingReview(await loadDomain(target));
     if (!pending.length) return console.log("Nothing pending review.");
+    // The notes `init` left above each item, such as a status code to encode or a value copied from a chat.
+    const notes = await reviewNotes(target);
     for (const p of pending) {
       console.log(`- ${p.kind} ${p.id}${p.source ? `  (${p.source.file})` : ""}`);
       if (p.source?.quote) console.log(`    "${p.source.quote}"`);
-      if (p.kind === "tool") console.log("    see the TODO(review) comments above it in sandtable.yaml");
+      for (const n of notes.get(`${p.kind} ${p.id}`) ?? []) console.log(`    TODO(review): ${n}`);
     }
     console.log(`\nAccept an item by changing its \`review: pending\` to \`review: accepted\` (or deleting the line).`);
   });
