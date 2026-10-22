@@ -17,7 +17,8 @@ const cli = (...args: string[]) => run(process.execPath, [path.join(root, "src",
 const mentions = (text: string, name: string) => new RegExp(`(^|[^\\w-])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^\\w-]|$)`).test(text);
 
 describe("docs/reference/cli.mdx", () => {
-  it("documents every option of every command, in that command's section", async () => {
+  // Runs the CLI from src/, which needs a Node that strips types (22.18 and later).
+  it.skipIf(!process.features.typescript)("documents every option of every command, in that command's section", async () => {
     const doc = page("cli");
     const commands = [...(await cli("--help")).stdout.split("Commands:")[1]!.matchAll(/^ {2}(\w+)/gm)].map((m) => m[1]!).filter((c) => c !== "help");
     expect(commands.length).toBeGreaterThan(5);
@@ -71,7 +72,9 @@ describe("docs/reference/spec.mdx", () => {
 });
 
 describe("docs/reference/results-schema.mdx", () => {
-  it("documents every field an offline run writes to results.json, with a baseline", async () => {
+  // Only the fields an offline freight run writes are seen here: per-model `usage`, `emptyAfterStrip`, caller notes
+  // and other fields that only live runs or other commands write are checked by reading the page, not by this test.
+  it.skipIf(!process.features.typescript)("documents every field an offline run writes to results.json, with a baseline", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "sandtable-reference-"));
     const base = ["run", "examples/freight", "--agent", "scripted:naive", "--user", "scripted", "-k", "2", "--no-html"];
     // The naive agent fails gates, so `run` exits 1; the results are written either way.
