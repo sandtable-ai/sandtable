@@ -26,6 +26,7 @@ import { draftTasksFromTranscripts } from "./init/transcripts.ts";
 import { draftPlan, planLine } from "./init/plan.ts";
 import { DOMAIN_FILE, isPolicyPlaceholder, POLICY_PLACEHOLDER, renderDraft, TASKS_PLACEHOLDER, writeDraft } from "./init/render.ts";
 import { DomainError, DomainNotFoundError, domainWarnings, loadDomain, pendingReview } from "./spec/load.ts";
+import { shellWord } from "./shell.ts";
 import { version } from "./version.ts";
 import { lintDomain } from "./grade/lint.ts";
 import type { Domain } from "./spec/schema.ts";
@@ -604,7 +605,10 @@ program
           `can't regrade ${resultsPath}: it is a run of ${stored.domain}, not ${domain.name}, so --domain ${o.domain} is likely not the domain the run used. Pass the one whose sandtable.yaml has \`name: ${stored.domain}\`, the name results.json records as "domain". If you renamed the domain since the run, restore its \`name:\` or rerun it with \`npx sandtable-ai run\`.`,
         );
       }
-      throw new Error(`can't regrade ${resultsPath}: ${err.message}. Rerun it with \`npx sandtable-ai run\` instead.`);
+      // Prompts that changed with sandtable itself, not with the domain: the version that ran it still regrades it.
+      const ranWith = stored.sandtable?.version;
+      const older = ranWith && ranWith !== version && stored.inputs ? ` It ran on sandtable-ai ${ranWith}: if the domain hasn't changed since, \`npx sandtable-ai@${ranWith} regrade ${shellWord(resultsPath)} -d ${shellWord(o.domain)}\` regrades it with that version.` : "";
+      throw new Error(`can't regrade ${resultsPath}: ${err.message}. Rerun it with \`npx sandtable-ai run\` instead.${older}`);
     }
     const flipped = changedVerdicts(stored, result);
     console.log(renderTerminal(result));

@@ -19,6 +19,7 @@ The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`
 | Field | Type | Description |
 |---|---|---|
 | `version` | `1` | format version: readers refuse a newer one |
+| `sandtable` | object, optional | the sandtable-ai that wrote the file: `version` ran the trials, and `regradedWith` re-scored them when `sandtable regrade` did. Absent in results from before 0.3.0, and `version` stays absent when such a run is regraded |
 | `runId` | string | unique per run, e.g. `20261018T210512-k3f9`; prefixes the agent session ids |
 | `domain` | string | the domain's `name` |
 | `agent` | string | the agent's name, such as `claude:claude-opus-5-5`, `openai:gpt-4.1-mini`, `http://localhost:8787/step` (an HTTP agent is named by its URL) |

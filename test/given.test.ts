@@ -137,7 +137,8 @@ describe("given.rows", () => {
   it("is what regrade replays stored trials against", async () => {
     const domain = await domainWith(patched, plain);
     const run = JSON.parse(JSON.stringify(await runSuite({ domain, agent: probeAgent([]), user: scriptedUser() }))) as SuiteResult;
-    expect(regradeSuite(domain, run)).toEqual(run);
+    // Everything but the note of who regraded it.
+    expect({ ...regradeSuite(domain, run), sandtable: run.sandtable }).toEqual(run);
     // Patching another field the agent saw makes verify_carrier return something else: the conversation could have gone otherwise.
     const edited = await domainWith({ ...patched, given: { ...patched.given, rows: { carriers: [{ mc_number: "100101", insurance_status: "pending" }] } } }, plain);
     expect(() => regradeSuite(edited, run)).toThrow(RegradeError);

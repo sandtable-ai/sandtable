@@ -142,7 +142,7 @@ describe("a run with passed, failed, flaky and skipped trials", () => {
     const r = JSON.parse(JSON.stringify(await run())) as SuiteResult;
     const regraded = regradeSuite(await loadDomain(example), r);
     // As stored: a score with no eligible task is NaN in memory and null in results.json.
-    expect(JSON.parse(JSON.stringify(regraded))).toEqual(r);
+    expect(JSON.parse(JSON.stringify({ ...regraded, sandtable: r.sandtable }))).toEqual(r);
     expect(changedVerdicts(r, regraded)).toEqual([]);
   });
 

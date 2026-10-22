@@ -6,6 +6,7 @@ import { expectedTool } from "../grade/expectations.ts";
 import { mentions, protectedValues } from "../grade/invariants.ts";
 import { agentSystemPrompt, taskContext } from "../sim/prompts.ts";
 import { operatorProblems, substitute } from "../world/match.ts";
+import { shellWord } from "../shell.ts";
 import { version } from "../version.ts";
 import { DomainSpec, type Domain, type Given, type Tool } from "./schema.ts";
 
@@ -73,14 +74,6 @@ function unknownKeysNote(count: number, target?: string): string {
   return `\nsandtable-ai ${version} doesn't know ${these}: check ${their} spelling, or whether a later release added ${them} (${check}).`;
 }
 
-/**
- * A path as one shell word, so the printed command runs as it is when the path has spaces or quotes, or starts with
- * `-`, which the CLI would read as an option.
- */
-function shellWord(s: string): string {
-  const p = s.startsWith("-") ? `./${s}` : s;
-  return /^[\w./@:+=,-]+$/.test(p) ? p : `'${p.replaceAll("'", `'\\''`)}'`;
-}
 
 /**
  * A domain built in code, checked as loadDomain checks a file: the schema, then the cross-references. Unlike a

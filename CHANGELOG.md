@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 ### Added
 
 - **Library**: `parseDomain(value)` checks a domain built in code as `loadDomain` checks a file, the schema and then the cross-references, and throws a `DomainError`. A new page, [sandtable.dev/reference/library](https://sandtable.dev/reference/library), documents every export of the package ([#370](https://github.com/sandtable-ai/sandtable/issues/370)).
+- `results.json` records the sandtable-ai that wrote it, as `sandtable: { version }`, and `sandtable regrade` adds `regradedWith`. When `regrade` refuses a run because what the agent or the caller is given changed, and the run came from another version, it says the version that ran it and the command that regrades it with that version, such as `npx sandtable-ai@0.2.1 regrade runs/results.json -d ./sandtable`. A leaderboard's resumed results stay as stored unless a verdict changes ([#372](https://github.com/sandtable-ai/sandtable/issues/372)).
 
 ### Changed
 

@@ -6,6 +6,7 @@ import { gradeEpisode, toolEvent, worldChanges, type TrajectoryEvent, type Trial
 import { inputsFingerprint } from "./inputs.ts";
 import { summarize, trialStatus, type SuiteResult } from "./suite.ts";
 import { createToolRunner } from "./tool-runner.ts";
+import { version } from "../version.ts";
 
 /** A stored run that can't be re-scored under the domain as it is now. */
 export class RegradeError extends Error {}
@@ -81,5 +82,10 @@ export function regradeSuite(domain: Domain, stored: SuiteResult): SuiteResult {
   if (blocker) throw new RegradeError(blocker);
   const tasks = stored.tasks.map((s) => domain.tasks.find((t) => t.id === s.id)!);
   const trials = stored.tasks.flatMap((s) => s.trials.map((trial) => regradeTrial(domain, trial)));
-  return { ...stored, ...summarize(domain, tasks, trials, stored.k, stored.user), pendingReview: pendingReview(domain) };
+  return {
+    ...stored,
+    sandtable: { ...stored.sandtable, regradedWith: version },
+    ...summarize(domain, tasks, trials, stored.k, stored.user),
+    pendingReview: pendingReview(domain),
+  };
 }
