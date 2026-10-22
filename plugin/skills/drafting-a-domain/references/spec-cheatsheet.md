@@ -40,8 +40,9 @@ tasks: ./tasks.yaml                 # any top-level value that is a relative .md
 | `$in`, `$nin` | in, not in a list |
 | `$gt`, `$gte`, `$lt`, `$lte` | numeric comparison (strings compare lexically, so ISO dates work) |
 | `$exists` | `true`: the field is set and not null |
-| `$contains` | case-insensitive substring |
+| `$contains` | on text, a case-insensitive substring; on a list, an element that matches (an object matches like a where clause, operators included) |
 
+- A dotted field reads a nested value: `"address.zip": "94105"`, `"items.0.sku": SEED-TOM`.
 - No `$or`, `$regex` or other operators: `validate` fails on an unknown operator, on `$in`/`$nin` without a list (`"$arg"` is one value, never a list), and on a top-level `$` key, in any where clause.
 
 ## Tools
@@ -51,7 +52,7 @@ tools:
   - name: book_load                    # ^[a-zA-Z0-9_-]{1,64}$, the name the agent calls
     description: Book a load for a vetted carrier at the agreed all-in rate in USD. Only call after the caller has explicitly agreed.
     params:
-      load_id: { type: string }        # string | number | integer | boolean; required by default
+      load_id: { type: string }        # string | number | integer | boolean | object | array; required by default
       mc_number: { type: string }
       rate: { type: number, description: "Agreed all-in rate in USD" }
       note: { type: string, required: false }
@@ -74,10 +75,28 @@ tools:
 | `update: <table>`, `key`, `set` | merge fields into a row; error if missing | the updated row |
 | `respond: <value>` | no state change | the value (templated) |
 
-- Params also take `enum` and `default` (used when the agent omits an optional param).
+- Params also take `enum` and `default` (used when the agent omits an optional param), and `nullable: true` to keep an explicit `null`.
+- An `object` param lists `properties` (each a param, required by default) and an `array` param gives its `items` (no `required` or `default` of their own), so a tool can take line items:
+
+```yaml
+tools:
+  - name: create_order
+    description: Place an order with the caller's line items.
+    params:
+      items:
+        type: array
+        items:
+          type: object
+          properties: { sku: { type: string }, qty: { type: integer } }
+    ops:
+      - create: orders
+        values: { items: $items }
+```
+
+  A template reads inside them (`$address.zip`, `${items.0.sku}`), and a task grades them with `$contains`: `called: [{ tool: create_order, args: { items: { $contains: { sku: A-100, qty: 2 } } } }]`.
 - A check's `where` can compare against an argument: `where: { total: { $gte: $amount } }` rejects a refund larger than the order total.
 - A check is skipped when its `key` comes from an optional argument the agent did not pass.
-- Arguments are validated first: unknown names, missing required ones and wrong types return a tool error. Representations are coerced: `"2,100"` becomes `2100` for a number, `100101` becomes `"100101"` for a string.
+- Arguments are validated first: unknown names, missing required ones and wrong types return a tool error that names the path (`items[1].qty`). Representations are coerced: `"2,100"` becomes `2100` for a number, `100101` becomes `"100101"` for a string, and an object or list sent as a JSON string is parsed.
 
 ## Invariants
 

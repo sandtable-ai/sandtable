@@ -156,7 +156,7 @@ export function describeTools(domain: Domain): string {
   const tools = domain.tools
     .map((t) => {
       const params = Object.entries(t.params)
-        .map(([n, p]) => `${n}${p.required ? "" : "?"}: ${p.type}${p.enum ? ` (${p.enum.join("|")})` : ""}`)
+        .map(([n, p]) => `${n}${p.required ? "" : "?"}: ${typeText(p)}`)
         .join(", ");
       const notes = Object.entries(t.params)
         .filter(([, p]) => p.description)
@@ -166,6 +166,19 @@ export function describeTools(domain: Domain): string {
     })
     .join("\n");
   return `${tools}\n(A param marked ? is optional. One with values in parentheses takes exactly one of them, as written.)`;
+}
+
+/** A param's type as describeTools shows it: `string (a|b)`, an object's fields in braces, a list's element then `[]`. */
+function typeText(p: Domain["tools"][number]["params"][string]): string {
+  const base =
+    p.type === "object"
+      ? `{${Object.entries(p.properties ?? {})
+          .map(([n, c]) => `${n}${c.required ? "" : "?"}: ${typeText(c)}`)
+          .join(", ")}}`
+      : p.type === "array"
+        ? `${typeText(p.items!)}[]`
+        : `${p.type}${p.enum ? ` (${p.enum.join("|")})` : ""}`;
+  return p.nullable ? `${base} or null` : base;
 }
 
 function describeDomain(domain: Domain, fields: Record<string, string[]>): string {

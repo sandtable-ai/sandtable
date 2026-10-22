@@ -31,13 +31,14 @@ Inside tool `ops`, `checks`, invariant `where` clauses and task assertions:
 
 - `"$arg"` is replaced by the tool call's argument value, keeping its type.
 - `"${arg}"` interpolates inside a longer string: `"Load ${load_id} is not available"`.
+- After an object or array param, a dotted path reads inside it: `"$address.zip"`, `"Ship to ${address.zip}"`, and a number indexes a list, as in `"$items.0.sku"`. A path that isn't there gives nothing, like an argument that wasn't passed. After any other param, the same text stays literal: `"$rate.00"` is the text `$rate.00`.
 - An argument's name is a letter or `_`, then letters, digits or `_`. Any other string is literal text, even when it starts with `$`: `"$5"`, `"$$"`, `"$/hr"`, `"$USD/kg"`, `"$@type"`. A whole string such as `"$USD"` is a reference.
 - In a tool's `ops` and `checks`, every reference must name one of the tool's params, or `sandtable validate` fails with `never resolves: tool "get_load" has no param "loadId"`. It would be empty at run time.
 - A condition whose argument was not passed (an optional param) is dropped, so it filters nothing.
 
 ## Where clauses
 
-`where`, `fields`, `when` and the `args` of a task's `called` and `not_called` entries are maps of field to condition. A plain value means equality. An object of operators means all of them must hold:
+`where`, `fields`, `when` and the `args` of a task's `called` and `not_called` entries are maps of field to condition. A plain value means equality. An object of operators means all of them must hold. A dotted field name reads a nested value, such as `"address.zip": "94105"` or `"items.0.sku": SEED-TOM`, unless the row has a field with that literal name.
 
 | Operator | Meaning |
 |---|---|
@@ -45,7 +46,7 @@ Inside tool `ops`, `checks`, invariant `where` clauses and task assertions:
 | `$in`, `$nin` | in / not in a list |
 | `$gt`, `$gte`, `$lt`, `$lte` | numeric comparison (strings compare lexically, so ISO dates work) |
 | `$exists` | `true`: the field is set and not null; `false`: it is missing or null |
-| `$contains` | case-insensitive substring |
+| `$contains` | on text, a case-insensitive substring; on a list, an element that matches: an object matches an element like a where clause, operators included (`items: { $contains: { sku: A-100, qty: { $gte: 2 } } }`), and any other value by equality (`tags: { $contains: rush }`) |
 
 There are no top-level operators such as `$or`: every field's condition must hold. `validate` fails on an unknown operator, on `$in` or `$nin` without a list (a `"$arg"` reference is a single value, never a list), and on a top-level `$` key, in every where clause, with the clause's path, such as `tools.list_orders.ops[0].where.status: unknown operator "$like"`.
 
@@ -72,9 +73,9 @@ A tool is what the agent sees (name, description, JSON-schema params) plus what 
 - name: book_load                       # ^[a-zA-Z0-9_-]{1,64}$
   description: What it does, written for a model.
   params:
-    load_id: { type: string }           # string | number | integer | boolean
+    load_id: { type: string }           # string | number | integer | boolean | object | array
     rate: { type: number, description: "All-in USD" }
-    note: { type: string, required: false }
+    note: { type: string, required: false, nullable: true }   # an explicit null is kept, to clear a field
     equipment: { type: string, required: false, enum: [dry_van, reefer] }
     status: { type: string, required: false, default: available }   # used when the agent omits it
   checks:                               # preconditions the real API enforces; failing one = tool error, no writes
@@ -97,9 +98,49 @@ A tool is what the agent sees (name, description, JSON-schema params) plus what 
 | `update: <table>, key, set` | merge fields into a row; error if missing | the updated row |
 | `respond: <value>` | no state change | the value (templated) |
 
-Arguments are validated before anything runs. Unknown argument names, missing required ones and wrong types come back to the agent as tool errors. Representations are coerced leniently: `"2,100"` becomes `2100` for a number param, and `100101` becomes `"100101"` for a string param.
+Arguments are validated before anything runs. Unknown argument names, missing required ones and wrong types come back to the agent as tool errors, with the path of the argument, such as `argument "items[1].qty" must be an integer`. Representations are coerced leniently: `"2,100"` becomes `2100` for a number param, `100101` becomes `"100101"` for a string param, and an object or list sent as a JSON string is parsed. Without `nullable: true`, `null` and `""` mean the argument was left out. Some models leave out an argument they mean to be `null`; for a required nullable param, the tool error then says `(it may be null)`, so the agent can send `null`.
 
-There is no `delete` op, and params are scalars only (no arrays or nested objects yet; see [#26](https://github.com/sandtable-ai/sandtable/issues/26)).
+### Objects and lists
+
+A param of `type: object` lists its `properties`, each a param that is required unless it says `required: false`. A param of `type: array` gives the param of its `items`, which has no `required` or `default` of its own. They nest, so a tool can take line items:
+
+```yaml
+- name: create_order
+  description: Place an order for the caller.
+  params:
+    order_id: { type: string }
+    items:
+      type: array
+      description: Line items on the order
+      items:
+        type: object
+        properties:
+          sku: { type: string }
+          qty: { type: integer }
+          gift_note: { type: string, required: false }
+    address:
+      type: object
+      properties: { street: { type: string }, zip: { type: string } }
+  checks:
+    - { table: products, key: $items.0.sku, error: "Unknown product ${items.0.sku}" }
+  ops:
+    - create: orders
+      values: { order_id: $order_id, items: $items, zip: $address.zip }
+```
+
+The agent gets nested JSON Schema, with `additionalProperties: false` on every object. A task can grade the items with `$contains` and a dotted field:
+
+```yaml
+expect:
+  called:
+    - { tool: create_order, args: { items: { $contains: { sku: SEED-TOM, qty: 2 } }, address.zip: "94105" } }
+  state:
+    - { table: orders, where: { zip: "94105", items: { $contains: { sku: SEED-TOM } } }, count: 1 }
+```
+
+`enum` is for scalars only. A `default` for an object or array param must be a valid argument, and a `null` default needs `nullable: true`. Invariants name top-level arguments (`limit.arg`, `require.key_arg`, `before.same`).
+
+There is no `delete` op.
 
 ## invariants
 
