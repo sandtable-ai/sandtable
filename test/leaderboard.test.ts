@@ -804,10 +804,22 @@ describe("leaderboard provenance", () => {
     await mkdir(path.dirname(prices));
     await writeFile(prices, await readFile("prices/bedrock.eu-west-1.json"));
     await run(process.execPath, path.resolve("src/cli.ts"), "leaderboard", example, "-m", models, "-u", "scripted", "-k", "1", "-t", "no-mc-number", "-o", dir, "--provider", "bedrock", "--region", "eu-west-1", "--prices", prices);
-    const head = (await promisify(execFile)("git", ["rev-parse", "HEAD"])).stdout.trim();
     const info = JSON.parse(await readFile(path.join(dir, "careful-rules", "run.json"), "utf8"));
-    expect(info).toMatchObject({ sandtable: { commit: head } });
-    expect(typeof info.sandtable.dirty).toBe("boolean");
+    // In a git clone of sandtable, the commit it ran from. From a source download with no .git (a release's
+    // tarball, `git archive`), there is none to record, only the version.
+    const head = await promisify(execFile)("git", ["-C", path.resolve("."), "rev-parse", "--show-toplevel", "HEAD"]).then(
+      ({ stdout }) => {
+        const [top, commit] = stdout.trim().split("\n");
+        return path.resolve(top!) === path.resolve(".") ? commit : undefined;
+      },
+      () => undefined,
+    );
+    if (head) {
+      expect(info).toMatchObject({ sandtable: { commit: head } });
+      expect(typeof info.sandtable.dirty).toBe("boolean");
+    } else {
+      expect(info.sandtable).toEqual({ version: expect.any(String) });
+    }
     // Nothing here ran Claude or called Bedrock, so neither the provider nor a region is recorded.
     expect(info).not.toHaveProperty("provider");
     expect(info).not.toHaveProperty("region");
