@@ -63,25 +63,25 @@ In about five minutes: an offline demo with no API key, the same example with Cl
     The HTML report is one self-contained file. For every task it shows each trial's transcript, the tool calls with their arguments and results, every check that passed or failed, and the changes the agent made to the world. Read a failing trial before trusting any score: it tells you whether the agent, the task or the simulated caller was wrong.
   </Step>
   <Step title="Run it with Claude">
-    Claude plays both the carrier and the agent, two trials per task by default.
+    Claude plays both the carrier and the agent, two trials per task by default. Claude Haiku 5.5 plays the carrier unless `--user-model` names another model, and the agent runs on Claude Opus 5.5 unless `--agent-model` does.
 
     <Tabs>
       <Tab title="Anthropic API">
         ```bash
         export ANTHROPIC_API_KEY=...
-        npx sandtable-ai demo --live --user-model claude-haiku-5-5
+        npx sandtable-ai demo --live
         ```
       </Tab>
       <Tab title="Amazon Bedrock">
         ```bash
         npm install --save-dev sandtable-ai @anthropic-ai/bedrock-sdk
-        npx sandtable-ai demo --live --provider bedrock --region eu-west-1 --user-model claude-haiku-5-5
+        npx sandtable-ai demo --live --provider bedrock --region eu-west-1
         ```
         Uses your AWS credentials (`--aws-profile` or the default chain). The Bedrock client is an optional package, so it goes next to `sandtable-ai`. See [Run against your agent](/guides/bring-your-agent#claude-on-amazon-bedrock).
       </Tab>
     </Tabs>
 
-    A cheaper model for the simulated caller keeps the cost down. The run holds one conversation per task and trial (`-k`, default 2), so its cost grows with both. For scale: on the example's first 10 tasks, 20 trials, Claude Opus 5.5 as the agent and Claude Haiku 5.5 as the caller cost about $0.58 at list prices ([results](/results)). The full example has more tasks and costs proportionally more.
+    The cheaper caller model keeps the cost down. The run holds one conversation per task and trial (`-k`, default 2), so its cost grows with both. For scale: on the example's first 10 tasks, 20 trials, Claude Opus 5.5 as the agent and Claude Haiku 5.5 as the caller cost about $0.58 at list prices ([results](/results)). The full example has more tasks and costs proportionally more.
   </Step>
   <Step title="Point it at your own agent">
     Any agent that answers one POST per step can be rehearsed. Here is a toy one that only verifies the caller's MC number, and remembers the verified carrier for the rest of the call under the `session_id` sandtable sends with every step:

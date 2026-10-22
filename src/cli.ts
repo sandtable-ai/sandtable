@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command, InvalidArgumentError } from "commander";
 import { freightScriptedAgent } from "./demo/freight-agents.ts";
+import { DEMO_USER_MODEL, demoLiveSides } from "./demo/live.ts";
 import { draftUsageLines, formatPercent, renderTerminal } from "./report/terminal.ts";
 import { renderHtml } from "./report/html.ts";
 import { criticalFailures, everyTrialFailed, runSuite, skippedTrials, trialStatus, type SuiteResult } from "./run/suite.ts";
@@ -13,7 +14,7 @@ import { changedVerdicts, RegradeError, regradeSuite } from "./run/regrade.ts";
 import { baselineSnapshot, checkBaseline } from "./run/compare.ts";
 import { readResults, readUserFile, readUserText, userPathError } from "./run/read.ts";
 import { writeFileAtomic } from "./run/write.ts";
-import { claudeAgent, claudeUser, providerOf, type ClaudeOptions, type Provider } from "./sim/claude.ts";
+import { providerOf, type ClaudeOptions, type Provider } from "./sim/claude.ts";
 import { registerPrices } from "./run/usage.ts";
 import { DEFAULT_OPENAI_BASE_URL } from "./sim/openai-compat.ts";
 import { scriptedUser } from "./sim/scripted.ts";
@@ -501,7 +502,7 @@ withProviderFlags(program
   .option("--live", "use Claude as both the agent and the simulated user (needs ANTHROPIC_API_KEY or `ant auth login`)")
   .option("-k, --trials <n>", "trials per task in --live mode", int, 2)
   .option("--agent-model <id>", "model for the agent in --live mode")
-  .option("--user-model <id>", "model for the simulated caller in --live mode (a cheaper model keeps runs cheap)")
+  .option("--user-model <id>", `model for the simulated caller in --live mode (default: ${DEMO_USER_MODEL}, a cheaper model than the agent's)`)
   .option("--no-open", "do not open the HTML report in the browser")
   .action(async (o: { live?: boolean; trials: number; agentModel?: string; userModel?: string; open: boolean } & ProviderFlags) => {
     const shouldOpen = o.open && process.stdout.isTTY;
@@ -509,13 +510,8 @@ withProviderFlags(program
     if (o.live) {
       const p = providerOpts(o);
       const spec = (model?: string) => (model ? `claude:${model}` : "claude");
-      await failIfUnreachable([{ role: "agent", spec: spec(o.agentModel) }, { role: "simulated user", spec: spec(o.userModel) }], p);
-      const result = await runSuite({
-        domain,
-        agent: claudeAgent({ ...p, ...(o.agentModel ? { model: o.agentModel } : {}) }),
-        user: claudeUser({ ...p, ...(o.userModel ? { model: o.userModel } : {}) }),
-        k: o.trials,
-      });
+      await failIfUnreachable([{ role: "agent", spec: spec(o.agentModel) }, { role: "simulated user", spec: spec(o.userModel ?? DEMO_USER_MODEL) }], p);
+      const result = await runSuite({ domain, ...demoLiveSides(p, o), k: o.trials });
       console.log(renderTerminal(result));
       const out = await save(result, defaultOut("demo-live"), true);
       console.log(`\n  report: ${path.join(out, "report.html")}`);
@@ -535,7 +531,7 @@ withProviderFlags(program
     if (shouldOpen && firstReport) openInBrowser(firstReport);
     console.log("Next:");
     console.log("  Claude on both sides, Haiku as the cheaper caller (needs ANTHROPIC_API_KEY):");
-    console.log(`    ${NEXT} demo --live --user-model claude-haiku-5-5`);
+    console.log(`    ${NEXT} demo --live`);
     console.log("  Draft a domain from your customer's API spec and SOP:");
     console.log(`    ${NEXT} init --openapi api.yaml --sop sop.md -o mine`);
   });
