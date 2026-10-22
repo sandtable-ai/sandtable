@@ -15,7 +15,7 @@ These are contracts. A change that can make something built on them stop working
 |---|---|
 | The domain spec: every key of `sandtable.yaml` and the files it includes | [Domain spec](/reference/spec) |
 | `results.json` and `leaderboard.json` | [results.json](/reference/results-schema) |
-| CLI commands, their arguments and flags, environment variables and exit codes | [CLI](/reference/cli) |
+| CLI commands, their arguments and flags, environment variables and exit codes, and the files the CLI reads besides a domain: the `leaderboard` models file and the `--prices` file | [CLI](/reference/cli) |
 | The HTTP step protocol | [HTTP step protocol](/reference/http-protocol) |
 | The exports of the `sandtable-ai` package | [Library API](/reference/library) |
 
@@ -24,7 +24,10 @@ What is not covered, and may change in any release:
 - the prompts given to the reference Claude agent and to the simulated caller, and the default models;
 - `init`'s drafts: the model-backed steps' prompts and what they produce;
 - the Claude Code plugin's skill and agent wording;
-- anything not exported from the package, including `dist/` paths.
+- anything not exported from the package, including `dist/` paths;
+- the bundled examples (`examples/freight`, `examples/clinic`) and their rule-based demo agents (`scripted:careful`, `scripted:naive`, `scripted:clinic-careful`, `scripted:clinic-naive`), which exist to show sandtable and test it. [Scores](#scores) says how a change to them is announced.
+
+Some results are judgments made by fixed rules: each trial's `attribution` (its owner and evidence), its `callerNotes`, and the `copied from` notes `init` writes. Their fields are covered, so they keep their names and types. The rules behind them can get better in a minor release, which can change which owner a trial gets or which values a note flags; the changelog says so. Pass and fail never depend on them.
 
 ## Version numbers
 

@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **Docs**: the stability policy names the files the CLI reads as covered (the `leaderboard` models file and the `--prices` file), says the bundled examples' demo agents aren't, and says the rules behind `attribution`, `callerNotes` and `init`'s `copied from` notes can improve in a minor release while their fields stay. The library reference documents `World`'s `keyOf` and `hasTable`, and the CLI reference both shapes of a `--prices` file ([#394](https://github.com/sandtable-ai/sandtable/issues/394)).
+
 ## [1.0.0-rc.1] - 2026-10-22
 
 The first release candidate for 1.0, published under npm's `next` tag. The contracts are as 0.3.0 left them. It adds a local check that flags names, usernames, emails, phone numbers and street addresses an `init --transcripts` draft copied from its chats, `sandtable review` printing each item's review notes, and the full list of exported types on the library reference. There are no breaking changes since 0.3.0.
