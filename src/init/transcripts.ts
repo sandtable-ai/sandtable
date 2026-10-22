@@ -5,6 +5,7 @@ import { validateDomain } from "../spec/load.ts";
 import { PersonaSpec, TaskSpec, type Domain, type Persona, type Task } from "../spec/schema.ts";
 import type { UsageByModel } from "../run/usage.ts";
 import { createClient, recordDraftUsage, requestBase, type ClaudeOptions } from "../sim/claude.ts";
+import { copiedValueNotes, type Place } from "./copied.ts";
 import { ConditionSpec, describeTools, whereOf } from "./sop.ts";
 import { equal } from "../world/match.ts";
 
@@ -17,6 +18,8 @@ export interface TranscriptDraft {
   /** Review notes per task id, such as a reused row that contradicts the transcript; `init` writes them as `# TODO(review):` comments above the task. */
   notes: Record<string, string[]>;
   redactions: number;
+  /** Personal values from the transcripts that the drafted tasks hold, each a review note on its task. */
+  copied: number;
   /** Tokens the drafting calls used, one per transcript, per model, for `init` to print with an estimated cost. */
   usage: UsageByModel;
 }
@@ -164,6 +167,24 @@ export function normalizeEnumArgs(domain: Domain, task: Task): string[] {
   return changes;
 }
 
+/** The parts of a drafted task that can hold a value from its chat, each with where it is. */
+function draftedPlaces(conv: { task: Task; persona?: Persona; rows: Record<string, Record<string, unknown>[]> }): Place[] {
+  const { task } = conv;
+  const places: Place[] = [
+    { where: "the description", text: task.description ?? "" },
+    { where: "the source quote", text: task.source?.quote ?? "" },
+    { where: "the caller's instructions", text: task.user.instructions },
+    { where: "the caller's script", text: (task.user.script ?? []).join("\n") },
+    { where: "the reference calls", text: JSON.stringify(task.reference ?? []) },
+    { where: "the expectations", text: JSON.stringify(task.expect) },
+  ];
+  for (const [table, rows] of Object.entries(conv.rows)) {
+    for (const row of rows) places.push({ where: `a new ${table} row`, text: JSON.stringify(row) });
+  }
+  if (conv.persona) places.push({ where: `persona ${conv.persona.id}`, text: conv.persona.description });
+  return places;
+}
+
 export function proposalToTask(p: Proposal, file: string): { task: Task; persona?: Persona; rows: Record<string, Record<string, unknown>[]> } | string {
   // Conditions on the same field are combined, so a range keeps both bounds.
   const state = p.expect_state.map((s) => ({ s, where: whereOf(s.conditions) }));
@@ -205,8 +226,10 @@ export async function draftTasksFromTranscripts(input: {
 }): Promise<TranscriptDraft> {
   const client = await createClient(input.claude ?? {});
   const base = requestBase(input.claude ?? {}, "high");
-  const out: TranscriptDraft = { tasks: [], personas: [], rows: {}, warnings: [], notes: {}, redactions: 0, usage: {} };
+  const out: TranscriptDraft = { tasks: [], personas: [], rows: {}, warnings: [], notes: {}, redactions: 0, copied: 0, usage: {} };
   let domain = input.domain;
+  // What the domain held before drafting: a value it already has, such as a seeded customer's name, isn't copied from a chat.
+  const known = JSON.stringify({ world: input.domain.world, policy: input.domain.policy, tools: input.domain.tools, personas: input.domain.personas });
 
   for (const t of input.transcripts) {
     const scrubbed = scrubPii(t.text);
@@ -263,6 +286,11 @@ export async function draftTasksFromTranscripts(input: {
     const lint = lintDomain({ ...candidate, tasks: [conv.task] }).tasks[0]!;
     for (const e of lint.errors) out.warnings.push(`${t.file}: ${conv.task.id}: ${e}`);
     notes.push(...lint.errors.map((e) => `lint: ${e}. Fix the expectation, the seed rows or the reference.`));
+    // Names, usernames, emails and phone numbers from the chat that the draft kept: each must become a fictional value.
+    const copied = copiedValueNotes(t.text, t.file, draftedPlaces(conv), known);
+    if (copied.length) out.warnings.push(`${t.file}: ${conv.task.id}: ${copied.length} value(s) copied from the chat: see its TODO(review) notes`);
+    out.copied += copied.length;
+    notes.push(...copied);
     if (notes.length) out.notes[conv.task.id] = notes;
 
     domain = candidate;

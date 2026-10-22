@@ -368,3 +368,67 @@ describe("init from transcripts", () => {
     expect(res.tasks[0]!.expect.state[0]!.where).toEqual({ load_id: "L-1001", status: { $in: ["available", "pending"] }, booked_by: { $exists: false } });
   });
 });
+
+describe("values a draft copied from its chat", () => {
+  // A fictional chat: the scrub removes the email and phone before sending, and keeps the username.
+  const chat = [
+    "Agent: Thanks for calling Blue Mesa dispatch.",
+    "Customer (Priya Halvorsen): Hi, my name is Priya Halvorsen, my portal username is phalvorsen88.",
+    "Customer: Reach me at phalvorsen88@mailbox.example or 415-555-0142. I'm after L-2001.",
+  ].join("\n");
+  // The model kept the name, the username and the phone, and made an email up from the username.
+  const copying = {
+    ...good,
+    instructions: "You are Priya Halvorsen (username phalvorsen88, phalvorsen88@mail.example, phone 415-555-0142) at Blue Mesa Trucking, MC 100101. You want L-2001. Ask for $2,600; accept $2,250 or more.",
+  };
+
+  it("notes each copied value on its task, once, with where it is, and counts them", async () => {
+    const domain = await loadDomain(path.resolve("examples/freight"));
+    const { client, requests } = fakeClient([copying]);
+    const res = await draftTasksFromTranscripts({ domain, claude: { client }, transcripts: [{ file: "chat-7.txt", text: chat }] });
+    // The scrub still ran before sending.
+    expect(requests[0]!.messages[0]!.content).not.toContain("415-555-0142");
+    const where = "(in the caller's instructions)";
+    expect(res.notes["negotiate-new-lane"]).toEqual([
+      `copied from chat-7.txt: replace "phalvorsen88@mail.example" with a fictional value ${where}`,
+      `copied from chat-7.txt: replace "phalvorsen88" with a fictional value ${where}`,
+      `copied from chat-7.txt: replace "415-555-0142" with a fictional value ${where}`,
+      `copied from chat-7.txt: replace "Priya Halvorsen" with a fictional value ${where}`,
+    ]);
+    expect(res.copied).toBe(4);
+    expect(res.warnings).toContain("chat-7.txt: negotiate-new-lane: 4 value(s) copied from the chat: see its TODO(review) notes");
+  });
+
+  it("leaves a draft alone that kept only the call's IDs, and values the domain already has", async () => {
+    const domain = await loadDomain(path.resolve("examples/freight"));
+    const { client } = fakeClient([good]);
+    // L-2001 and MC 100101 are what the task is about; Blue Mesa Trucking is a seeded carrier.
+    const res = await draftTasksFromTranscripts({ domain, claude: { client }, transcripts: [{ file: "chat-7.txt", text: `${chat}\nCustomer: This is Blue Mesa Trucking, MC 100101.` }] });
+    expect(res.copied).toBe(0);
+    expect(res.notes["negotiate-new-lane"]).toBeUndefined();
+  });
+
+  it("finds a surname alone, a phone written another way, and a name in a new persona", async () => {
+    const domain = await loadDomain(path.resolve("examples/freight"));
+    const elsewhere = {
+      ...good,
+      instructions: "You are Ms. Halvorsen at Blue Mesa Trucking, MC 100101. Call back on (415) 555 0142. You want L-2001. Ask for $2,600; accept $2,250 or more.",
+      new_persona: { id: "veteran-dispatcher", description: "Priya Halvorsen, a long-time dispatcher who counters every offer once." },
+    };
+    const { client } = fakeClient([elsewhere]);
+    const res = await draftTasksFromTranscripts({ domain, claude: { client }, transcripts: [{ file: "chat-7.txt", text: chat }] });
+    expect(res.notes["negotiate-new-lane"]).toEqual([
+      'copied from chat-7.txt: replace "(415) 555 0142" with a fictional value (in the caller\'s instructions)',
+      'copied from chat-7.txt: replace "Halvorsen" with a fictional value (in the caller\'s instructions)',
+      'copied from chat-7.txt: replace "Priya Halvorsen" with a fictional value (in persona veteran-dispatcher)',
+    ]);
+  });
+
+  it("doesn't take a speaker's role or a greeting for a name", async () => {
+    const domain = await loadDomain(path.resolve("examples/freight"));
+    const roles = "Customer Service: Hello Team, this is Support Desk.\nSupport Agent: Hi.";
+    const { client } = fakeClient([{ ...good, instructions: `${good.instructions} Customer Service and Support Agent were on the call.` }]);
+    const res = await draftTasksFromTranscripts({ domain, claude: { client }, transcripts: [{ file: "chat-8.txt", text: roles }] });
+    expect(res.copied).toBe(0);
+  });
+});

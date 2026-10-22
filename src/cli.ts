@@ -363,7 +363,8 @@ withProviderFlags(program
       if (res.personas.length) await appendToDomainList(o.out, "personas", res.personas);
       if (res.tasks.length) await appendToDomainList(o.out, "tasks", res.tasks, undefined, res.notes);
       const rows = Object.values(res.rows).reduce((n, r) => n + r.length, 0);
-      console.log(`  ${res.tasks.length} task(s), ${res.personas.length} persona(s), ${rows} seed row(s) drafted; ${res.redactions} PII redaction(s)`);
+      const copied = res.copied ? `; ${res.copied} value(s) copied from the chats: marked TODO(review)` : "";
+      console.log(`  ${res.tasks.length} task(s), ${res.personas.length} persona(s), ${rows} seed row(s) drafted; ${res.redactions} PII redaction(s)${copied}`);
       for (const l of draftUsageLines(res.usage)) console.log(l);
       for (const w of res.warnings) console.log(`  ! ${w}`);
     }

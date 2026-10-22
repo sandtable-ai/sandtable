@@ -11,6 +11,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 ### Fixed
 
 - **Docs**: [sandtable.dev/reference/library](https://sandtable.dev/reference/library) lists every type the package exports, such as `AttributionCounts`, `Owner`, `SuiteOptions` and `ToolSchema`, grouped by what it describes, and a test fails when an exported type is missing from it ([#353](https://github.com/sandtable-ai/sandtable/issues/353)).
+### Added
+
+- `init --transcripts`: after drafting, a local check with no model call flags the values a task copied from its chat: names the caller gave, usernames, the chat's emails and phone numbers, and emails made from its usernames. Each gets a `# TODO(review): copied from <file>: replace "<value>" with a fictional value` note above the task, saying where it is, and the summary prints how many it found, next to the PII redactions. Before, a draft could keep a caller's real name, or rebuild an email from a kept username, with nothing pointing at it. Order, account and load IDs, and values the domain already had, aren't flagged ([#388](https://github.com/sandtable-ai/sandtable/issues/388)).
 
 ## [0.3.0] - 2026-10-22
 
