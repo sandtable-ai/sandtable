@@ -41,6 +41,14 @@ Keep runs in the project: `run` writes to `.sandtable/runs/` unless `-o` names a
 | `init --openapi`, `validate`, `review`, `lint`, `report` | `init --sop`, `init --transcripts` (Claude) |
 | `run --agent noop --user scripted`, `demo` | `run` with a model agent (`claude`, `openai:`, `bedrock:`) or a model user (the default `claude`, `openai:`), `demo --live` |
 
+Before a model-backed `init`, tell the engineer what it will spend, even when they have already authorized model steps: an authorization isn't a budget.
+
+- **Calls**: `--sop` makes 1, and `--transcripts` makes 1 per `.txt` or `.md` file. Both in one command add up.
+- **Model and provider**: `claude-opus-5-5` at effort `high` unless `-m` names another model, on the Anthropic API or, with `--provider bedrock`, on Bedrock.
+- **Cost bound**: each call reads the policy, the tools, the tables and one document, and writes at most 16,000 tokens. With a document of a few thousand words, that is at most about $0.36 a call with Claude Opus 5.5 and $0.18 with Claude Sonnet 5.5, at list prices: 20 transcripts with Opus stay under about $7.50. Give this bound before the call: `init` prints the step's actual tokens and estimated cost only after it has run.
+
+For a first draft of many transcripts, suggest Sonnet, half the price per token: `npx sandtable-ai init --transcripts ./discovery/calls -o ./sandtable -m claude-sonnet-5-5`.
+
 The `init` drafting steps use Claude: `ANTHROPIC_API_KEY`, or `--provider bedrock` with AWS credentials (`--region`, `--aws-profile`) and `@anthropic-ai/bedrock-sdk` installed as above. Do not paste customer documents into your own prompts or commit them to a public repository: `init --transcripts` scrubs emails, phone numbers and card numbers locally before anything is sent, and you should not undo that.
 
 ## Workflow
