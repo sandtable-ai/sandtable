@@ -44,3 +44,15 @@ export function hasReasoning(text: string): boolean {
 export function hasUnclosedReasoning(text: string): boolean {
   return OPENING.test(withoutClosedBlocks(text));
 }
+
+/** Whether the text is nothing but reasoning: it holds some, and stripReasoning leaves nothing to say. */
+export function onlyReasoning(text: string): boolean {
+  return hasReasoning(text) && stripReasoning(text) === "";
+}
+
+/**
+ * How many times an adapter asks again for a reply it can't use as it is: one whose reasoning never closes, or one
+ * that is nothing but reasoning, which the other side would hear as silence. The discarded replies never enter the
+ * conversation.
+ */
+export const REASONING_RETRIES = 2;

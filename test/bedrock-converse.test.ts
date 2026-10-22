@@ -297,6 +297,25 @@ describe("bedrockConverseAgent", () => {
       expect(usage.map(([, u]) => u.reasoningStripped)).toEqual([1, 1, 1]);
     });
 
+    it("asks again when a reply is nothing but reasoning, so the caller doesn't hear silence", async () => {
+      const { client, requests } = stub([say("<reasoning>The caller wants L-1001. Max is 2350.</reasoning>"), say("L-1001 is posted at $2,100.")]);
+      const usage: Array<[string, Record<string, unknown>]> = [];
+      const s = await session(client, usage);
+      expect(await s.reply("What's L-1001 paying?", noTools)).toBe("L-1001 is posted at $2,100.");
+      expect(requests).toHaveLength(2);
+      expect(requests[1]!.messages).toEqual(requests[0]!.messages);
+      expect(usage.map(([, u]) => u.emptyAfterStrip)).toEqual([undefined, undefined]);
+    });
+
+    it("after two more tries, sends the silence and counts it as emptyAfterStrip", async () => {
+      const { client, requests } = stub([say("<reasoning>Thinking.</reasoning>"), say("<analysis>Still thinking.</analysis>"), say("<reasoning>Never closed.")]);
+      const usage: Array<[string, Record<string, unknown>]> = [];
+      const s = await session(client, usage);
+      expect(await s.reply("hi", noTools)).toBe("");
+      expect(requests).toHaveLength(3);
+      expect(usage.map(([, u]) => u.emptyAfterStrip)).toEqual([undefined, undefined, 1]);
+    });
+
     it("drops <analysis> and <think> spans too, and counts each reply that had one", async () => {
       const { client } = stub([
         say("<analysis>Load is available. Posted is $3200, max_rate $3565.</analysis>L-1003 is posted at $3,200."),

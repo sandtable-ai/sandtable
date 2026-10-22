@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 ### Fixed
 
 - `run --agent <module>`: when a JS or TS agent fails to load, sandtable's advice now starts a new sentence after Node's error, as in `Unexpected token 'export'. Node read it as CommonJS, …`, instead of running on from it ([#345](https://github.com/sandtable-ai/sandtable/issues/345)).
+- **Agents and callers on other models**: a reply that is nothing but reasoning, with no tool call, no longer reaches the other side as silence. The `openai:` adapter (agent and caller) and the Bedrock Converse agent (`bedrock:<model-id>`) removed the reasoning and sent an empty message, so the caller heard nothing, asked "Hello?" and the turn counted against `max_turns`; gpt-oss-120b through Bedrock's OpenAI-compatible endpoint did this in 4 of 56 agent turns. Both now ask for such a reply again, up to twice, as Converse already did for reasoning that never closes, and the discarded replies never enter the conversation. If the third reply is still empty, it is sent as before and counted in `results.json`'s `usage` as `emptyAfterStrip`, next to `reasoningStripped`, so a run shows how often the other side heard silence; the terminal summary and the HTML report show the count when it isn't zero ([#332](https://github.com/sandtable-ai/sandtable/issues/332)).
 
 ## [0.2.0] - 2026-10-22
 

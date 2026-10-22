@@ -1,5 +1,5 @@
 import { importOptional } from "./optional.ts";
-import { hasReasoning, hasUnclosedReasoning, stripReasoning } from "./reasoning.ts";
+import { hasReasoning, hasUnclosedReasoning, onlyReasoning, REASONING_RETRIES, stripReasoning } from "./reasoning.ts";
 import type { AgentAdapter } from "./types.ts";
 
 /** The slice of BedrockRuntimeClient this adapter uses; injectable for tests. */
@@ -58,17 +58,14 @@ async function makeClient(opts: BedrockConverseOptions): Promise<{ client: Conve
   };
 }
 
-/**
- * gpt-oss on Bedrock usually sends its reasoning in reasoningContent blocks, but now and then inside the
- * text, as <reasoning>…</reasoning> or <analysis>…</analysis>, sometimes with no closing tag. The caller must
- * never hear it: stripReasoning removes it.
- */
-const MALFORMED_RETRIES = 2;
-
 /** The reply's text blocks as returned; reasoningContent blocks are never among them. */
 const rawTextOf = (content: ConverseBlock[]) => content.map((b) => b.text ?? "").join("");
 
-/** What the reply says out loud: its text without reasoning. */
+/**
+ * What the reply says out loud: its text without reasoning. gpt-oss on Bedrock usually sends its reasoning in
+ * reasoningContent blocks, but now and then inside the text, as <reasoning>…</reasoning> or <analysis>…</analysis>,
+ * sometimes with no closing tag. The caller must never hear it: stripReasoning removes it.
+ */
 const textOf = (content: ConverseBlock[]) => stripReasoning(rawTextOf(content));
 
 /** The result for a tool call that was not run, because the reply that made it ended some other way than with a call. */
@@ -81,10 +78,19 @@ const FILTERED = "[agent output was filtered]";
 /** Stop reasons a tool call is run under. Grok 4.7 sometimes ends a turn with a call under end_turn. */
 const RUNS_TOOLS = new Set(["tool_use", "end_turn"]);
 
+/** A reply stopped by a guardrail or content filter. */
+const filteredStop = (res: ConverseResponse) => res.stopReason === "guardrail_intervened" || res.stopReason === "content_filtered";
+
 /** A reply whose reasoning was never closed: the reasoning and the answer can't be told apart. */
 const unclosedReasoning = (res: ConverseResponse) => {
   const content = res.output?.message?.content ?? [];
   return !content.some((b) => b.toolUse) && hasUnclosedReasoning(rawTextOf(content));
+};
+
+/** A reply with no tool call whose text is nothing but reasoning: once it is removed, the caller would hear silence. */
+const silentAfterStrip = (res: ConverseResponse) => {
+  const content = res.output?.message?.content ?? [];
+  return !filteredStop(res) && !content.some((b) => b.toolUse) && onlyReasoning(rawTextOf(content));
 };
 
 /**
@@ -144,7 +150,8 @@ export function bedrockConverseAgent(opts: BedrockConverseOptions): AgentAdapter
       return {
         async reply(userMessage, callTool) {
           pushUser([{ text: userMessage || "(silence)" }]);
-          const request = async () => {
+          /** One request; `attempt` counts the tries for this reply, so the last one can count a silent reply. */
+          const request = async (attempt: number) => {
             const res = await client.send(
               command({
                 modelId: opts.modelId,
@@ -157,6 +164,8 @@ export function bedrockConverseAgent(opts: BedrockConverseOptions): AgentAdapter
             const u = res.usage;
             const cut = res.stopReason === "max_tokens";
             const reasoning = hasReasoning(rawTextOf(res.output?.message?.content ?? []));
+            // Still nothing but reasoning on the last try: the caller hears silence.
+            const empty = attempt >= REASONING_RETRIES && silentAfterStrip(res);
             if (u || cut || reasoning) {
               ctx.recordUsage?.(opts.modelId, {
                 input: u?.inputTokens ?? 0,
@@ -167,16 +176,18 @@ export function bedrockConverseAgent(opts: BedrockConverseOptions): AgentAdapter
                 ...(cut ? { maxTokensStops: 1 } : {}),
                 // Reasoning in the text, removed before the caller hears it.
                 ...(reasoning ? { reasoningStripped: 1 } : {}),
+                ...(empty ? { emptyAfterStrip: 1 } : {}),
               });
             }
             return res;
           };
           for (let round = 0; round < maxRounds; round++) {
-            let res = await request();
-            // Ask again before taking a reply whose reasoning never closed; it is never added to the conversation.
-            for (let retry = 0; retry < MALFORMED_RETRIES && unclosedReasoning(res); retry++) res = await request();
+            let res = await request(0);
+            // Ask again before taking a reply whose reasoning never closed, or that is nothing but reasoning; neither
+            // is added to the conversation.
+            for (let retry = 1; retry <= REASONING_RETRIES && (unclosedReasoning(res) || silentAfterStrip(res)); retry++) res = await request(retry);
             const message = res.output?.message ?? { role: "assistant" as const, content: [] };
-            const filtered = res.stopReason === "guardrail_intervened" || res.stopReason === "content_filtered";
+            const filtered = filteredStop(res);
             // Converse rejects an empty message, so an empty reply is kept as what the caller heard.
             const content = message.content.length > 0 ? message.content : [{ text: filtered ? FILTERED : "(silence)" }];
             messages.push({ role: "assistant", content });

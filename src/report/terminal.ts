@@ -50,7 +50,8 @@ export function tokenLine(label: string, group: UsageByModel): string | undefine
   const models = Object.keys(group).join(", ");
   const stops = t.maxTokensStops ? `, ${t.maxTokensStops} stopped at max_tokens` : "";
   const reasoning = t.reasoningStripped ? `, ${t.reasoningStripped} with reasoning removed` : "";
-  return `${label} ${models}: ${t.calls} calls, ${k(t.input)} in, ${k(t.output)} out, ${k(t.cacheRead)} cache read, ${k(t.cacheWrite)} cache write${stops}${reasoning}`;
+  const silent = t.emptyAfterStrip ? `, ${t.emptyAfterStrip} silent once it was removed` : "";
+  return `${label} ${models}: ${t.calls} calls, ${k(t.input)} in, ${k(t.output)} out, ${k(t.cacheRead)} cache read, ${k(t.cacheWrite)} cache write${stops}${reasoning}${silent}`;
 }
 
 /**

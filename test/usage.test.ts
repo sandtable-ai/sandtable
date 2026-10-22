@@ -46,6 +46,17 @@ describe("usage accounting", () => {
     expect(total.agent.m).toEqual({ calls: 2, input: 2, output: 4, cacheRead: 6, cacheWrite: 8 });
   });
 
+  it("counts replies with reasoning removed and replies left silent, with no count until one has", () => {
+    const g: UsageByModel = {};
+    recordInto(g, "m", { output: 10 });
+    expect(g.m).not.toHaveProperty("emptyAfterStrip");
+    recordInto(g, "m", { output: 20, reasoningStripped: 1, emptyAfterStrip: 1 });
+    expect(g.m).toMatchObject({ calls: 2, reasoningStripped: 1, emptyAfterStrip: 1 });
+    const trial = { agent: g, user: {}, costUsd: null };
+    expect(sumUsage([trial, trial]).agent.m).toMatchObject({ calls: 4, reasoningStripped: 2, emptyAfterStrip: 2 });
+    expect(totalTokens({ a: g.m!, b: g.m! })).toMatchObject({ calls: 4, emptyAfterStrip: 2 });
+  });
+
   it("counts calls that stopped at max_tokens, with no count until one has", () => {
     const g: UsageByModel = {};
     recordInto(g, "m", { output: 10 });

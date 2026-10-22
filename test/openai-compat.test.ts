@@ -215,6 +215,59 @@ describe("openaiCompatAgent", () => {
     expect(await session.reply("And?", noTools)).toBe("Let me check.");
   });
 
+  describe("a reply that is nothing but reasoning", () => {
+    const thinking = (text = "The ceiling is 2350; I should ask for the MC number first.") => say(`<reasoning>${text}</reasoning>`);
+    const session = async (usage: Array<Record<string, unknown>>, tools: ReturnType<typeof toolSchema>[] = []) =>
+      openaiCompatAgent({ baseUrl: BASE, model: "openai.gpt-oss-120b-1:0" }).createSession({
+        domain: (await freight()).domain,
+        system: "s",
+        tools,
+        sessionId: "t#0",
+        recordUsage: (_m, u) => usage.push(u),
+      });
+
+    it("is asked for again instead of reaching the caller as silence, and never enters the conversation", async () => {
+      const requests = stubEndpoint([thinking(), say("What's your MC number?")]);
+      const usage: Array<Record<string, unknown>> = [];
+      const s = await session(usage);
+      expect(await s.reply("Hi, I'm calling about a load.", noTools)).toBe("What's your MC number?");
+      expect(requests).toHaveLength(2);
+      expect(requests[1]!.body.messages).toEqual(requests[0]!.body.messages);
+      expect(usage.map((u) => u.reasoningStripped)).toEqual([1, undefined]);
+      expect(usage.map((u) => u.emptyAfterStrip)).toEqual([undefined, undefined]);
+    });
+
+    it("after two more tries, is sent as silence and counted as emptyAfterStrip", async () => {
+      const requests = stubEndpoint([thinking(), thinking(), thinking("<analysis>still deciding</analysis>"), say("Anything else?")]);
+      const usage: Array<Record<string, unknown>> = [];
+      const s = await session(usage);
+      expect(await s.reply("Hello?", noTools)).toBe("");
+      expect(requests).toHaveLength(3);
+      expect(usage.map((u) => u.emptyAfterStrip)).toEqual([undefined, undefined, 1]);
+      // The turn goes on from the reply the caller heard.
+      expect(await s.reply("Are you still there?", noTools)).toBe("Anything else?");
+      expect(requests[3]!.body.messages.slice(-2)).toEqual([
+        { role: "assistant", content: "<reasoning><analysis>still deciding</analysis></reasoning>" },
+        { role: "user", content: "Are you still there?" },
+      ]);
+    });
+
+    it("is not asked for again when it calls a tool or was cut off", async () => {
+      const { tools } = await freight();
+      const requests = stubEndpoint([
+        completion({ content: "<reasoning>Look the load up.</reasoning>", tool_calls: [{ id: "c1", type: "function", function: { name: "get_load", arguments: '{"load_id":"L-1001"}' } }] }, "tool_calls"),
+        say("L-1001 is posted at $2,100."),
+        completion({ content: "<reasoning>The posted rate is" }, "length"),
+      ]);
+      const usage: Array<Record<string, unknown>> = [];
+      const s = await session(usage, tools);
+      expect(await s.reply("L-1001?", noTools)).toBe("L-1001 is posted at $2,100.");
+      expect(await s.reply("Rate?", noTools)).toBe("[agent reply cut off at the output token limit]");
+      expect(requests).toHaveLength(3);
+      expect(usage.map((u) => u.emptyAfterStrip)).toEqual([undefined, undefined, undefined]);
+    });
+  });
+
   it("cuts the turn off after maxToolRounds", async () => {
     const requests = stubEndpoint([callTools(["c1", "get_load", { load_id: "L-1001" }]), callTools(["c2", "get_load", { load_id: "L-1001" }])]);
     const { domain, tools } = await freight();
@@ -357,6 +410,17 @@ describe("openaiCompatUser", () => {
     expect(await sim.next(null)).toEqual({ text: "Got anything Dallas to Atlanta?", stop: false });
     expect(await sim.next("L-1001 pays $2,100.")).toEqual({ text: "Deal, book it.", stop: true });
     expect(usage.map((u) => u.reasoningStripped)).toEqual([1, 1]);
+  });
+
+  it("asks the caller again when its reply is nothing but reasoning", async () => {
+    const requests = stubEndpoint([say("<reasoning>Open with the lane.</reasoning>"), say("Got anything Dallas to Atlanta?")]);
+    const domain = await loadDomain(example);
+    const task = domain.tasks.find((t) => t.id === "book-at-posted-rate")!;
+    const usage: Array<Record<string, unknown>> = [];
+    const sim = await openaiCompatUser({ baseUrl: BASE, model: "gpt-test" }).createSession({ domain, task, recordUsage: (_m, u) => usage.push(u) });
+    expect(await sim.next(null)).toEqual({ text: "Got anything Dallas to Atlanta?", stop: false });
+    expect(requests[1]!.body.messages).toEqual(requests[0]!.body.messages);
+    expect(usage.map((u) => u.emptyAfterStrip)).toEqual([undefined, undefined]);
   });
 });
 

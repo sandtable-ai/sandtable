@@ -12,6 +12,11 @@ export interface TokenUsage {
    * other side heard it. Set once one has.
    */
   reasoningStripped?: number;
+  /**
+   * Replies that were nothing but reasoning, with no tool call, even after sandtable asked again: once the reasoning
+   * was removed the other side heard silence. Set once one has.
+   */
+  emptyAfterStrip?: number;
 }
 
 export type UsageByModel = Record<string, TokenUsage>;
@@ -77,10 +82,11 @@ export function recordInto(target: UsageByModel, model: string, u: Partial<Omit<
   addCounts(t, u);
 }
 
-/** Adds `maxTokensStops` and `reasoningStripped`, each absent while no call has counted. */
-function addCounts(t: TokenUsage, u: Partial<Pick<TokenUsage, "maxTokensStops" | "reasoningStripped">>): void {
+/** Adds `maxTokensStops`, `reasoningStripped` and `emptyAfterStrip`, each absent while no call has counted. */
+function addCounts(t: TokenUsage, u: Partial<Pick<TokenUsage, "maxTokensStops" | "reasoningStripped" | "emptyAfterStrip">>): void {
   if (u.maxTokensStops) t.maxTokensStops = (t.maxTokensStops ?? 0) + u.maxTokensStops;
   if (u.reasoningStripped) t.reasoningStripped = (t.reasoningStripped ?? 0) + u.reasoningStripped;
+  if (u.emptyAfterStrip) t.emptyAfterStrip = (t.emptyAfterStrip ?? 0) + u.emptyAfterStrip;
 }
 
 /**
