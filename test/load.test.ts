@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { DomainError, loadDomain } from "../src/spec/load.ts";
+import { version } from "../src/version.ts";
 
 // A domain's own files: sandtable.yaml and the policy, world or tasks files it includes.
 
@@ -78,6 +79,48 @@ describe("loadDomain schema and cross-reference errors", () => {
     const message = ((await loadDomain(dir).catch((e: unknown) => e)) as Error).message;
     expect(message).toContain(`${path.join(dir, "tasks.yaml")}:\n✖ Unrecognized key: "critcal"`);
     expect(message).toContain(`${path.join(dir, "sandtable.yaml")}:\n✖ Unrecognized key: "nmae"`);
+    // Last, the installed version, so a key from a later release reads differently from a typo.
+    expect(message.split("\n").at(-1)).toBe(
+      `sandtable-ai ${version} doesn't know these keys: check their spelling, or whether a later release added them (CHANGELOG.md, or \`npx sandtable-ai@latest validate ${dir}\`).`,
+    );
+  });
+
+  it("say once which version doesn't know a single unknown key", async () => {
+    const dir = copyOfClinic();
+    edit(path.join(dir, "sandtable.yaml"), /^name: /m, "nmae: x\nname: ");
+    const message = ((await loadDomain(dir).catch((e: unknown) => e)) as Error).message;
+    expect(message).toContain(`\nsandtable-ai ${version} doesn't know this key: check its spelling, or whether a later release added it`);
+  });
+
+  it("print the validate command with the path as given, quoted when it needs to be, so it runs as printed", async () => {
+    const dir = copyOfClinic();
+    edit(path.join(dir, "sandtable.yaml"), /^name: /m, "nmae: x\nname: ");
+    const spaced = `${dir} copy`;
+    renameSync(dir, spaced);
+    const message = ((await loadDomain(spaced).catch((e: unknown) => e)) as Error).message;
+    expect(message).toContain(`\`npx sandtable-ai@latest validate '${spaced}'\``);
+  });
+
+  it("print a relative path that starts with - as ./, so the CLI doesn't read it as an option", async () => {
+    const dir = copyOfClinic();
+    edit(path.join(dir, "sandtable.yaml"), /^name: /m, "nmae: x\nname: ");
+    const parent = mkdtempSync(path.join(tmpdir(), "sandtable-dash-"));
+    renameSync(dir, path.join(parent, "-weird"));
+    const cwd = process.cwd();
+    process.chdir(parent);
+    try {
+      const message = ((await loadDomain("-weird").catch((e: unknown) => e)) as Error).message;
+      expect(message).toContain("`npx sandtable-ai@latest validate ./-weird`");
+    } finally {
+      process.chdir(cwd);
+    }
+  });
+
+  it("leave other schema errors without the version line", async () => {
+    const dir = copyOfClinic();
+    edit(path.join(dir, "sandtable.yaml"), /^name: .*$/m, "name: 42");
+    const message = ((await loadDomain(dir).catch((e: unknown) => e)) as Error).message;
+    expect(message).not.toContain("doesn't know");
   });
 
   it("name the included tasks file for a task's cross-reference problem", async () => {

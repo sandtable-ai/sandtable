@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `sandtable validate`, and every command that loads a domain: an unrecognized key is followed by a line naming the installed version, such as `sandtable-ai 0.2.1 doesn't know this key: check its spelling, or whether a later release added it`, so a key from a newer release than the one installed is easy to tell from a typo ([#341](https://github.com/sandtable-ai/sandtable/issues/341)).
+
 ### Changed
 
 - **Claude Code plugin**: before blaming the agent for a failed invariant, `running-and-reading-results` and the `failure-triager` subagent read the rule's `source.quote` and check that the SOP requires what the rule checks: the same order of calls, bound and condition. A rule stricter than the SOP is attributed to the task spec, with the fix to relax it or make it `soft: true` and confirm with `regrade`, instead of the agent being blamed for following the SOP ([#343](https://github.com/sandtable-ai/sandtable/issues/343)).

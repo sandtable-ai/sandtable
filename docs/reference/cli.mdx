@@ -73,6 +73,13 @@ npx sandtable-ai validate ./my-domain [--strict]
 
 A `⚠` line is a warning, not an error, and never fails `validate`, not even with `--strict`. It flags a `never_disclose` field that no tool returns and the policy doesn't state, which can never fire, since a value counts only once the agent has been shown it.
 
+An unrecognized key also prints the installed version, since a key from a newer release fails the same way as a typo:
+
+```text
+✖ Unrecognized key: "critcal"
+sandtable-ai 0.2.1 doesn't know this key: check its spelling, or whether a later release added it (CHANGELOG.md, or `npx sandtable-ai@latest validate ./my-domain`).
+```
+
 ## lint
 
 Prove every task is ready, solvable, non-vacuous and graded, without any model call. See [The noop baseline and lint](/concepts/baselines).
