@@ -10,7 +10,7 @@ keywords: ["results.json", "output format", "SuiteResult", "TrialResult", "repor
 - `results.json`: a `SuiteResult`, described below. It is the source of truth for a run.
 - `report.html`: a self-contained rendering of it, with no external assets, that you can attach to a pull request or send to a customer. `npx sandtable-ai report results.json` re-renders it.
 
-The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`, `CheckResult` and the rest). Until 1.0, fields may still be added or change.
+The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`, `CheckResult` and the rest). Fields are added in minor releases; a field is removed or changes meaning only in a major release, with a new `version`.
 
 `version` is the format version, `1` in every `results.json` sandtable has written. It moves only when a field is removed or changes meaning, never for an added field, so a reader that meets a field it doesn't know can ignore it. `report`, `regrade`, `run --baseline` and `leaderboard` (reading each model's stored results) read every version up to their own, and refuse a newer one with exit 2 and a message saying to run the command with a newer sandtable-ai, such as `npx sandtable-ai@latest`. A file without `version`, which only a hand-made one can be, is read as version 1. `leaderboard.json`'s `version` follows the same rule; sandtable writes it but never reads it back. `passAt`, `flipRate`, `flaky`, `skipped` and the task verdict fields are absent in results from before verdicts, in which every trial was graded.
 

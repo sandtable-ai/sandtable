@@ -2,14 +2,19 @@
 
 All notable changes to sandtable are documented in this file: the `sandtable-ai` CLI and library on npm, its Python launcher on PyPI, and the Claude Code plugin in this repository, which share one version number.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, a minor release may change the domain spec, the CLI or the library API; every such change is marked **Breaking:** and says what to do.
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). From 1.0, the [stability policy](https://sandtable.dev/reference/stability) applies: a breaking change comes only in a major release, after a deprecation. Before 1.0, a minor release could change the domain spec, the CLI or the library API; every such change is marked **Breaking:** and says what to do.
 
 <!-- Contributors and coding agents: add your entry under [Unreleased] in the same PR as the change. The brief is in AGENTS.md ("Changelog"). `npm version` moves [Unreleased] into a dated release. -->
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-22
+
+sandtable 1.0. The domain spec, `results.json`, the CLI and its exit codes, the HTTP step protocol and the library API are now stable: they change only in a major release, as the [stability policy](https://sandtable.dev/reference/stability) says. There are no breaking changes since 0.3.0. Coming from 0.3.0, read [1.0.0-rc.1](https://github.com/sandtable-ai/sandtable/blob/main/CHANGELOG.md#100-rc1---2026-10-22) as well. Since the release candidate, the drafting skill waits for a go-ahead after a dry run, and the docs settle the last contract questions.
+
 ### Changed
 
+- **Status**: sandtable leaves beta. The README, the docs, the docs site's banner and the PyPI classifier (`Development Status :: 5 - Production/Stable`) say it is stable since 1.0, and the CI guide now suggests pinning the major version (`^1.0.0`) instead of an exact one. From 1.0, the [stability policy](https://sandtable.dev/reference/stability) applies: a breaking change comes only in a major release, after a minor release that deprecates the item ([#353](https://github.com/sandtable-ai/sandtable/issues/353)).
 - **Docs**: the stability policy names the files the CLI reads as covered (the `leaderboard` models file and the `--prices` file), says the bundled examples' demo agents aren't, and says the rules behind `attribution`, `callerNotes` and `init`'s `copied from` notes can improve in a minor release while their fields stay. The library reference documents `World`'s `keyOf` and `hasTable`, and the CLI reference both shapes of a `--prices` file ([#394](https://github.com/sandtable-ai/sandtable/issues/394)).
 
 ### Fixed
@@ -237,7 +242,8 @@ First public release. sandtable rehearses an AI agent on a simulated copy of one
 
 A rehearsal of the release pipeline (npm, PyPI and GitHub releases from one tag), published before the first public release. Everything in it is also in 0.1.0; use 0.1.0 instead.
 
-[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v1.0.0-rc.1...HEAD
+[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/sandtable-ai/sandtable/compare/v1.0.0-rc.1...v1.0.0
 [1.0.0-rc.1]: https://github.com/sandtable-ai/sandtable/compare/v0.3.0...v1.0.0-rc.1
 [0.3.0]: https://github.com/sandtable-ai/sandtable/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/sandtable-ai/sandtable/compare/v0.2.0...v0.2.1

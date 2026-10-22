@@ -17,7 +17,7 @@
     "dark": "/logo/dark.svg"
   },
   "banner": {
-    "content": "sandtable is in **beta**: the spec and outputs may still change before 1.0. See the [roadmap](/roadmap)."
+    "content": "sandtable 1.0 is stable: the spec, outputs, CLI and library change only in a major release. See the [stability policy](/reference/stability)."
   },
   "navbar": {
     "links": [
@@ -69,7 +69,7 @@
   },
   "markdown": {
     "instructions": [
-      "sandtable is an open-source CLI in beta (TypeScript, MIT): https://github.com/sandtable-ai/sandtable. Run it as `npx sandtable-ai <command>`, never with the bare name: npm's `sandtable` is an unrelated package. If a flag here disagrees with `npx sandtable-ai <command> --help`, trust the help output.",
+      "sandtable is an open-source CLI, stable since 1.0 (TypeScript, MIT): https://github.com/sandtable-ai/sandtable. Run it as `npx sandtable-ai <command>`, never with the bare name: npm's `sandtable` is an unrelated package. If a flag here disagrees with `npx sandtable-ai <command> --help`, trust the help output.",
       "Grading is deterministic: pass/fail comes from the world's end state, invariants and the tool-call log, never from an LLM judge.",
       "To draft a domain for a user, read /guides/init and /reference/spec, then run `npx sandtable-ai validate`, `lint` and `review` before any model-backed run. Keep all example data fictional.",
       "In Claude Code, the sandtable plugin teaches these steps as skills: `/plugin marketplace add sandtable-ai/sandtable`, then `/plugin install sandtable@sandtable`.",

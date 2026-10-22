@@ -39,12 +39,13 @@ Issues and milestones on GitHub are the source of truth; this page is the overvi
 - [x] Node.js 22 and Python 3.10 as the oldest supported versions (#350)
 - [x] Freight example fixes: callers that know their truck's availability and don't repeat the agent's numbers (#346, #383), and a made-up load ID filed under its own rule (#163)
 
-## Next: 1.0, stable contracts (milestone v1.0)
-1.0 promises that the domain spec, `results.json`, CLI commands, flags and exit codes, the HTTP step protocol and the library's exports change only in a major release, as the stability policy says.
-- [ ] A release candidate, `1.0.0-rc.1`, tested end to end before 1.0.0 (#353)
-- [ ] The project leaves beta in the README, the docs and the PyPI classifier
+## In 1.0
+- [x] Stable contracts: the domain spec, `results.json`, CLI commands, flags and exit codes, the HTTP step protocol and the library's exports change only in a major release, as the stability policy says (#352, #394)
+- [x] A release candidate, `1.0.0-rc.1`, tested end to end before 1.0.0 (#353)
+- [x] `init --transcripts` flags names, usernames, emails, phone numbers and street addresses a draft copied from its chats, and `sandtable review` shows each item's notes (#388)
+- [x] The drafting skill writes the plan of a paid `init` as its own message, and waits for a go-ahead unless model steps are authorized (#392)
 
-## After 1.0 (milestones v1.1 and black-box)
+## Next (milestones v1.1 and black-box)
 - [ ] PR comments with pass^k deltas (#13), coverage matrix (#30), customer sign-off report: rule → evidence → reliability (#31)
 - [ ] Black-box and platform on-ramps: serve the world as REST, MCP and webhook tools for hosted agent platforms (#14), import voice-agent platform configs as draft domains (#34, #35), fault profiles (#15)
 
