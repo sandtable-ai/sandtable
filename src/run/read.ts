@@ -60,10 +60,21 @@ export function parseJson(text: string, file: string): unknown {
   }
 }
 
+/**
+ * The results.json format version this sandtable writes, and the newest it reads. It moves only when a field is
+ * removed or changes meaning, never for an added one, and a reader reads every version up to its own.
+ */
+export const RESULTS_VERSION = 1;
+
 /** Parse a results.json written by `run`, or say what the file is not. */
 export function parseResults(text: string, file: string): SuiteResult {
-  const r = parseJson(text, file) as Partial<SuiteResult & { rows: unknown }> | null;
-  if (!r || typeof r !== "object" || !Array.isArray(r.tasks) || typeof r.passHat !== "object" || typeof r.domain !== "string") {
+  const r = parseJson(text, file) as Partial<Omit<SuiteResult, "version"> & { version: unknown; rows: unknown }> | null;
+  // Every results.json sandtable wrote has a version; one made by hand without it is read as version 1, as before.
+  const version = r && typeof r === "object" ? r.version : undefined;
+  if (typeof version === "number" && Number.isInteger(version) && version > RESULTS_VERSION) {
+    throw new Error(`${file} is results.json format version ${version}, from a newer sandtable; this one reads format version ${RESULTS_VERSION}. Run the command with a newer sandtable-ai, such as \`npx sandtable-ai@latest\`.`);
+  }
+  if (!r || typeof r !== "object" || !Array.isArray(r.tasks) || typeof r.passHat !== "object" || typeof r.domain !== "string" || !(version === undefined || (Number.isInteger(version) && (version as number) >= 1))) {
     // A leaderboard's own file is the one people pass most often by mistake.
     const leaderboard = r && typeof r === "object" && Array.isArray(r.rows) ? "; it is a leaderboard's leaderboard.json: each model's results.json is in its folder next to it" : "";
     throw new Error(`${file} is not a results.json written by \`sandtable run\`${leaderboard}`);
