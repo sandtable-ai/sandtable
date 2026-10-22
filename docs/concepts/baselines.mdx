@@ -55,7 +55,7 @@ Make refusal tasks discriminate. "Nothing was booked" is passed by an agent that
 | **graded** | the task has `state` or `called` expectations | error: nothing is graded |
 | **ready** | every row the expectations need is seeded, or some tool can create or change it | error: `expect.state[i]` needs a row that is not seeded and no tool can create or change |
 | **non-vacuous** | a task that expects a write is failed by a do-nothing agent | error: the seed already satisfies the expected state |
-| **solvable** | the task's `reference` calls, replayed against a fresh world, pass every expectation and break no invariant | error: the reference call failed, or does not pass a check |
+| **solvable** | the task's `reference` calls, replayed against a fresh world, pass every expectation and break no invariant; a call marked `expect_error` must fail instead | error: a reference call failed (or succeeded where `expect_error` says it fails), or does not pass a check |
 
 A task that expects a write but has no `reference` gets a warning, since its solvability is unproven. `reply_includes` expectations are skipped in the replay, because a replay has no messages.
 

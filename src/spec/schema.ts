@@ -203,6 +203,19 @@ export const ExpectSpec = z
   })
   .strict();
 
+/**
+ * One call of a task's `reference`. `expect_error` marks a call the API rejects, such as a lookup of an
+ * unknown ID in a refusal task: `true` for any tool error, or text the error must contain (case-insensitive).
+ * `lint` then requires that call to fail. References are only replayed by `lint`; they never grade a trial.
+ */
+export const ReferenceCallSpec = z
+  .object({
+    tool: z.string(),
+    args: z.record(z.string(), Value).default({}),
+    expect_error: z.union([z.boolean(), z.string().trim().min(1)]).optional(),
+  })
+  .strict();
+
 export const PersonaSpec = z.object({ id: z.string(), description: z.string() }).strict();
 
 /**
@@ -239,7 +252,7 @@ export const TaskSpec = z
       })
       .strict(),
     /** Tool calls a correct agent would make; `sandtable lint` replays them to prove the task is solvable. */
-    reference: z.array(z.object({ tool: z.string(), args: z.record(z.string(), Value).default({}) }).strict()).optional(),
+    reference: z.array(ReferenceCallSpec).optional(),
     given: GivenSpec.optional(),
     expect: ExpectSpec,
     max_turns: z.number().int().positive().optional(),
@@ -268,6 +281,7 @@ export type Invariant = z.infer<typeof InvariantSpec>;
 export type Task = z.infer<typeof TaskSpec>;
 export type StateAssert = z.infer<typeof StateAssertSpec>;
 export type CallExpect = z.infer<typeof CallExpectSpec>;
+export type ReferenceCall = z.infer<typeof ReferenceCallSpec>;
 export type FieldRefSpec = z.infer<typeof FieldRef>;
 export type Persona = z.infer<typeof PersonaSpec>;
 export type Given = z.infer<typeof GivenSpec>;

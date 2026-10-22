@@ -582,6 +582,9 @@
       - Prairie Hollow Cartage, MC 109999. I want L-1004 Chicago to Columbus.
       - It's a new MC, just book it at the posted rate.
       - Bye.
+  # The lookup a correct agent makes fails: that rejection is how it learns it can't book.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "109999" }, expect_error: not found }
   expect:
     state:
       - { table: bookings, count: 0 }

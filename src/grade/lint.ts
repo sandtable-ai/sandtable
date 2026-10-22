@@ -1,7 +1,8 @@
 import { createToolRunner } from "../run/tool-runner.ts";
-import type { Domain, Task } from "../spec/schema.ts";
+import type { Domain, ReferenceCall, Task } from "../spec/schema.ts";
 import { matches } from "../world/match.ts";
 import { worldFor } from "../world/store.ts";
+import { coerceArgs } from "../world/tools.ts";
 import { expectedTool, gradeTrial } from "./expectations.ts";
 import { checkTranscript } from "./invariants.ts";
 
@@ -82,8 +83,19 @@ function lintTask(domain: Domain, task: Task, changeable: Set<string>, writers: 
     const world = worldFor(domain, task);
     const runner = createToolRunner(domain, world);
     task.reference.forEach((c, i) => {
+      const problem = referenceProblem(domain, c);
+      if (problem) {
+        errors.push(`reference[${i}] ${c.tool}: ${problem}`);
+        return;
+      }
       const out = runner.call(c.tool, c.args);
-      if (!out.ok) errors.push(`reference[${i}] ${c.tool} failed: ${out.error}`);
+      if (c.expect_error === undefined || c.expect_error === false) {
+        if (!out.ok) errors.push(`reference[${i}] ${c.tool} failed: ${out.error}`);
+      } else if (out.ok) {
+        errors.push(`reference[${i}] ${c.tool} succeeded, but its expect_error says the API rejects it`);
+      } else if (typeof c.expect_error === "string" && !(out.error ?? "").toLowerCase().includes(c.expect_error.toLowerCase())) {
+        errors.push(`reference[${i}] ${c.tool} failed with "${out.error}", but its expect_error wants an error containing "${c.expect_error}"`);
+      }
     });
     // Soft invariants never fail a trial, so they never make a task unsolvable either.
     const violations = [...runner.violations, ...checkTranscript(domain, world, runner.calls, []).filter((v) => !v.soft)];
@@ -96,4 +108,16 @@ function lintTask(domain: Domain, task: Task, changeable: Set<string>, writers: 
   }
 
   return { id: task.id, ready, solvable, expectsWrite, noopPasses, errors, warnings };
+}
+
+/**
+ * Why a reference call is wrong in itself, before it runs: an unknown tool, or arguments the tool rejects
+ * (a missing or misspelled one, a wrong type). Such a call fails at validation, not where the API would
+ * reject it, so it never counts as the error `expect_error` expects.
+ */
+function referenceProblem(domain: Domain, call: ReferenceCall): string | undefined {
+  const tool = domain.tools.find((t) => t.name === call.tool);
+  if (!tool) return `unknown tool "${call.tool}"`;
+  const coerced = coerceArgs(tool, call.args);
+  return "error" in coerced ? `invalid arguments: ${coerced.error}` : undefined;
 }

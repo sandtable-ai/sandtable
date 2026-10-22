@@ -144,6 +144,8 @@ invariants:
       - Alright, bye.
   reference:
     - { tool: verify_carrier, args: { mc_number: "100101" } }
+    # A call the API must reject, such as a lookup of an unknown MC number: expect_error: true, or text the error contains.
+    # - { tool: verify_carrier, args: { mc_number: "109999" }, expect_error: not found }
   expect:
     state:
       - { table: bookings, count: 0 }                                  # exactly N rows (optionally with where)

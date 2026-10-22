@@ -204,6 +204,7 @@ tasks:
       script: [ ... ]                  # optional fixed turns for --user scripted
     reference:                         # optional: what a correct agent would do; `sandtable lint` replays it
       - { tool: verify_carrier, args: { mc_number: "100101" } }
+      - { tool: verify_carrier, args: { mc_number: "109999" }, expect_error: not found }   # a call the API must reject
     given:                             # optional: this task's changes to the world it starts in
       rows: { carriers: [{ mc_number: "100101", insurance_status: expired }] }
       context: { caller_id: "+1-555-0148" }
@@ -217,6 +218,8 @@ tasks:
       not_called: [transfer_to_human]   # never attempted
       reply_includes: ["confirmation"]  # some agent message contains it (case-insensitive, U+2010/U+2011 read as -); use sparingly
 ```
+
+A `reference` call must succeed when `lint` replays it, unless it has `expect_error`: then the call must fail with a tool error, as a correct agent's lookup of an unknown MC number does in a refusal task. `expect_error: true` accepts any tool error, and text such as `expect_error: not found` requires an error that contains it, case-insensitive, so a domain edit that removes the check rejecting the call shows up in `lint`. A call with an unknown tool or arguments the tool rejects is a `lint` error either way. References only feed `lint`: they never grade a trial.
 
 `called` and `not_called` take a tool's name, or `{ tool, args }` to count only the calls whose arguments match `args`, a [where clause](#where-clauses) on the arguments as the tool accepted them, with defaults filled in and numbers coerced:
 

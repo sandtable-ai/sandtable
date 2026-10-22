@@ -67,7 +67,7 @@ It has a firm hidden goal with numbers, a clear exit, a script for offline runs,
     When a task comes from a real call, the expected outcome is what the SOP requires, even if the human rep did something else. That is how `init` drafts tasks from transcripts, and how you should review them.
   </Step>
   <Step title="Prove it is solvable">
-    Add a `reference`: the tool calls a correct agent would make. `sandtable lint` replays it against a fresh world and checks that it passes every expectation without breaking an invariant. A task no agent could pass is a broken task.
+    Add a `reference`: the tool calls a correct agent would make. `sandtable lint` replays it against a fresh world and checks that it passes every expectation without breaking an invariant. A task no agent could pass is a broken task. In a refusal task, the correct agent's call is often one the API rejects, such as a lookup of an unknown MC number: mark it `expect_error: true`, or `expect_error: not found` to name the error, and `lint` requires it to fail.
   </Step>
   <Step title="Make it run offline">
     Add a `user.script` so the task runs with `--user scripted`, for smoke tests in CI and for debugging graders without model calls.
