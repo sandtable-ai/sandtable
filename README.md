@@ -103,7 +103,7 @@ models:
 | `./my-agent.ts` | Your agent is a JS/TS function: default-export an `AgentAdapter`. |
 | `noop` | The do-nothing baseline: shows how much of a suite rewards refusing. |
 
-Whatever the adapter, every tool call goes to the simulated world: it is checked against the invariants and changes only the mock records. Details: [run against your agent](https://sandtable.dev/guides/bring-your-agent).
+Whatever the adapter, every tool call goes to the simulated world: it is checked against the invariants and changes only the mock records. Details: [run against your agent](https://sandtable.dev/guides/bring-your-agent). The package is also a library: `runSuite`, `regradeSuite`, `compareRuns` and the adapters are in the [library API reference](https://sandtable.dev/reference/library).
 
 Worked examples for agent frameworks, each a one-file adapter checked offline in CI ([guide](https://sandtable.dev/guides/frameworks)):
 
