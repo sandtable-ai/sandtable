@@ -73,7 +73,7 @@ describe("the plugin eval suite's cases", () => {
   const front = (file: string) => YAML.parse(/^---\n([\s\S]*?)\n---/.exec(readFileSync(file, "utf8"))![1]!) as Record<string, unknown>;
 
   it("each load the plugin under test, grade with at least one check, and tag the skill issue they cover", () => {
-    expect(cases.sort()).toEqual(["attribute-stored-run", "check-cli-features", "confirm-grading-fix", "draft-from-sources", "install-advice", "review-drafted-domain"]);
+    expect(cases.sort()).toEqual(["attribute-stored-run", "check-cli-features", "confirm-grading-fix", "draft-from-sources", "draft-preauthorized", "install-advice", "review-drafted-domain"]);
     for (const c of cases) {
       const meta = front(path.join(evals, c, "prompt.md"));
       expect(meta.plugins, c).toEqual(["../../plugin"]);
@@ -97,6 +97,30 @@ describe("the plugin eval suite's cases", () => {
       expect(reads.test(bash("npx sandtable-ai init --help")), c).toBe(false);
       expect(reads.test(bash("cat node_modules/sandtable-ai/package.json")), c).toBe(false);
       expect(reads.test(bash("npm install --save-dev sandtable-ai @anthropic-ai/bedrock-sdk")), c).toBe(false);
+    }
+  });
+
+  it("tell, in draft-preauthorized, an estimate stated before the model-backed init from one stated after", () => {
+    const grader = (name: string) => new RegExp(front(path.join(evals, "draft-preauthorized", "graders", `${name}.md`)).pattern as string);
+    const initBeforeEstimate = grader("no-paid-init-before-estimate");
+    const estimateThenInit = grader("estimate-then-init");
+    // Trace lines as the eval writes them: one JSON event per line.
+    const event = (type: "assistant" | "user", ...content: object[]) => JSON.stringify({ type, message: { role: type, content } });
+    const say = (text: string) => event("assistant", { type: "text", text });
+    const bash = (command: string) => event("assistant", { type: "tool_use", id: "t", name: "Bash", input: { command } });
+    const skill = event("user", { type: "text", text: "Base directory for this skill: … at most about $0.36 a call …" });
+    const paid = "npx sandtable-ai init --sop discovery/sop.md --transcripts discovery/transcripts -o sandtable --provider bedrock -m claude-sonnet-5-5";
+    const trace = (...lines: string[]) => `${lines.join("\n")}\n`;
+    const cases: [string, string, boolean, boolean][] = [
+      ["an estimate, then the run", trace(skill, say('5 model calls on Claude Sonnet 5.5 via Bedrock, at most about $0.90, as "authorized".'), bash(paid)), false, true],
+      ["the run, then the cost", trace(skill, bash(paid), say("Done: 5 calls cost $0.46.")), true, false],
+      ["an estimate and a question, no run", trace(skill, say("This would make 5 calls, about $0.90. Go ahead?")), false, false],
+      ["a free step that 'costs nothing', then the run", trace(skill, say("--openapi costs nothing, so I ran it first."), bash(paid)), true, false],
+      ["a dollar amount from the SOP, then the run", trace(skill, say("The SOP says refunds over $50 need a manager."), bash(paid)), true, false],
+    ];
+    for (const [name, t, before, then] of cases) {
+      expect(initBeforeEstimate.test(t), name).toBe(before);
+      expect(estimateThenInit.test(t), name).toBe(then);
     }
   });
 

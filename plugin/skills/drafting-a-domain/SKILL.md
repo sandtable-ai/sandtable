@@ -63,6 +63,8 @@ The `init` drafting steps use Claude: `ANTHROPIC_API_KEY`, or `--provider bedroc
 
 ### 1. Draft
 
+Run `--openapi` on its own first: it's free. Before you run `--sop` or `--transcripts`, put the estimate in your reply, in a line or two: the calls (1 for the SOP, 1 per transcript), the model and provider, and the cost bound from [Ask before spending money](#ask-before-spending-money). If the engineer already authorized model steps, state it and go on; otherwise ask and wait. Never run them first and report the cost after.
+
 ```bash
 npx sandtable-ai init --openapi ./discovery/openapi.yaml --sop ./discovery/sop.md --transcripts ./discovery/calls -o ./sandtable
 ```
