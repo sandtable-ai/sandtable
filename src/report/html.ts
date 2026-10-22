@@ -185,9 +185,13 @@ if (notes.length) {
     notes.map((n) => "<tr><td><b>" + esc(n.task) + "</b><div class='meta'><a href='#detail' onclick='show(" + n.ti + "," + n.i + ");return false'>trial " + (n.i + 1) + "</a></div></td><td>" + n.turn + "</td><td>" + esc(n.why) + "</td><td>" + esc(n.text) + "</td></tr>").join("") +
     "</tbody></table></div>";
 }
-if (R.byTag && R.byTag.length > 1) {
-  $("tags").innerHTML = "<h2>By tag</h2><div class='wrap'><table><thead><tr><th>Tag</th><th>Tasks</th><th>pass^1</th>" + (R.k > 1 ? "<th>pass^" + R.k + "</th>" : "") + "</tr></thead><tbody>" +
-    R.byTag.map((t) => "<tr><td><span class='chip'>" + esc(t.tag) + "</span></td><td>" + t.tasks + "</td><td>" + pct(t.passHat1) + "</td>" + (R.k > 1 ? "<td>" + pct(t.passHatK) + "</td>" : "") + "</tr>").join("") +
+// run --floor: each tag's least pass^k; a tag below its floor failed the run.
+const floors = R.floors || {};
+const floored = Object.keys(floors).length > 0;
+const floorCell = (t) => !(t.tag in floors) ? "<td class='meta'>none</td>" : t.passHatK >= floors[t.tag] ? "<td>" + pct(floors[t.tag]) + "</td>" : "<td class='badt'>" + pct(floors[t.tag]) + " ✗</td>";
+if (R.byTag && (R.byTag.length > 1 || floored)) {
+  $("tags").innerHTML = "<h2>By tag</h2><div class='wrap'><table><thead><tr><th>Tag</th><th>Tasks</th><th>pass^1</th>" + (R.k > 1 ? "<th>pass^" + R.k + "</th>" : "") + (floored ? "<th>Floor</th>" : "") + "</tr></thead><tbody>" +
+    R.byTag.map((t) => "<tr><td><span class='chip'>" + esc(t.tag) + "</span></td><td>" + t.tasks + "</td><td>" + pct(t.passHat1) + "</td>" + (R.k > 1 ? "<td>" + pct(t.passHatK) + "</td>" : "") + (floored ? floorCell(t) : "") + "</tr>").join("") +
     "</tbody></table></div>";
 }
 if (R.soft && R.soft.length) {

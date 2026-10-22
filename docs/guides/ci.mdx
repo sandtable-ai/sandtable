@@ -19,6 +19,7 @@ Every command exits with a status a CI step can act on, as `grep` and `diff` do:
 | Status | Command | When |
 |---|---|---|
 | `1` | `run --fail-under <pct>` | pass^k, with k = `--trials`, is below `pct` |
+| `1` | `run --floor <tag>=<pct>` | that tag's pass^k is below `pct`; the output names each such tag. A tag no task in the run carries is a usage error (`2`) before any trial runs |
 | `1` | `run` | any trial of a task marked [`critical: true`](/reference/spec#critical-tasks) failed, whatever the score. This holds without `--fail-under` too, and the output names each such task |
 | `1` | `run --baseline <results> --fail-on-regression`, `compare <baseline> <results> --fail-on-regression` | a task that passed every trial in the baseline fails one now. The output names each such task |
 | `1` | `validate`, `lint` | the domain exists but is invalid: a schema, cross-reference or YAML error |
@@ -31,6 +32,14 @@ Every command exits with a status a CI step can act on, as `grep` and `diff` do:
 | `2` | any command | a usage error (an unknown command or option, a missing argument, an invalid value), a missing or unreadable file, no domain at the path, an invalid domain for any command but `validate` and `lint`, an adapter that can't be built, or another error that stops it |
 
 In `run`, a trial that ends in an error is skipped, not failed, unless the agent had already broken a hard invariant or called a tool it must not call: an outage is not the agent's failure, but a crash can't hide what it broke first. Skipped trials are left out of pass^k, which `--fail-under` judges, and listed under **Skipped trials** with their error. The run exits 2, since its score rests on fewer trials than you asked for: rerun it, and if one host keeps throttling, lower `--concurrency`. When a gate failed too, the output says so, and the status is still 2. In `leaderboard`, any crashed trial turns that model into an error row instead of a score, and the board exits 2 only when every model is one. A skipped trial of a critical task is not a critical failure.
+
+Groups of tasks often have different bars: refusals that must pass every time, negotiation where 70% may be fine. `--fail-under` alone lets a strong happy path carry weak refusals over the gate, so give such tags their own floor, next to it:
+
+```bash
+npx sandtable-ai run ./sandtable --agent ./agent.ts -k 3 --fail-under 85 --floor refusal=100 --floor negotiation=70
+```
+
+Each floor gates its tag's pass^k from the **By tag** table ([details](/reference/cli#per-tag-floors)). For a single task that must never fail, mark it [`critical: true`](/reference/spec#critical-tasks) instead.
 
 A step that treats any non-zero status as a failure needs nothing more. To let a failed gate through while an error still stops the job, as a step that renders a report for a failing agent does, accept only `1`: `npx sandtable-ai run ... || [ $? -eq 1 ]`.
 
