@@ -15,15 +15,17 @@ describe("agentModuleError", () => {
   it("says to rename a .ts agent to .mts, or set type module, when Node read it as CommonJS", () => {
     const err = agentModuleError("./agent.ts", "/p/agent.ts", new SyntaxError("Unexpected token 'export'"));
     expect(err.message).toBe(
-      'could not load the agent module ./agent.ts: Unexpected token \'export\' Node read it as CommonJS, but it uses ES module syntax: rename it to .mts, or set "type": "module" in the package.json nearest to it.',
+      'could not load the agent module ./agent.ts: Unexpected token \'export\'. Node read it as CommonJS, but it uses ES module syntax: rename it to .mts, or set "type": "module" in the package.json nearest to it.',
     );
     expect(agentModuleError("./a.js", "/p/a.js", new SyntaxError("Cannot use import statement outside a module")).message).toContain("rename it to .mjs");
+    // Node's message already ending a sentence gets no second period.
+    expect(agentModuleError("./a.js", "/p/a.js", new SyntaxError("Cannot use import statement outside a module.")).message).toContain("outside a module. Node read it");
   });
 
   it("says which Node a TypeScript agent needs when Node doesn't know the .ts extension", () => {
     const old = Object.assign(new TypeError('Unknown file extension ".ts" for /p/agent.ts'), { code: "ERR_UNKNOWN_FILE_EXTENSION" });
     const msg = agentModuleError("./agent.ts", "/p/agent.ts", old).message;
-    expect(msg).toContain("needs Node 22.18 or later");
+    expect(msg).toContain('for /p/agent.ts. Loading a TypeScript agent needs Node 22.18 or later');
     expect(msg).toContain(`this is Node ${process.versions.node}`);
     expect(agentModuleError("./agent.mts", "/p/agent.mts", old).message).toContain("needs Node 22.18 or later");
   });

@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- `run --agent <module>`: when a JS or TS agent fails to load, sandtable's advice now starts a new sentence after Node's error, as in `Unexpected token 'export'. Node read it as CommonJS, …`, instead of running on from it ([#345](https://github.com/sandtable-ai/sandtable/issues/345)).
+
 ## [0.2.0] - 2026-10-22
 
 A release with breaking changes that closes the loop in CI: `critical: true` tasks, argument matchers and per-task `given`, `run --baseline` with what changed per task, passed, failed, flaky and skipped verdicts with errored trials skipped, exit 1 for a failed gate and 2 for an error, `init` drafts that keep their sources' facts, show their plan and cost with `--dry-run` and print what they cost, a simulated caller that says it doesn't know instead of guessing, and a Claude Code plugin installed from the release; read the seven **Breaking:** entries under Changed before upgrading.
