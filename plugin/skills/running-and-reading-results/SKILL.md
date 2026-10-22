@@ -1,6 +1,6 @@
 ---
 name: running-and-reading-results
-description: Runs a sandtable domain against an agent (Claude, any OpenAI-compatible or Bedrock model, an HTTP endpoint, a JS/TS module or the noop baseline), chooses k and reads pass^k, then reads results.json and report.html to find failure modes, attributes each failing trial to the agent under test, the simulated user, the task spec or the harness, and proposes fixes. Use when an engineer wants to rehearse or regression-test an agent with sandtable, compare models, gate CI on pass^k, or understand why trials failed or a score changed.
+description: Runs a sandtable domain against an agent (Claude, any OpenAI-compatible or Bedrock model, an HTTP endpoint, a JS/TS module or the noop baseline), chooses k and reads pass^k, then reads results.json and report.html to find failure modes, attributes each failing trial to the agent under test, the simulated user, the task spec or the harness, and proposes fixes. Use when an engineer wants to rehearse or regression-test an agent with sandtable, compare models, gate CI (--fail-under on pass^k, critical release-blocker tasks, exit 1 for a failed gate and 2 for an error), or understand why trials failed or a score changed.
 ---
 
 # Running sandtable and reading results

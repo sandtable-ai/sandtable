@@ -17,7 +17,7 @@ Every company, person, order and chat here is invented.
 | `check-cli-features` | `skill-301` | A project pinned to sandtable-ai 0.1.2 is asked for `critical: true`, which came later | Asks the CLI (`--version`, `--help`, `validate`); never reads sandtable's code, in npx's cache or `node_modules/sandtable-ai`; leaves the domain valid; says 0.1.2 can't and what to do instead |
 | `install-advice` | `skill-295` | What to install for Claude on Bedrock, without a global install | `npm install --save-dev … sandtable-ai`, `@anthropic-ai/bedrock-sdk`, `npx sandtable-ai validate ./sandtable`, no broken `-p` form |
 
-Each case also has a `skill-fired` grader, which reports whether the expected skill loaded but doesn't count toward the score.
+Each case also has a `skill-fired` grader, which reports whether the expected skill loaded. Under the default `--ablation with-without` it is a plugin-fired indicator and doesn't count toward the score. Under `--ablation none`, the before/after method below, it counts like any other grader: a run in which no skill loaded scores lower, and the other graders then measure Claude without the skill's guidance, so read a change in `skill-fired` before reading the rest.
 
 ## Layout
 

@@ -1,9 +1,11 @@
 ---
 name: writing-good-tasks
-description: Writes and reviews sandtable tasks (tasks.yaml) that measure an agent fairly. Covers hidden user goals with hard limits and stop conditions, end states that follow the customer's policy rather than what a human rep did, avoiding vacuous or over-strict expectations, protecting internal values with never_disclose, and balancing write, refusal and handoff tasks against the noop baseline. Use when adding, editing or reviewing tasks, turning a call transcript or bug report into a task, or when a suite scores well for a do-nothing agent or fails a correct one.
+description: Writes and reviews sandtable tasks (tasks.yaml) that measure an agent fairly. Covers hidden user goals with hard limits and stop conditions, end states that follow the customer's policy rather than what a human rep did, avoiding vacuous or over-strict expectations, protecting internal values with never_disclose, balancing write, refusal and handoff tasks against the noop baseline, and task options such as marking a task critical (a release blocker whose failed trial fails CI whatever the score), per-task given rows and context, and called entries that match a call's arguments. Use when adding, editing or reviewing tasks, making a task a release blocker, turning a call transcript or bug report into a task, or when a suite scores well for a do-nothing agent or fails a correct one.
 ---
 
 # Writing good sandtable tasks
+
+Check what the installed CLI supports before using a task option: run `npx sandtable-ai --version`, read `npx sandtable-ai validate --help`, and let `validate` tell you whether a key is accepted. Never read sandtable's own code to find out, in `node_modules/sandtable-ai` or npx's cache. An option the installed version rejects (such as `critical: true` before 0.2.0) needs a newer `sandtable-ai`: say so, name the release that adds it, and offer what works on the installed version, such as running that task alone in CI with `--tasks <id> --fail-under 100` in place of `critical: true`. Don't edit the domain into a state the installed CLI rejects.
 
 A task is one rehearsed conversation: a simulated customer with a hidden goal, and the end state that counts as success if the agent follows the SOP. A good task fails a wrong agent, passes a correct one, and does so for the same reason in every trial. Every rule below serves one of those three properties.
 
