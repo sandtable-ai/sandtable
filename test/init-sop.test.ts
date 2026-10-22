@@ -9,7 +9,9 @@ import { describe, expect, it } from "vitest";
 import { appendToDomainList } from "../src/init/merge.ts";
 import { draftFromOpenApi } from "../src/init/openapi.ts";
 import { DOMAIN_FILE, POLICY_PLACEHOLDER, renderDraft, TASKS_PLACEHOLDER, writeDraft } from "../src/init/render.ts";
-import { draftInvariantsFromSop, knownFields, softRuleComments } from "../src/init/sop.ts";
+import { draftInvariantsFromSop, knownFields, softRuleComments, whereOf } from "../src/init/sop.ts";
+import { checkCall } from "../src/grade/invariants.ts";
+import { World } from "../src/world/store.ts";
 import { loadDomain, pendingReview } from "../src/spec/load.ts";
 
 const SOP = await readFile("examples/freight/policy.md", "utf8");
@@ -124,6 +126,65 @@ describe("init from an SOP", () => {
     expect(w).toMatch(/a soft rule refers to rule r9, which the draft's list of rules doesn't have/);
     expect(softRuleComments(res.softRules)).toContain(' Soft rule, not checked: Thank the caller before hanging up\n   "Thank the caller before you hang up."\n   why: not classified by the draft');
     expect(softRuleComments([])).toBeUndefined();
+  });
+
+  it("drafts \"a call like this must include Y\" as never with in and exists: false, and the invariant fires only on the wrong call", async () => {
+    const { dir, fields } = await draftedDomainDir();
+    const domain = await loadDomain(dir);
+    const sop = "When you escalate a payment or a claims question, enter the carrier's MC number.";
+    const rules = [{ id: "r1", rule: "A payment or claims escalation includes the MC number", quote: sop }];
+    const escalation = {
+      ...none,
+      rule_id: "r1",
+      id: "escalation-needs-mc",
+      description: "A payment or claims escalation must include the MC number.",
+      quote: sop,
+      kind: "never",
+      tool: "create_escalation",
+      conditions: [
+        { field: "reason", op: "in", value: ["payment", "claims"] },
+        { field: "mc_number", op: "exists", value: false },
+      ],
+    };
+    const { client, requests } = fakeClient({ rules, invariants: [escalation], soft_rules: [] });
+    const res = await draftInvariantsFromSop({ domain, sop, sopFile: "sop.md", fields: knownFields(domain, fields), claude: { client } });
+
+    expect(res.invariants).toHaveLength(1);
+    expect(res.invariants[0]).toMatchObject({ never: { tool: "create_escalation", when: { reason: { $in: ["payment", "claims"] }, mc_number: { $exists: false } } } });
+    expect(res.softRules).toEqual([]);
+    const system = (requests[0] as { system: string }).system;
+    expect(system).toMatch(/must include Y/);
+    expect(system).toMatch(/in or nin with a list of values/);
+    expect(system).toMatch(/A field that may take any of several values is one condition with in, not an either\/or/);
+
+    const checked = { ...domain, invariants: res.invariants };
+    const fires = (args: Record<string, unknown>) => checkCall(checked, new World(checked.world), [], { index: 0, name: "create_escalation", args }).length > 0;
+    expect(fires({ reason: "payment" })).toBe(true);
+    expect(fires({ reason: "claims", mc_number: "100101" })).toBe(false);
+    expect(fires({ reason: "detention" })).toBe(false);
+  });
+
+  it("turns drafted conditions into a where clause, or says why it can't", () => {
+    expect(whereOf([{ field: "status", op: "in", value: "open" }])).toEqual({ status: { $in: ["open"] } });
+    expect(whereOf([{ field: "status", op: "nin", value: ["closed", "void"] }])).toEqual({ status: { $nin: ["closed", "void"] } });
+    expect(whereOf([{ field: "rate", op: "gte", value: 10 }, { field: "rate", op: "lte", value: 100 }])).toEqual({ rate: { $gte: 10, $lte: 100 } });
+    expect(whereOf([{ field: "status", op: "eq", value: "open" }, { field: "status", op: "ne", value: "void" }])).toEqual({ status: { $eq: "open", $ne: "void" } });
+    expect(whereOf([{ field: "status", op: "eq", value: ["open"] }])).toBe("status: eq takes one value, not a list");
+    expect(whereOf([{ field: "note", op: "exists", value: "no" }])).toBe('note: exists takes true or false, not "no"');
+    expect(whereOf([{ field: "rate", op: "lte", value: 10 }, { field: "rate", op: "lte", value: 20 }])).toBe("rate: two lte conditions");
+  });
+
+  it("drops a drafted condition it can't turn into a where clause, with the reason", async () => {
+    const { dir, fields } = await draftedDomainDir();
+    const domain = await loadDomain(dir);
+    const sop = "Escalate only with a reason.";
+    const rules = [{ id: "r1", rule: "Escalations have a reason", quote: sop }];
+    const bad = { ...none, rule_id: "r1", id: "bad-exists", description: "x", quote: sop, kind: "never", tool: "create_escalation", conditions: [{ field: "reason", op: "exists", value: "no" }] };
+    const { client } = fakeClient({ rules, invariants: [bad], soft_rules: [] });
+    const res = await draftInvariantsFromSop({ domain, sop, sopFile: "sop.md", fields: knownFields(domain, fields), claude: { client } });
+    expect(res.invariants).toEqual([]);
+    expect(res.warnings.join("\n")).toMatch(/dropped bad-exists: reason: exists takes true or false, not "no"/);
+    expect(res.softRules[0]).toMatchObject({ reason: 'its drafted invariant was dropped (bad-exists: reason: exists takes true or false, not "no")' });
   });
 
   it("appends drafted invariants to the domain, keeping comments, as pending review", async () => {

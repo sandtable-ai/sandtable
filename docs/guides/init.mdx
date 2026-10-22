@@ -104,6 +104,12 @@ Claude reads the SOP alongside the domain's tools, params, tables and known fiel
 - Every invariant must **quote** the SOP. A quote that does not appear verbatim gets a warning.
 - Proposals that reference an unknown tool, param, table or field, or that are incomplete, are **dropped**, and the reason is printed.
 - Survivors are appended to the domain (existing comments are kept) with `review: pending` and `source: { file, quote }`.
+- Conditions can compare with one value (`$ne`, `$gt`, ...), a list (`$in`, `$nin`) or presence (`$exists`). So "a call like this must include Y" drafts as a `never` whose `when` describes the call and sets `$exists: false` on Y, the argument the agent would leave out:
+
+  ```yaml
+  - id: check-refund-needs-address
+    never: { tool: create_refund, when: { method: { $in: [ check, gift_card ] }, mailing_address: { $exists: false } } }
+  ```
 - Every rule the SOP states ends up as an invariant, a **soft rule** comment, or both. Claude first lists the SOP's rules, then maps each one. A rule that no invariant checks, or checks only in part, is written as a comment after the invariants, with its quote and why it isn't checked:
 
   ```yaml
