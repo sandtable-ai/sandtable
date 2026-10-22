@@ -72,11 +72,13 @@ export function agentModuleError(spec: string, file: string, err: unknown): Erro
   const ext = path.extname(file).toLowerCase();
   let hint = "";
   if ((err as NodeJS.ErrnoException | undefined)?.code === "ERR_UNKNOWN_FILE_EXTENSION" && [".ts", ".mts", ".cts"].includes(ext)) {
-    hint = ` Loading a TypeScript agent needs Node 22.18 or later, which strips types itself, and this is Node ${process.versions.node}: upgrade Node, or compile the agent to .mjs.`;
+    hint = `Loading a TypeScript agent needs Node 22.18 or later, which strips types itself, and this is Node ${process.versions.node}: upgrade Node, or compile the agent to .mjs.`;
   } else if (ESM_AS_COMMONJS.test(message) && (ext === ".ts" || ext === ".js")) {
-    hint = ` Node read it as CommonJS, but it uses ES module syntax: rename it to ${ext === ".ts" ? ".mts" : ".mjs"}, or set "type": "module" in the package.json nearest to it.`;
+    hint = `Node read it as CommonJS, but it uses ES module syntax: rename it to ${ext === ".ts" ? ".mts" : ".mjs"}, or set "type": "module" in the package.json nearest to it.`;
   }
-  return new Error(`could not load the agent module ${spec}: ${message}${hint}`);
+  // Node's message rarely ends a sentence, so the hint starts a new one.
+  const sep = !hint ? "" : /[.!?]$/.test(message) ? " " : ". ";
+  return new Error(`could not load the agent module ${spec}: ${message}${sep}${hint}`);
 }
 
 export function resolveUser(spec: string, p: ClaudeOptions = {}, openaiBaseUrl?: string): UserSimulator {
