@@ -68,7 +68,7 @@ Ask before running anything that calls a model, because it needs keys and costs 
 - Maintainers' clones run a pre-commit hook that scans for private names. Never bypass it with `--no-verify`. If it blocks, replace the name with a fictional one.
 - Never commit secrets. Keys come from the environment (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, AWS profiles), never from a file in the repo.
 - Keep the spec small. Prefer a new, clearly named invariant kind over a general expression language.
-- These are contracts users build on, so a change to one is a changelog entry, and removing or renaming in one is **Breaking**:
+- These are contracts users build on ([stability policy](docs/reference/stability.mdx)), so a change to one is a changelog entry, and removing or renaming in one is **Breaking**:
   - the exports of `src/index.ts`
   - the spec (`src/spec/schema.ts`)
   - CLI flags
