@@ -2,7 +2,8 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import { validateDomain } from "../spec/load.ts";
 import { InvariantSpec, type Domain, type Invariant } from "../spec/schema.ts";
-import { createClient, requestBase, type ClaudeOptions } from "../sim/claude.ts";
+import type { UsageByModel } from "../run/usage.ts";
+import { createClient, recordDraftUsage, requestBase, type ClaudeOptions } from "../sim/claude.ts";
 
 /**
  * A rule the SOP states that no drafted invariant checks (or checks only in part). It is written as a
@@ -36,6 +37,8 @@ export interface SopDraft {
   softRules: SoftRule[];
   /** Proposals dropped or flagged, with the reason, for the person reviewing. */
   warnings: string[];
+  /** Tokens the drafting call used, per model, for `init` to print with an estimated cost. */
+  usage: UsageByModel;
 }
 
 const Scalar = z.union([z.string(), z.number(), z.boolean()]);
@@ -266,6 +269,8 @@ export async function draftInvariantsFromSop(input: {
     system: SYSTEM,
     messages: [{ role: "user", content: `${describeDomain(domain, fields)}\n\n<sop file="${sopFile}">\n${sop}\n</sop>` }],
   });
+  const usage: UsageByModel = {};
+  recordDraftUsage(usage, input.claude ?? {}, base.model, response);
   if (response.stop_reason === "refusal") throw new Error("the model declined to draft invariants from this SOP");
   const out = response.parsed_output;
   if (!out) throw new Error("the model returned no parseable invariants");
@@ -306,7 +311,7 @@ export async function draftInvariantsFromSop(input: {
     checked.add(p.rule_id);
     invariants.push(inv);
   }
-  return { invariants, softRules: softRules(out, checked, dropped, warnings), warnings };
+  return { invariants, softRules: softRules(out, checked, dropped, warnings), warnings, usage };
 }
 
 /**

@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command, InvalidArgumentError } from "commander";
 import { freightScriptedAgent } from "./demo/freight-agents.ts";
-import { formatPercent, renderTerminal } from "./report/terminal.ts";
+import { draftUsageLines, formatPercent, renderTerminal } from "./report/terminal.ts";
 import { renderHtml } from "./report/html.ts";
 import { criticalFailures, everyTrialFailed, runSuite, skippedTrials, trialStatus, type SuiteResult } from "./run/suite.ts";
 import { changedVerdicts, RegradeError, regradeSuite } from "./run/regrade.ts";
@@ -286,6 +286,7 @@ withProviderFlags(program
       });
       const file = await appendToDomainList(o.out, "invariants", res.invariants, softRuleComments(res.softRules));
       console.log(`  ${res.invariants.length} invariant(s) drafted (review: pending), ${res.softRules.length} soft rule(s) noted in ${file}`);
+      for (const l of draftUsageLines(res.usage)) console.log(l);
       for (const w of res.warnings) console.log(`  ! ${w}`);
     }
     if (transcripts) {
@@ -300,6 +301,7 @@ withProviderFlags(program
       if (res.tasks.length) await appendToDomainList(o.out, "tasks", res.tasks, undefined, res.notes);
       const rows = Object.values(res.rows).reduce((n, r) => n + r.length, 0);
       console.log(`  ${res.tasks.length} task(s), ${res.personas.length} persona(s), ${rows} seed row(s) drafted; ${res.redactions} PII redaction(s)`);
+      for (const l of draftUsageLines(res.usage)) console.log(l);
       for (const w of res.warnings) console.log(`  ! ${w}`);
     }
     console.log(`\nNext: accept or fix each drafted item, then validate:\n  ${NEXT} review ${o.out}\n  ${NEXT} validate ${o.out} --strict`);

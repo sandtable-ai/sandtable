@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { UsageRecorder } from "../run/usage.ts";
+import { recordInto, type UsageByModel, type UsageRecorder } from "../run/usage.ts";
 import { importOptional } from "./optional.ts";
 import { STOP_TOKEN, USER_KICKOFF, userSystemPrompt } from "./prompts.ts";
 import type { AgentAdapter, UserSimulator } from "./types.ts";
@@ -192,6 +192,11 @@ function report(ctx: { recordUsage?: UsageRecorder }, requested: string, respons
     // The reply hit max_tokens: what the agent says next may be cut off or empty.
     ...(cut ? { maxTokensStops: 1 } : {}),
   });
+}
+
+/** Record one `init` drafting call's usage under the model that served it, as the agent and user sessions do. */
+export function recordDraftUsage(usage: UsageByModel, opts: ClaudeOptions, requested: string, response: Anthropic.Beta.BetaMessage): void {
+  report({ recordUsage: (model, u) => recordInto(usage, model, u) }, requested, response, providerOf(opts) === "bedrock");
 }
 
 function textOf(content: Anthropic.Beta.BetaContentBlock[]): string {

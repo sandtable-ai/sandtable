@@ -2,7 +2,8 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import { validateDomain } from "../spec/load.ts";
 import { PersonaSpec, TaskSpec, type Domain, type Persona, type Task } from "../spec/schema.ts";
-import { createClient, requestBase, type ClaudeOptions } from "../sim/claude.ts";
+import type { UsageByModel } from "../run/usage.ts";
+import { createClient, recordDraftUsage, requestBase, type ClaudeOptions } from "../sim/claude.ts";
 import { equal } from "../world/match.ts";
 
 export interface TranscriptDraft {
@@ -14,6 +15,8 @@ export interface TranscriptDraft {
   /** Review notes per task id, such as a reused row that contradicts the transcript; `init` writes them as `# TODO(review):` comments above the task. */
   notes: Record<string, string[]>;
   redactions: number;
+  /** Tokens the drafting calls used, one per transcript, per model, for `init` to print with an estimated cost. */
+  usage: UsageByModel;
 }
 
 /**
@@ -168,7 +171,7 @@ export async function draftTasksFromTranscripts(input: {
 }): Promise<TranscriptDraft> {
   const client = await createClient(input.claude ?? {});
   const base = requestBase(input.claude ?? {}, "high");
-  const out: TranscriptDraft = { tasks: [], personas: [], rows: {}, warnings: [], notes: {}, redactions: 0 };
+  const out: TranscriptDraft = { tasks: [], personas: [], rows: {}, warnings: [], notes: {}, redactions: 0, usage: {} };
   let domain = input.domain;
 
   for (const t of input.transcripts) {
@@ -181,6 +184,7 @@ export async function draftTasksFromTranscripts(input: {
       system: SYSTEM,
       messages: [{ role: "user", content: `${describe(domain)}\n\n<transcript file="${t.file}">\n${scrubbed.text}\n</transcript>` }],
     });
+    recordDraftUsage(out.usage, input.claude ?? {}, base.model, response);
     if (response.stop_reason === "refusal" || !response.parsed_output) {
       out.warnings.push(`${t.file}: no usable proposal`);
       continue;

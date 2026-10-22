@@ -43,7 +43,7 @@ npx sandtable-ai init --openapi api.yaml --sop policy.md --transcripts calls/ -o
 | `--force` | overwrite existing files when drafting from `--openapi` |
 | `--provider`, `--region`, `--aws-profile` | where Claude runs; see [provider options](#provider-options) |
 
-At least one of `--openapi`, `--sop` and `--transcripts` is required. They run in that order. Without `--force`, `--openapi` refuses to overwrite existing files.
+At least one of `--openapi`, `--sop` and `--transcripts` is required. They run in that order. Without `--force`, `--openapi` refuses to overwrite existing files. After `--sop` and after `--transcripts`, `init` prints the step's token usage per model and an estimated cost: one call for the SOP, one per transcript.
 
 ## validate
 

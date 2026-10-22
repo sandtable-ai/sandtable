@@ -1,6 +1,6 @@
 import { comparisonOf, type Comparison, type TaskChange } from "../run/compare.ts";
 import { gradedOutcomes, skippedTrials, trialStatus, type SoftScore, type SuiteResult, type TaskSummary } from "../run/suite.ts";
-import { totalTokens, type UsageByModel } from "../run/usage.ts";
+import { costOf, totalTokens, type UsageByModel } from "../run/usage.ts";
 
 const useColor = process.stdout.isTTY && !process.env.NO_COLOR;
 const paint = (code: number) => (s: string) => (useColor ? `\x1b[${code}m${s}\x1b[0m` : s);
@@ -43,13 +43,23 @@ export function fitList(items: string[], budget: number): string {
 
 const clip = (s: string, width: number) => (s.length <= width ? s : `${s.slice(0, width - 1)}…`);
 
-function tokens(label: string, group: UsageByModel): string | undefined {
+/** "<label> <models>: N calls, 12.3k in, 4.1k out, ..." for a group of model calls, or undefined when there were none. */
+export function tokenLine(label: string, group: UsageByModel): string | undefined {
   const t = totalTokens(group);
   if (t.calls === 0) return undefined;
   const models = Object.keys(group).join(", ");
   const stops = t.maxTokensStops ? `, ${t.maxTokensStops} stopped at max_tokens` : "";
   const reasoning = t.reasoningStripped ? `, ${t.reasoningStripped} with reasoning removed` : "";
   return `${label} ${models}: ${t.calls} calls, ${k(t.input)} in, ${k(t.output)} out, ${k(t.cacheRead)} cache read, ${k(t.cacheWrite)} cache write${stops}${reasoning}`;
+}
+
+/**
+ * What an `init` drafting step's model calls used and cost, in the lines `run` prints: the estimated cost at list
+ * prices, then the token line. Empty when no call reported usage.
+ */
+export function draftUsageLines(usage: UsageByModel): string[] {
+  const line = tokenLine("model", usage);
+  return line ? [`  estimated cost ${formatCost(costOf(usage))}`, `    ${line}`] : [];
 }
 
 /** "37.5%  3 of 8 trials that called log_offer", or why there is no rate yet. */
@@ -132,7 +142,7 @@ export function renderTerminal(r: SuiteResult, opts: { baseline?: string } = {})
     lines.push(dim(r.k === 1 ? `  pass^1 leaves out ${tasks} with no graded trial` : `  pass^${r.k} and pass@${r.k} leave out ${tasks} with fewer than ${r.k} graded trials`));
   }
   lines.push(dim(`  agent turn latency p50 ${formatMs(r.latency.agentTurnP50Ms)} · p95 ${formatMs(r.latency.agentTurnP95Ms)}`));
-  const usageLines = [tokens("agent", r.usage.agent), tokens("user", r.usage.user)].filter(Boolean);
+  const usageLines = [tokenLine("agent", r.usage.agent), tokenLine("user", r.usage.user)].filter(Boolean);
   if (usageLines.length) {
     lines.push(dim(`  estimated cost ${formatCost(r.usage.costUsd)}`));
     for (const l of usageLines) lines.push(dim(`    ${l}`));
