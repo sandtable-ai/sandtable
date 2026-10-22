@@ -14,7 +14,7 @@ updates:
       npm-minor-and-patch:
         update-types: [minor, patch]
     # Major versions are upgraded deliberately, not monthly: commander 15, for one, needs Node 22.12,
-    # and the published CLI supports Node 20 (#101).
+    # and the published CLI supports Node 22.0 and later (#101, #350).
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]

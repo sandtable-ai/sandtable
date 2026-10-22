@@ -31,7 +31,7 @@ def test_without_node_it_says_to_install_node(monkeypatch, capsys):
     monkeypatch.setattr(cli.shutil, "which", which({}))
     assert cli.main(["--version"]) == 127
     err = capsys.readouterr().err
-    assert "Node.js 20 or newer" in err and "https://nodejs.org" in err
+    assert "Node.js 22 or newer" in err and "https://nodejs.org" in err
 
 
 def test_with_node_but_no_npx_it_says_to_install_npm(monkeypatch, capsys):
@@ -84,7 +84,7 @@ def test_a_failed_start_prints_the_install_hint_not_a_traceback(monkeypatch, cap
     monkeypatch.setattr(cli.subprocess, "call", broken)
     assert cli.main(["demo"]) == 127
     err = capsys.readouterr().err
-    assert "Exec format error" in err and "Node.js 20 or newer" in err
+    assert "Exec format error" in err and "Node.js 22 or newer" in err
 
 
 def test_the_launcher_license_is_the_projects():

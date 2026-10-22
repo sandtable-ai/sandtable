@@ -7,7 +7,7 @@ import sys
 
 from . import NPM_VERSION
 
-NEEDS_NODE = "sandtable needs Node.js 20 or newer (https://nodejs.org)"
+NEEDS_NODE = "sandtable needs Node.js 22 or newer (https://nodejs.org)"
 
 # npm settings for npx unless you set them in the environment. npm retries a failed registry request
 # after 10 s and then 60 s, so a run without network stalled 70 s before npx fell back to its cache;
@@ -50,7 +50,7 @@ def main(argv=None) -> int:
     if npx is None:
         sys.stderr.write(
             "sandtable runs the CLI with `npx`, which ships with npm, and `npx` was not found on PATH.\n"
-            "Install npm: it comes with Node.js 20 or newer from https://nodejs.org, "
+            "Install npm: it comes with Node.js 22 or newer from https://nodejs.org, "
             "but some Linux packages of Node.js leave it out.\n"
         )
         return 127

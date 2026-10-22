@@ -6,7 +6,7 @@ sandtable rehearses AI agents on simulated copies of a customer's world. A simul
 
 ## Commands
 
-Development needs Node ≥ 22.18, which runs `src/*.ts` directly: no build step. The published CLI is compiled to `dist/` and must run on Node 20.
+Development needs Node ≥ 22.18, which runs `src/*.ts` directly: no build step. The published CLI is compiled to `dist/` and must run on Node 22.
 
 ```bash
 npm ci
