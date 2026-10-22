@@ -30,7 +30,7 @@ uvx sandtable-ai demo      # or through Python's uv (still needs Node.js 20+)
 
 No API key and no model calls: two rule-based agents take the same 50 scripted calls. Each run writes `results.json` and a self-contained `report.html` under `.sandtable/runs/`, and the naive agent's report opens in your browser.
 
-To watch a real model, `npx sandtable-ai demo --live --user-model claude-haiku-5-5` has Claude play both the caller and the agent, two trials per task. It needs `ANTHROPIC_API_KEY` and costs money.
+To watch a real model, `npx sandtable-ai demo --live` has Claude play both the caller (Claude Haiku 5.5, the cheaper model) and the agent, two trials per task. It needs `ANTHROPIC_API_KEY` and costs money.
 
 ## What it catches
 

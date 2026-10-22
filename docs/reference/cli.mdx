@@ -222,7 +222,7 @@ Rehearse the bundled freight carrier-sales example.
 
 ```bash
 npx sandtable-ai demo                                       # offline: two rule-based agents, no API key
-npx sandtable-ai demo --live --user-model claude-haiku-5-5  # Claude plays the caller and the agent
+npx sandtable-ai demo --live                                # Claude plays the caller and the agent
 ```
 
 | Option | Description |
@@ -230,7 +230,7 @@ npx sandtable-ai demo --live --user-model claude-haiku-5-5  # Claude plays the c
 | `--live` | use Claude as both the agent and the simulated user (needs `ANTHROPIC_API_KEY` or `ant auth login`, or `--provider bedrock`) |
 | `-k, --trials <n>` | trials per task in `--live` mode. Default: `2` |
 | `--agent-model <id>` | model for the agent in `--live` mode |
-| `--user-model <id>` | model for the simulated caller in `--live` mode; a cheaper model keeps runs cheap |
+| `--user-model <id>` | model for the simulated caller in `--live` mode. Default: `claude-haiku-5-5`, cheaper than the agent's model, which keeps the run cheap |
 | `--no-open` | do not open the HTML report in the browser |
 | `--provider`, `--region`, `--aws-profile` | where Claude runs; see [provider options](#provider-options) |
 

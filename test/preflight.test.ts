@@ -60,7 +60,7 @@ describe.skipIf(!process.features.typescript)("before the first trial", () => {
     expect(r.code).toBe(2);
     expect(r.stderr).toContain("Nothing ran: 2 problems:");
     expect(r.stderr).toContain("- the agent (claude): no Anthropic credentials");
-    expect(r.stderr).toContain("- the simulated user (claude): no Anthropic credentials");
+    expect(r.stderr).toContain("- the simulated user (claude:claude-haiku-5-5): no Anthropic credentials");
     expect(r.stderr).not.toContain("Every trial ended in an error");
   });
 

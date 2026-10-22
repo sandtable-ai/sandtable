@@ -16,7 +16,7 @@ describe.skipIf(!process.features.typescript)("the next steps", () => {
   it("after demo: npx commands, with the cheap caller model, within 80 columns", async () => {
     const cwd = mkdtempSync(path.join(tmpdir(), "sandtable-demo-"));
     const lines = nextSteps((await promisify(execFile)(process.execPath, [cli, "demo", "--no-open"], { cwd })).stdout);
-    expect(lines).toContain("    npx sandtable-ai demo --live --user-model claude-haiku-5-5");
+    expect(lines).toContain("    npx sandtable-ai demo --live");
     expect(lines).toContain("    npx sandtable-ai init --openapi api.yaml --sop sop.md -o mine");
     for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(80);
   });
