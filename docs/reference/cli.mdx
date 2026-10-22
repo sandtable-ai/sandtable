@@ -20,6 +20,7 @@ npx sandtable-ai <command> [options]
 | [`demo`](#demo) | rehearse the bundled freight example |
 | [`report`](#report) | re-render the HTML report for a past run |
 | [`regrade`](#regrade) | re-score a past run's stored trials under the domain's current rules, without calling a model |
+| [`compare`](#compare) | show what changed between two stored runs of one domain, without calling a model |
 
 `npx sandtable-ai --version` prints the version and `npx sandtable-ai <command> --help` lists a command's options. From a clone of the repo, run `npm run sandtable -- <command>`.
 
@@ -307,6 +308,26 @@ A run made with `--baseline` is compared with its baseline again after the re-sc
 
 The hash covers what sandtable's own adapters give a model. A custom agent adapter receives the whole domain, so a field it reads beyond the system prompt and the tool schemas is not covered: after editing one, rerun instead of regrading.
 
+## compare
+
+Show what changed between two runs that already exist, the same way [`run --baseline`](#compare-with-a-baseline) does while it runs. No model is called and nothing is rerun.
+
+```bash
+npx sandtable-ai compare main-run/results.json pr-run/results.json [--fail-on-regression] [-o <dir>]
+```
+
+| Argument / option | Description |
+|---|---|
+| `<baseline>` | the earlier run's `results.json` |
+| `<results>` | the newer run's `results.json`, of the same domain |
+| `--fail-on-regression` | exit 1 if a task that passed every trial in the baseline fails one in the newer run, naming each, as with [`run`](#compare-with-a-baseline) |
+| `-o, --out <dir>` | also write the newer run's `results.json` and `report.html` to this directory, with the baseline attached, so the report opens with the changes. Without it, `compare` writes nothing |
+| `--no-html` | with `-o`, skip the HTML report |
+
+It prints the newer run on two lines, then the same block a `run --baseline` summary ends with: each task that broke, got worse, got fixed, got better or changed, the added, removed and unchanged tasks, and pass^1 and pass^k before and after over the tasks both runs ran with the same test.
+
+Use it when the two runs were made apart: a pull request's run and the base branch's, made in separate CI jobs; a run from before a prompt change and one from after, made without `--baseline`; or two models' folders from a [leaderboard](#leaderboard). Two runs of different domains, a file that isn't a `results.json`, or a missing file exit 2 before anything is printed.
+
 ## Provider options
 
 `init`, `run`, `leaderboard` and `demo` accept:
@@ -337,6 +358,6 @@ As `grep` and `diff` do, a failed gate exits 1 and an error exits 2. See [Use it
 | Code | When |
 |---|---|
 | `0` | the command did its job and every gate passed; also `--help` and `--version` |
-| `1` | a gate failed on a complete result: `run` below `--fail-under`, a `run` in which any trial of a critical task failed, a `run --fail-on-regression` in which a task broke since the baseline, `validate` or `lint` on a domain that exists but is invalid, `validate --strict` with pending items, or `lint` errors |
+| `1` | a gate failed on a complete result: `run` below `--fail-under`, a `run` in which any trial of a critical task failed, a `run --fail-on-regression` or `compare --fail-on-regression` in which a task broke since the baseline, `validate` or `lint` on a domain that exists but is invalid, `validate --strict` with pending items, or `lint` errors |
 | `2` | the command couldn't do its job: a usage error (an unknown command or option, a missing argument, an invalid value, or no command at all), a missing or unreadable file, no domain at the path, an invalid domain for any command but `validate` and `lint`, an unknown agent or user spec, missing credentials or package, an agent or simulated user that can't start (checked before a `run` or `demo --live` runs any trial), a `run` with a skipped trial (it ended in an error before the agent broke a rule, so the run is incomplete, even when a gate failed too), a `run` or `demo --live` in which every trial ended in an error, or a `leaderboard` on which every model failed or crashed |
 | `141` | the output was piped into a reader that stopped early, such as `head` or a `less` quit before the end: the command stops there quietly, without finishing, with the status a shell reports for a Unix tool stopped by `SIGPIPE` (128 + 13) |

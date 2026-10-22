@@ -221,6 +221,21 @@ export function renderTerminal(r: SuiteResult, opts: { baseline?: string } = {})
   return lines.join("\n");
 }
 
+/**
+ * What `sandtable compare` prints: the newer run on two lines, then the block a `run --baseline` summary ends with.
+ * `r` carries the baseline as `baseline`; `files` names the two results.json files as the command was given them.
+ */
+export function renderCompare(r: SuiteResult, files: { baseline: string; results: string }): string {
+  const comparison = comparisonOf(r);
+  if (!comparison) throw new Error("renderCompare needs a run with a baseline");
+  return [
+    bold(`sandtable compare · ${r.domain} · ${files.results}`),
+    dim(`  run ${r.runId} · started ${r.startedAt} · agent ${r.agent} · user ${r.user} · k=${r.k}`),
+    "",
+    ...renderComparison(comparison, files.baseline),
+  ].join("\n");
+}
+
 const CHANGE_MARK: Partial<Record<TaskChange, string>> = { broken: red("✗"), worse: red("↓"), fixed: green("✓"), better: green("↑"), changed: yellow("~") };
 
 /** "(−90.0 pts)", "(+2.5 pts)" or "(no change)" at the precision the percentages are shown. */

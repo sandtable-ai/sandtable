@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { Command, InvalidArgumentError } from "commander";
 import { freightScriptedAgent } from "./demo/freight-agents.ts";
 import { DEMO_USER_MODEL, demoLiveSides } from "./demo/live.ts";
-import { draftUsageLines, formatPercent, renderTerminal } from "./report/terminal.ts";
+import { draftUsageLines, formatPercent, renderCompare, renderTerminal } from "./report/terminal.ts";
 import { renderHtml } from "./report/html.ts";
 import { criticalFailures, everyTrialFailed, runSuite, skippedTrials, trialStatus, type SuiteResult } from "./run/suite.ts";
 import { changedVerdicts, RegradeError, regradeSuite } from "./run/regrade.ts";
@@ -633,6 +633,29 @@ program
     }
     const out = await save(result, o.out ?? path.dirname(resultsPath), o.html);
     console.log(`\n  results: ${path.join(out, "results.json")}${o.html ? `\n  report:  ${path.join(out, "report.html")}` : ""}`);
+  });
+
+program
+  .command("compare")
+  .argument("<baseline>", "the earlier run's results.json")
+  .argument("<results>", "the newer run's results.json, of the same domain")
+  .description("show what changed between two stored runs, as run --baseline does, without calling a model")
+  .option("--fail-on-regression", "exit 1 if a task that passed every trial in the baseline fails one in the newer run (CI gate)")
+  .option("-o, --out <dir>", "also write the newer run's results.json and report.html, with the baseline attached, to this directory")
+  .option("--no-html", "with -o, skip the HTML report")
+  .action(async (baselinePath: string, resultsPath: string, o: { failOnRegression?: boolean; out?: string; html: boolean }) => {
+    const baseline = await readResults(baselinePath, "compare");
+    const result = await readResults(resultsPath, "compare");
+    if (baseline.domain !== result.domain) {
+      throw new Error(`${baselinePath} and ${resultsPath} are runs of different domains, ${baseline.domain} and ${result.domain}: compare two runs of the same domain`);
+    }
+    const compared: SuiteResult = { ...result, baseline: baselineSnapshot(baseline) };
+    console.log(renderCompare(compared, { baseline: baselinePath, results: resultsPath }));
+    if (o.out !== undefined) {
+      const out = await save(compared, o.out, o.html);
+      console.log(`\n  results: ${path.join(out, "results.json")}${o.html ? `\n  report:  ${path.join(out, "report.html")}` : ""}`);
+    }
+    if (o.failOnRegression) failIfRegressed(compareRuns(compared.baseline!, compared));
   });
 
 program.parseAsync().catch((err: unknown) => {

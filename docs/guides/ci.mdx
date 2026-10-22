@@ -20,7 +20,7 @@ Every command exits with a status a CI step can act on, as `grep` and `diff` do:
 |---|---|---|
 | `1` | `run --fail-under <pct>` | pass^k, with k = `--trials`, is below `pct` |
 | `1` | `run` | any trial of a task marked [`critical: true`](/reference/spec#critical-tasks) failed, whatever the score. This holds without `--fail-under` too, and the output names each such task |
-| `1` | `run --baseline <results> --fail-on-regression` | a task that passed every trial in the baseline fails one now. The output names each such task |
+| `1` | `run --baseline <results> --fail-on-regression`, `compare <baseline> <results> --fail-on-regression` | a task that passed every trial in the baseline fails one now. The output names each such task |
 | `1` | `validate`, `lint` | the domain exists but is invalid: a schema, cross-reference or YAML error |
 | `1` | `validate --strict` | a drafted item is still `review: pending` |
 | `1` | `lint` | any task is not graded, not ready, vacuous or not solvable |
@@ -165,6 +165,19 @@ permissions:
 ```
 
 The first pull request, before `main` has a run, rehearses without a baseline. Compare like with like: keep the simulated user and k the same as on `main`, since the comparison names any difference but can't take it out of the numbers. Without `--fail-on-regression`, the comparison never changes the exit code.
+
+### Compare two runs made apart
+
+When the base branch and the pull request rehearse in separate jobs, or the baseline comes from a nightly run, compare the two stored `results.json` files afterwards with [`compare`](/reference/cli#compare). It prints the same changes as `--baseline` and calls no model, so nothing is paid for twice:
+
+```yaml
+      - name: Compare with main
+        run: |
+          npx sandtable-ai compare .sandtable/baseline/results.json .sandtable/ci/results.json \
+            --fail-on-regression -o .sandtable/compared
+```
+
+`-o` writes the pull request's run again with the baseline attached, so the report in `.sandtable/compared` opens with the regressions; upload that folder as the artifact.
 
 ## Choosing the threshold and k
 

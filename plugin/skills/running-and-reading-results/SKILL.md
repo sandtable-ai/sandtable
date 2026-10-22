@@ -144,7 +144,7 @@ npx sandtable-ai run ./sandtable --agent http://localhost:8787/step -k 4 --fail-
 
 When one triage finds both kinds, fix grading first and regrade, then change the caller's instructions and rerun those tasks: `regrade` refuses the whole run, not just one task, once any task's caller prompt changed. Pass `-o` to `regrade`, or it replaces the run's own `results.json`, which you need as the baseline.
 
-One passing rerun of a flaky task proves little. Report pass^1 and pass^k before and after, at the same k: pass the run from before the fix as `--baseline <results.json>`, and the summary lists which tasks broke or got fixed.
+One passing rerun of a flaky task proves little. Report pass^1 and pass^k before and after, at the same k: pass the run from before the fix as `--baseline <results.json>`, and the summary lists which tasks broke or got fixed. For two runs that already exist, such as a run made without `--baseline` or two leaderboard models' folders, `npx sandtable-ai compare <before>/results.json <after>/results.json` prints the same comparison without calling a model.
 
 ## References
 
