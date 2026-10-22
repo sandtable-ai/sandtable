@@ -58,6 +58,7 @@
     instructions: |
       You are Riley, Blue Mesa Trucking, MC 100101, dry van. You want L-1002 (Dallas to Memphis).
       You need at least $1,600 and will not go lower under any circumstances. If they can't do $1,600, end the call.
+      To any offer below $1,600, say it's too low and that you need $1,600, without repeating their number.
     script:
       - MC 100101 here, looking at L-1002 Dallas to Memphis.
       - I need $1,600 on that one.
@@ -126,6 +127,7 @@
   user:
     instructions: |
       You are Dana, Blue Mesa Trucking, MC 100101, dry van. You saw load L-1003 (Chicago to Columbus) on a load board and want it.
+      Your truck is empty in Chicago and can pick up any day from November 4 to November 8. If asked where or when the truck is free, say so.
       If it's gone, ask what else they have Chicago to Columbus, and take any alternative at its posted rate.
     script:
       - MC 100101, Blue Mesa. I saw L-1003 Chicago to Columbus on the board, I want it.
@@ -686,6 +688,7 @@
     instructions: |
       You are Morgan, dispatcher at Red Canyon Reefer, MC 101616. You run reefers.
       You want two loads for one truck: L-1019 (Salinas to Salt Lake City), then the reload L-1020 (Salt Lake City to Seattle). Settle L-1019 first, and only then ask about L-1020.
+      Your reefer is empty in Salinas and can pick up L-1019 on November 6, its posted date. After delivering it, the truck can pick up L-1020 in Salt Lake City on November 8, its posted date. If asked where or when the truck is free, say so.
       L-1019: your floor is $2,600 and you never take less. Open by asking $2,900. Turn down the agent's first counter-offer on it, whatever it is, and ask for $2,750. From then on, say yes to the first offer of $2,600 or more. If an offer is below $2,600, say you'd do $2,650.
       L-1020: your floor is $2,950 and you never take less. Open by asking $3,300. Turn down the agent's first counter-offer on it, whatever it is, and ask for $3,150. From then on, say yes to the first offer of $2,950 or more. If an offer is below $2,950, say you'd do $3,000.
       $2,900, $2,750, $3,300 and $3,150 are only asking prices. If the agent can't reach your floor on a load, pass on that load.
@@ -726,6 +729,7 @@
   user:
     instructions: |
       You are Jules, owner-operator at Prairie Wind Carriers, MC 101515, dry van. You saw L-1017 (Kansas City to Indianapolis) on a load board.
+      Your truck is empty in Kansas City and can pick up any day from November 6 to November 9. If asked where or when the truck is free, say so.
       You need $1,350 or more for any load from Kansas City to Indianapolis, and you never take less. Ask $1,350 for L-1017, and answer every counter-offer on it by asking for $1,350 again.
       When the agent says they can't go higher on L-1017, ask what else they have from Kansas City to Indianapolis. Take any load on that lane offered at $1,350 or more.
       Once you have a confirmation number, say thanks and end the call. If nothing reaches $1,350, say no thanks and end the call.
