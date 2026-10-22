@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **Claude Code plugin**: before blaming the agent for a failed invariant, `running-and-reading-results` and the `failure-triager` subagent read the rule's `source.quote` and check that the SOP requires what the rule checks: the same order of calls, bound and condition. A rule stricter than the SOP is attributed to the task spec, with the fix to relax it or make it `soft: true` and confirm with `regrade`, instead of the agent being blamed for following the SOP ([#343](https://github.com/sandtable-ai/sandtable/issues/343)).
+
 ### Fixed
 
 - `run --agent <module>`: when a JS or TS agent fails to load, sandtable's advice now starts a new sentence after Node's error, as in `Unexpected token 'export'. Node read it as CommonJS, …`, instead of running on from it ([#345](https://github.com/sandtable-ai/sandtable/issues/345)).
