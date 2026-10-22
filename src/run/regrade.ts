@@ -81,5 +81,5 @@ export function regradeSuite(domain: Domain, stored: SuiteResult): SuiteResult {
   if (blocker) throw new RegradeError(blocker);
   const tasks = stored.tasks.map((s) => domain.tasks.find((t) => t.id === s.id)!);
   const trials = stored.tasks.flatMap((s) => s.trials.map((trial) => regradeTrial(domain, trial)));
-  return { ...stored, ...summarize(domain, tasks, trials, stored.k), pendingReview: pendingReview(domain) };
+  return { ...stored, ...summarize(domain, tasks, trials, stored.k, stored.user), pendingReview: pendingReview(domain) };
 }

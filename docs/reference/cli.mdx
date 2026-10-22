@@ -147,20 +147,25 @@ npx sandtable-ai run ./my-domain --agent http://localhost:8787/step -k 4 --basel
 ```text
   Compared with main-run/results.json
   run 20261021T101544-p2qd · started 2026-10-21T10:15:44.120Z
-  ! prompts changed: the policy, a tool's schema or a task's caller prompt
+  ! how it's graded changed for 1 task
 
   ✗ broken  expired-insurance         4/4 → 2/4
   ↓ worse   negotiate-two-rounds      3/4 → 1/4
   ✓ fixed   walk-away-above-ceiling   2/4 → 4/4
-  = 47 unchanged
+  ~ changed rep-confirm-and-instant   1/4 → 4/4  grading
+  ~ changed: its prompts, tools, world or grading differ from the baseline's
+  = 46 unchanged
 
+  over the 49 tasks both runs ran with the same test (1 changed left out):
   pass^1 87.0% → 86.0%  (−1.0 pts)
   pass^4 76.0% → 76.0%  (no change)
 ```
 
-pass^4 didn't move here, because one task broke as another was fixed: the task lines are what show the regression.
+pass^4 didn't move here, because one task broke as another was fixed: the task lines are what show the regression. `rep-confirm-and-instant` passes now because its expectations were edited, so it isn't credited as fixed.
 
-Each task that ran in both is `broken` (it passed every trial before and fails one now), `worse` (fewer of its trials pass, without crossing passing every trial), `fixed`, `better` or unchanged, counting graded trials only. A task that one of the runs graded no trial of, because each was [skipped](/concepts/pass-k#skipped-trials), is listed as not graded instead. New failures come first. Added tasks, and tasks only the baseline ran (removed from the domain, or left out with `--tasks`), are counted on a line each, with the failing added tasks named first. pass^1 and pass^k are compared over the tasks both runs ran, up to the smaller of the two k. Under the baseline's run id, a `!` line names each other difference: the agent, the simulated user, k, or what the agent and the caller are given (the `inputs` hash), which is often the point of the change.
+Each task that ran in both, with the same test, is `broken` (it passed every trial before and fails one now), `worse` (fewer of its trials pass, without crossing passing every trial), `fixed`, `better` or unchanged, counting graded trials only. A task that one of the runs graded no trial of, because each was [skipped](/concepts/pass-k#skipped-trials), is listed as not graded instead. New failures come first. Added tasks, and tasks only the baseline ran (removed from the domain, or left out with `--tasks`), are counted on a line each, with the failing added tasks named first. pass^1 and pass^k are compared over the tasks both runs ran with the same test, up to the smaller of the two k. Under the baseline's run id, a `!` line names each other difference: the agent, the simulated user, k, and how many tasks' tests changed.
+
+A task's test is `changed` when its per-task hashes in `results.json` differ from the baseline's: `inputs`, what the agent and the caller are given and the world they act in (the policy, every tool's definition, the caller's prompt, opening and turn limit, the script for `--user scripted`, and the seed rows with the task's `given.rows`), or `grading`, how its trials are graded (its `expect` and `critical`, and every invariant with its `soft` flag, since a call to any tool can trip one). Its result is shown, but it isn't counted as fixed or broken, and it's left out of pass^k: the move may come from the edit, not the agent. Seed rows, tools and invariants are shared, so editing one marks every task changed. Accepting a drafted item (its `review`) changes neither hash. To compare like with like after changing how tasks are graded, regrade the baseline under the edited domain first (`regrade main-run/results.json -d ./my-domain -o main-regraded`) and pass that as `--baseline`. A baseline written before these hashes (by 0.1.x) can't show which tests changed, and the comparison says so in a `!` line.
 
 The baseline is read before any trial runs, so a missing file, a file that isn't a `results.json`, or a run of another domain stops the run before it calls a model. The comparison never changes the exit code: `--fail-under` still gates on this run's pass^k alone.
 

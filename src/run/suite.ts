@@ -6,7 +6,7 @@ import type { Domain, Task } from "../spec/schema.ts";
 import type { AgentAdapter, UserSimulator } from "../sim/types.ts";
 import type { BaselineSnapshot } from "./compare.ts";
 import { runEpisode, type TrialResult } from "./episode.ts";
-import { inputsFingerprint } from "./inputs.ts";
+import { inputsFingerprint, taskFingerprints } from "./inputs.ts";
 import { percentile, sumUsage, type Usage } from "./usage.ts";
 
 /**
@@ -31,6 +31,13 @@ export interface TaskSummary {
   verdict?: Verdict;
   /** The 95% Wilson score interval for passes / graded; absent when no trial was graded. */
   interval?: { low: number; high: number };
+  /**
+   * Short hashes of the task's test (see taskFingerprints): `inputs`, what the agent and the caller are given and
+   * the world they act in, and `grading`, how its trials are graded. `run --baseline` labels a task whose hashes
+   * differ from the baseline's as changed instead of fixed or broken. Absent in results from before them.
+   */
+  inputs?: string;
+  grading?: string;
 }
 
 export interface FailureMode {
@@ -161,7 +168,7 @@ export async function runSuite(opts: SuiteOptions): Promise<SuiteResult> {
     inputs: inputsFingerprint(domain, tasks.map((t) => t.id), user.name),
     startedAt,
     durationMs: Math.round(performance.now() - started),
-    ...summarize(domain, tasks, results, k),
+    ...summarize(domain, tasks, results, k, user.name),
     usage: sumUsage(results.map((r) => r.usage)),
     pendingReview: pendingReview(domain),
     latency: { agentTurnP50Ms: percentile(turnLatencies, 50), agentTurnP95Ms: percentile(turnLatencies, 95) },
@@ -174,6 +181,8 @@ export function summarize(
   tasks: readonly Task[],
   results: readonly TrialResult[],
   k: number,
+  /** The simulated user's name, which decides whether the task's script is part of its `inputs` hash. */
+  user: string,
 ): Pick<SuiteResult, "tasks" | "passHat" | "passAt" | "flipRate" | "flaky" | "skipped" | "callerNotes" | "failureModes" | "byTag" | "soft"> {
   const summaries: TaskSummary[] = tasks.map((task) => {
     const trials = results.filter((r) => r.taskId === task.id).sort((a, b) => a.trial - b.trial);
@@ -191,6 +200,7 @@ export function summarize(
       skipped: trials.length - graded,
       verdict: verdictOf(passes, graded),
       ...(interval ? { interval } : {}),
+      ...taskFingerprints(domain, task, user),
     };
   });
   const outcomes = summaries.map(gradedOutcomes);

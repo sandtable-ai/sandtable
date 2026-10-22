@@ -19,10 +19,19 @@ const example = path.resolve("examples/freight");
 const cli = path.resolve("src/cli.ts");
 const plain = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");
 
-/** A run with the given verdicts per task, e.g. { a: [true, false] }; enough for comparing. */
-function fake(verdicts: Record<string, boolean[]>, over: Partial<SuiteResult> = {}): SuiteResult {
+/**
+ * A run with the given verdicts per task, e.g. { a: [true, false] }; enough for comparing. Each task carries the
+ * same `inputs` and `grading` hashes in every fake run unless `tests` overrides them, or `perTask: false`
+ * leaves them out, as in results written before per-task hashes.
+ */
+function fake(
+  verdicts: Record<string, boolean[]>,
+  over: Partial<SuiteResult> = {},
+  opts: { perTask?: boolean; tests?: Record<string, { inputs?: string; grading?: string }> } = {},
+): SuiteResult {
   const tasks = Object.entries(verdicts).map(([id, v]) => ({
     id, tags: [], passes: v.filter(Boolean).length,
+    ...(opts.perTask === false ? {} : { inputs: `in-${id}`, grading: `gr-${id}`, ...opts.tests?.[id] }),
     trials: v.map((passed, trial) => ({ taskId: id, trial, passed, checks: [], violations: [], soft: [], events: [], changes: [], endReason: "user_stop" as const, turns: 1, durationMs: 0, usage: { agent: {}, user: {}, costUsd: 0 } })),
   }));
   const k = Math.max(...Object.values(verdicts).map((v) => v.length));
@@ -75,7 +84,10 @@ describe("compareRuns", () => {
       { id: "outage", change: "skipped", before: { passes: 2, trials: 2 }, after: { passes: 0, trials: 0 } },
       { id: "kept", change: "same", before: { passes: 2, trials: 2 }, after: { passes: 1, trials: 1 } },
     ]);
-    expect(baselineSnapshot(now).tasks).toEqual([{ id: "kept", passes: 1, trials: 1 }, { id: "outage", passes: 0, trials: 0 }]);
+    expect(baselineSnapshot(now).tasks).toEqual([
+      { id: "kept", passes: 1, trials: 1, inputs: "in-kept", grading: "gr-kept" },
+      { id: "outage", passes: 0, trials: 0, inputs: "in-outage", grading: "gr-outage" },
+    ]);
     expect(plain(renderTerminal({ ...now, baseline: baselineSnapshot(before) }))).toContain("  ○ 1 not graded in one of the runs (outage)");
   });
 
@@ -89,18 +101,22 @@ describe("compareRuns", () => {
     expect(c.differences).toEqual(["k 4 → 2: pass^j compared up to j=2"]);
   });
 
-  it("names a changed agent and caller, and changed prompts only when both runs ran the same tasks with the same caller", () => {
-    const base = baselineSnapshot(fake({ t: [true] }, { agent: "scripted:careful", inputs: "old" }));
+  it("with a baseline from before per-task hashes, says so, and names changed prompts only when both runs ran the same tasks with the same caller", () => {
+    const NOTE = "the baseline has no per-task fingerprints: a changed test looks like a fix";
+    const base = baselineSnapshot(fake({ t: [true] }, { agent: "scripted:careful", inputs: "old" }, { perTask: false }));
     expect(compareRuns(base, fake({ t: [true] }, { agent: "scripted:naive", inputs: "new" })).differences).toEqual([
       "agent scripted:careful → scripted:naive",
+      NOTE,
       "prompts changed: the policy, a tool's schema or a task's caller prompt",
     ]);
-    // Another caller, or other tasks, change the fingerprint by themselves: nothing more to say.
-    expect(compareRuns(base, fake({ t: [true] }, { agent: "scripted:careful", user: "scripted", inputs: "new" })).differences).toEqual(["simulated user u → scripted"]);
-    expect(compareRuns(base, fake({ t: [true], s: [true] }, { agent: "scripted:careful", inputs: "new" })).differences).toEqual([]);
-    // A baseline from before the fingerprint has nothing to compare it with.
+    // Another caller, or other tasks, change the run's fingerprint by themselves: nothing more to say.
+    expect(compareRuns(base, fake({ t: [true] }, { agent: "scripted:careful", user: "scripted", inputs: "new" })).differences).toEqual(["simulated user u → scripted", NOTE]);
+    expect(compareRuns(base, fake({ t: [true], s: [true] }, { agent: "scripted:careful", inputs: "new" })).differences).toEqual([NOTE]);
+    // A baseline from before the run's fingerprint has nothing to compare it with either.
     const { inputs: _, ...old } = base;
-    expect(compareRuns(old, fake({ t: [true] }, { agent: "scripted:careful", inputs: "new" })).differences).toEqual([]);
+    expect(compareRuns(old, fake({ t: [true] }, { agent: "scripted:careful", inputs: "new" })).differences).toEqual([NOTE]);
+    // Old baselines keep today's verdicts: a task whose test changed still reads as fixed.
+    expect(compareRuns(baselineSnapshot(fake({ t: [false] }, {}, { perTask: false })), fake({ t: [true] }, {}, { tests: { t: { inputs: "edited" } } })).tasks[0]).toMatchObject({ change: "fixed" });
   });
 
   it("lists every freight task the naive agent broke against the careful one", async () => {
@@ -114,6 +130,64 @@ describe("compareRuns", () => {
     expect(c.sameTasks).toBe(true);
     expect(c.passHat).toEqual([{ j: 1, before: careful.passHat["1"], after: naive.passHat["1"] }]);
     expect(c.differences).toEqual(["agent scripted:careful → scripted:naive"]);
+  });
+});
+
+describe("a task whose test changed since the baseline", () => {
+  const ids = ["book-at-posted-rate", "expired-insurance", "walk-away-above-ceiling"];
+  const careful = (domain: Domain, taskIds: string[]) =>
+    runSuite({ domain, agent: freightScriptedAgent("careful"), user: scriptedUser(), taskIds }).then((r) => JSON.parse(JSON.stringify(r)) as SuiteResult);
+  const edit = (domain: Domain, id: string, change: (t: Domain["tasks"][number]) => Domain["tasks"][number]): Domain => ({
+    ...domain,
+    tasks: domain.tasks.map((t) => (t.id === id ? change(t) : t)),
+  });
+
+  it("is labelled changed, with what changed, and left out of pass^k, even when the runs ran other tasks", async () => {
+    const domain = await loadDomain(example);
+    const before = await careful(domain, ids);
+    // The issue's case: one task's caller is given something else, another's expectations change, and a task is added.
+    let edited = edit(domain, "book-at-posted-rate", (t) => ({ ...t, user: { ...t.user, script: [...t.user.script!.slice(0, -1), "Thanks, that's all. Bye."] } }));
+    edited = edit(edited, "expired-insurance", (t) => ({ ...t, expect: { ...t.expect, called: ["verify_carrier"] } }));
+    const now = await careful(edited, [...ids, "inactive-authority"]);
+    const c = compareRuns(baselineSnapshot(before), now);
+    const byId = Object.fromEntries(c.tasks.map((d) => [d.id, d]));
+    expect(byId["book-at-posted-rate"]).toMatchObject({ change: "changed", what: ["inputs"] });
+    expect(byId["expired-insurance"]).toMatchObject({ change: "changed", what: ["grading"] });
+    expect(byId["walk-away-above-ceiling"]).toMatchObject({ change: "same" });
+    expect(byId["walk-away-above-ceiling"]!.what).toBeUndefined();
+    expect(byId["inactive-authority"]).toMatchObject({ change: "added" });
+    // The task sets differ, and the run still says what changed.
+    expect(c.sameTasks).toBe(false);
+    expect(c.differences).toEqual(["what the agent or caller is given changed for 1 task", "how it's graded changed for 1 task"]);
+    expect(c.shared).toBe(3);
+    expect(c.comparable).toBe(1);
+    const lines = plain(renderTerminal({ ...now, baseline: baselineSnapshot(before) })).split("\n");
+    const block = lines.slice(lines.findIndex((l) => l.startsWith("  Compared with")));
+    expect(block).toContain("  ! what the agent or caller is given changed for 1 task");
+    expect(block.some((l) => /^ {2}~ changed book-at-posted-rate +1\/1 → 1\/1 +inputs$/.test(l))).toBe(true);
+    expect(block.some((l) => /^ {2}~ changed expired-insurance +1\/1 → 1\/1 +grading$/.test(l))).toBe(true);
+    expect(block).toContain("  ~ changed: its prompts, tools, world or grading differ from the baseline's");
+    expect(block).toContain("  over the 1 task both runs ran with the same test (2 changed left out):");
+    for (const line of block) expect(line.length, line).toBeLessThanOrEqual(80);
+  });
+
+  it("covers every task when a rule, a seed row or a tool changes, and not when a draft is accepted", async () => {
+    const domain = await loadDomain(example);
+    const before = await careful(domain, ids);
+    const changes = async (edited: Domain) => compareRuns(baselineSnapshot(before), await careful(edited, ids)).tasks.map((d) => d.what?.join() ?? d.change);
+    // A rule made soft changes how every task is graded: a call to any tool can trip a rule.
+    const soft: Domain = { ...domain, invariants: domain.invariants.map((inv, i) => (i === 0 ? { ...inv, soft: true } : inv)) };
+    expect(await changes(soft)).toEqual(["grading", "grading", "grading"]);
+    // A seed row is part of the world every task acts in.
+    const rows: Domain = { ...domain, world: { tables: { ...domain.world.tables, loads: { ...domain.world.tables.loads!, rows: domain.world.tables.loads!.rows.slice(0, -1) } } } };
+    expect(await changes(rows)).toEqual(["inputs", "inputs", "inputs"]);
+    // Accepting a drafted rule or tool records a review, not a change to the test.
+    const accepted: Domain = {
+      ...domain,
+      tools: domain.tools.map((t) => ({ ...t, review: "accepted" as const })),
+      invariants: domain.invariants.map((inv) => ({ ...inv, review: "accepted" as const, description: `${inv.description} (reviewed)` })),
+    };
+    expect(await changes(accepted)).toEqual(["same", "same", "same"]);
   });
 });
 
@@ -189,6 +263,15 @@ describe("HTML comparison", () => {
     expect(rows.find((r) => r.includes("<b>fixes</b>"))).not.toContain("since baseline");
   });
 
+  it("labels a task whose test changed neutrally, with what changed, and leaves it out of the scores", () => {
+    const before = fake({ kept: [true], edited: [false] });
+    const now = fake({ kept: [true], edited: [true] }, {}, { tests: { edited: { grading: "new" } } });
+    const section = page(renderHtml({ ...now, baseline: baselineSnapshot(before) }))("baseline");
+    expect(section).toContain("<td class='meta'>test changed (how it's graded)</td><td><code>edited</code></td><td>0/1</td><td class='meta'>1/1</td>");
+    expect(section).toContain("Score (over the 1 task both runs ran with the same test; 1 changed left out)");
+    expect(section).toContain("<li>how it's graded changed for 1 task</li>");
+  });
+
   it("has no comparison section for a run without a baseline", () => {
     expect(page(renderHtml(fake({ t: [true] })))("baseline")).toBe("");
   });
@@ -208,8 +291,17 @@ describe("regrade and report keep the comparison", () => {
     expect(regraded.baseline).toEqual(run.baseline);
     const reefer = careful.tasks.filter((t) => t.trials[0]!.events.some((e) => e.type === "tool" && e.name === "book_load" && (e.args as { load_id?: string }).load_id === "L-1005")).map((t) => t.id);
     expect(reefer).toContain("equipment-mismatch");
-    expect(compareRuns(regraded.baseline!, regraded).tasks.filter((d) => d.change === "broken").map((d) => d.id)).toEqual(reefer);
-    expect(plain(renderTerminal(regraded))).toMatch(/✗ broken {2}equipment-mismatch +1\/1 → 0\/1/);
+    // The new invariant changed how every task is graded since the baseline, so the regraded run reads its moves as
+    // a changed test, not as the agent breaking them, and has no task left to compare pass^k over.
+    const c = compareRuns(regraded.baseline!, regraded);
+    expect(c.tasks.every((d) => d.change === "changed" && d.what?.join() === "grading")).toBe(true);
+    expect(c.tasks.filter((d) => d.after!.passes < d.before!.passes).map((d) => d.id)).toEqual(reefer);
+    expect(c.differences).toEqual([`how it's graded changed for ${careful.tasks.length} tasks`]);
+    expect(c.comparable).toBe(0);
+    const text = plain(renderTerminal(regraded));
+    expect(text).toMatch(/~ changed equipment-mismatch +1\/1 → 0\/1 +grading/);
+    expect(text).toContain("every task both runs ran has a changed test, so there is no pass^k to compare");
+    expect(text).not.toContain("✗ broken");
   });
 
   it.skipIf(!process.features.typescript)("sandtable run --baseline stores the baseline, and report re-renders the changes without the old file", async () => {

@@ -123,19 +123,21 @@ if (C) {
   const frac = (x) => x ? x.passes + "/" + x.trials : "–";
   const moved = C.tasks.filter((d) => d.change !== "same");
   const same = C.tasks.length - moved.length;
-  const label = { broken: "broken", worse: "worse", fixed: "fixed", better: "better", added: "added", removed: "only in the baseline", skipped: "not graded in one run" };
+  const label = { broken: "broken", worse: "worse", fixed: "fixed", better: "better", changed: "test changed", added: "added", removed: "only in the baseline", skipped: "not graded in one run" };
+  // What a changed task's hashes say changed: what the agent or caller is given (and the world), or how it's graded.
+  const what = (d) => d.what ? " (" + d.what.map((w) => w === "inputs" ? "what it's given" : "how it's graded").join(", ") + ")" : "";
   const shown = C.passHat.filter((p) => p.j === 1 || p.j === C.passHat.length);
   const pts = (p) => { const d = (p.after - p.before) * 100; return Number.isNaN(d) ? "" : Math.abs(d) < 0.05 ? "no change" : (d > 0 ? "+" : "−") + Math.abs(d).toFixed(1) + " pts"; };
   $("baseline").innerHTML = "<h2>Changes since baseline</h2><p class='explain' style='margin-top:0'>Compared with run <code>" + esc(b.runId) + "</code> of " + esc(b.startedAt) +
     ": agent " + esc(b.agent) + ", user " + esc(b.user) + ", k=" + b.k + ". Regressions come first.</p>" +
     (C.differences.length ? "<ul class='notes'>" + C.differences.map((d) => "<li>" + esc(d) + "</li>").join("") + "</ul>" : "") +
-    (C.shared ? "<div class='wrap'><table><thead><tr><th>Score" + (C.sameTasks ? "" : " (over the " + C.shared + " tasks both runs ran)") + "</th><th>Baseline</th><th>Now</th><th>Change</th></tr></thead><tbody>" +
+    (C.comparable ? "<div class='wrap'><table><thead><tr><th>Score" + (C.comparable < C.shared ? " (over the " + C.comparable + (C.comparable === 1 ? " task" : " tasks") + " both runs ran with the same test; " + (C.shared - C.comparable) + " changed left out)" : C.sameTasks ? "" : " (over the " + C.shared + " tasks both runs ran)") + "</th><th>Baseline</th><th>Now</th><th>Change</th></tr></thead><tbody>" +
       shown.map((p) => "<tr><td>pass^" + p.j + "</td><td>" + pct(p.before) + "</td><td>" + pct(p.after) + "</td><td class='" + ((p.after - p.before) * 100 <= -0.05 ? "badt" : "") + "'>" + pts(p) + "</td></tr>").join("") +
-      "</tbody></table></div>" : "<p class='meta'>No task ran in both runs, so there is no pass^k to compare.</p>") +
+      "</tbody></table></div>" : "<p class='meta'>" + (C.shared ? "Every task both runs ran has a changed test" : "No task ran in both runs") + ", so there is no pass^k to compare.</p>") +
     (moved.length ? "<div class='wrap' style='margin-top:16px'><table><thead><tr><th>Change</th><th>Task</th><th>Baseline</th><th>Now</th></tr></thead><tbody>" +
       moved.map((d) => {
         const cls = regressed(d.id) ? "badt" : d.change === "fixed" || d.change === "better" ? "okt" : "meta";
-        return "<tr><td class='" + cls + "'>" + (regressed(d.id) ? "<b>" + label[d.change] + "</b>" : label[d.change]) + "</td><td><code>" + esc(d.id) + "</code></td><td>" + frac(d.before) + "</td><td class='" + cls + "'>" + frac(d.after) + "</td></tr>";
+        return "<tr><td class='" + cls + "'>" + (regressed(d.id) ? "<b>" + label[d.change] + "</b>" : label[d.change] + esc(what(d))) + "</td><td><code>" + esc(d.id) + "</code></td><td>" + frac(d.before) + "</td><td class='" + cls + "'>" + frac(d.after) + "</td></tr>";
       }).join("") + "</tbody></table></div>" : "") +
     "<p class='meta'>" + (moved.length ? same + " task" + (same === 1 ? "" : "s") + " unchanged." : "No task changed: all " + same + " have the same result as in the baseline.") + "</p>";
 }

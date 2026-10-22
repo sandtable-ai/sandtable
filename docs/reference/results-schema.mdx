@@ -54,6 +54,8 @@ The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`
 | `skipped` | number | trials that were skipped |
 | `verdict` | string | `passed` (every graded trial passed), `failed` (none did), `flaky` (some did) or `skipped` (no trial was graded) |
 | `interval` | object | `low` and `high`: the 95% Wilson score interval for `passes / graded`, from 0 to 1; absent when no trial was graded |
+| `inputs` | string | a short hash of what the agent and the caller are given for this task and the world they act in: the policy, every tool's definition, the caller's prompt, opening and turn limit, the script under `--user scripted`, and the seed rows with the task's `given.rows`. [`--baseline`](/reference/cli#compare-with-a-baseline) labels a task whose hash changed as `changed`. Absent in results from before it |
+| `grading` | string | a short hash of how this task's trials are graded: its `expect` and `critical`, and every invariant with its `soft` flag. A drafted item's `review` is left out, so accepting it keeps the hash. Absent in results from before it |
 
 ### FailureMode
 
@@ -101,7 +103,7 @@ What a run made with `--baseline` keeps of the earlier run, so the terminal summ
 | `k` | number | the baseline's trials per task |
 | `inputs` | string | the baseline's `inputs` hash; absent when its `results.json` had none |
 | `passHat` | object | the baseline's own pass^1 to pass^k, over all of its tasks |
-| `tasks` | object[] | `{ id, passes, trials }` for each of the baseline's tasks, in its order. `trials` counts graded trials: skipped ones are left out, as in pass^k |
+| `tasks` | object[] | `{ id, passes, trials, inputs, grading }` for each of the baseline's tasks, in its order. `trials` counts graded trials: skipped ones are left out, as in pass^k. `inputs` and `grading` are the task's hashes, absent when the baseline's `results.json` had none |
 
 ### PendingItem
 

@@ -209,7 +209,7 @@ export function renderTerminal(r: SuiteResult, opts: { baseline?: string } = {})
   return lines.join("\n");
 }
 
-const CHANGE_MARK: Partial<Record<TaskChange, string>> = { broken: red("✗"), worse: red("↓"), fixed: green("✓"), better: green("↑") };
+const CHANGE_MARK: Partial<Record<TaskChange, string>> = { broken: red("✗"), worse: red("↓"), fixed: green("✓"), better: green("↑"), changed: yellow("~") };
 
 /** "(−90.0 pts)", "(+2.5 pts)" or "(no change)" at the precision the percentages are shown. */
 function pointsDelta(before: number, after: number): string {
@@ -220,8 +220,9 @@ function pointsDelta(before: number, after: number): string {
 }
 
 /**
- * What changed since the baseline, regressions first: one line per task whose result moved, the added,
- * removed, ungraded and unchanged tasks counted on a line each, then pass^1 and pass^k before and after.
+ * What changed since the baseline, regressions first: one line per task whose result moved or whose test
+ * changed, the added, removed, ungraded and unchanged tasks counted on a line each, then pass^1 and pass^k
+ * before and after over the tasks both runs ran with the same test.
  */
 function renderComparison(c: Comparison, source: string | undefined): string[] {
   const b = c.baseline;
@@ -234,14 +235,19 @@ function renderComparison(c: Comparison, source: string | undefined): string[] {
   const frac = (x?: { passes: number; trials: number }) => (x ? `${x.passes}/${x.trials}` : "–");
   const fracs = moved.map((d) => `${frac(d.before)} → ${frac(d.after)}`);
   const fracWidth = Math.max(0, ...fracs.map((f) => f.length));
-  // "  ✗ broken  <id>  1/1 → 0/1": the id column takes what the label and the fractions leave of 80.
-  const idWidth = Math.min(Math.max(0, ...moved.map((d) => d.id.length)), WIDTH - 2 - 2 - 7 - 1 - 2 - fracWidth);
+  // A changed task says which of its hashes changed: "inputs", "grading" or both.
+  const reasons = moved.map((d) => (d.what ?? []).join(", "));
+  const reasonWidth = Math.max(0, ...reasons.map((r) => (r ? r.length + 2 : 0)));
+  // "  ✗ broken  <id>  1/1 → 0/1": the id column takes what the label, the fractions and a reason leave of 80.
+  const idWidth = Math.min(Math.max(0, ...moved.map((d) => d.id.length)), WIDTH - 2 - 2 - 7 - 1 - 2 - fracWidth - reasonWidth);
   if (moved.length) lines.push("");
   moved.forEach((d, i) => {
     const regressed = d.change === "broken" || d.change === "worse";
-    const after = regressed ? red(fracs[i]!) : green(fracs[i]!);
-    lines.push(`  ${CHANGE_MARK[d.change]} ${d.change.padEnd(7)} ${clip(d.id, idWidth).padEnd(idWidth)}  ${after}`);
+    const after = d.change === "changed" ? fracs[i]! : regressed ? red(fracs[i]!) : green(fracs[i]!);
+    const reason = reasons[i] ? `  ${dim(reasons[i]!)}` : "";
+    lines.push(`  ${CHANGE_MARK[d.change]} ${d.change.padEnd(7)} ${clip(d.id, idWidth).padEnd(idWidth)}  ${after.padEnd(after.length + fracWidth - fracs[i]!.length)}${reason}`.trimEnd());
   });
+  if (moved.some((d) => d.change === "changed")) lines.push(dim("  ~ changed: its prompts, tools, world or grading differ from the baseline's"));
   const ids = (change: TaskChange) => c.tasks.filter((d) => d.change === change).map((d) => d.id);
   // Added tasks that fail come first: they are new failures too, with nothing to compare them with.
   const failing = c.tasks.filter((d) => d.change === "added" && d.after!.passes < d.after!.trials).map((d) => d.id);
@@ -261,9 +267,13 @@ function renderComparison(c: Comparison, source: string | undefined): string[] {
   if (same) lines.push(dim(`  = ${same} unchanged`));
 
   lines.push("");
+  const left = c.shared - c.comparable;
   if (c.shared === 0) lines.push(dim("  no task ran in both runs, so there is no pass^k to compare"));
+  else if (c.comparable === 0) lines.push(dim("  every task both runs ran has a changed test, so there is no pass^k to compare"));
   else {
-    if (!c.sameTasks) lines.push(dim(`  over the ${c.shared} task${c.shared === 1 ? "" : "s"} both runs ran:`));
+    const tasks = `${c.comparable} task${c.comparable === 1 ? "" : "s"}`;
+    if (left) lines.push(dim(`  over the ${tasks} both runs ran with the same test (${left} changed left out):`));
+    else if (!c.sameTasks) lines.push(dim(`  over the ${tasks} both runs ran:`));
     const shown = c.passHat.filter((p) => p.j === 1 || p.j === c.passHat.length);
     for (const p of shown) {
       lines.push(`  ${bold(`pass^${p.j}`)} ${formatPercent(p.before)} → ${formatPercent(p.after)}  ${pointsDelta(p.before, p.after)}`);
