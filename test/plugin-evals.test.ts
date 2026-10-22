@@ -19,6 +19,11 @@ const stored = JSON.parse(readFileSync(path.join(fixtures, "wrenfield-run", "res
 const verdicts = (r: SuiteResult) => Object.fromEntries(r.tasks.map((t) => [t.id, t.trials.every((tr) => tr.passed)]));
 
 describe("the plugin eval suite's fixtures", () => {
+  it("start the eval without npm's global config path, which makes Claude Code's sandbox block Homebrew's OpenSSL config", () => {
+    const script = (JSON.parse(readFileSync("package.json", "utf8")) as { scripts: Record<string, string> }).scripts["evals:plugin"]!;
+    expect(script).toMatch(/env -u npm_config_globalconfig claude plugin eval /);
+  });
+
   it("rebuild the stored run exactly from the current code: run `node plugin-evals/fixtures/build-run.ts` when this fails", async () => {
     expect(JSON.parse(JSON.stringify(await buildRun()))).toEqual(stored);
   });

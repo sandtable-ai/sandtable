@@ -42,7 +42,7 @@
     "preversion": "node scripts/changelog.mjs check --release",
     "version": "node scripts/sync-version.mjs && node scripts/changelog.mjs release && git add python plugin .claude-plugin CHANGELOG.md",
     "evals:pack": "npm run build && node -e \"require('node:fs').mkdirSync('plugin-evals/.cache', { recursive: true })\" && npm pack --silent --pack-destination plugin-evals/.cache",
-    "evals:plugin": "npm run evals:pack && claude plugin eval . --eval-dir plugin-evals --scaffold --allow-tools Bash Edit Write"
+    "evals:plugin": "npm run evals:pack && env -u npm_config_globalconfig claude plugin eval . --eval-dir plugin-evals --scaffold --allow-tools Bash Edit Write"
   },
   "keywords": [
     "sandtable",
