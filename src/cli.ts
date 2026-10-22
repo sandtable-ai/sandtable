@@ -10,7 +10,7 @@ import { draftUsageLines, formatPercent, renderTerminal } from "./report/termina
 import { renderHtml } from "./report/html.ts";
 import { criticalFailures, everyTrialFailed, runSuite, skippedTrials, trialStatus, type SuiteResult } from "./run/suite.ts";
 import { changedVerdicts, RegradeError, regradeSuite } from "./run/regrade.ts";
-import { baselineSnapshot, checkBaseline } from "./run/compare.ts";
+import { baselineSnapshot, checkBaseline, compareRuns, regressions, type Comparison } from "./run/compare.ts";
 import { readResults, readUserFile, readUserText, userPathError } from "./run/read.ts";
 import { writeFileAtomic } from "./run/write.ts";
 import { providerOf, type ClaudeOptions, type Provider } from "./sim/claude.ts";
@@ -39,7 +39,8 @@ import YAML from "yaml";
 // stack trace. Node ignores SIGPIPE, so the CLI exits with that status itself. Any other write error still crashes.
 const SIGPIPE_STATUS = 141;
 // Exit statuses, as grep and diff use them. 1: a gate failed on a complete result, such as --fail-under, a
-// critical task, lint errors, an invalid domain under validate or lint, or pending items under validate --strict.
+// critical task, --fail-on-regression, lint errors, an invalid domain under validate or lint, or pending items
+// under validate --strict.
 // 2: the command couldn't do its job, such as a usage error, a missing file, an invalid domain for any other
 // command, an adapter that can't be built, or a run that graded nothing or skipped trials.
 const EXIT_GATE = 1;
@@ -145,6 +146,15 @@ function failIfIncomplete(result: SuiteResult): void {
   const trials = result.tasks.reduce((n, t) => n + t.trials.length, 0);
   console.error(`\n✗ ${skipped.length} of ${trials} trial(s) ended in an error before the agent broke any rule, so they were skipped and this run is incomplete: rerun it. The first error:\n  ${skipped[0]!.error ?? "unknown error"}`);
   exitWith(EXIT_ERROR);
+}
+
+/** The `--fail-on-regression` gate: exit 1, naming each task, when any broke since the baseline. */
+function failIfRegressed(comparison: Comparison): void {
+  const broken = regressions(comparison);
+  if (broken.length === 0) return;
+  const counts = (x?: { passes: number; trials: number }) => (x ? `${x.passes}/${x.trials}` : "-");
+  console.error(`\n✗ ${broken.length} task(s) broke since the baseline (--fail-on-regression): ${broken.map((d) => `${d.id} ${counts(d.before)} → ${counts(d.after)}`).join(", ")}`);
+  exitWith(EXIT_GATE);
 }
 
 /**
@@ -408,9 +418,11 @@ withProviderFlags(program
   .option("--no-html", "skip the HTML report")
   .option("--fail-under <pct>", "exit 1 if pass^k is below this percentage (CI gate)", percent)
   .option("--baseline <results>", "a previous run's results.json: also show which tasks broke or got fixed since, and how pass^k moved")
+  .option("--fail-on-regression", "with --baseline: exit 1 if a task that passed every trial in the baseline fails one now (CI gate)")
   .option("--open", "open the HTML report in the browser when the run finishes")
   .option("--prices <file>", PRICES_HELP)
-  .action(async (domainPath: string, o: { agent: string; user: string; openaiBaseUrl?: string; trials: number; tasks?: string; concurrency: number; out?: string; html: boolean; failUnder?: number; baseline?: string; open?: boolean; prices?: string } & ProviderFlags) => {
+  .action(async (domainPath: string, o: { agent: string; user: string; openaiBaseUrl?: string; trials: number; tasks?: string; concurrency: number; out?: string; html: boolean; failUnder?: number; baseline?: string; failOnRegression?: boolean; open?: boolean; prices?: string } & ProviderFlags, command: Command) => {
+    if (o.failOnRegression && o.baseline === undefined) command.error("error: --fail-on-regression needs --baseline <results>: the run it compares with");
     await loadPrices(o.prices);
     const domain = await loadDomain(await resolveDomain(domainPath));
     if (domain.tasks.length === 0) throw new Error(`${domain.name} has no tasks yet: add some to tasks.yaml`);
@@ -456,6 +468,7 @@ withProviderFlags(program
       console.error(`\n✗ pass^${o.trials} ${formatPercent(score)} is below --fail-under ${formatPercent(o.failUnder)}`);
       exitWith(EXIT_GATE);
     }
+    if (o.failOnRegression && result.baseline) failIfRegressed(compareRuns(result.baseline, result));
   });
 
 withProviderFlags(program
