@@ -24,8 +24,8 @@ On a fictional freight brokerage's carrier-sales desk, an agent that books whate
 ## Try it in 10 seconds
 
 ```bash
-npx sandtable-ai demo      # Node.js 20+
-uvx sandtable-ai demo      # or through Python's uv (still needs Node.js 20+)
+npx sandtable-ai demo      # Node.js 22+
+uvx sandtable-ai demo      # or through Python's uv (still needs Node.js 22+)
 ```
 
 No API key and no model calls: two rule-based agents take the same 50 scripted calls. Each run writes `results.json` and a self-contained `report.html` under `.sandtable/runs/`, and the naive agent's report opens in your browser.

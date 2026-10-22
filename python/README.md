@@ -10,6 +10,6 @@ uvx sandtable-ai demo
 pip install sandtable-ai && sandtable demo
 ```
 
-It needs Python 3.9 or later and Node.js 20 or later with npm. The first run downloads that CLI release from npm through `npx`; later runs use npm's cache, also offline.
+It needs Python 3.10 or later and Node.js 22 or later with npm. The first run downloads that CLI release from npm through `npx`; later runs use npm's cache, also offline.
 
 Docs: https://sandtable.dev · Source: https://github.com/sandtable-ai/sandtable

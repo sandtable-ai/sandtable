@@ -6,7 +6,7 @@ Thanks for helping. Issues, example domains and adapters are all welcome.
 
 - **Anyone** can open an issue (a bug, a feature or a new example domain, through the issue forms), start a [Discussion](https://github.com/sandtable-ai/sandtable/discussions), or send a pull request from a fork. For anything bigger than a small fix, open or comment on an issue first, so we agree on the approach before you write code.
 - **Maintainers** triage issues, review pull requests, merge them and cut releases. Each pull request automatically requests a review from the maintainers team (see [`.github/CODEOWNERS`](.github/CODEOWNERS)).
-- **A pull request is merged** by a maintainer, squashed, once CI is green and every review conversation is resolved. CI covers the tests on Node 20, 22 and 24, the Python launcher, and the title and changelog checks. On a first-time contributor's pull request, CI starts once a maintainer approves the run.
+- **A pull request is merged** by a maintainer, squashed, once CI is green and every review conversation is resolved. CI covers the tests on Node 22, 24 and 26, the Python launcher, and the title and changelog checks. On a first-time contributor's pull request, CI starts once a maintainer approves the run.
 - **Releases** are tagged by maintainers only (see [Releasing](#releasing)), and `v*` tags are protected.
 - **Security problems** go in a private report, never a public issue: see [SECURITY.md](SECURITY.md).
 - Everyone who takes part follows the [Code of Conduct](CODE_OF_CONDUCT.md).
@@ -20,7 +20,7 @@ npm run typecheck
 npm run demo        # offline demo from the TypeScript sources
 ```
 
-Development needs Node ≥ 22.18, which runs `src/*.ts` directly (type stripping), so there is no build step. The published CLI is compiled to `dist/` and runs on Node ≥ 20.
+Development needs Node ≥ 22.18, which runs `src/*.ts` directly (type stripping), so there is no build step. The published CLI is compiled to `dist/` and runs on Node ≥ 22.
 
 ## Ground rules
 

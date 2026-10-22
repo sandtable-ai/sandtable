@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
   - `userSystemPrompt`, `STOP_TOKEN`, `callerNotes`, `binom`, `DEFAULT_MODEL`, `DEFAULT_OPENAI_BASE_URL`: internals with no replacement; a run's `results.json` still carries each trial's `callerNotes`.
 
   Code that imports only the documented exports is unaffected ([#370](https://github.com/sandtable-ai/sandtable/issues/370)).
+- **Breaking:** **Node.js and Python**: sandtable-ai needs Node.js 22 or later (`engines.node` is `>=22`), and the PyPI launcher needs Python 3.10 or later. Node.js 20 reached end of life on 2026-04-30 and Python 3.9 in October 2025, and 1.0 shouldn't promise to keep supporting them. On Node 20, `npm install` and `npx sandtable-ai` warn about the engine, and an install with `engine-strict` fails; `pip install sandtable-ai` on Python 3.9 keeps installing 0.2.1, the last launcher that supports it, which runs `npx sandtable-ai@0.2.1`. Upgrade Node.js to 22 or later (a CI job's `node-version: 22`), and Python to 3.10 or later for the launcher. CI now tests Node 22, 24 and 26 ([#350](https://github.com/sandtable-ai/sandtable/issues/350)).
 
 ### Fixed
 
