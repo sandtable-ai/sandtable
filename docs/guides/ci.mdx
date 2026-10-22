@@ -24,7 +24,8 @@ Every command exits with a status a CI step can act on, as `grep` and `diff` do:
 | `1` | `validate --strict` | a drafted item is still `review: pending` |
 | `1` | `lint` | any task is not graded, not ready, vacuous or not solvable |
 | `2` | `run` | any trial was skipped: it ended in an error (throttling or a timeout that outlasted the retries, an agent endpoint that went down) before the agent broke a rule, so the run is incomplete. This holds without `--fail-under` too, and wins over a failed gate |
-| `2` | `run`, `demo --live` | every trial ended in an error, so nothing was graded: missing credentials or package, or an agent that isn't running |
+| `2` | `run`, `demo --live` | the agent or the simulated user can't start, checked before the first trial, so nothing runs or is written: missing credentials, a missing optional package, no AWS region for a `bedrock:` agent, or nothing listening at an HTTP agent's URL |
+| `2` | `run`, `demo --live` | every trial ended in an error, so nothing was graded: an agent that fails on every call, or credentials the provider rejects partway |
 | `2` | `leaderboard` | every model is an error row, so the board ranks none of them: its agent couldn't be built, or any of its trials crashed (missing credentials or package, the wrong provider or region, throttling, an agent that isn't running). The do-nothing baseline doesn't count |
 | `2` | any command | a usage error (an unknown command or option, a missing argument, an invalid value), a missing or unreadable file, no domain at the path, an invalid domain for any command but `validate` and `lint`, an adapter that can't be built, or another error that stops it |
 
