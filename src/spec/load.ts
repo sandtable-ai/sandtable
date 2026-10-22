@@ -71,9 +71,13 @@ function unknownKeysNote(count: number, target: string): string {
   return `\nsandtable-ai ${version} doesn't know ${these}: check ${their} spelling, or whether a later release added ${them} (CHANGELOG.md, or \`npx sandtable-ai@latest validate ${shellWord(target)}\`).`;
 }
 
-/** A path as one shell word, so the printed command runs as it is when the path has spaces or quotes. */
+/**
+ * A path as one shell word, so the printed command runs as it is when the path has spaces or quotes, or starts with
+ * `-`, which the CLI would read as an option.
+ */
 function shellWord(s: string): string {
-  return /^[\w./@:+=,-]+$/.test(s) ? s : `'${s.replaceAll("'", `'\\''`)}'`;
+  const p = s.startsWith("-") ? `./${s}` : s;
+  return /^[\w./@:+=,-]+$/.test(p) ? p : `'${p.replaceAll("'", `'\\''`)}'`;
 }
 
 /** Items grouped by key, keys in the order they first appear. */

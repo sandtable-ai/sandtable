@@ -101,6 +101,21 @@ describe("loadDomain schema and cross-reference errors", () => {
     expect(message).toContain(`\`npx sandtable-ai@latest validate '${spaced}'\``);
   });
 
+  it("print a relative path that starts with - as ./, so the CLI doesn't read it as an option", async () => {
+    const dir = copyOfClinic();
+    edit(path.join(dir, "sandtable.yaml"), /^name: /m, "nmae: x\nname: ");
+    const parent = mkdtempSync(path.join(tmpdir(), "sandtable-dash-"));
+    renameSync(dir, path.join(parent, "-weird"));
+    const cwd = process.cwd();
+    process.chdir(parent);
+    try {
+      const message = ((await loadDomain("-weird").catch((e: unknown) => e)) as Error).message;
+      expect(message).toContain("`npx sandtable-ai@latest validate ./-weird`");
+    } finally {
+      process.chdir(cwd);
+    }
+  });
+
   it("leave other schema errors without the version line", async () => {
     const dir = copyOfClinic();
     edit(path.join(dir, "sandtable.yaml"), /^name: .*$/m, "name: 42");
