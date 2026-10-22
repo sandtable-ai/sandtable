@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-22
+
+A patch release with no breaking changes: `validate` names the installed version and a command to check a newer one when a key is unknown, a model whose reply is only reasoning is asked again instead of leaving the caller in silence, a module agent's load error reads as two sentences, and the plugin checks a failed rule against its SOP quote before blaming the agent.
+
 ### Added
 
 - `sandtable validate`, and every command that loads a domain: an unrecognized key is followed by a line naming the installed version, such as `sandtable-ai 0.2.1 doesn't know this key: check its spelling, or whether a later release added it`, so a key from a newer release than the one installed is easy to tell from a typo ([#341](https://github.com/sandtable-ai/sandtable/issues/341)).
@@ -156,7 +160,8 @@ First public release. sandtable rehearses an AI agent on a simulated copy of one
 
 A rehearsal of the release pipeline (npm, PyPI and GitHub releases from one tag), published before the first public release. Everything in it is also in 0.1.0; use 0.1.0 instead.
 
-[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/sandtable-ai/sandtable/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/sandtable-ai/sandtable/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/sandtable-ai/sandtable/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/sandtable-ai/sandtable/compare/v0.1.0...v0.1.1
