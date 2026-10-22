@@ -8,7 +8,7 @@ import { freightScriptedAgent } from "./demo/freight-agents.ts";
 import { DEMO_USER_MODEL, demoLiveSides } from "./demo/live.ts";
 import { draftUsageLines, formatPercent, renderCompare, renderTerminal } from "./report/terminal.ts";
 import { renderHtml } from "./report/html.ts";
-import { criticalFailures, everyTrialFailed, runSuite, skippedTrials, trialStatus, type SuiteResult } from "./run/suite.ts";
+import { criticalFailures, everyTrialFailed, runSuite, skippedTrials, tagsBelowFloor, trialStatus, type SuiteResult } from "./run/suite.ts";
 import { changedVerdicts, RegradeError, regradeSuite } from "./run/regrade.ts";
 import { baselineSnapshot, checkBaseline, compareRuns, regressions, type Comparison } from "./run/compare.ts";
 import { readResults, readUserFile, readUserText, userPathError } from "./run/read.ts";
@@ -86,6 +86,17 @@ const percent = (v: string) => {
   if (!Number.isFinite(n) || n < 0 || n > 100) throw new InvalidArgumentError("must be 0-100");
   return n / 100;
 };
+/** `--floor <tag>=<pct>`, repeatable: each tag's floor as a fraction, in the order given. */
+const floor = (v: string, floors: Record<string, number> = {}) => {
+  const m = /^([^=]+)=(.*)$/.exec(v);
+  const tag = m?.[1]!.trim();
+  if (!m || !tag) throw new InvalidArgumentError("must be <tag>=<pct>, such as refusal=100");
+  const pct = m[2]!.trim();
+  const n = pct === "" ? Number.NaN : Number(pct.replace(/%$/, ""));
+  if (!Number.isFinite(n) || n < 0 || n > 100) throw new InvalidArgumentError("the percentage must be 0-100");
+  if (Object.hasOwn(floors, tag)) throw new InvalidArgumentError(`${tag} has a floor already`);
+  return { ...floors, [tag]: n / 100 };
+};
 
 const PRICES_HELP = "extra model prices, JSON in USD per million tokens: { \"<model-id>\": { input, output, cacheRead, cacheWrite } } (the sandtable repo's scripts/bedrock-prices.mjs writes one for Bedrock)";
 
@@ -123,6 +134,17 @@ function openInBrowser(file: string): void {
     spawn(cmd, args as string[], { detached: true, stdio: "ignore" }).on("error", () => {}).unref();
   } catch {
     // no browser available (CI, containers): the path is printed anyway
+  }
+}
+
+/**
+ * Every `--floor` tag must be on a task this run will run, checked before any trial, so a misspelled tag fails the
+ * command instead of becoming a gate that can never fail. Tasks without tags are scored as `untagged`.
+ */
+function checkFloors(floors: Record<string, number> | undefined, tasks: readonly { tags: string[] }[]): void {
+  const tags = new Set(tasks.flatMap((t) => (t.tags.length ? t.tags : ["untagged"])));
+  for (const tag of Object.keys(floors ?? {})) {
+    if (!tags.has(tag)) throw new Error(`--floor: no task in this run is tagged "${tag}" (its tags: ${[...tags].sort().join(", ")})`);
   }
 }
 
@@ -417,15 +439,18 @@ withProviderFlags(program
   .option("-o, --out <dir>", "output directory for results.json and report.html")
   .option("--no-html", "skip the HTML report")
   .option("--fail-under <pct>", "exit 1 if pass^k is below this percentage (CI gate)", percent)
+  .option("--floor <tag=pct>", "exit 1 if this tag's pass^k is below the percentage, e.g. refusal=100 (repeatable)", floor)
   .option("--baseline <results>", "a previous run's results.json: also show which tasks broke or got fixed since, and how pass^k moved")
   .option("--fail-on-regression", "with --baseline: exit 1 if a task that passed every trial in the baseline fails one now (CI gate)")
   .option("--open", "open the HTML report in the browser when the run finishes")
   .option("--prices <file>", PRICES_HELP)
-  .action(async (domainPath: string, o: { agent: string; user: string; openaiBaseUrl?: string; trials: number; tasks?: string; concurrency: number; out?: string; html: boolean; failUnder?: number; baseline?: string; failOnRegression?: boolean; open?: boolean; prices?: string } & ProviderFlags, command: Command) => {
+  .action(async (domainPath: string, o: { agent: string; user: string; openaiBaseUrl?: string; trials: number; tasks?: string; concurrency: number; out?: string; html: boolean; failUnder?: number; floor?: Record<string, number>; baseline?: string; failOnRegression?: boolean; open?: boolean; prices?: string } & ProviderFlags, command: Command) => {
     if (o.failOnRegression && o.baseline === undefined) command.error("error: --fail-on-regression needs --baseline <results>: the run it compares with");
     await loadPrices(o.prices);
     const domain = await loadDomain(await resolveDomain(domainPath));
     if (domain.tasks.length === 0) throw new Error(`${domain.name} has no tasks yet: add some to tasks.yaml`);
+    const taskIds = o.tasks?.split(",").map((s) => s.trim()).filter(Boolean);
+    checkFloors(o.floor, taskIds?.length ? domain.tasks.filter((t) => taskIds.includes(t.id)) : domain.tasks);
     // Read the baseline before any trial runs, so a wrong file costs no model calls.
     let baseline: SuiteResult | undefined;
     if (o.baseline !== undefined) {
@@ -443,7 +468,7 @@ withProviderFlags(program
       user,
       k: o.trials,
       concurrency: o.concurrency,
-      taskIds: o.tasks?.split(",").map((s) => s.trim()).filter(Boolean),
+      taskIds,
       onTrial: (r) => {
         done++;
         if (process.stderr.isTTY) process.stderr.write(`\r  ${done}/${total} trials  ${STATUS_MARK[trialStatus(r)]} ${r.taskId}`.padEnd(70));
@@ -451,6 +476,7 @@ withProviderFlags(program
     });
     if (process.stderr.isTTY) process.stderr.write("\r".padEnd(72) + "\r");
     if (baseline) result.baseline = baselineSnapshot(baseline);
+    if (o.floor) result.floors = o.floor;
     console.log(renderTerminal(result, o.baseline ? { baseline: o.baseline } : {}));
     const out = await save(result, o.out ?? defaultOut(domain.name), o.html);
     console.log(`\n  results: ${path.join(out, "results.json")}${o.html ? `\n  report:  ${path.join(out, "report.html")}` : ""}`);
@@ -466,6 +492,11 @@ withProviderFlags(program
     const score = result.passHat[String(o.trials)] ?? 0;
     if (o.failUnder !== undefined && !(score >= o.failUnder)) {
       console.error(`\n✗ pass^${o.trials} ${formatPercent(score)} is below --fail-under ${formatPercent(o.failUnder)}`);
+      exitWith(EXIT_GATE);
+    }
+    const below = tagsBelowFloor(result);
+    if (below.length) {
+      console.error(`\n✗ ${below.length} tag(s) below their --floor: ${below.map((t) => `${t.tag} pass^${o.trials} ${formatPercent(t.passHatK)} < ${formatPercent(t.floor)}`).join(", ")}`);
       exitWith(EXIT_GATE);
     }
     if (o.failOnRegression && result.baseline) failIfRegressed(compareRuns(result.baseline, result));

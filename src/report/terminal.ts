@@ -1,5 +1,5 @@
 import { comparisonOf, type Comparison, type TaskChange } from "../run/compare.ts";
-import { gradedOutcomes, skippedTrials, trialStatus, type SoftScore, type SuiteResult, type TaskSummary } from "../run/suite.ts";
+import { gradedOutcomes, skippedTrials, tagsBelowFloor, trialStatus, type SoftScore, type SuiteResult, type TaskSummary } from "../run/suite.ts";
 import { costOf, totalTokens, type UsageByModel } from "../run/usage.ts";
 
 const useColor = process.stdout.isTTY && !process.env.NO_COLOR;
@@ -149,13 +149,17 @@ export function renderTerminal(r: SuiteResult, opts: { baseline?: string } = {})
     for (const l of usageLines) lines.push(dim(`    ${l}`));
   }
 
-  if (r.byTag.length > 1) {
+  // With --floor, every tag's floor is shown next to it, and one below its floor is marked.
+  const floors = r.floors ?? {};
+  const below = new Set(tagsBelowFloor(r).map((t) => t.tag));
+  if (r.byTag.length > 1 || Object.keys(floors).length) {
     lines.push("");
     lines.push(bold("  By tag"));
     const tw = Math.max(...r.byTag.map((t) => t.tag.length));
     for (const t of r.byTag) {
       const kCol = r.k > 1 ? `   pass^${r.k} ${formatPercent(t.passHatK).padStart(6)}` : "";
-      lines.push(`  ${t.tag.padEnd(tw)}  ${dim(`${t.tasks} task${t.tasks === 1 ? "" : "s"}`.padEnd(8))}  pass^1 ${formatPercent(t.passHat1).padStart(6)}${kCol}`);
+      const floor = t.tag in floors ? (below.has(t.tag) ? red(`  ✗ below floor ${formatPercent(floors[t.tag]!)}`) : dim(`  floor ${formatPercent(floors[t.tag]!)}`)) : "";
+      lines.push(`  ${t.tag.padEnd(tw)}  ${dim(`${t.tasks} task${t.tasks === 1 ? "" : "s"}`.padEnd(8))}  pass^1 ${formatPercent(t.passHat1).padStart(6)}${kCol}${floor}`);
     }
   }
 

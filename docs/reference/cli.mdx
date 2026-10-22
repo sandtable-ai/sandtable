@@ -127,6 +127,7 @@ npx sandtable-ai run ./my-domain --agent http://localhost:8787/step -k 4 --fail-
 | `-o, --out <dir>` | output directory for `results.json` and `report.html`. Default: `.sandtable/runs/<timestamp>-<domain>` |
 | `--no-html` | skip the HTML report |
 | `--fail-under <pct>` | exit 1 if pass^k (k = `--trials`) is below this percentage, `0` to `100`. A trailing `%` is accepted |
+| `--floor <tag=pct>` | exit 1 if this tag's pass^k (k = `--trials`) is below the percentage, e.g. `--floor refusal=100`. Repeat it for more tags; see [per-tag floors](#per-tag-floors) |
 | `--baseline <results>` | a previous run's `results.json`: also show which tasks broke or got fixed since, and how pass^k moved. See [compare with a baseline](#compare-with-a-baseline) |
 | `--fail-on-regression` | with `--baseline`: exit 1 if a task that passed every trial in the baseline fails one now. Without `--baseline`, a usage error. See [compare with a baseline](#compare-with-a-baseline) |
 | `--open` | open the HTML report in the browser when the run finishes |
@@ -155,6 +156,16 @@ The run prints a summary (per-task results, pass^k, latency, cost, per-tag score
 [Critical tasks](/reference/spec#critical-tasks) are listed first and marked `critical`, with a line such as `critical 2 of 3 passed every trial` under pass^k. When any trial of a critical task fails, `run` names those tasks and exits 1, with or without `--fail-under`. When both fail, it prints both.
 
 Each task row shows one mark per trial, `✓` passed, `✗` failed or `○` skipped, then passes out of graded trials, and `flaky` when some graded trials passed and others failed. With k > 1, the headline adds pass@k and the flip rate (the share of tasks with two or more graded trials that are flaky), and **Flaky tasks** lists those tasks with a 95% interval for each one's pass rate. A trial that ended in an error before the agent broke a rule is skipped: left out of pass^k and pass@k, and listed under **Skipped trials** with its error. A run with any skipped trial exits 2, since it is incomplete; see [pass^k and reliability](/concepts/pass-k#skipped-trials).
+
+### Per-tag floors
+
+`--fail-under` gates pass^k over every task, so a strong happy path can carry weak refusals over it. `--floor <tag>=<pct>` gates one tag's pass^k, as the **By tag** table reports it, over the graded trials of the tasks with that tag:
+
+```bash
+npx sandtable-ai run ./my-domain --agent http://localhost:8787/step -k 4 --fail-under 85 --floor refusal=100 --floor negotiation=70
+```
+
+Repeat it for each tag, with or without `--fail-under`. When a tag is below its floor, `run` exits 1 and names it, as in `✗ 1 tag(s) below their --floor: refusal pass^4 87.5% < 100.0%`. Tasks with no tags count as `untagged`. A tag that no task in the run carries, after `--tasks`, stops the run before any trial with exit 2, so a misspelled tag can't make the gate pass. So does a value that isn't `<tag>=<pct>`, a percentage outside `0` to `100` (a decimal such as `refusal=97.5` is fine), or a tag given twice. The **By tag** table shows each floor next to its tag and marks a tag below it, in the terminal and in `report.html`, and `results.json` records the floors as `floors`. For one task that must pass every trial, mark it [`critical: true`](/reference/spec#critical-tasks) instead.
 
 ### Compare with a baseline
 
@@ -358,6 +369,6 @@ As `grep` and `diff` do, a failed gate exits 1 and an error exits 2. See [Use it
 | Code | When |
 |---|---|
 | `0` | the command did its job and every gate passed; also `--help` and `--version` |
-| `1` | a gate failed on a complete result: `run` below `--fail-under`, a `run` in which any trial of a critical task failed, a `run --fail-on-regression` or `compare --fail-on-regression` in which a task broke since the baseline, `validate` or `lint` on a domain that exists but is invalid, `validate --strict` with pending items, or `lint` errors |
+| `1` | a gate failed on a complete result: `run` below `--fail-under`, a `run` with a tag below its `--floor`, a `run` in which any trial of a critical task failed, a `run --fail-on-regression` or `compare --fail-on-regression` in which a task broke since the baseline, `validate` or `lint` on a domain that exists but is invalid, `validate --strict` with pending items, or `lint` errors |
 | `2` | the command couldn't do its job: a usage error (an unknown command or option, a missing argument, an invalid value, or no command at all), a missing or unreadable file, no domain at the path, an invalid domain for any command but `validate` and `lint`, an unknown agent or user spec, missing credentials or package, an agent or simulated user that can't start (checked before a `run` or `demo --live` runs any trial), a `run` with a skipped trial (it ended in an error before the agent broke a rule, so the run is incomplete, even when a gate failed too), a `run` or `demo --live` in which every trial ended in an error, or a `leaderboard` on which every model failed or crashed |
 | `141` | the output was piped into a reader that stopped early, such as `head` or a `less` quit before the end: the command stops there quietly, without finishing, with the status a shell reports for a Unix tool stopped by `SIGPIPE` (128 + 13) |

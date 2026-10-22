@@ -42,6 +42,7 @@ The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`
 | `pendingReview` | `PendingItem[]` | drafted items not yet accepted; while non-empty, the run is provisional |
 | `latency` | object | `agentTurnP50Ms` and `agentTurnP95Ms`: time the agent took per user turn, tool calls included (`null` with no turns) |
 | `baseline` | `BaselineSnapshot` | present only in a run made with [`--baseline`](/reference/cli#compare-with-a-baseline): what it keeps of the run it was compared with |
+| `floors` | object | present only in a run made with [`--floor`](/reference/cli#per-tag-floors): each tag's floor on pass^k, as a fraction like `passHat`, e.g. `{ "refusal": 1, "negotiation": 0.7 }`. `report` and `regrade` mark the tags below it again |
 
 ### TaskSummary
 

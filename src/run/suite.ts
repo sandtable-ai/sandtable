@@ -123,6 +123,11 @@ export interface SuiteResult {
   latency: { agentTurnP50Ms: number | null; agentTurnP95Ms: number | null };
   /** The earlier run this one was compared with (`run --baseline`); reports show what changed since. */
   baseline?: BaselineSnapshot;
+  /**
+   * `run --floor <tag>=<pct>`: the least pass^k each tag must reach, as a fraction like `passHat`, in the order given.
+   * Absent without `--floor`.
+   */
+  floors?: Record<string, number>;
 }
 
 export interface TagScore {
@@ -263,6 +268,18 @@ export function skippedTrials(result: Pick<SuiteResult, "tasks">): TrialResult[]
  */
 export function criticalFailures(result: Pick<SuiteResult, "tasks">): TaskSummary[] {
   return result.tasks.filter((t) => t.critical && t.passes < (t.graded ?? t.trials.length));
+}
+
+/**
+ * The tags whose pass^k is below their `--floor`, in the order the floors were given. Any one of them fails
+ * `sandtable run`, as `--fail-under` does for the suite. A tag with no task that has k graded trials has no pass^k
+ * and is below any floor; the run is then incomplete as well.
+ */
+export function tagsBelowFloor(result: Pick<SuiteResult, "byTag" | "floors">): Array<TagScore & { floor: number }> {
+  return Object.entries(result.floors ?? {}).flatMap(([tag, floor]) => {
+    const score = result.byTag.find((t) => t.tag === tag);
+    return score && !(score.passHatK >= floor) ? [{ ...score, floor }] : [];
+  });
 }
 
 /**

@@ -50,6 +50,8 @@ SuiteResult
   baseline?                    only with `run --baseline`: { runId, startedAt, agent, user, k, inputs?, passHat,
                                tasks[]: { id, passes, trials, inputs?, grading? } } of the run it was compared with
                                (trials counts graded trials); reports work out what changed from it
+  floors?                      only with `run --floor`: { "refusal": 1, "negotiation": 0.7 }, each tag's floor on
+                               byTag's passHatK, as a fraction; a tag below its floor failed the run (exit 1)
   tasks[]                      { id, description, tags[], critical?, passes, graded, skipped, verdict, interval?,
                                trials[] }: critical: true only on a critical task, which fails `run` when a graded
                                trial fails; verdict "passed" | "failed" | "flaky" | "skipped" over graded trials;
