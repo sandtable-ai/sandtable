@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **Docs**: [sandtable.dev/reference/library](https://sandtable.dev/reference/library) lists every type the package exports, such as `AttributionCounts`, `Owner`, `SuiteOptions` and `ToolSchema`, grouped by what it describes, and a test fails when an exported type is missing from it ([#353](https://github.com/sandtable-ai/sandtable/issues/353)).
+
 ## [0.3.0] - 2026-10-22
 
 The last release before 1.0 that changes contracts. It adds:

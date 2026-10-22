@@ -49,6 +49,20 @@ describe("the library API", () => {
     const page = readFileSync("docs/reference/library.mdx", "utf8");
     expect(EXPORTS.filter((name) => !page.includes(`\`${name}`))).toEqual([]);
   });
+
+  it("documents every exported type in docs/reference/library.mdx", () => {
+    // Types are erased at runtime, so read them from the export statements, and from sim/types.ts, which is re-exported whole.
+    const index = readFileSync("src/index.ts", "utf8");
+    const names = new Set<string>();
+    for (const [, list] of index.matchAll(/export type \{([^}]*)\}/g)) for (const n of list!.split(",")) names.add(n.trim());
+    for (const [, list] of index.matchAll(/export \{([^}]*)\}/g)) for (const n of list!.split(",")) if (n.trim().startsWith("type ")) names.add(n.trim().slice(5).trim());
+    expect(index).toContain('export type * from "./sim/types.ts";');
+    for (const [, n] of readFileSync("src/sim/types.ts", "utf8").matchAll(/^export (?:interface|type) (\w+)/gm)) names.add(n!);
+    names.delete("");
+    expect(names.size).toBeGreaterThan(50);
+    const page = readFileSync("docs/reference/library.mdx", "utf8");
+    expect([...names].filter((name) => !page.includes(`\`${name}\``)).sort()).toEqual([]);
+  });
 });
 
 describe("parseDomain", () => {

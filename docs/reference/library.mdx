@@ -67,7 +67,7 @@ An agent is an `AgentAdapter`: a `name`, and `createSession(ctx)` that returns a
 | `passHatK(trials, k)`, `passAtK(trials, k)` | pass^k and pass@k over each task's trial outcomes (`boolean[][]`). |
 | `wilsonInterval(passes, trials, z?)` | The 95% Wilson interval of a pass rate, `{ low, high }`. |
 
-The result types are exported too: `SuiteResult`, `TaskSummary`, `TrialResult`, `TrajectoryEvent`, `CheckResult`, `Violation`, `Verdict`, `Comparison`, `Attribution`, `TokenUsage` and the rest. [The results.json reference](/reference/results-schema) describes every field.
+The result types are exported too. [The results.json reference](/reference/results-schema) describes every field.
 
 ## Reports
 
@@ -75,6 +75,18 @@ The result types are exported too: `SuiteResult`, `TaskSummary`, `TrialResult`, 
 |---|---|
 | `renderTerminal(result, opts?)` | The summary `sandtable run` prints. |
 | `renderHtml(result)` | The self-contained `report.html`. |
+
+## Types
+
+Every type the package exports, by what it describes. Like the values above, they are part of the API.
+
+| Describes | Types |
+|---|---|
+| A domain | `Domain`, `Tool`, `Op`, `Invariant`, `Task`, `StateAssert`, `CallExpect`, `ReferenceCall`, `FieldRefSpec`, `Persona`, `Given`, `PendingItem` |
+| The world and its tools | `Change`, `Snapshot`, `ToolOutcome`, `ToolSchema` |
+| Agents and simulated users | `AgentAdapter`, `AgentContext`, `AgentSession`, `CallTool`, `UserSimulator`, `UserContext`, `UserSession`, `UserTurn`, `ClaudeOptions`, `ClaudeAgentOptions`, `OpenAICompatOptions`, `OpenAICompatAgentOptions`, `BedrockConverseOptions` |
+| A run and its results | `SuiteOptions`, `SuiteResult`, `TaskSummary`, `TrialResult`, `TrajectoryEvent`, `EndReason`, `CheckResult`, `CheckKind`, `CallRecord`, `Violation`, `SoftCheck`, `SoftScore`, `FailureMode`, `Verdict`, `CallerNote`, `Attribution`, `AttributionCounts`, `Owner`, `TokenUsage`, `UsageByModel`, `Usage`, `UsageRecorder` |
+| Comparing runs, and lint | `BaselineSnapshot`, `Comparison`, `TaskDelta`, `TaskChange`, `LintReport`, `TaskLint` |
 
 ## Example: a suite in your test runner
 
