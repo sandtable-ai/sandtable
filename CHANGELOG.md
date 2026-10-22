@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 ### Changed
 
 - **Docs**: the stability policy names the files the CLI reads as covered (the `leaderboard` models file and the `--prices` file), says the bundled examples' demo agents aren't, and says the rules behind `attribution`, `callerNotes` and `init`'s `copied from` notes can improve in a minor release while their fields stay. The library reference documents `World`'s `keyOf` and `hasTable`, and the CLI reference both shapes of a `--prices` file ([#394](https://github.com/sandtable-ai/sandtable/issues/394)).
+
 ### Fixed
 
 - **Claude Code plugin**: after an `init --dry-run`, `drafting-a-domain` writes the plan (calls, model, provider and dollar bound) to the engineer as a message of its own, then ends its turn and waits for a go-ahead, or, when model steps are already authorized, runs the model-backed `init` right after that message. Before, an agent could go from the plan line straight to the paid command ([#392](https://github.com/sandtable-ai/sandtable/issues/392)).

@@ -50,9 +50,9 @@ npx sandtable-ai init --sop ./discovery/sop.md --transcripts ./discovery/calls -
 
 After the dry run, write its plan to the engineer as a message of its own: the calls, the model, the provider and the dollar bound. Then:
 - if they haven't authorized model steps, end your turn there and wait for their go-ahead (installing a package it needs, such as `@anthropic-ai/bedrock-sdk`, isn't one);
-- if they have, run the model-backed `init` right after that message.
+- if they have, write the plan as one line, such as `Plan: 5 calls to claude-sonnet-5-5 on Bedrock, at most about $0.94. You authorized model steps, so I'm running it.`, and then run the model-backed `init`.
 
-Never run the paid `init` straight after the dry run's output without that message in between.
+The `Plan:` line in the command's output doesn't count: the engineer reads your reply, not the tool output. Never run the paid `init` straight after the dry run's output without your own plan message in between.
 
 The calls are 1 for the SOP and 1 per `.txt` or `.md` transcript. The model is `claude-opus-5-5` at effort `high` unless `-m` names another. The bound assumes every call writes its 16,000-token maximum, so a real draft usually costs a fraction of it, and `init` prints the actual tokens and cost after each step.
 
@@ -72,7 +72,7 @@ The `init` drafting steps use Claude: `ANTHROPIC_API_KEY`, or `--provider bedroc
 
 ### 1. Draft
 
-Run `--openapi` on its own first: it's free. Then run the `--sop` and `--transcripts` command with `--dry-run` added, and show the engineer its `Plan:` line. Write the plan to them as a message of its own. If they already authorized model steps, run the command without `--dry-run` right after that message; otherwise end your turn there and wait for their go-ahead. Never run a paid step without its dry run first.
+Run `--openapi` on its own first: it's free. Then run the `--sop` and `--transcripts` command with `--dry-run` added, and show the engineer its `Plan:` line. Write the plan to them as a message of your own, with the calls and the dollar bound. If they already authorized model steps, run the command without `--dry-run` after that message; otherwise end your turn there and wait for their go-ahead. Never run a paid step without its dry run first.
 
 ```bash
 npx sandtable-ai init --openapi ./discovery/openapi.yaml --sop ./discovery/sop.md --transcripts ./discovery/calls -o ./sandtable
