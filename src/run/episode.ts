@@ -5,6 +5,7 @@ import { agentSystemPrompt, taskContext } from "../sim/prompts.ts";
 import type { AgentAdapter, CallTool, UserSimulator } from "../sim/types.ts";
 import { diffSnapshots, worldFor, type Change, type Snapshot, type World } from "../world/store.ts";
 import { toolSchema } from "../world/tools.ts";
+import type { Attribution } from "./attribution.ts";
 import { callerNotes, type CallerNote } from "./caller-notes.ts";
 import { createToolRunner, type ToolEvent, type ToolRunner } from "./tool-runner.ts";
 import { costOf, recordInto, type Usage } from "./usage.ts";
@@ -57,6 +58,12 @@ export interface TrialResult {
    * Present only when there are some, and never a reason to fail: read the trial before trusting its verdict.
    */
   callerNotes?: CallerNote[];
+  /**
+   * On a trial that didn't pass: its most likely owner and the evidence, from deterministic rules (see
+   * attributeTrial). A first suspect to read the transcript with, never a reason to change the verdict.
+   * Absent in results from before attribution, until `sandtable regrade` re-scores them.
+   */
+  attribution?: Attribution;
   events: TrajectoryEvent[];
   changes: Change[];
   endReason: EndReason;

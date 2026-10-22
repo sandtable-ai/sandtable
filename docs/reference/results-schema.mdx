@@ -35,6 +35,7 @@ The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`
 | `flaky` | string[] | ids of the flaky tasks, in spec order |
 | `skipped` | number | trials skipped across the run; `run` exits 2 when it isn't 0 |
 | `callerNotes` | object | `{ turns, trials }`: how many caller turns stepped out of role (see each trial's [`callerNotes`](#callernote)), and in how many trials. Absent in results from before caller notes |
+| `attribution` | object | `{ agent, "simulated-user", "task-spec", harness }`: how many trials that didn't pass (failed or skipped) each trial's [`attribution`](#attribution) names, every owner listed. No score depends on it. Absent in results from before attribution, until [`regrade`](/reference/cli#regrade) re-scores them |
 | `failureModes` | `FailureMode[]` | failed checks clustered across graded trials, most frequent first; a skipped trial's error is not one |
 | `byTag` | `TagScore[]` | scores per task tag (`untagged` for tasks without tags), weakest first |
 | `soft` | `SoftScore[]` | one entry per soft invariant in the domain, in spec order; empty when there are none |
@@ -129,6 +130,7 @@ What a run made with `--baseline` keeps of the earlier run, so the terminal summ
 | `violations` | `Violation[]` | hard invariant violations; any one fails the trial |
 | `soft` | `SoftCheck[]` | each soft invariant that applied in this trial, and whether it was broken |
 | `callerNotes` | `CallerNote[]` | present when the simulated user stepped out of its role in some turn; never changes `passed` |
+| `attribution` | `Attribution` | present on a trial that didn't pass (failed or skipped): its most likely owner and the evidence; never changes `passed` |
 | `events` | `TrajectoryEvent[]` | the conversation and tool calls, in order |
 | `changes` | `Change[]` | the difference between the world's seed and its final state |
 | `endReason` | string | `user_stop`, `max_turns` or `error` |
@@ -176,6 +178,19 @@ A caller turn in which the simulated user stepped out of its role. The patterns 
 | `turn` | number | the caller's turn, counting from 1 |
 | `text` | string | the sentence that was flagged, such as `The agent asked for two things at once, and my instructions say to give one.` |
 | `why` | string | `talks about its instructions`, `says its goal is met` or `talks about the agent in the third person`; several are joined with `; ` |
+
+### Attribution
+
+A first suspect for a trial that didn't pass, from deterministic evidence only: no model is called, and no verdict or score changes. The first rule that applies decides the owner:
+
+| `owner` | When | `evidence` |
+|---|---|---|
+| `harness` | the trial was skipped: it ended in an error before the agent broke a rule | the trial's `error` |
+| `task-spec` | [`lint`](/reference/cli#lint) proves the task can't pass as written: a row it expects can't come to exist, or its `reference` fails its own expectations | `lint: ` and lint's finding |
+| `simulated-user` | a [caller note](#callernote) comes before the trial's first hard failure (a hard invariant violation, or a call of a `not_called` tool), or anywhere in a trial that failed only on how it ended (end state, `called`, `reply`) | `caller turn <n> (<why>): "<sentence>"` |
+| `agent` | anything else | `nothing points at the caller, the task or the harness; first failed check: <id>: <detail>` |
+
+`agent` is the default, not a finding. A caller that drifted without stepping out of its role, or a task that lint can't prove wrong, such as a rule stricter than the SOP or a seed row that contradicts the caller's instructions, stays with the agent until someone reads the transcript. Since attribution is decided from the stored trial and the domain, `regrade` decides it again under the domain as it is now.
 
 ### TrajectoryEvent
 
@@ -238,6 +253,10 @@ jq -r '.tasks[].trials[] | select(.skipped) | "\(.taskId)#\(.trial): \(.error)"'
 # every failed trial, with its failing checks
 jq -r '.tasks[] | .id as $t | .trials[] | select((.passed or .skipped) | not)
   | "\($t)#\(.trial): \([.checks[] | select(.passed | not) | .id] | join(", "))"' results.json
+
+# trials that didn't pass, per likely owner, then each one's owner and evidence
+jq '.attribution' results.json
+jq -r '.tasks[].trials[] | select(.attribution) | "\(.taskId)#\(.trial) \(.attribution.owner): \(.attribution.evidence)"' results.json
 
 # failure modes, most frequent first
 jq -r '.failureModes[] | "\(.count)x \(.kind) \(.id)"' results.json

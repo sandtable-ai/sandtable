@@ -228,7 +228,8 @@ function show(ti, i) {
   const changes = tr.changes.length ? tr.changes.map(change).join("") : "<div class='meta'>No writes.</div>";
   $("detail").innerHTML = '<div class="trial"><h2 style="margin-top:0">' + esc(t.id) + " · trial " + (i + 1) + " · " +
     ({ passed: '<span class="okt">passed</span>', failed: '<span class="badt">failed</span>', skipped: '<span class="meta">skipped: it ended in an error before the agent broke any rule, so it was not graded</span>' })[status(tr)] + '</h2><div class="meta">ended: ' + tr.endReason + " · " + tr.turns + " turns · " + tr.durationMs + "ms" + (calls(tr.usage) ? " · " + usd(tr.usage.costUsd) : "") + (stops(tr.usage) ? " · " + stops(tr.usage) + " stopped at max_tokens" : "") + (stripped(tr.usage) ? " · " + stripped(tr.usage) + " with reasoning removed" : "") + (silent(tr.usage) ? " · " + silent(tr.usage) + " silent once it was removed" : "") + (tr.error ? " · " + esc(tr.error) : "") +
-    "</div><h2>Checks</h2>" + checks + "<h2>World changes</h2>" + changes + "<h2>Transcript</h2>" + evs + "</div>";
+    "</div>" + (tr.attribution ? '<div class="meta">likely owner: <b>' + esc(tr.attribution.owner.replace("-", " ")) + "</b> · " + esc(tr.attribution.evidence) + "</div>" : "") +
+    "<h2>Checks</h2>" + checks + "<h2>World changes</h2>" + changes + "<h2>Transcript</h2>" + evs + "</div>";
   $("detail").scrollIntoView({ behavior: "smooth" });
 }
 // An update shows only the fields it changed, before → after, with the whole row behind a toggle; an insert or a

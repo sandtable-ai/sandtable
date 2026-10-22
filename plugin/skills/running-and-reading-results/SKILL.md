@@ -113,6 +113,8 @@ In the terminal summary and the report:
 
 Failure modes show what failed, not whose fault it was. Open the transcripts. In the first live freight run (on the example's first 10 tasks), most failures were the simulated caller's: it hung up right after accepting an offer, and it invented requests outside its goal. The score went from 70% to 95% by fixing the harness and one over-strict task, not the agent.
 
+Since 0.3.0, each trial that didn't pass carries `attribution`: a first suspect (`harness`, `task-spec`, `simulated-user` or `agent`) with its evidence, from deterministic rules, and `results.json` counts them per owner. Start from it, then confirm it in the transcript. `agent` is the default when nothing proves another owner, so it is the suspect most often wrong: a rule stricter than the SOP or a caller that invents a fact without stepping out of role still reads `agent`. When your reading names another owner, say so next to the field's.
+
 For each failing trial, find the **first** point where the trajectory leaves what the SOP and the task's `reference` describe, then attribute it:
 
 | Owner | Typical evidence | Fix |

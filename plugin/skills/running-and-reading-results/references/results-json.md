@@ -27,6 +27,8 @@ SuiteResult
   flaky[]                      ids of flaky tasks (some graded trials passed, some failed)
   skipped                      trials skipped across the run; run exits 2 when it isn't 0
   callerNotes                  { turns, trials }: caller turns that stepped out of role, and the trials they are in
+  attribution                  { agent, "simulated-user", "task-spec", harness }: trials that didn't pass, by the
+                               owner each trial's attribution names (absent before 0.3.0 until regraded)
   byTag[]                      { tag, tasks, passHat1, passHatK }; "untagged" for tasks without tags
   failureModes[]               { id, kind, count, tasks[], example }: failed checks of graded trials clustered, most
                                frequent first; skipped trials' errors are not in it
@@ -74,6 +76,11 @@ SuiteResult
       callerNotes?             { turn, text, why }[]: caller turns that stepped out of role (talked about its
                                instructions, said its goal was met, or talked about the agent instead of to it).
                                turn counts the caller's turns from 1. Never changes passed
+      attribution?             { owner, evidence } on a trial that didn't pass: a first suspect from deterministic
+                               rules, first match wins. harness: skipped. task-spec: lint proves the task can't pass.
+                               simulated-user: a caller note before the first hard failure (or anywhere, when only
+                               the end state, called or reply failed). agent: everything else, the default, not a
+                               finding. Never changes passed
       events[]                 the transcript, in order:
                                  { type: "user", text }
                                  { type: "agent", text, latencyMs }
@@ -123,6 +130,12 @@ Every failing trial with its failed checks (skipped trials are listed below):
 
 ```bash
 jq -r '.tasks[].trials[] | select((.passed or .skipped) | not) | "\(.taskId)#\(.trial) \(.endReason): " + ([.checks[] | select(.passed | not) | .id] | join(", "))' "$R"
+```
+
+Each trial that didn't pass with its first suspect, the starting point for attribution (absent in results from before 0.3.0 until regraded):
+
+```bash
+jq -r '.tasks[].trials[] | select(.attribution) | "\(.taskId)#\(.trial) \(.attribution.owner): \(.attribution.evidence)"' "$R"
 ```
 
 Every invariant violation, with the call or message that broke it:

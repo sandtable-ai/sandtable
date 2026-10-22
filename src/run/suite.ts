@@ -1,9 +1,11 @@
 import type { CheckKind } from "../grade/expectations.ts";
 import { invariantTool } from "../grade/invariants.ts";
+import { lintDomain } from "../grade/lint.ts";
 import { passAtK, passHatK, wilsonInterval } from "../grade/passk.ts";
 import { pendingReview, type PendingItem } from "../spec/load.ts";
 import type { Domain, Task } from "../spec/schema.ts";
 import type { AgentAdapter, UserSimulator } from "../sim/types.ts";
+import { attributeTrial, attributionCounts, type AttributionCounts } from "./attribution.ts";
 import type { BaselineSnapshot } from "./compare.ts";
 import { runEpisode, type TrialResult } from "./episode.ts";
 import { inputsFingerprint, taskFingerprints } from "./inputs.ts";
@@ -111,6 +113,11 @@ export interface SuiteResult {
    * trials they are in. Absent in results from before caller notes.
    */
   callerNotes?: { turns: number; trials: number };
+  /**
+   * Trials that didn't pass (failed or skipped), by the owner each trial's `attribution` names. Scores don't
+   * depend on it. Absent in results from before attribution, until `sandtable regrade` re-scores them.
+   */
+  attribution?: AttributionCounts;
   failureModes: FailureMode[];
   /** pass^1 and pass^k per task tag ("untagged" for tasks without tags). */
   byTag: TagScore[];
@@ -195,7 +202,8 @@ export function summarize(
   k: number,
   /** The simulated user's name, which decides whether the task's script is part of its `inputs` hash. */
   user: string,
-): Pick<SuiteResult, "tasks" | "passHat" | "passAt" | "flipRate" | "flaky" | "skipped" | "callerNotes" | "failureModes" | "byTag" | "soft"> {
+): Pick<SuiteResult, "tasks" | "passHat" | "passAt" | "flipRate" | "flaky" | "skipped" | "callerNotes" | "attribution" | "failureModes" | "byTag" | "soft"> {
+  results = attributed(domain, tasks, results);
   const summaries: TaskSummary[] = tasks.map((task) => {
     const trials = results.filter((r) => r.taskId === task.id).sort((a, b) => a.trial - b.trial);
     const passes = trials.filter((t) => t.passed).length;
@@ -235,10 +243,25 @@ export function summarize(
       turns: results.reduce((n, r) => n + (r.callerNotes?.length ?? 0), 0),
       trials: results.filter((r) => r.callerNotes?.length).length,
     },
+    attribution: attributionCounts(results),
     failureModes: failureModes(results),
     byTag: tagScores(summaries, k),
     soft: softScores(domain, results),
   };
+}
+
+/**
+ * Each trial with its attribution decided under the domain as it is now: a trial that didn't pass gets one, and a
+ * trial that passed has none. Lint runs once for the domain, not per trial.
+ */
+function attributed(domain: Domain, tasks: readonly Task[], results: readonly TrialResult[]): TrialResult[] {
+  const lints = new Map(lintDomain(domain).tasks.map((l) => [l.id, l]));
+  const byId = new Map(tasks.map((t) => [t.id, t]));
+  return results.map(({ attribution: _, ...trial }) => {
+    const task = byId.get(trial.taskId);
+    const attribution = task && attributeTrial(trial, task, lints.get(trial.taskId));
+    return attribution ? { ...trial, attribution } : trial;
+  });
 }
 
 function verdictOf(passes: number, graded: number): Verdict {
