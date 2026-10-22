@@ -84,6 +84,22 @@ describe("the plugin eval suite's cases", () => {
     }
   });
 
+  it("fail a case that reads sandtable's own code to learn what the CLI supports, and not one that runs or asks the CLI", () => {
+    for (const c of ["check-cli-features", "draft-from-sources"]) {
+      const reads = new RegExp(front(path.join(evals, c, "graders", "no-reading-sandtable-code.md")).pattern as string);
+      const bash = (command: string) => JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", name: "Bash", input: { command } }] } });
+      const grep = (p: string) => JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", name: "Grep", input: { pattern: "bedrock", path: p } }] } });
+      // The replay at b0143b8: cd into the package, then grep its dist.
+      expect(reads.test(bash("cd /work/node_modules/sandtable-ai && ls dist | head -50")), c).toBe(true);
+      expect(reads.test(bash('grep -rn -i "bedrock" node_modules/sandtable-ai/dist')), c).toBe(true);
+      expect(reads.test(grep("node_modules/sandtable-ai/src")), c).toBe(true);
+      expect(reads.test(bash("ls ~/.npm/_npx/1a2b/node_modules/sandtable-ai")), c).toBe(true);
+      expect(reads.test(bash("npx sandtable-ai init --help")), c).toBe(false);
+      expect(reads.test(bash("cat node_modules/sandtable-ai/package.json")), c).toBe(false);
+      expect(reads.test(bash("npm install --save-dev sandtable-ai @anthropic-ai/bedrock-sdk")), c).toBe(false);
+    }
+  });
+
   it("set up their workspace with a scaffold script that bash can parse", () => {
     for (const c of cases.filter((c) => existsSync(path.join(evals, c, "case.yaml")))) {
       const meta = YAML.parse(readFileSync(path.join(evals, c, "case.yaml"), "utf8")) as { name: string; context: { scaffold_script: string } };
