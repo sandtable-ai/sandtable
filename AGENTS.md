@@ -56,7 +56,7 @@ Ask before running anything that calls a model, because it needs keys and costs 
 - File each entry under `### Added`, `### Changed`, `### Deprecated`, `### Removed`, `### Fixed` or `### Security`. Create the heading if it is missing, in that order.
 - Each entry names the area in backticks or bold, then says in one or two sentences what users can do now or what changed for them, ending with the issue link:
   `` - `examples/clinic`: a fictional clinic front desk with 25 tasks and 12 invariants, runnable offline with `--agent scripted:clinic-careful` ([#22](https://github.com/sandtable-ai/sandtable/issues/22)). ``
-- Mark a break **Breaking:** and say what to change (a renamed flag, spec key or export). Before 1.0, breaks ship in a minor release.
+- Mark a break **Breaking:** and say what to change (a renamed flag, spec key or export). Since 1.0, a break ships only in a major release, after a minor release that deprecates the item and warns ([stability policy](docs/reference/stability.mdx)); propose it in an issue first.
 - Never edit a released `## [x.y.z]` section, never add a version heading or date (`npm version` does that), and never paste commit lists or PR titles.
 - If `CHANGELOG.md` conflicts after main moves, rebase, keep every entry, and keep yours under `[Unreleased]`.
 
@@ -92,7 +92,7 @@ Update these in the same PR as the code change:
 | `results.json` | `docs/reference/results-schema.mdx`, `plugin/skills/running-and-reading-results/references/results-json.md` |
 | the HTTP step protocol (`src/sim/http.ts`) | `docs/reference/http-protocol.mdx` |
 | the set of skills | `test/plugin.test.ts` (its skill list), the README skill table, `docs/guides/claude-code-plugin.mdx` |
-| the project's status (beta until 1.0) | the README's Status section, the banner and assistant prompt in `docs/docs.json`, `docs/index.mdx`, `docs/roadmap.mdx`, `docs/compare/overview.mdx`, `docs/compare/hosted-platforms.mdx`, `docs/guides/ci.mdx`, `docs/reference/results-schema.mdx`, and the `Development Status` classifier in `python/pyproject.toml` |
+| the project's status (stable since 1.0) | the README's Status section, the banner and assistant prompt in `docs/docs.json`, `docs/index.mdx`, `docs/roadmap.mdx`, `docs/compare/overview.mdx`, `docs/compare/hosted-platforms.mdx`, `docs/guides/ci.mdx`, `docs/reference/results-schema.mdx`, and the `Development Status` classifier in `python/pyproject.toml` |
 
 `test/plugin.test.ts` fails when a skill uses a command or flag that `--help` doesn't list, or a YAML snippet that the schema rejects. Take flags from `npm run sandtable -- <command> --help`, never from memory.
 

@@ -1,13 +1,13 @@
 [project]
 name = "sandtable-ai"
-version = "1.0.0rc1"
+version = "1.0.0"
 description = "Rehearse AI agents on a sand table of your customer's world before they go live. Python launcher for the sandtable CLI."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 keywords = ["ai-agents", "evals", "agent-testing", "simulation", "tau-bench", "pass^k"]
 classifiers = [
-  "Development Status :: 4 - Beta",
+  "Development Status :: 5 - Production/Stable",
   "Environment :: Console",
   "Intended Audience :: Developers",
   "Operating System :: OS Independent",

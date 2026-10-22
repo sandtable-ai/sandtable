@@ -100,7 +100,7 @@ jobs:
 The uploaded artifact holds `report.html` and `results.json`, so a reviewer can open the failing transcripts from the pull request.
 
 <Note>
-Until sandtable reaches 1.0, pin an exact version of `sandtable-ai` in `package.json` (for example `npm install --save-dev --save-exact sandtable-ai`): the spec and outputs may change between releases.
+Pin the major version of `sandtable-ai` in `package.json`, such as `"sandtable-ai": "^1.0.0"`: minor releases add, and only a major release breaks the spec, the outputs or the CLI, as the [stability policy](/reference/stability) says. A minor release can still change a score, for example when a grading bug is fixed, and the changelog says so; pin an exact version when a gate must not move without a pull request.
 </Note>
 
 ### Other agent setups
