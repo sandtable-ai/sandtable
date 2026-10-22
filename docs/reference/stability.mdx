@@ -1,0 +1,55 @@
+---
+title: "Stability policy: what sandtable keeps stable, and how it changes"
+sidebarTitle: "Stability policy"
+description: "Which parts of sandtable are contracts you can build on, how versions signal a breaking change, how long a deprecated flag, key or export keeps working, and what counts as a change to a score."
+keywords: ["stability", "semver", "versioning", "deprecation", "breaking changes", "compatibility"]
+---
+
+sandtable is a CI gate, so a release must not change what your pipeline relies on without saying so. This page says what is covered, how a version number tells you what changed, and how a change reaches you. It applies from 1.0. Until then, a minor release may still break a contract, and every such change is marked **Breaking:** in the [changelog](https://github.com/sandtable-ai/sandtable/blob/main/CHANGELOG.md).
+
+## What is covered
+
+These are contracts. A change that can make something built on them stop working comes only in a major release:
+
+| Contract | Reference |
+|---|---|
+| The domain spec: every key of `sandtable.yaml` and the files it includes | [Domain spec](/reference/spec) |
+| `results.json` and `leaderboard.json` | [results.json](/reference/results-schema) |
+| CLI commands, their arguments and flags, environment variables and exit codes | [CLI](/reference/cli) |
+| The HTTP step protocol | [HTTP step protocol](/reference/http-protocol) |
+| The exports of the `sandtable-ai` package | [Library API](/reference/library) |
+
+What is not covered, and may change in any release:
+- the layout and wording of the terminal summary, `report.html`, `LEADERBOARD.md` and `leaderboard.html`, and of error messages (the exit codes are covered);
+- the prompts given to the reference Claude agent and to the simulated caller, and the default models;
+- `init`'s drafts: the model-backed steps' prompts and what they produce;
+- the Claude Code plugin's skill and agent wording;
+- anything not exported from the package, including `dist/` paths.
+
+## Version numbers
+
+sandtable follows [Semantic Versioning](https://semver.org). The npm package, the PyPI launcher and the Claude Code plugin share one version.
+
+- **Patch** (1.2.3 → 1.2.4): fixes, and doc or skill changes. Nothing you rely on changes, except a bug.
+- **Minor** (1.2 → 1.3): additions. A new spec key, flag, command, `results.json` field or export. Existing domains, scripts and code keep working. A reader of `results.json` should ignore fields it doesn't know.
+- **Major** (1.x → 2.0): a removal, a rename, or a change of meaning in a contract. Each one is marked **Breaking:** in the changelog, with what to change.
+
+## Deprecation
+
+Before a major release removes a flag, a spec key or an export, a minor release deprecates it. A deprecated item keeps working for at least one minor release, warns when it is used, and the changelog names what to use instead. Then a major release may remove it.
+
+## Scores
+
+A change can make a run that passed fail without changing any contract: a new caller prompt, a fixed grader or a corrected example task. sandtable treats such a change as follows:
+
+- **Grading** (how a trial is checked against its expectations and invariants) changes only to fix a bug, and the changelog says which verdicts can flip. `sandtable regrade` re-scores stored trials under the new rules without a model call.
+- **What the agent and the caller are given** can change in a minor release, and the changelog says so. A changed default prompt moves the run's `inputs` hash: `regrade` refuses the stored run, `leaderboard` stops before running anything and says which stored results no longer match, and `run --baseline` lists its tasks as `changed`. A changed default caller model shows in `results.json`'s `user`: `run --baseline` reports that the caller changed, and `leaderboard` won't mix the two. `regrade` still works, since it replays the stored turns.
+- **The bundled examples** are examples, not a contract. They can gain or fix tasks in a minor release, and a change that makes stored runs of them unusable (`regrade` refusing them, a `leaderboard` stopping) names the tasks it affects in the changelog.
+
+## results.json versions
+
+`results.json` and `leaderboard.json` carry a format `version`. It moves only when a field is removed or changes meaning, which only a major release does. Readers read every version up to their own, and refuse a newer one with a message saying to use a newer sandtable-ai. An added field never moves the version.
+
+## Node.js and Python
+
+sandtable supports the Node.js release lines that are maintained, as of each release, and the Python versions that are maintained for the PyPI launcher. Dropping one that has reached its end of life is a minor-release change, announced at the top of that release's changelog section. Today that means Node.js 22 or later, and Python 3.10 or later for the launcher.
