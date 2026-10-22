@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **Docs**: the CLI reference lists `NO_COLOR`, and the spec reference describes `source: { file, quote }` on invariants and tasks. Tests now fail when a reference page misses a command's option, an environment variable, a spec key or a `results.json` field, so the pages stay complete ([#371](https://github.com/sandtable-ai/sandtable/issues/371)).
+
 ## [0.2.1] - 2026-10-22
 
 A patch release with no breaking changes: `validate` names the installed version and a command to check a newer one when a key is unknown, a model whose reply is only reasoning is asked again instead of leaving the caller in silence, a module agent's load error reads as two sentences, and the plugin checks a failed rule against its SOP quote before blaming the agent.
