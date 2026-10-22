@@ -38,6 +38,19 @@ jobs:
       - working-directory: docs
         run: npx --yes mint@4.2.981 broken-links
 
+  # The checks AGENTS.md asks for after a change to plugin/ or .claude-plugin/: the first validates the
+  # marketplace file, the second the plugin's manifest, skills and agent. Neither needs a login or an API key.
+  # test/plugin.test.ts checks the skills' commands and YAML against the CLI; this checks what Claude Code reads.
+  plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npx --yes @anthropic-ai/claude-code@2.1.301 plugin validate . --strict
+      - run: npx --yes @anthropic-ai/claude-code@2.1.301 plugin validate ./plugin --strict
+
   python-launcher:
     runs-on: ubuntu-latest
     steps:
