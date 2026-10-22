@@ -43,17 +43,23 @@ export interface SopDraft {
 
 const Scalar = z.union([z.string(), z.number(), z.boolean()]);
 
+/**
+ * One condition of a drafted where clause, as both drafting steps ask the model for it (`init --sop` for an
+ * invariant's conditions, `init --transcripts` for an expected end state). whereOf turns a list of them into a
+ * where clause.
+ */
+export const ConditionSpec = z.object({
+  field: z.string(),
+  op: z.enum(["eq", "ne", "gt", "gte", "lt", "lte", "in", "nin", "exists"]),
+  value: z
+    .union([Scalar, z.array(Scalar)])
+    .describe("one value; for in and nin, the list of allowed or excluded values; for exists, true (present) or false (absent, e.g. an argument the agent left out)"),
+});
+
 function outputSchema(tools: string[], tables: string[]) {
   const Tool = z.enum(tools as [string, ...string[]]);
   const Table = z.enum(tables as [string, ...string[]]);
   const FieldRef = z.object({ table: Table, key_arg: z.string(), field: z.string() });
-  const Condition = z.object({
-    field: z.string(),
-    op: z.enum(["eq", "ne", "gt", "gte", "lt", "lte", "in", "nin", "exists"]),
-    value: z
-      .union([Scalar, z.array(Scalar)])
-      .describe("one value; for in and nin, the list of allowed or excluded values; for exists, true (present) or false (absent, e.g. an argument the agent left out)"),
-  });
   const Proposal = z.object({
     rule_id: z.string().describe("id of the rule in `rules` this invariant checks"),
     id: z.string().describe("kebab-case identifier, e.g. verify-before-book"),
@@ -66,7 +72,7 @@ function outputSchema(tools: string[], tables: string[]) {
     table: Table.nullable().describe("require: table of the record the call refers to; otherwise null"),
     key_arg: z.string().nullable().describe("require: the call argument holding that record's key; otherwise null"),
     conditions: z
-      .array(Condition)
+      .array(ConditionSpec)
       .describe("require: conditions on the record's fields; never: conditions on the call's arguments (empty = never call it at all)"),
     arg: z.string().nullable().describe("limit: the numeric argument being bounded; otherwise null"),
     bound: z.enum(["lte", "gte"]).nullable().describe("limit: lte = at most, gte = at least; otherwise null"),
@@ -138,15 +144,29 @@ Rules for invariants:
 - A rule that a call must include an argument in some cases ("for a check, enter the mailing address") is a never invariant with exists: false on that argument, not a soft rule.
 - Rules about not revealing a specific internal field are never_disclose invariants. Other rules about what the agent says go into soft_rules as agent_says.`;
 
-function describeDomain(domain: Domain, fields: Record<string, string[]>): string {
+/**
+ * The agent's tools as both drafting steps show them to the model: each param with its type, `?` when it is
+ * optional, and its allowed values when it has an enum, then the params' descriptions. Without the allowed values,
+ * the model takes a value from the document's wording ("By Mail" for by_mail).
+ */
+export function describeTools(domain: Domain): string {
   const tools = domain.tools
     .map((t) => {
       const params = Object.entries(t.params)
-        .map(([n, p]) => `${n}: ${p.type}${p.required ? "" : "?"}${p.enum ? ` (${p.enum.join("|")})` : ""}`)
+        .map(([n, p]) => `${n}${p.required ? "" : "?"}: ${p.type}${p.enum ? ` (${p.enum.join("|")})` : ""}`)
         .join(", ");
-      return `- ${t.name}(${params}): ${t.description}`;
+      const notes = Object.entries(t.params)
+        .filter(([, p]) => p.description)
+        .map(([n, p]) => `\n    ${n}: ${p.description}`)
+        .join("");
+      return `- ${t.name}(${params}): ${t.description}${notes}`;
     })
     .join("\n");
+  return `${tools}\n(A param marked ? is optional. One with values in parentheses takes exactly one of them, as written.)`;
+}
+
+function describeDomain(domain: Domain, fields: Record<string, string[]>): string {
+  const tools = describeTools(domain);
   const tables = Object.entries(domain.world.tables)
     .map(([name, t]) => `- ${name} (key ${t.key}): ${(fields[name] ?? []).join(", ") || "fields unknown"}`)
     .join("\n");
@@ -195,7 +215,7 @@ export function whereOf(conds: readonly Condition[]): Record<string, unknown> | 
   return out;
 }
 
-type Condition = Proposal["conditions"][number];
+type Condition = z.infer<typeof ConditionSpec>;
 
 export function proposalToInvariant(p: Proposal, sopFile: string): Invariant | string {
   const base = { id: p.id, description: p.description, review: "pending" as const, source: { file: sopFile, quote: p.quote } };
