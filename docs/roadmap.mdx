@@ -26,29 +26,40 @@ sandtable is in **beta**: the spec may still change before 1.0. [Issues](https:/
 - This docs site, with `llms.txt` ([#50](https://github.com/sandtable-ai/sandtable/issues/50))
 - Packages on npm and PyPI, published from one tag ([#23](https://github.com/sandtable-ai/sandtable/issues/23))
 
-## Next: closing the loop in CI (milestone v0.3)
+## In 0.2.0
 
-Done on `main`, not yet released:
-
-- Baseline comparison: `run --baseline` lists the tasks that broke or got fixed since an earlier run ([#12](https://github.com/sandtable-ai/sandtable/issues/12))
-- Reliability verdicts: pass@k, flaky tasks, flip rate, intervals, infra errors as SKIPPED ([#27](https://github.com/sandtable-ai/sandtable/issues/27))
+- Baseline comparison: `run --baseline` lists the tasks that broke, got worse, got fixed or changed since an earlier run ([#12](https://github.com/sandtable-ai/sandtable/issues/12), [#309](https://github.com/sandtable-ai/sandtable/issues/309))
+- Reliability verdicts: pass@k, flaky tasks, flip rate and intervals; trials that end in an error are skipped, not failed ([#27](https://github.com/sandtable-ai/sandtable/issues/27))
 - Critical tasks that fail the run whatever the score ([#28](https://github.com/sandtable-ai/sandtable/issues/28))
-- Argument matchers in `called` and `not_called` ([#25](https://github.com/sandtable-ai/sandtable/issues/25)), per-task `given` rows and context ([#37](https://github.com/sandtable-ai/sandtable/issues/37))
+- Argument matchers in `called` and `not_called` ([#25](https://github.com/sandtable-ai/sandtable/issues/25)), per-task `given` rows and context ([#37](https://github.com/sandtable-ai/sandtable/issues/37)), `reference` calls the API rejects ([#274](https://github.com/sandtable-ai/sandtable/issues/274))
+- Exit 1 for a failed gate and 2 for an error ([#282](https://github.com/sandtable-ai/sandtable/issues/282))
+- `init`: drafts keep their sources' facts and quote every rule, drafted tasks carry reference calls, and each step prints its plan with `--dry-run` and what it cost ([#276](https://github.com/sandtable-ai/sandtable/issues/276), [#277](https://github.com/sandtable-ai/sandtable/issues/277), [#278](https://github.com/sandtable-ai/sandtable/issues/278), [#296](https://github.com/sandtable-ai/sandtable/issues/296), [#297](https://github.com/sandtable-ai/sandtable/issues/297))
+- A simulated caller that says it doesn't know a fact its instructions leave out, instead of inventing one ([#287](https://github.com/sandtable-ai/sandtable/issues/287))
+- The Claude Code plugin installs from the release tag ([#301](https://github.com/sandtable-ai/sandtable/issues/301)), and sandtable.dev documents the latest release ([#313](https://github.com/sandtable-ai/sandtable/issues/313))
 
-Still to do:
+## Next: 0.3.0, the last release before 1.0 (milestone v0.3)
 
-- PR comments with pass^k deltas ([#13](https://github.com/sandtable-ai/sandtable/issues/13)), a regression gate ([#281](https://github.com/sandtable-ai/sandtable/issues/281)), comparing two stored runs ([#285](https://github.com/sandtable-ai/sandtable/issues/285))
-- Exit 1 for a failed gate and 2 for an error ([#282](https://github.com/sandtable-ai/sandtable/issues/282)), per-tag pass^k floors ([#283](https://github.com/sandtable-ai/sandtable/issues/283))
+0.3.0 is the last release that may change the contracts 1.0 freezes, so everything that could change them lands in it.
+
 - Critical tasks and skipped trials in `leaderboard` and `demo --live` ([#284](https://github.com/sandtable-ai/sandtable/issues/284))
-- Failure attribution ([#29](https://github.com/sandtable-ai/sandtable/issues/29)), coverage matrix ([#30](https://github.com/sandtable-ai/sandtable/issues/30))
-- Customer sign-off report: rule → evidence → reliability ([#31](https://github.com/sandtable-ai/sandtable/issues/31))
-- Nested params ([#26](https://github.com/sandtable-ai/sandtable/issues/26))
+- Failure attribution: agent, simulated user, task or infrastructure ([#29](https://github.com/sandtable-ai/sandtable/issues/29))
+- Nested params: objects and arrays in tool schemas ([#26](https://github.com/sandtable-ai/sandtable/issues/26))
+- Readers of `results.json` check its version ([#349](https://github.com/sandtable-ai/sandtable/issues/349))
+- Node 22 and Python 3.10 as the oldest supported versions ([#350](https://github.com/sandtable-ai/sandtable/issues/350))
+- A last review of every contract before it freezes ([#351](https://github.com/sandtable-ai/sandtable/issues/351))
+- A regression gate ([#281](https://github.com/sandtable-ai/sandtable/issues/281)), comparing two stored runs ([#285](https://github.com/sandtable-ai/sandtable/issues/285)), per-tag pass^k floors ([#283](https://github.com/sandtable-ai/sandtable/issues/283))
 
-## Then: black-box and platform on-ramps (milestone v0.4)
+## 1.0: stable contracts (milestone v1.0)
 
-- Serve the world as REST, MCP and webhook tools for hosted agent platforms ([#14](https://github.com/sandtable-ai/sandtable/issues/14))
-- Import voice-agent platform configs as draft domains ([#34](https://github.com/sandtable-ai/sandtable/issues/34), [#35](https://github.com/sandtable-ai/sandtable/issues/35))
-- Fault profiles ([#15](https://github.com/sandtable-ai/sandtable/issues/15))
+1.0 promises that the domain spec, `results.json`, CLI commands, flags and exit codes, the HTTP step protocol and the library's exports change only in a major release.
+
+- A stability policy: what is covered, semver, and the deprecation window ([#352](https://github.com/sandtable-ai/sandtable/issues/352))
+- A release candidate, tested end to end before 1.0.0 ([#353](https://github.com/sandtable-ai/sandtable/issues/353))
+
+## After 1.0 (milestones v1.1 and black-box)
+
+- PR comments with pass^k deltas ([#13](https://github.com/sandtable-ai/sandtable/issues/13)), coverage matrix ([#30](https://github.com/sandtable-ai/sandtable/issues/30)), customer sign-off report: rule → evidence → reliability ([#31](https://github.com/sandtable-ai/sandtable/issues/31))
+- Black-box and platform on-ramps: serve the world as REST, MCP and webhook tools for hosted agent platforms ([#14](https://github.com/sandtable-ai/sandtable/issues/14)), import voice-agent platform configs as draft domains ([#34](https://github.com/sandtable-ai/sandtable/issues/34), [#35](https://github.com/sandtable-ai/sandtable/issues/35)), fault profiles ([#15](https://github.com/sandtable-ai/sandtable/issues/15))
 
 ## Later
 

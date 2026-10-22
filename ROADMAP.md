@@ -20,25 +20,34 @@ Issues and milestones on GitHub are the source of truth; this page is the overvi
 - [x] This docs site, with `llms.txt` (#50)
 - [x] Packages on npm and PyPI, published from one tag (#23)
 
-## Next: closing the loop in CI (milestone v0.3)
-Done, not yet released:
-- [x] Baseline comparison: `run --baseline` lists the tasks that broke or got fixed since an earlier run (#12)
-- [x] Reliability verdicts: pass@k, flaky tasks, flip rate, intervals, infra errors as SKIPPED (#27)
+## In 0.2.0
+- [x] Baseline comparison: `run --baseline` lists the tasks that broke, got worse, got fixed or changed since an earlier run (#12, #309)
+- [x] Reliability verdicts: pass@k, flaky tasks, flip rate and intervals; trials that end in an error are skipped, not failed (#27)
 - [x] Critical tasks that fail the run whatever the score (#28)
-- [x] Argument matchers in `called` and `not_called` (#25), per-task `given` rows and context (#37)
+- [x] Argument matchers in `called` and `not_called` (#25), per-task `given` rows and context (#37), `reference` calls the API rejects (#274)
+- [x] Exit 1 for a failed gate and 2 for an error (#282)
+- [x] `init`: drafts keep their sources' facts and quote every rule, drafted tasks carry reference calls, and each step prints its plan with `--dry-run` and what it cost (#276, #277, #278, #296, #297)
+- [x] A simulated caller that says it doesn't know a fact its instructions leave out, instead of inventing one (#287)
+- [x] The Claude Code plugin installs from the release tag (#301), and sandtable.dev documents the latest release (#313)
 
-Still to do:
-- [ ] PR comments with pass^k deltas (#13), a regression gate (#281), comparing two stored runs (#285)
-- [ ] Exit 1 for a failed gate and 2 for an error (#282), per-tag pass^k floors (#283)
+## Next: 0.3.0, the last release before 1.0 (milestone v0.3)
+0.3.0 is the last release that may change the contracts 1.0 freezes, so everything that could change them lands in it.
 - [ ] Critical tasks and skipped trials in `leaderboard` and `demo --live` (#284)
-- [ ] Failure attribution (#29), coverage matrix (#30)
-- [ ] Customer sign-off report: rule → evidence → reliability (#31)
-- [ ] Nested params (#26)
+- [ ] Failure attribution: agent, simulated user, task or infrastructure (#29)
+- [ ] Nested params: objects and arrays in tool schemas (#26)
+- [ ] Readers of `results.json` check its version (#349)
+- [ ] Node 22 and Python 3.10 as the oldest supported versions (#350)
+- [ ] A last review of every contract before it freezes (#351)
+- [ ] A regression gate (#281), comparing two stored runs (#285), per-tag pass^k floors (#283)
 
-## Then: black-box and platform on-ramps (milestone v0.4)
-- [ ] Serve the world as REST, MCP and webhook tools for hosted agent platforms (#14)
-- [ ] Import voice-agent platform configs as draft domains (#34, #35)
-- [ ] Fault profiles (#15)
+## 1.0: stable contracts (milestone v1.0)
+1.0 promises that the domain spec, `results.json`, CLI commands, flags and exit codes, the HTTP step protocol and the library's exports change only in a major release.
+- [ ] A stability policy: what is covered, semver, and the deprecation window (#352)
+- [ ] A release candidate, tested end to end before 1.0.0 (#353)
+
+## After 1.0 (milestones v1.1 and black-box)
+- [ ] PR comments with pass^k deltas (#13), coverage matrix (#30), customer sign-off report: rule → evidence → reliability (#31)
+- [ ] Black-box and platform on-ramps: serve the world as REST, MCP and webhook tools for hosted agent platforms (#14), import voice-agent platform configs as draft domains (#34, #35), fault profiles (#15)
 
 ## Later
 LLM-judged checks (#16), voice transport and timing metrics (#17, #43), exports to other harness formats (#18), negotiation invariants (#36), simulation clock (#38), outcome grading (#39), business metrics (#40), persona × condition matrix (#41), multi-session tasks (#42), Python agents in-process (#44).

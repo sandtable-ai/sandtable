@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 ### Changed
 
 - **Claude Code plugin**: before blaming the agent for a failed invariant, `running-and-reading-results` and the `failure-triager` subagent read the rule's `source.quote` and check that the SOP requires what the rule checks: the same order of calls, bound and condition. A rule stricter than the SOP is attributed to the task spec, with the fix to relax it or make it `soft: true` and confirm with `regrade`, instead of the agent being blamed for following the SOP ([#343](https://github.com/sandtable-ai/sandtable/issues/343)).
+- **Roadmap**: `ROADMAP.md` and sandtable.dev/roadmap list what 0.2.0 shipped, instead of calling it unreleased, and show the path to 1.0: 0.3.0 as the last release that may change the contracts, what 1.0 promises to keep stable, and what comes after it ([#347](https://github.com/sandtable-ai/sandtable/issues/347)).
 
 ### Fixed
 
