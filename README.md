@@ -125,7 +125,7 @@ Worked examples for agent frameworks, each a one-file adapter checked offline in
     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-`validate` and `lint` are free and need no secrets. A `.ts` agent module needs Node 22.18 or later on the runner, and must be an ES module: name it `.mts`, or set `"type": "module"` in your package.json. `--fail-under` exits non-zero when pass^k drops below the threshold, so a prompt change that breaks a customer rule fails the build. `--baseline <results.json>` compares the run with an earlier one, such as the last run on `main`, and lists the tasks that broke or got fixed; add `--fail-on-regression` to fail the build when a task that passed every trial before fails now. Guide: [use it in CI](https://sandtable.dev/guides/ci).
+`validate` and `lint` are free and need no secrets. A `.ts` agent module needs Node 22.18 or later on the runner, and must be an ES module: name it `.mts`, or set `"type": "module"` in your package.json. `--fail-under` exits non-zero when pass^k drops below the threshold, so a prompt change that breaks a customer rule fails the build. `--baseline <results.json>` compares the run with an earlier one, such as the last run on `main`, and lists the tasks that broke or got fixed; add `--fail-on-regression` to fail the build when a task that passed every trial before fails now. `sandtable compare <baseline.json> <results.json>` shows the same changes between two runs that already exist, without calling a model. Guide: [use it in CI](https://sandtable.dev/guides/ci).
 
 ## Use it from your coding agent
 

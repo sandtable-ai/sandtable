@@ -363,6 +363,57 @@ describe("regrade and report keep the comparison", () => {
     expect(await stat(out).catch(() => undefined)).toBeUndefined();
   });
 
+  it.skipIf(!process.features.typescript)("sandtable compare prints what run --baseline would have, from two stored runs, and writes nothing", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-compare-"));
+    const exec = (...args: string[]) =>
+      promisify(execFile)(process.execPath, [cli, ...args]).then((r) => ({ code: 0, ...r }), (e: { code: number; stdout: string; stderr: string }) => e);
+    const run = (agent: string, out: string, ...more: string[]) => exec("run", example, "--agent", agent, "--user", "scripted", "-t", "book-at-posted-rate,no-mc-number", "-o", path.join(dir, out), "--no-html", ...more);
+    await run("scripted:careful", "careful");
+    const base = path.join(dir, "careful", "results.json");
+    const live = plain((await run("scripted:naive", "naive-live", "--baseline", base)).stdout);
+    await run("scripted:naive", "naive");
+    const now = path.join(dir, "naive", "results.json");
+    const before = await readFile(now, "utf8");
+
+    const compared = await exec("compare", base, now);
+    expect(compared.code).toBe(0);
+    const text = plain(compared.stdout);
+    expect(text.split("\n")[0]).toContain(`sandtable compare · freight-carrier-sales · ${now}`);
+    // The same block as the live run's, from "Compared with" on.
+    const block = (t: string) => t.slice(t.indexOf(`  Compared with ${base}`)).split("\n\n  results:")[0]!.trimEnd();
+    expect(block(text)).toBe(block(live));
+    expect(block(text)).toMatch(/✗ broken {2}book-at-posted-rate {2}1\/1 → 0\/1/);
+    expect(await readFile(now, "utf8")).toBe(before);
+
+    const gated = await exec("compare", base, now, "--fail-on-regression");
+    expect(gated.code).toBe(1);
+    expect(gated.stderr).toContain("✗ 1 task(s) broke since the baseline (--fail-on-regression): book-at-posted-rate 1/1 → 0/1");
+    expect((await exec("compare", base, base, "--fail-on-regression")).code).toBe(0);
+
+    // -o writes the newer run with the baseline attached, as run --baseline would have.
+    const out = path.join(dir, "compared");
+    expect((await exec("compare", base, now, "-o", out)).code).toBe(0);
+    const written = JSON.parse(await readFile(path.join(out, "results.json"), "utf8")) as SuiteResult;
+    expect(written.baseline).toEqual(baselineSnapshot(JSON.parse(await readFile(base, "utf8")) as SuiteResult));
+    expect(written.runId).toBe((JSON.parse(before) as SuiteResult).runId);
+    expect(await readFile(path.join(out, "report.html"), "utf8")).toContain('"change":"broken"');
+  });
+
+  it.skipIf(!process.features.typescript)("sandtable compare refuses runs of two domains, and a file that isn't a results.json", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-compare-"));
+    const freight = path.join(dir, "freight.json");
+    const clinic = path.join(dir, "clinic.json");
+    await writeFile(freight, JSON.stringify(fake({ t: [true] }, { domain: "freight-carrier-sales" })));
+    await writeFile(clinic, JSON.stringify(fake({ t: [true] }, { domain: "clinic-front-desk" })));
+    const fail = (...args: string[]) => promisify(execFile)(process.execPath, [cli, "compare", ...args]).catch((e: { code: number; stdout: string; stderr: string }) => e);
+    const other = await fail(freight, clinic);
+    expect(other).toMatchObject({ code: 2, stdout: "" });
+    expect((other as { stderr: string }).stderr).toContain(`${freight} and ${clinic} are runs of different domains, freight-carrier-sales and clinic-front-desk: compare two runs of the same domain`);
+    await writeFile(clinic, JSON.stringify({ rows: [] }));
+    expect(((await fail(freight, clinic)) as { stderr: string }).stderr).toContain(`${clinic} is not a results.json written by \`sandtable run\`; it is a leaderboard's leaderboard.json`);
+    expect(((await fail(freight, path.join(dir, "nope.json"))) as { code: number; stderr: string })).toMatchObject({ code: 2 });
+  });
+
   it.skipIf(!process.features.typescript)("sandtable run --baseline refuses another domain's run before any trial runs", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-baseline-"));
     const base = path.join(dir, "freight.json");
