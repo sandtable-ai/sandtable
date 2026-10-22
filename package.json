@@ -1,6 +1,6 @@
 {
   "name": "sandtable-ai",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Rehearse your AI agent on a simulated copy of your customer's world before it goes live: tau-bench-style simulations with stateful tools, policy invariants and pass^k.",
   "license": "MIT",
   "homepage": "https://sandtable.dev",

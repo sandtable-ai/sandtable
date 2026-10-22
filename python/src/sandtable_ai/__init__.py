@@ -1,5 +1,5 @@
 """sandtable: rehearse AI agents on a sand table of your customer's world before they go live."""
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 # The npm release this launcher runs. Kept in sync with package.json by scripts/sync-version.mjs.
-NPM_VERSION = "0.2.0"
+NPM_VERSION = "0.2.1"
