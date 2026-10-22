@@ -19,16 +19,55 @@ const Review = z.enum(["pending", "accepted"]).optional();
 const Source = z.object({ file: z.string(), quote: z.string().optional() }).strict().optional();
 const Where = z.record(z.string(), Value);
 
-export const ParamSpec = z
-  .object({
-    type: z.enum(["string", "number", "integer", "boolean"]),
-    description: z.string().optional(),
-    required: z.boolean().default(true),
-    enum: z.array(z.union([z.string(), z.number()])).optional(),
-    /** Value used when the agent omits this (optional) param, as the real API would. */
-    default: z.union([z.string(), z.number(), z.boolean()]).optional(),
-  })
-  .strict();
+const SCALAR_TYPES = ["string", "number", "integer", "boolean"] as const;
+
+/**
+ * One argument of a tool. Scalars are `string`, `number`, `integer` or `boolean`. An `object` lists its
+ * `properties`, each a param that is required unless it says otherwise; an `array` gives the param of its
+ * `items`, which has no `required` or `default` of its own. With `nullable: true`, an explicit `null` is kept
+ * (to clear a field, say); without it, `null` and `""` mean the argument was left out.
+ */
+interface Param {
+  type: (typeof SCALAR_TYPES)[number] | "object" | "array";
+  description?: string;
+  required: boolean;
+  nullable?: boolean;
+  enum?: (string | number)[];
+  /** Value used when the agent omits this (optional) param, as the real API would. */
+  default?: unknown;
+  properties?: Record<string, Param>;
+  items?: Param;
+}
+
+interface ParamInput extends Omit<Param, "required" | "properties" | "items"> {
+  required?: boolean;
+  properties?: Record<string, ParamInput>;
+  items?: ParamInput;
+}
+
+export const ParamSpec: z.ZodType<Param, ParamInput> = z.lazy(() =>
+  z
+    .object({
+      type: z.enum([...SCALAR_TYPES, "object", "array"]),
+      description: z.string().optional(),
+      required: z.boolean().default(true),
+      nullable: z.boolean().optional(),
+      enum: z.array(z.union([z.string(), z.number()])).optional(),
+      default: z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(Value), z.record(z.string(), Value)]).optional(),
+      properties: z.record(z.string(), ParamSpec).optional(),
+      items: ParamSpec.optional(),
+    })
+    .strict()
+    .superRefine((p, ctx) => {
+      if (p.type === "object" && !p.properties) ctx.addIssue({ code: "custom", message: "an object param needs properties", path: ["properties"] });
+      if (p.type !== "object" && p.properties) ctx.addIssue({ code: "custom", message: `properties are only for an object param, not a ${p.type}`, path: ["properties"] });
+      if (p.type === "array" && !p.items) ctx.addIssue({ code: "custom", message: "an array param needs items", path: ["items"] });
+      if (p.type !== "array" && p.items) ctx.addIssue({ code: "custom", message: `items are only for an array param, not a ${p.type}`, path: ["items"] });
+      if (p.enum && (p.type === "object" || p.type === "array")) ctx.addIssue({ code: "custom", message: `enum is only for a scalar param, not an ${p.type}`, path: ["enum"] });
+      if (p.items?.required === false) ctx.addIssue({ code: "custom", message: "an array's items have no required of their own: make the array optional instead", path: ["items", "required"] });
+      if (p.items?.default !== undefined) ctx.addIssue({ code: "custom", message: "an array's items have no default of their own: give the array a default instead", path: ["items", "default"] });
+    }),
+);
 
 export const TableSpec = z
   .object({

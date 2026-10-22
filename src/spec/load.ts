@@ -8,6 +8,7 @@ import { agentSystemPrompt, taskContext } from "../sim/prompts.ts";
 import { operatorProblems, substitute } from "../world/match.ts";
 import { shellWord } from "../shell.ts";
 import { version } from "../version.ts";
+import { coerceArgs } from "../world/tools.ts";
 import { DomainSpec, type Domain, type Given, type Tool } from "./schema.ts";
 
 export const DOMAIN_FILE = "sandtable.yaml";
@@ -118,6 +119,11 @@ export function validateDomain(d: Domain): string[] {
     // Own keys only: `in` would also find Object.prototype members such as toString or constructor.
     if (t && !Object.hasOwn(t.params, name)) problems.push(`${where}: tool "${toolName}" has no param "${name}"`);
   };
+  // A where clause on a call's arguments may also name a nested one, such as "address.zip" or "items.0.sku".
+  const argPath = (toolName: string, name: string, where: string) => {
+    const t = tools.get(toolName);
+    if (t && !paramAt(t.params, name)) problems.push(`${where}: tool "${toolName}" has no param "${name}"`);
+  };
 
   for (const [name, t] of Object.entries(d.world.tables)) {
     const keys = new Set<string>();
@@ -143,10 +149,19 @@ export function validateDomain(d: Domain): string[] {
       if ("list" in op) operators(op.where, `tools.${t.name}.ops[${i}].where`, { refs: true });
     });
     const unresolved = (value: unknown, where: string) => {
-      for (const { ref, name } of references(value)) {
-        if (!Object.hasOwn(t.params, name)) problems.push(`${where}: "${ref}" never resolves: tool "${t.name}" has no param "${name}"`);
+      for (const { ref, name, path } of references(value)) {
+        const p = Object.hasOwn(t.params, name) ? t.params[name] : undefined;
+        if (!path.length) {
+          if (!p) problems.push(`${where}: "${ref}" never resolves: tool "${t.name}" has no param "${name}"`);
+          continue;
+        }
+        // A path after a param with no fields stays literal text, as it did before params could nest.
+        if (p && (p.type === "object" || p.type === "array") && !paramAt(t.params, [name, ...path].join("."))) {
+          problems.push(`${where}: "${ref}" never resolves: param "${name}" has no "${path.join(".")}"`);
+        }
       }
     };
+    for (const [name, p] of Object.entries(t.params)) problems.push(...defaultProblems(p, `tools.${t.name}.params.${name}`));
     t.checks.forEach((c, i) => unresolved(c, `tools.${t.name}.checks[${i}]`));
     t.ops.forEach((op, i) => unresolved(op, `tools.${t.name}.ops[${i}]`));
     if (t.returns >= t.ops.length) problems.push(`tools.${t.name}: returns=${t.returns} but only ${t.ops.length} op(s)`);
@@ -216,7 +231,7 @@ export function validateDomain(d: Domain): string[] {
       task.expect[list].forEach((e, i) => {
         tool(expectedTool(e), `${where}.expect`);
         if (typeof e === "string") return;
-        for (const name of Object.keys(e.args)) arg(e.tool, name, `${where}.expect.${list}[${i}]`);
+        for (const name of Object.keys(e.args)) argPath(e.tool, name, `${where}.expect.${list}[${i}]`);
         operators(e.args, `${where}.expect.${list}[${i}].args`);
       });
     }
@@ -254,15 +269,53 @@ function givenProblems(d: Domain, given: Given, where: string, tables: Set<strin
  * without seed rows, or rows without the field, can't be judged (tools may create the values).
  */
 /** Every argument reference in a tool's op or check, read exactly as resolve() reads it at run time. */
-function references(value: unknown): { ref: string; name: string }[] {
+function references(value: unknown): { ref: string; name: string; path: string[] }[] {
   if (typeof value === "string") {
-    const found: { ref: string; name: string }[] = [];
-    substitute(value, (name, ref) => found.push({ ref, name }));
+    const found: { ref: string; name: string; path: string[] }[] = [];
+    substitute(value, (name, ref, path) => found.push({ ref, name, path }));
     return found;
   }
   if (Array.isArray(value)) return value.flatMap(references);
   if (value && typeof value === "object") return Object.values(value).flatMap(references);
   return [];
+}
+
+type Param = Tool["params"][string];
+
+/**
+ * The param a dotted name reaches: a top-level param by its own name first, then a path through an object's
+ * properties and an array's items, where a segment into an array is an index.
+ */
+function paramAt(params: Record<string, Param>, name: string): Param | undefined {
+  if (Object.hasOwn(params, name)) return params[name];
+  const [root, ...path] = name.split(".");
+  let p = Object.hasOwn(params, root!) ? params[root!] : undefined;
+  for (const seg of path) {
+    if (p?.type === "object" && p.properties && Object.hasOwn(p.properties, seg)) p = p.properties[seg];
+    else if (p?.type === "array" && /^\d+$/.test(seg)) p = p.items;
+    else return undefined;
+  }
+  return p;
+}
+
+/**
+ * What's wrong with a param's default, and its fields' defaults: a `null` needs `nullable`, a list or an object
+ * suits only an array or object param, and an object or array param's default must be a valid argument. A scalar
+ * param's string, number or boolean default is used as written, as before params could nest.
+ */
+function defaultProblems(p: Param, where: string): string[] {
+  const problems: string[] = [];
+  const d = p.default;
+  const scalar = p.type !== "object" && p.type !== "array";
+  if (d === null && !p.nullable) problems.push(`${where}.default: null needs nullable: true`);
+  else if (d !== undefined && d !== null && scalar && typeof d === "object") problems.push(`${where}.default: a ${p.type} param can't default to ${Array.isArray(d) ? "a list" : "an object"}`);
+  else if (d !== undefined && d !== null && !scalar) {
+    const coerced = coerceArgs({ params: { default: { ...p, default: undefined, required: true } } } as unknown as Tool, { default: d });
+    if ("error" in coerced) problems.push(`${where}.default: ${coerced.error.replace(/"default(?=[.\[" ])/, `"${where.split(".").at(-1)}`)}`);
+  }
+  for (const [name, child] of Object.entries(p.properties ?? {})) problems.push(...defaultProblems(child, `${where}.properties.${name}`));
+  if (p.items) problems.push(...defaultProblems(p.items, `${where}.items`));
+  return problems;
 }
 
 function undetectable(d: Domain, table: string, field: string): string | undefined {

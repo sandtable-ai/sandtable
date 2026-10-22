@@ -1,32 +1,71 @@
 export type Row = Record<string, unknown>;
 export type Args = Record<string, unknown>;
 
-const WHOLE_REF = /^\$([a-zA-Z_]\w*)$/;
-const INLINE_REF = /\$\{([a-zA-Z_]\w*)\}/g;
+const NAME = /^[a-zA-Z_]\w*$/;
+// A name, then an optional path into it: "$address.zip", "${items.0.sku}".
+const WHOLE_REF = /^\$([a-zA-Z_]\w*)((?:\.\w+)*)$/;
+const INLINE_REF = /\$\{([a-zA-Z_]\w*)((?:\.\w+)*)\}/g;
+
+/** What a lookup returns to leave a reference as the literal text it is. */
+export const LITERAL: unique symbol = Symbol("literal");
 
 /**
  * Read a string as a template: when the whole string is "$name", the result is `lookup(name)`;
  * otherwise each "${name}" inside it is replaced by `lookup(name)`'s text. A name is a letter or _,
  * then letters, digits or _, and anything else stays literal: "$5", "$$", "$/hr", "$USD/kg", "$@type".
+ * A name can go on with a path, as in "$address.zip" or "${items.0.sku}", and `lookup` gets its segments;
+ * it returns LITERAL to keep the reference as text, as a path into a param that has no fields is.
  * resolve() and `validate` both read strings through this, so they agree on what a reference is.
  */
-export function substitute(value: string, lookup: (name: string, ref: string) => unknown): unknown {
+export function substitute(value: string, lookup: (name: string, ref: string, path: string[]) => unknown): unknown {
   const whole = WHOLE_REF.exec(value);
-  if (whole) return lookup(whole[1]!, value);
-  return value.replace(INLINE_REF, (ref, name: string) => String(lookup(name, ref) ?? ""));
+  if (whole) {
+    const found = lookup(whole[1]!, value, segments(whole[2]!));
+    return found === LITERAL ? value : found;
+  }
+  return value.replace(INLINE_REF, (ref, name: string, path: string) => {
+    const found = lookup(name, ref, segments(path));
+    return found === LITERAL ? ref : String(found ?? "");
+  });
 }
+
+const segments = (path: string) => (path ? path.slice(1).split(".") : []);
 
 /** Whether "$name" refers to a param called `name`, rather than being literal text. */
 export function isParamName(name: string): boolean {
-  return WHOLE_REF.test(`$${name}`);
+  return NAME.test(name);
 }
 
-/** Replace "$arg" with the argument value and "${arg}" with its string form, recursively. */
-export function resolve(value: unknown, args: Args): unknown {
-  if (typeof value === "string") return substitute(value, (name) => (Object.hasOwn(args, name) ? args[name] : undefined));
-  if (Array.isArray(value)) return value.map((v) => resolve(v, args));
+/** The value at `path` inside `value`: a field of an object, or a numeric index into an array. */
+export function valueAt(value: unknown, path: readonly string[]): unknown {
+  let cur = value;
+  for (const seg of path) {
+    if (Array.isArray(cur) && /^\d+$/.test(seg)) cur = cur[Number(seg)];
+    else if (isPlainObject(cur) && Object.hasOwn(cur, seg)) cur = cur[seg];
+    else return undefined;
+  }
+  return cur;
+}
+
+/** The params a template's references can reach into: only an object or an array param has a path. */
+type ParamTypes = Record<string, { type: string }>;
+
+/**
+ * Replace "$arg" with the argument value and "${arg}" with its string form, recursively. "$arg.field" reads
+ * a field of an object or array param; the same text after any other param stays literal, as it always was.
+ */
+export function resolve(value: unknown, args: Args, params: ParamTypes = {}): unknown {
+  if (typeof value === "string") {
+    return substitute(value, (name, _ref, path) => {
+      if (!path.length) return Object.hasOwn(args, name) ? args[name] : undefined;
+      const type = Object.hasOwn(params, name) ? params[name]!.type : undefined;
+      if (type !== "object" && type !== "array") return LITERAL;
+      return valueAt(Object.hasOwn(args, name) ? args[name] : undefined, path);
+    });
+  }
+  if (Array.isArray(value)) return value.map((v) => resolve(v, args, params));
   if (isPlainObject(value)) {
-    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, resolve(v, args)]));
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, resolve(v, args, params)]));
   }
   return value;
 }
@@ -51,13 +90,23 @@ export function pruneUndefined(where: Row): Row {
 }
 
 export function matches(row: Row, where: Row): boolean {
-  return Object.entries(where).every(([field, cond]) => test(row[field], cond));
+  return Object.entries(where).every(([field, cond]) => test(fieldValue(row, field), cond));
+}
+
+/**
+ * A row's field. A dotted name such as "address.zip" reads a nested value, unless the row has a field
+ * with that literal name.
+ */
+export function fieldValue(row: Row, field: string): unknown {
+  if (Object.hasOwn(row, field) || !field.includes(".")) return row[field];
+  return valueAt(row, field.split("."));
 }
 
 /** Explain the first failing condition, for readable grader output. */
 export function mismatch(row: Row, where: Row): string | undefined {
   for (const [field, cond] of Object.entries(where)) {
-    if (!test(row[field], cond)) return `${field} is ${JSON.stringify(row[field])}, expected ${JSON.stringify(cond)}`;
+    const actual = fieldValue(row, field);
+    if (!test(actual, cond)) return `${field} is ${JSON.stringify(actual)}, expected ${JSON.stringify(cond)}`;
   }
   return undefined;
 }
@@ -76,9 +125,18 @@ const OPERATOR_TESTS: Record<string, (actual: unknown, expected: unknown) => boo
   $lt: (actual, expected) => compare(actual, expected) < 0,
   $lte: (actual, expected) => compare(actual, expected) <= 0,
   $exists: (actual, expected) => (actual !== undefined && actual !== null) === Boolean(expected),
-  $contains: (actual, expected) =>
-    typeof actual === "string" && typeof expected === "string" && actual.toLowerCase().includes(expected.toLowerCase()),
+  // Text that contains a string (case-insensitive), or a list with an element that matches: a plain object
+  // matches an element like a where clause, operators included; anything else, by equality.
+  $contains: (actual, expected) => {
+    if (Array.isArray(actual)) return actual.some((element) => elementMatches(element, expected));
+    return typeof actual === "string" && typeof expected === "string" && actual.toLowerCase().includes(expected.toLowerCase());
+  },
 };
+
+function elementMatches(element: unknown, cond: unknown): boolean {
+  if (isPlainObject(cond) && !isOperatorObject(cond)) return isPlainObject(element) && matches(element, cond);
+  return test(element, cond);
+}
 
 export const OPERATORS: readonly string[] = Object.keys(OPERATOR_TESTS);
 
@@ -98,6 +156,12 @@ export function operatorProblems(where: Row, opts: { refs?: boolean } = {}): str
     }
     if (!isOperatorObject(cond)) continue;
     for (const [op, expected] of Object.entries(cond)) {
+      if (op === "$contains" && isPlainObject(expected)) {
+        // An element's where clause, or operators on the element itself.
+        if (isOperatorObject(expected)) problems.push(...operatorProblems({ [field]: expected }, opts));
+        else for (const p of operatorProblems(expected, opts)) problems.push(`${field}.$contains.${p}`);
+        continue;
+      }
       if (!Object.hasOwn(OPERATOR_TESTS, op)) problems.push(`${field}: unknown operator "${op}" (use ${OPERATORS.join(", ")})`);
       else if ((op === "$in" || op === "$nin") && !Array.isArray(expected)) {
         const ref = opts.refs && typeof expected === "string" && WHOLE_REF.test(expected);

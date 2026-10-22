@@ -2,7 +2,7 @@ import { mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
 import { DOMAIN_FILE } from "../spec/load.ts";
-import type { OpenApiDraft } from "./openapi.ts";
+import type { DraftParam, OpenApiDraft } from "./openapi.ts";
 
 export const POLICY_PLACEHOLDER = `# Policy
 
@@ -38,9 +38,7 @@ export function renderDraft(d: OpenApiDraft, source: string): string {
   const tools = d.tools.map((t) => ({
     name: t.name,
     description: t.description,
-    ...(Object.keys(t.params).length
-      ? { params: Object.fromEntries(Object.entries(t.params).map(([k, { required, ...rest }]) => [k, required ? rest : { ...rest, required }])) }
-      : {}),
+    ...(Object.keys(t.params).length ? { params: Object.fromEntries(Object.entries(t.params).map(([k, p]) => [k, paramYaml(p)])) } : {}),
     ...(t.checks.length ? { checks: t.checks } : {}),
     ops: t.ops,
     ...(t.returns !== undefined ? { returns: t.returns } : {}),
@@ -66,7 +64,7 @@ export function renderDraft(d: OpenApiDraft, source: string): string {
   }
   d.tools.forEach((tool, i) => {
     // Short maps read better inline: params, checks and operator conditions.
-    for (const name of Object.keys(tool.params)) flow(doc.getIn(["tools", i, "params", name], true));
+    for (const [name, p] of Object.entries(tool.params)) flowParam(doc, ["tools", i, "params", name], p);
     tool.checks.forEach((_, j) => flow(doc.getIn(["tools", i, "checks", j], true)));
     tool.ops.forEach((op, j) => {
       for (const field of Object.keys((op.where ?? {}) as object)) flow(doc.getIn(["tools", i, "ops", j, "where", field], true));
@@ -76,6 +74,24 @@ export function renderDraft(d: OpenApiDraft, source: string): string {
     if (node) node.commentBefore = tool.notes.map((n) => ` TODO(review): ${n}`).join("\n");
   });
   return doc.toString({ lineWidth: 0 });
+}
+
+/** A drafted param as YAML: `required` only where it isn't the default, and never on an array's items. */
+function paramYaml(p: DraftParam, isItems = false): Record<string, unknown> {
+  const { required, properties, items, ...rest } = p;
+  return {
+    ...rest,
+    ...(required || isItems ? {} : { required }),
+    ...(properties ? { properties: Object.fromEntries(Object.entries(properties).map(([k, c]) => [k, paramYaml(c)])) } : {}),
+    ...(items ? { items: paramYaml(items, true) } : {}),
+  };
+}
+
+/** A scalar param reads best inline; an object or array param stays a block, with its scalars inline. */
+function flowParam(doc: YAML.Document, at: (string | number)[], p: DraftParam) {
+  if (p.properties) for (const [name, c] of Object.entries(p.properties)) flowParam(doc, [...at, "properties", name], c);
+  else if (p.items) flowParam(doc, [...at, "items"], p.items);
+  else flow(doc.getIn(at, true));
 }
 
 function flow(node: unknown) {

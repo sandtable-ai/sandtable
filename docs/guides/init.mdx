@@ -67,6 +67,7 @@ No model is involved: the same spec always produces the same draft.
 | `/customers/{customer_id}/orders` | parent params become filters and create values |
 | `POST /orders/{id}/cancel` (no GET) | action: a `get` on the parent plus a review note to model the effect |
 | a body param named like another table's key | existence `check` on that table |
+| a body field that is an object, or an array of scalars or objects (`items: [{ sku, qty }]`) | a nested param with its `properties` or `items`, `$ref`s resolved, up to 3 levels deep; the op writes the whole value (`items: $items`) |
 | a schema composed with `allOf` | its members' properties and required lists merged, in bodies, responses and params |
 | a field or param named `@type` or `pickup-window` | param `at_type` or `pickup_window`, since `$` references only name letters, digits and `_`; the op still writes `"@type": $at_type` |
 | a `{param}` in the path that the spec doesn't declare | a required string param |
@@ -77,11 +78,12 @@ It cannot infer some things, so they become `# TODO(review):` comments next to t
 - **409/422/400/403 responses**: encode the condition as a `check` with a `where`.
 - **Side effects in the description** ("the load becomes booked"): add the `update` op on the other table.
 - **Action endpoints**: replace the placeholder `get` with the ops that model the action.
+- **Body fields it can't map**: a schema with several types, an array without `items`, or objects nested more than 3 levels deep. Add the param by hand if the agent needs it. A `oneOf` or `anyOf` field without a `type` is drafted as a string param, as before.
 
 It also leaves out several things and lists them as warnings:
 
 - header and cookie params
-- non-scalar fields (arrays, objects)
+- object and array path or query params, which would be filters on a table, and body fields it can't map (also a review note)
 - `DELETE` operations
 - webhooks, which the API sends to the client rather than serves: OpenAPI 3.1 `webhooks`, operations' `callbacks`, and the paths where a client receives events or subscribes to them. A path counts as one only when it has a listener's shape:
   - every operation on it is tagged "notification listener" or "events subscription", and it takes only `POST` or `DELETE`, or its `POST` takes a callback URL (a string `callback` field)

@@ -9,12 +9,19 @@ import { isParamName } from "../world/match.ts";
 type Json = Record<string, unknown>;
 
 export interface DraftParam {
-  type: "string" | "number" | "integer" | "boolean";
+  type: "string" | "number" | "integer" | "boolean" | "object" | "array";
   description?: string;
   required: boolean;
   enum?: (string | number)[];
   default?: string | number | boolean;
+  /** An object's fields. */
+  properties?: Record<string, DraftParam>;
+  /** An array's element. */
+  items?: DraftParam;
 }
+
+/** How deep a body field's objects and arrays are drafted as nested params; anything deeper is left out. */
+const MAX_DEPTH = 3;
 
 export interface DraftTool {
   name: string;
@@ -153,7 +160,8 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
         continue;
       }
       if (loc === "query" && PAGINATION.has(name)) continue;
-      const param = toParam(deref(p.schema ?? {}) as Json, deref, loc === "path" || p.required === true, p.description);
+      // Path and query values are filters on a table, so they stay scalars.
+      const param = toParam(deref(p.schema ?? {}) as Json, deref, loc === "path" || p.required === true, p.description, MAX_DEPTH);
       if (!param) {
         warnings.push(`${where}: parameter "${name}" is not a scalar; skipped`);
         continue;
@@ -170,7 +178,8 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
       for (const [name, raw] of Object.entries((body.properties ?? {}) as Json)) {
         const param = toParam(deref(raw) as Json, deref, required.has(name));
         if (!param) {
-          warnings.push(`${where}: body field "${name}" is not a scalar; skipped`);
+          warnings.push(`${where}: body field "${name}" has a schema init can't map; skipped`);
+          tool.notes.push(`Body field "${name}" was left out: init maps scalars, and objects and arrays of them up to ${MAX_DEPTH} levels deep, not a schema with several types or an array without items. Add it as a param by hand if the agent needs it.`);
           continue;
         }
         if (!inputs.has(name)) inputs.set(name, { param, loc: "body" });
@@ -343,8 +352,31 @@ function pathParams(path: string): string[] {
   return [...path.matchAll(/\{([^}]+)\}/g)].map((m) => m[1]!);
 }
 
-function toParam(schema: Json, deref: (x: unknown) => unknown, required: boolean, description?: unknown): DraftParam | undefined {
+/**
+ * A tool param for a schema, or undefined when it can't be one. An object's properties and an array's items
+ * are mapped too, until `depth` reaches MAX_DEPTH, so a `$ref` cycle ends there.
+ */
+function toParam(schema: Json, deref: (x: unknown) => unknown, required: boolean, description?: unknown, depth = 0): DraftParam | undefined {
   const s = flatten(schema, deref);
+  const desc = (description ?? s.description) as string | undefined;
+  if (s.type === "object" || (s.type === undefined && s.properties)) {
+    if (depth >= MAX_DEPTH || !s.properties || typeof s.properties !== "object") return undefined;
+    const needed = new Set((s.required as string[] | undefined) ?? []);
+    const properties: Record<string, DraftParam> = {};
+    for (const [name, raw] of Object.entries(s.properties as Json)) {
+      const child = toParam(deref(raw) as Json, deref, needed.has(name), undefined, depth + 1);
+      if (!child) return undefined;
+      properties[name] = child;
+    }
+    if (!Object.keys(properties).length) return undefined;
+    return { type: "object", required, ...(desc ? { description: String(desc).trim() } : {}), properties };
+  }
+  if (s.type === "array") {
+    if (depth >= MAX_DEPTH || !s.items) return undefined;
+    const items = toParam(deref(s.items) as Json, deref, true, undefined, depth + 1);
+    if (!items) return undefined;
+    return { type: "array", required, ...(desc ? { description: String(desc).trim() } : {}), items };
+  }
   // A nullable enum lists null among its values: an agent can't pass it, so the param's enum leaves it out.
   const values = Array.isArray(s.enum) ? (s.enum.filter((v) => v !== null) as (string | number)[]) : undefined;
   let type = s.type as string | undefined;
@@ -352,7 +384,6 @@ function toParam(schema: Json, deref: (x: unknown) => unknown, required: boolean
   if (!type) type = "string";
   if (!["string", "number", "integer", "boolean"].includes(type)) return undefined;
   const param: DraftParam = { type: type as DraftParam["type"], required };
-  const desc = (description ?? s.description) as string | undefined;
   if (desc) param.description = String(desc).trim();
   if (values?.length) param.enum = values;
   if (!required && ["string", "number", "boolean"].includes(typeof s.default)) param.default = s.default as string | number | boolean;

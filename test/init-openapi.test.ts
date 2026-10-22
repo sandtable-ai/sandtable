@@ -120,7 +120,9 @@ describe("init from OpenAPI: edge cases", () => {
     expect(byName.cancel_order!.ops).toEqual([{ get: "orders", key: "$order_id" }]);
     expect(byName.cancel_order!.notes[0]).toMatch(/action on orders/);
     expect(d.warnings.join("\n")).toMatch(/header parameter "X-Trace" ignored/);
-    expect(d.warnings.join("\n")).toMatch(/body field "items" is not a scalar/);
+    // An array without items can't be a param.
+    expect(d.warnings.join("\n")).toMatch(/body field "items" has a schema init can't map; skipped/);
+    expect(byName.create_order!.notes.join("\n")).toMatch(/Body field "items" was left out/);
     expect(d.warnings.join("\n")).toMatch(/DELETE is not supported/);
   });
 
@@ -201,7 +203,7 @@ describe("init from OpenAPI: allOf-composed schemas", () => {
       enum: ["low", "normal", "urgent"],
       default: "normal",
     });
-    expect(d.warnings.join("\n")).toMatch(/body field "parts" is not a scalar/);
+    expect(d.warnings.join("\n")).toMatch(/body field "parts" has a schema init can't map/);
   });
 });
 
@@ -476,17 +478,18 @@ describe("init from OpenAPI: 3.1 nullable types", () => {
     expect(create.params.cordless).toEqual({ type: "boolean", required: false, default: false });
     // The spec lists null among a nullable enum's values: the agent can't pass it, and the draft's enum doesn't take it.
     expect(create.params.finish).toEqual({ type: "string", required: false, enum: ["matte", "gloss"] });
-    expect(create.ops).toEqual([{ create: "kettles", values: { label: "$label", cordless: "$cordless", finish: "$finish" } }]);
+    // A nullable array of strings is a list param.
+    expect(create.params.tags).toEqual({ type: "array", required: false, items: { type: "string", required: true } });
+    expect(create.ops).toEqual([{ create: "kettles", values: { label: "$label", cordless: "$cordless", finish: "$finish", tags: "$tags" } }]);
     expect(byName.update_kettle!.params.kettleId).toEqual({ type: "string", required: true });
   });
 
   it("still skips a field with two types besides null, or none", () => {
     const d = draftFromOpenApi(spec);
-    const skipped = d.warnings.filter((w) => w.includes("not a scalar"));
+    const skipped = d.warnings.filter((w) => w.includes("can't map"));
     expect(skipped).toEqual([
-      'POST /kettles: body field "odd" is not a scalar; skipped',
-      'POST /kettles: body field "tags" is not a scalar; skipped',
-      'POST /kettles: body field "nothing" is not a scalar; skipped',
+      'POST /kettles: body field "odd" has a schema init can\'t map; skipped',
+      'POST /kettles: body field "nothing" has a schema init can\'t map; skipped',
     ]);
   });
 
