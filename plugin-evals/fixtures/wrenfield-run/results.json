@@ -234,6 +234,10 @@
             "agent": {},
             "user": {},
             "costUsd": 0
+          },
+          "attribution": {
+            "owner": "agent",
+            "evidence": "nothing points at the caller, the task or the harness; first failed check: state:returns#1: 0 returns row(s) match {\"order_id\":\"O-2004\"} (expected 1)"
           }
         }
       ],
@@ -385,6 +389,10 @@
             "agent": {},
             "user": {},
             "costUsd": 0
+          },
+          "attribution": {
+            "owner": "agent",
+            "evidence": "nothing points at the caller, the task or the harness; first failed check: state:returns#1: 1 returns row(s) match {} (expected 0)"
           }
         }
       ],
@@ -551,6 +559,10 @@
             "agent": {},
             "user": {},
             "costUsd": 0
+          },
+          "attribution": {
+            "owner": "agent",
+            "evidence": "nothing points at the caller, the task or the harness; first failed check: account-before-order: get_order(order_id=\"O-2001\") was called without a prior successful lookup_account"
           }
         }
       ],
@@ -578,6 +590,12 @@
   "callerNotes": {
     "turns": 0,
     "trials": 0
+  },
+  "attribution": {
+    "agent": 3,
+    "simulated-user": 0,
+    "task-spec": 0,
+    "harness": 0
   },
   "failureModes": [
     {

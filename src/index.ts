@@ -25,6 +25,7 @@ export type { TrialResult, TrajectoryEvent, EndReason, SoftCheck } from "./run/e
 export type { CheckResult, CheckKind } from "./grade/expectations.ts";
 export type { CallRecord, Violation } from "./grade/invariants.ts";
 export type { CallerNote } from "./run/caller-notes.ts";
+export type { Attribution, AttributionCounts, Owner } from "./run/attribution.ts";
 export type { TokenUsage, UsageByModel, Usage, UsageRecorder } from "./run/usage.ts";
 export { regradeSuite, RegradeError } from "./run/regrade.ts";
 export { compareRuns, baselineSnapshot, type Comparison, type TaskDelta, type TaskChange, type BaselineSnapshot } from "./run/compare.ts";

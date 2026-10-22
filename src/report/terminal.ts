@@ -1,3 +1,4 @@
+import { OWNERS } from "../run/attribution.ts";
 import { comparisonOf, type Comparison, type TaskChange } from "../run/compare.ts";
 import { gradedOutcomes, skippedTrials, tagsBelowFloor, trialStatus, type SoftScore, type SuiteResult, type TaskSummary } from "../run/suite.ts";
 import { costOf, totalTokens, type UsageByModel } from "../run/usage.ts";
@@ -136,6 +137,9 @@ export function renderTerminal(r: SuiteResult, opts: { baseline?: string } = {})
     const trials = new Set(notes.map((n) => `${n.task}#${n.trial}`)).size;
     lines.push(yellow(`  ${notes.length} caller turn(s) in ${trials} trial(s) stepped out of role: see Caller notes`));
   }
+  // A first suspect per trial that didn't pass (each trial's attribution in results.json); absent in older results.
+  const owners = r.attribution ? OWNERS.filter((o) => r.attribution![o] > 0) : [];
+  if (owners.length) lines.push(dim(`  not passed, by likely owner: ${owners.map((o) => `${o.replace("-", " ")} ${r.attribution![o]}`).join(" · ")}`));
   // The estimators need k graded trials of a task to count it in pass^k and pass@k.
   const short = r.tasks.filter((t) => gradedOutcomes(t).length < r.k).length;
   if (short) {

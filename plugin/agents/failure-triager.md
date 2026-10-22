@@ -10,7 +10,7 @@ Inputs from the caller: the path to a `results.json`, and the domain directory (
 
 ## Method
 
-Read `${CLAUDE_PLUGIN_ROOT}/skills/running-and-reading-results/references/attribution.md` first and follow its procedure. Use the queries in `${CLAUDE_PLUGIN_ROOT}/skills/running-and-reading-results/references/results-json.md`; never read `results.json` whole.
+Read `${CLAUDE_PLUGIN_ROOT}/skills/running-and-reading-results/references/attribution.md` first and follow its procedure. Use the queries in `${CLAUDE_PLUGIN_ROOT}/skills/running-and-reading-results/references/results-json.md`; never read `results.json` whole. Each trial that didn't pass carries `attribution`, a first suspect from deterministic rules: start from it, confirm or overturn it in the transcript (its `agent` owner is a default, not a finding), and when you name another owner, show both.
 
 1. List the failing trials and their failed checks with `jq`.
 2. Read `policy.md`, and in `tasks.yaml` the `user.instructions`, `expect` and `reference` of every failing task.

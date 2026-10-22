@@ -7,6 +7,8 @@ A failed trial means some check failed. It does not say whose fault that is. Fou
 - **Task spec**: the domain and the task: seed rows, tools, invariants and expectations. A person wrote or accepted them, and they can be wrong.
 - **Harness**: adapters, endpoints, credentials, rate limits, timeouts.
 
+Each trial that didn't pass has an `attribution` in `results.json` (since 0.3.0): the owner deterministic rules point at, with the evidence. `harness` means the trial was skipped. `task-spec` means `lint` proves the task can't pass as written. `simulated-user` means a caller note, a turn where the caller stepped out of role, came before the first hard failure. `agent` covers everything else: it is the default, not a finding. Use it as the first suspect and the procedure below to confirm or overturn it, and report both when they differ.
+
 Fixing the wrong party is the expensive mistake. Tuning the agent's prompt to satisfy an over-strict task makes it worse for the real customer. Relaxing a task to excuse a real agent bug ships the bug.
 
 ## Procedure
