@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { execFileSync, spawn } from "node:child_process";
-import { createRequire } from "node:module";
 import { mkdir, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,6 +26,7 @@ import { draftTasksFromTranscripts } from "./init/transcripts.ts";
 import { draftPlan, planLine } from "./init/plan.ts";
 import { DOMAIN_FILE, isPolicyPlaceholder, POLICY_PLACEHOLDER, renderDraft, TASKS_PLACEHOLDER, writeDraft } from "./init/render.ts";
 import { DomainError, DomainNotFoundError, domainWarnings, loadDomain, pendingReview } from "./spec/load.ts";
+import { version } from "./version.ts";
 import { lintDomain } from "./grade/lint.ts";
 import type { Domain } from "./spec/schema.ts";
 import { bedrockRegion, bedrockUse, ModelsFile, pricesFile, renderLeaderboardMarkdown, runLeaderboard, type PricesFile, type RunInfo } from "./run/leaderboard.ts";
@@ -209,9 +209,6 @@ const NEXT = "npx sandtable-ai";
 function defaultOut(label: string): string {
   return path.join(".sandtable", "runs", `${new Date().toISOString().replace(/[:.]/g, "-")}-${label}`);
 }
-
-// package.json sits one level above both src/cli.ts and dist/cli.js, and ships in the npm package.
-const { version } = createRequire(import.meta.url)("../package.json") as { version: string };
 
 /**
  * The commit sandtable runs from, when it runs from its own git clone. An npm install inside someone's

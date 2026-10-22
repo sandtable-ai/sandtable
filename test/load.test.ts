@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { DomainError, loadDomain } from "../src/spec/load.ts";
+import { version } from "../src/version.ts";
 
 // A domain's own files: sandtable.yaml and the policy, world or tasks files it includes.
 
@@ -78,6 +79,24 @@ describe("loadDomain schema and cross-reference errors", () => {
     const message = ((await loadDomain(dir).catch((e: unknown) => e)) as Error).message;
     expect(message).toContain(`${path.join(dir, "tasks.yaml")}:\n✖ Unrecognized key: "critcal"`);
     expect(message).toContain(`${path.join(dir, "sandtable.yaml")}:\n✖ Unrecognized key: "nmae"`);
+    // Last, the installed version, so a key from a later release reads differently from a typo.
+    expect(message.split("\n").at(-1)).toBe(
+      `sandtable-ai ${version} doesn't know these keys: check their spelling, or whether a later release added them (CHANGELOG.md, or \`npx sandtable-ai@latest validate\`).`,
+    );
+  });
+
+  it("say once which version doesn't know a single unknown key", async () => {
+    const dir = copyOfClinic();
+    edit(path.join(dir, "sandtable.yaml"), /^name: /m, "nmae: x\nname: ");
+    const message = ((await loadDomain(dir).catch((e: unknown) => e)) as Error).message;
+    expect(message).toContain(`\nsandtable-ai ${version} doesn't know this key: check its spelling, or whether a later release added it`);
+  });
+
+  it("leave other schema errors without the version line", async () => {
+    const dir = copyOfClinic();
+    edit(path.join(dir, "sandtable.yaml"), /^name: .*$/m, "name: 42");
+    const message = ((await loadDomain(dir).catch((e: unknown) => e)) as Error).message;
+    expect(message).not.toContain("doesn't know");
   });
 
   it("name the included tasks file for a task's cross-reference problem", async () => {
