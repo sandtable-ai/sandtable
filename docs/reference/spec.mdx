@@ -181,7 +181,7 @@ The terminal summary, the HTML report and the leaderboard show the rate, for exa
 
 The `Soft rule` comments that `init --sop` writes are different: they note the SOP's rules that no invariant checks, such as wording, a rule that needs today's date, or one that depends on a fact no record holds, each with the reason ([init from an SOP](/guides/init#from-an-sop-claude-grounded)). Nothing checks them.
 
-Every invariant also accepts `review` and `source` (see [Review workflow](/concepts/review-workflow)).
+Every invariant also accepts `review` and `source`, as `source: { file, quote }`: the document the rule comes from and the sentence it enforces, which `init --sop` fills in (see [Review workflow](/concepts/review-workflow)).
 
 ## personas and tasks
 
