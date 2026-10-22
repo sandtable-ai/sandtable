@@ -72,7 +72,7 @@ The full list, with the policy line each rule enforces, is in the [freight examp
 
 One rule is **soft** and never fails a trial: `counter-at-ceiling`, a logged counter-offer that reached the load's `max_rate`. The policy allows it, so the board reports it as a concession rate, out of the trials that logged a counter-offer, and keeps it out of the ranking.
 
-A trial that crashes (throttling past the retries, expired credentials) is not a result. A model with any crashed trial shows as an error row instead of a score.
+A trial that crashes (throttling past the retries, expired credentials) before the agent broke a rule is skipped: it is not a result, and a model with any skipped trial shows as an error row instead of a score. This board was graded before [critical tasks](/reference/spec#critical-tasks) existed, so it has no **Critical** column; a board graded by a newer sandtable shows one, and ranks a model that failed a critical task below every model that failed none.
 
 ## Which models
 

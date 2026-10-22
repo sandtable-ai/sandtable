@@ -78,7 +78,7 @@ Guide: [draft a domain with init](https://sandtable.dev/guides/init). Spec: [ref
 
 The [freight leaderboard](https://sandtable.dev/leaderboard) runs 13 models as the agent on the freight example's 50 calls, four trials each, against the same simulated caller. Grading is deterministic, and models rank by pass^4. Six models pass all 200 of their trials: Claude Opus 5.5, Claude Sonnet 5.5, Claude Haiku 5.5, GPT-6 Astra, GPT-6.1 Sol and Grok 4.7. For five of the seven others, most failed trials include telling the caller a load's ceiling rate. Every conversation is published in [sandtable-ai/leaderboard](https://github.com/sandtable-ai/leaderboard), and the page has the commands to reproduce the board.
 
-`sandtable leaderboard` ranks several agents on one domain under the same simulated callers, next to a do-nothing baseline, by pass^k with rule violations, cost per trial and latency:
+`sandtable leaderboard` ranks several agents on one domain under the same simulated callers, next to a do-nothing baseline, by pass^k with rule violations, cost per trial and latency. A model that failed a critical task ranks below every model that failed none:
 
 ```bash
 npx sandtable-ai leaderboard examples/freight -m models.yaml -k 4

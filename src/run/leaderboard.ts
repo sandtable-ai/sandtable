@@ -11,7 +11,7 @@ import { DEFAULT_AGENT_EFFORT, type Effort, type Provider } from "../sim/claude.
 import type { AgentAdapter, UserSimulator } from "../sim/types.ts";
 import { changedVerdicts, RegradeError, regradeSuite } from "./regrade.ts";
 import { parseJson, parseResults } from "./read.ts";
-import { runSuite, type SuiteResult } from "./suite.ts";
+import { criticalFailures, runSuite, skippedTrials, type SuiteResult } from "./suite.ts";
 import { costOf, totalTokens } from "./usage.ts";
 import { writeFileAtomic } from "./write.ts";
 
@@ -67,6 +67,11 @@ export interface LeaderboardRow {
   topFailure?: string;
   /** Soft invariants: how often each was broken, in the trials where it applied. Never part of the score. */
   soft: Record<string, { applied: number; broken: number; rate: number | null }>;
+  /**
+   * The critical tasks the board ran (release blockers), and the ids of those with a failed trial. A model that
+   * failed one ranks below every model that failed none, whatever its pass^k. Absent when no task run is critical.
+   */
+  critical?: { tasks: number; failed: string[] };
   /** Agent and simulated caller together. */
   costUsd: number | null;
   costPerTrialUsd: number | null;
@@ -74,7 +79,10 @@ export interface LeaderboardRow {
   agentCostPerTrialUsd: number | null;
   agentTurnP95Ms: number | null;
   agentTokens: number;
+  /** Why the row has no score: the model couldn't run, or some of its trials were skipped (see `skipped`). */
   error?: string;
+  /** On an error row: how many trials ended in an error before the agent broke any rule, and were skipped. */
+  skipped?: number;
 }
 
 /** What produced a run, beyond the domain, caller, k and models: recorded in run.json and leaderboard.json. */
@@ -199,14 +207,15 @@ function otherRun(r: SuiteResult, want: RunScope): string | undefined {
 
 /**
  * Why stored results cannot stand in for this run, or undefined when they can. Results are
- * comparable only under the same domain, k, simulated caller and tasks, and a crashed trial
- * (throttling, expired credentials) is not a result.
+ * comparable only under the same domain, k, simulated caller and tasks, and a skipped trial
+ * (one that ended in an error, such as throttling or expired credentials, before the agent broke
+ * any rule) is not a result. A trial that ended in an error after the agent broke a rule failed, as in `run`.
  */
 export function staleReason(r: SuiteResult, want: RunScope): string | undefined {
   const other = otherRun(r, want);
   if (other) return other;
-  const crashed = r.tasks.reduce((n, t) => n + t.trials.filter((tr) => tr.endReason === "error").length, 0);
-  if (crashed) return `${crashed} trial(s) crashed`;
+  const skipped = skippedTrials(r).length;
+  if (skipped) return `${skipped} trial(s) were skipped after an error`;
   return undefined;
 }
 
@@ -265,15 +274,20 @@ export function changedWhere(had: Where, now: Where): string | undefined {
   return undefined;
 }
 
-/** "3 of 200 trial(s) crashed: <the first error>", or undefined when no trial crashed. */
-function crashOf(r: SuiteResult): string | undefined {
-  const crashes = r.tasks.flatMap((t) => t.trials.filter((tr) => tr.endReason === "error"));
-  if (crashes.length === 0) return undefined;
+/**
+ * A run with skipped trials, as `run` treats it: they ended in an error before the agent broke any rule, so the run
+ * is incomplete and the board doesn't rank it. Its error, "3 of 200 trial(s) skipped after an error: <the first
+ * error>", and how many were skipped; undefined when none was. A trial that ended in an error after the agent broke
+ * a rule failed, and counts in pass^k.
+ */
+function incompleteRun(r: SuiteResult): { error: string; skipped: number } | undefined {
+  const skipped = skippedTrials(r);
+  if (skipped.length === 0) return undefined;
   const trials = r.tasks.reduce((n, t) => n + t.trials.length, 0);
-  return `${crashes.length} of ${trials} trial(s) crashed: ${crashes[0]!.error ?? "unknown error"}`;
+  return { error: `${skipped.length} of ${trials} trial(s) skipped after an error: ${skipped[0]!.error ?? "unknown error"}`, skipped: skipped.length };
 }
 
-function errorRow(entry: LeaderboardEntry, error: string): LeaderboardRow {
+function errorRow(entry: LeaderboardEntry, error: string, skipped?: number): LeaderboardRow {
   return {
     label: entry.label,
     agent: entry.agent,
@@ -291,6 +305,7 @@ function errorRow(entry: LeaderboardEntry, error: string): LeaderboardRow {
     agentTurnP95Ms: null,
     agentTokens: 0,
     error,
+    ...(skipped ? { skipped } : {}),
   };
 }
 
@@ -313,6 +328,7 @@ export function toRow(entry: LeaderboardEntry, r: SuiteResult, baseline = false)
     violations,
     ...(r.failureModes[0] ? { topFailure: `${r.failureModes[0].id} (${r.failureModes[0].count}×)` } : {}),
     soft: Object.fromEntries((r.soft ?? []).map((x) => [x.id, { applied: x.applied, broken: x.broken, rate: x.rate }])),
+    ...criticalOf(r),
     costUsd: hasUsage ? cost : null,
     costPerTrialUsd: hasUsage && cost !== null && trials ? cost / trials : null,
     agentCostPerTrialUsd: (() => {
@@ -325,6 +341,12 @@ export function toRow(entry: LeaderboardEntry, r: SuiteResult, baseline = false)
       return t.input + t.output + t.cacheRead + t.cacheWrite;
     })(),
   };
+}
+
+/** A row's `critical`: the critical tasks run, and those with a failed trial; nothing when no task run is critical. */
+function criticalOf(r: SuiteResult): { critical?: LeaderboardRow["critical"] } {
+  const tasks = r.tasks.filter((t) => t.critical).length;
+  return tasks ? { critical: { tasks, failed: criticalFailures(r).map((t) => t.id) } } : {};
 }
 
 /** A model's stored results, graded again under the current rules when they can stand in for this run, or why they can't. */
@@ -366,12 +388,18 @@ async function readStored(dir: string, key: RunKey, where: Where | undefined, do
   if (stale) return { stored, stale };
   // Stored verdicts are never reused as they are: the stored conversations are graded again under the
   // current rules, so every row of the board is graded by the same grader.
+  let result: SuiteResult;
   try {
-    return { stored, result: regradeSuite(domain, stored) };
+    result = regradeSuite(domain, stored);
   } catch (err) {
     if (!(err instanceof RegradeError)) throw err;
     return { stored, stale: err.message };
   }
+  // Whether a trial is skipped is decided again under the current rules: one that ended in an error counts as failed
+  // only while the agent had broken a rule before it.
+  const skipped = skippedTrials(result).length;
+  if (skipped) return { stored, stale: `${skipped} trial(s) are skipped under the current rules, since they ended in an error before the agent broke any` };
+  return { stored, result };
 }
 
 /** A model's results.json, run.json and report.html, each written whole or not at all. */
@@ -538,9 +566,10 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
     }
     const key = runKey(entry);
     const info = opts.runInfo ? { sandtable: opts.runInfo.sandtable, ...whereOf(entry) } : {};
-    // A crashed trial (credentials, throttling) says nothing about the model: show the row as an
-    // error instead of ranking it, and let the next run retry the model.
-    const message = crashOf(result);
+    // A skipped trial (credentials, throttling, before the agent broke any rule) says nothing about the model: show
+    // the row as an error instead of ranking it, and let the next run retry the model.
+    const incomplete = incompleteRun(result);
+    const message = incomplete?.error;
     // This run supersedes an earlier crashed run of the same run. A crashed run of another run, such as a full
     // board's under a quick check, may hold the only copy of paid conversations: it is never removed or replaced.
     const crashed = await crashedRuns(dir, { domain: domain.name, k, user: user.name, taskIds });
@@ -555,7 +584,7 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
       await writeRun(crashedDir, result, { ...key, ...info });
       const kept = crashed.other.length ? `; ${keptNote(crashed.other)}` : "";
       opts.onEntry?.(entry.label, "failed", `${message}; the crashed run is in ${crashedDir}${(await exists(file)) ? ", and the stored results are kept" : ""}${kept}`);
-      rows.push(errorRow(entry, message));
+      rows.push(errorRow(entry, message, incomplete!.skipped));
       continue;
     }
     await writeRun(dir, result, { ...key, ...info });
@@ -580,11 +609,11 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
   const scripted = tasks.every((t) => t.user.script?.length);
   const noop = await runSuite({ domain, agent: noopAgent(), user: scripted ? scriptedUser() : user, k: scripted ? 1 : k, taskIds });
   const baselineEntry = { label: "Do-nothing baseline", agent: "noop" };
-  const baselineCrash = crashOf(noop);
+  const baselineCrash = incompleteRun(noop);
   if (baselineCrash) {
     // A baseline whose caller crashed sets no floor: it shows as an error, like a model.
-    opts.onEntry?.(baselineEntry.label, "failed", baselineCrash);
-    rows.push({ ...errorRow(baselineEntry, baselineCrash), baseline: true });
+    opts.onEntry?.(baselineEntry.label, "failed", baselineCrash.error);
+    rows.push({ ...errorRow(baselineEntry, baselineCrash.error, baselineCrash.skipped), baseline: true });
   } else {
     const baseline = toRow(baselineEntry, noop, true);
     // A scripted noop run is deterministic, so its pass^k equals its pass^1.
@@ -592,9 +621,11 @@ export async function runLeaderboard(opts: LeaderboardOptions): Promise<Leaderbo
     rows.push(baseline);
   }
 
-  // Errored rows (NaN) sort last; a 0% model still ranks above them.
+  // A model that failed a critical task, a release blocker, ranks below every model that failed none, whatever its
+  // pass^k; error rows come last. Within each group, by pass^k, then pass^1.
+  const group = (r: LeaderboardRow) => (r.error !== undefined ? 2 : r.critical?.failed.length ? 1 : 0);
   const score = (x: number) => (Number.isNaN(x) ? -1 : x);
-  rows.sort((a, b) => score(b.passHatK) - score(a.passHatK) || score(b.passHat1) - score(a.passHat1));
+  rows.sort((a, b) => group(a) - group(b) || score(b.passHatK) - score(a.passHatK) || score(b.passHat1) - score(a.passHat1));
   const result: LeaderboardResult = {
     version: 1,
     domain: domain.name,
@@ -626,6 +657,15 @@ const COST_NOTE = "Cost / trial counts the agent's model only; leaderboard.json 
 const SOFT_NOTE = "Soft rules never fail a trial: each shows how often the model broke it, in the trials where it applied.";
 /** Whether any row reports a soft invariant, so the table needs its column. */
 const hasSoft = (l: LeaderboardResult) => l.rows.some((r) => Object.keys(r.soft ?? {}).length > 0);
+/** Whether the board ran a critical task, so the table needs its column. */
+const hasCritical = (l: LeaderboardResult) => l.rows.some((r) => r.critical !== undefined);
+const CRITICAL_NOTE = "Critical counts the critical tasks (release blockers) that passed every trial; a model that failed one ranks below every model that failed none, whatever its score.";
+/** "3/3" when every critical task passed every trial, else "✗ 1/3: <the failed task ids>". */
+export function criticalCell(r: LeaderboardRow): string {
+  if (!r.critical) return "";
+  const { tasks, failed } = r.critical;
+  return failed.length ? `✗ ${tasks - failed.length}/${tasks}: ${failed.join(", ")}` : `${tasks}/${tasks}`;
+}
 /** e.g. "counter-at-ceiling 37.5% (3/8)". */
 export function softCell(r: LeaderboardRow): string {
   return Object.entries(r.soft ?? {})
@@ -635,11 +675,12 @@ export function softCell(r: LeaderboardRow): string {
 
 export function renderLeaderboardMarkdown(l: LeaderboardResult): string {
   const soft = hasSoft(l);
-  const heads = ["#", "Model", ...passHeads(l.k), "Rule violations", "Top failure", ...(soft ? ["Soft rules"] : []), "Cost / trial", "p95 turn"];
+  const critical = hasCritical(l);
+  const heads = ["#", "Model", ...passHeads(l.k), ...(critical ? ["Critical"] : []), "Rule violations", "Top failure", ...(soft ? ["Soft rules"] : []), "Cost / trial", "p95 turn"];
   const lines = [
     `# Leaderboard: ${l.domain}`,
     "",
-    `Each model plays the agent on every task ${howOften(l.k)}, against the same simulated callers (${l.user}). ${passMeaning(l.k)} Grading is deterministic: end state, rules checked on every tool call and message, required and forbidden tools. ${soft ? `${SOFT_NOTE} ` : ""}${COST_NOTE}`,
+    `Each model plays the agent on every task ${howOften(l.k)}, against the same simulated callers (${l.user}). ${passMeaning(l.k)} Grading is deterministic: end state, rules checked on every tool call and message, required and forbidden tools. ${critical ? `${CRITICAL_NOTE} ` : ""}${soft ? `${SOFT_NOTE} ` : ""}${COST_NOTE}`,
     "",
     `| ${heads.join(" | ")} |`,
     `|${heads.map(() => "---").join("|")}|`,
@@ -649,8 +690,8 @@ export function renderLeaderboardMarkdown(l: LeaderboardResult): string {
     const place = r.baseline || r.error ? "" : String(++rank);
     const model = r.baseline ? `_${r.label}_` : modelName(r);
     const cells = r.error
-      ? [place, model, "error", ...passHeads(l.k).slice(1).map(() => ""), "", r.error.replace(/\|/g, "/").slice(0, 80), ...(soft ? [""] : []), "", ""]
-      : [place, model, ...passCells(r, l.k), String(totalViolations(r)), r.topFailure ?? "", ...(soft ? [softCell(r)] : []), usd(r.agentCostPerTrialUsd), secs(r.agentTurnP95Ms)];
+      ? [place, model, "error", ...passHeads(l.k).slice(1).map(() => ""), ...(critical ? [""] : []), "", r.error.replace(/\|/g, "/").slice(0, 80), ...(soft ? [""] : []), "", ""]
+      : [place, model, ...passCells(r, l.k), ...(critical ? [criticalCell(r)] : []), String(totalViolations(r)), r.topFailure ?? "", ...(soft ? [softCell(r)] : []), usd(r.agentCostPerTrialUsd), secs(r.agentTurnP95Ms)];
     lines.push(`| ${cells.join(" | ")} |`);
   }
   lines.push("", `Generated ${l.generatedAt} with [sandtable](https://github.com/sandtable-ai/sandtable)${builtWith(l.sandtable)}. Per-model reports and trajectories are in the folders next to this file.`, "");
@@ -660,13 +701,15 @@ export function renderLeaderboardMarkdown(l: LeaderboardResult): string {
 export function renderLeaderboardHtml(l: LeaderboardResult): string {
   const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
   const soft = hasSoft(l);
+  const critical = hasCritical(l);
   const body = l.rows
     .map((r) => {
       const effort = r.effort ? ` <span class="effort">effort ${esc(r.effort)}</span>` : "";
       const link = r.baseline ? esc(r.label) : `<a href="./${slugify(r.label)}/report.html">${esc(r.label)}</a>${effort}`;
-      if (r.error) return `<tr${r.baseline ? ' class="base"' : ""}><td>${link}</td><td colspan="${passHeads(l.k).length + (soft ? 5 : 4)}" class="err">${esc(r.error)}</td></tr>`;
+      if (r.error) return `<tr${r.baseline ? ' class="base"' : ""}><td>${link}</td><td colspan="${passHeads(l.k).length + (soft ? 5 : 4) + (critical ? 1 : 0)}" class="err">${esc(r.error)}</td></tr>`;
       const pass = passCells(r, l.k).map((c, i, all) => (i === all.length - 1 ? `<td><b>${c}</b></td>` : `<td>${c}</td>`)).join("");
-      return `<tr${r.baseline ? ' class="base"' : ""}><td>${link}</td>${pass}<td>${totalViolations(r)}</td><td>${esc(r.topFailure ?? "")}</td>${soft ? `<td>${esc(softCell(r))}</td>` : ""}<td>${usd(r.agentCostPerTrialUsd)}</td><td>${secs(r.agentTurnP95Ms)}</td></tr>`;
+      const crit = critical ? `<td${r.critical?.failed.length ? ' class="err"' : ""}>${esc(criticalCell(r))}</td>` : "";
+      return `<tr${r.baseline ? ' class="base"' : ""}><td>${link}</td>${pass}${crit}<td>${totalViolations(r)}</td><td>${esc(r.topFailure ?? "")}</td>${soft ? `<td>${esc(softCell(r))}</td>` : ""}<td>${usd(r.agentCostPerTrialUsd)}</td><td>${secs(r.agentTurnP95Ms)}</td></tr>`;
     })
     .join("\n");
   return `<!doctype html>
@@ -682,8 +725,8 @@ th,td{text-align:left;padding:8px 16px;border-bottom:1px solid var(--line);font-
 th{font-size:12px;color:var(--muted)}tr.base td{color:var(--muted);font-style:italic}.err{color:var(--bad-text)}a{color:inherit}.effort{color:var(--muted);font-size:12px;white-space:nowrap}
 </style></head><body><main>
 <div class="head">${MARK_SVG}<h1>Leaderboard: ${esc(l.domain)}</h1></div>
-<p>Each model plays the agent on every task ${howOften(l.k)} against the same simulated callers (${esc(l.user)}). ${passMeaning(l.k).replace(/^(pass\^\d+)/, "<b>$1</b>")} Grading is deterministic: end state, rules checked on every tool call and message, required and forbidden tools. ${soft ? `${SOFT_NOTE} ` : ""}${COST_NOTE} Click a model for its full report and trajectories.</p>
-<div class="wrap"><table><thead><tr><th>Model</th>${passHeads(l.k).map((h) => `<th>${h}</th>`).join("")}<th>Rule violations</th><th>Top failure</th>${soft ? "<th>Soft rules</th>" : ""}<th>Cost / trial</th><th>p95 turn</th></tr></thead>
+<p>Each model plays the agent on every task ${howOften(l.k)} against the same simulated callers (${esc(l.user)}). ${passMeaning(l.k).replace(/^(pass\^\d+)/, "<b>$1</b>")} Grading is deterministic: end state, rules checked on every tool call and message, required and forbidden tools. ${critical ? `${CRITICAL_NOTE} ` : ""}${soft ? `${SOFT_NOTE} ` : ""}${COST_NOTE} Click a model for its full report and trajectories.</p>
+<div class="wrap"><table><thead><tr><th>Model</th>${passHeads(l.k).map((h) => `<th>${h}</th>`).join("")}${critical ? "<th>Critical</th>" : ""}<th>Rule violations</th><th>Top failure</th>${soft ? "<th>Soft rules</th>" : ""}<th>Cost / trial</th><th>p95 turn</th></tr></thead>
 <tbody>
 ${body}
 </tbody></table></div>
