@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-22
+
+A release with breaking changes that closes the loop in CI: `critical: true` tasks, argument matchers and per-task `given`, `run --baseline` with what changed per task, passed, failed, flaky and skipped verdicts with errored trials skipped, exit 1 for a failed gate and 2 for an error, `init` drafts that keep their sources' facts, show their plan and cost with `--dry-run` and print what they cost, a simulated caller that says it doesn't know instead of guessing, and a Claude Code plugin installed from the release; read the seven **Breaking:** entries under Changed before upgrading.
+
 ### Added
 
 - **Domain spec**: a task's `called` and `not_called` entries can say which call, as `{ tool, args }` with a where clause on the call's arguments, such as `called: [{ tool: transfer_to_human, args: { mc_number: "100101" } }]` or `not_called: [{ tool: book_load, args: { load_id: L-1004 } }]`. A failed check says how the closest call differed, and `validate` rejects an argument the tool doesn't have or an unknown operator. Plain tool names work as before, and the library exports the entry's schema as `CallExpectSpec` ([#25](https://github.com/sandtable-ai/sandtable/issues/25)).
@@ -138,7 +142,8 @@ First public release. sandtable rehearses an AI agent on a simulated copy of one
 
 A rehearsal of the release pipeline (npm, PyPI and GitHub releases from one tag), published before the first public release. Everything in it is also in 0.1.0; use 0.1.0 instead.
 
-[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/sandtable-ai/sandtable/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/sandtable-ai/sandtable/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/sandtable-ai/sandtable/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/sandtable-ai/sandtable/compare/v0.1.0-alpha.1...v0.1.0

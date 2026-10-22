@@ -1,6 +1,6 @@
 [project]
 name = "sandtable-ai"
-version = "0.1.2"
+version = "0.2.0"
 description = "Rehearse AI agents on a sand table of your customer's world before they go live. Python launcher for the sandtable CLI."
 readme = "README.md"
 license = "MIT"
