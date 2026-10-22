@@ -188,7 +188,8 @@ describe("Claude Code plugin", () => {
       const text = read(file);
       const code = [...fences(text).map((f) => f.code), ...[...text.matchAll(/`([^`\n]+)`/g)].map((m) => m[1]!)];
       for (const snippet of code) {
-        for (const m of snippet.matchAll(/(?:npx sandtable-ai|node src\/cli\.ts) +([a-z][\w-]*)([^\n;&|`]*)/g)) {
+        // `npx sandtable-ai <command>`, `npx -p sandtable-ai -p <package> sandtable <command>` (the bin, after -p), or the repo's source.
+        for (const m of snippet.matchAll(/(?:npx sandtable-ai|npx (?:-p \S+ )+sandtable|node src\/cli\.ts) +([a-z][\w-]*)([^\n;&|`]*)/g)) {
           count++;
           const [, command, rest] = m as unknown as [string, string, string];
           expect(commands, `${rel(file)}: ${m[0]}`).toContain(command);
