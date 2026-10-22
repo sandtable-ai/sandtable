@@ -69,7 +69,7 @@ function lintTask(domain: Domain, task: Task, changeable: Set<string>, writers: 
     const present = a.key !== undefined ? seed.get(a.table, a.key) !== undefined : seed.list(a.table).some((r) => matches(r, a.where ?? {}));
     if (!present && !changeable.has(a.table)) {
       ready = false;
-      errors.push(`expect.state[${i}] needs a ${a.table} row that is not seeded and no tool can create or change`);
+      errors.push(`expect.state[${i}] needs a row in ${a.table} that is not seeded and no tool can create or change`);
     }
   });
 

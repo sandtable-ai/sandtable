@@ -241,13 +241,13 @@ The offline demo runs the `scripted:naive` and `scripted:careful` agents against
 Re-render the HTML report for a past run, for example after upgrading sandtable.
 
 ```bash
-npx sandtable-ai report .sandtable/runs/<run>/results.json [-o report.html]
+npx sandtable-ai report .sandtable/runs/<run>/results.json [-o <folder> | -o <file>.html]
 ```
 
 | Argument / option | Description |
 |---|---|
 | `<results>` | path to a `results.json` |
-| `-o, --out <file>` | output HTML path; a directory that doesn't exist yet is created. Default: `report.html` next to `results.json` |
+| `-o, --out <path>` | a folder to write `report.html` into, as `run -o` and `regrade -o` take a folder, or a path ending in `.html` for the file itself. A folder that doesn't exist yet is created. Default: `report.html` next to `results.json` |
 
 It prints the path it wrote. A run made with `--baseline` keeps its changes since the baseline, without the baseline's file.
 

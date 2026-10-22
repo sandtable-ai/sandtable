@@ -152,6 +152,17 @@ describe.skipIf(!process.features.typescript)("CLI errors", () => {
       expect(existsSync(out)).toBe(true);
     });
 
+    it("report -o names a folder, as run -o does, and the report goes in it as report.html", async () => {
+      const dir = tmp();
+      await promisify(execFile)(process.execPath, [cli, "run", "examples/freight", "-t", "book-at-posted-rate", "--agent", "scripted:careful", "--user", "scripted", "--no-html", "-o", dir]);
+      const folder = path.join(dir, "rerender");
+      const { stdout } = await promisify(execFile)(process.execPath, [cli, "report", path.join(dir, "results.json"), "-o", folder]);
+      expect(stdout.trim()).toBe(path.join(folder, "report.html"));
+      expect(existsSync(path.join(folder, "report.html"))).toBe(true);
+      const { stdout: byDefault } = await promisify(execFile)(process.execPath, [cli, "report", path.join(dir, "results.json")]);
+      expect(byDefault.trim()).toBe(path.join(dir, "report.html"));
+    });
+
     it("a directory where a file is expected says so, and points at the results.json inside it", async () => {
       const run = tmp();
       expect((await fail(["report", run])).stderr.trim()).toBe(`report: ${run} is a directory, not a file`);
