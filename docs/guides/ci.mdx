@@ -2,7 +2,7 @@
 title: "Test AI agents in CI: gate pull requests on pass^k"
 sidebarTitle: "Use it in CI"
 description: "Gate pull requests on agent reliability: free offline checks on every change, and a model-backed rehearsal that fails the build below a pass^k threshold."
-keywords: ["continuous integration", "GitHub Actions", "--fail-under", "--baseline", "regression testing", "exit codes", "prompt changes"]
+keywords: ["continuous integration", "GitHub Actions", "--fail-under", "--baseline", "--fail-on-regression", "regression testing", "exit codes", "prompt changes"]
 ---
 
 The goal is simple: a prompt tweak, model swap or tool change that breaks a customer rule should fail the build, the same way a broken unit test does. `sandtable` gives you two tiers for that.
@@ -20,6 +20,7 @@ Every command exits with a status a CI step can act on, as `grep` and `diff` do:
 |---|---|---|
 | `1` | `run --fail-under <pct>` | pass^k, with k = `--trials`, is below `pct` |
 | `1` | `run` | any trial of a task marked [`critical: true`](/reference/spec#critical-tasks) failed, whatever the score. This holds without `--fail-under` too, and the output names each such task |
+| `1` | `run --baseline <results> --fail-on-regression` | a task that passed every trial in the baseline fails one now. The output names each such task |
 | `1` | `validate`, `lint` | the domain exists but is invalid: a schema, cross-reference or YAML error |
 | `1` | `validate --strict` | a drafted item is still `review: pending` |
 | `1` | `lint` | any task is not graded, not ready, vacuous or not solvable |
@@ -131,6 +132,8 @@ Until sandtable reaches 1.0, pin an exact version of `sandtable-ai` in `package.
 
 `--fail-under` says whether this run is good enough. `--baseline` says what changed: it compares the run with an earlier `results.json` of the same domain and lists the tasks that broke or got fixed, new failures first, with pass^1 and pass^k before and after ([details](/reference/cli#compare-with-a-baseline)). The report shows the same changes at the top, so a reviewer opening the artifact sees the regressions first.
 
+`--fail-on-regression` makes the comparison a gate: the run exits 1 when any task that passed every trial in the baseline fails one now, whatever pass^k does. A pull request that breaks two tasks while another two get fixed keeps the same score and still fails. Only those `broken` tasks gate; a task that got worse without ever passing every trial, a task whose test changed, and a new failing task are listed but don't.
+
 Keep the last good run on `main` as the baseline. One way is to run the same job on pushes to `main` too, and on a pull request, download the newest artifact from `main` before rehearsing:
 
 ```yaml
@@ -154,14 +157,14 @@ permissions:
       - name: Rehearse
         run: |
           baseline=()
-          [ -f .sandtable/baseline/results.json ] && baseline=(--baseline .sandtable/baseline/results.json)
+          [ -f .sandtable/baseline/results.json ] && baseline=(--baseline .sandtable/baseline/results.json --fail-on-regression)
           npx sandtable-ai run ./sandtable --agent http://localhost:8787/step \
             --user claude:claude-haiku-5-5 -k 3 --fail-under 85 --out .sandtable/ci "${baseline[@]}"
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-The first pull request, before `main` has a run, rehearses without a baseline. Compare like with like: keep the simulated user and k the same as on `main`, since the comparison names any difference but can't take it out of the numbers. The comparison never changes the exit code.
+The first pull request, before `main` has a run, rehearses without a baseline. Compare like with like: keep the simulated user and k the same as on `main`, since the comparison names any difference but can't take it out of the numbers. Without `--fail-on-regression`, the comparison never changes the exit code.
 
 ## Choosing the threshold and k
 
@@ -177,4 +180,4 @@ Each run costs tasks × k conversations. For scale: the first 10 tasks of the bu
 
 ## Coming next
 
-Posting the changes since the baseline as a pull request comment is planned ([#13](https://github.com/sandtable-ai/sandtable/issues/13)), as are critical tasks that fail the build on their own ([#28](https://github.com/sandtable-ai/sandtable/issues/28)).
+Posting the changes since the baseline as a pull request comment is planned ([#13](https://github.com/sandtable-ai/sandtable/issues/13)).

@@ -159,6 +159,15 @@ export function compareRuns(baseline: BaselineSnapshot, now: SuiteResult): Compa
   return { baseline, tasks: deltas, sameTasks, shared: shared.length, comparable: comparable.length, passHat, differences };
 }
 
+/**
+ * The tasks that fail `--fail-on-regression`: those that passed every graded trial in the baseline and fail one now,
+ * with the same test. A `worse` task never passed every trial, and with a few trials its move is often noise; a
+ * `changed` task's test differs, so its move can't be put down to the agent.
+ */
+export function regressions(c: Comparison): TaskDelta[] {
+  return c.tasks.filter((d) => d.change === "broken");
+}
+
 /** The comparison stored with a run, or undefined for a run made without `--baseline`. */
 export function comparisonOf(r: SuiteResult): Comparison | undefined {
   return r.baseline ? compareRuns(r.baseline, r) : undefined;

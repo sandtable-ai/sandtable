@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { freightScriptedAgent } from "../src/demo/freight-agents.ts";
 import { renderHtml } from "../src/report/html.ts";
 import { renderTerminal } from "../src/report/terminal.ts";
-import { baselineSnapshot, compareRuns } from "../src/run/compare.ts";
+import { baselineSnapshot, compareRuns, regressions } from "../src/run/compare.ts";
 import { regradeSuite } from "../src/run/regrade.ts";
 import { runSuite, type SuiteResult } from "../src/run/suite.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
@@ -117,6 +117,18 @@ describe("compareRuns", () => {
     expect(compareRuns(old, fake({ t: [true] }, { agent: "scripted:careful", inputs: "new" })).differences).toEqual([NOTE]);
     // Old baselines keep today's verdicts: a task whose test changed still reads as fixed.
     expect(compareRuns(baselineSnapshot(fake({ t: [false] }, {}, { perTask: false })), fake({ t: [true] }, {}, { tests: { t: { inputs: "edited" } } })).tasks[0]).toMatchObject({ change: "fixed" });
+  });
+
+  it("counts only broken tasks as regressions: not worse, changed, added, removed or skipped ones", () => {
+    const before = fake({ broke: [true, true], worse: [true, false, true], changed: [true, true], gone: [true], crashed: [true], kept: [true] }, { k: 3 });
+    const now = fake(
+      { broke: [true, false], worse: [false, false, true], changed: [false, false], added: [false], crashed: [], kept: [true] },
+      { k: 3 },
+      { tests: { changed: { grading: "edited" } } },
+    );
+    const c = compareRuns(baselineSnapshot(before), now);
+    expect(c.tasks.map((d) => [d.id, d.change])).toEqual(expect.arrayContaining([["worse", "worse"], ["changed", "changed"], ["added", "added"], ["gone", "removed"], ["crashed", "skipped"]]));
+    expect(regressions(c).map((d) => d.id)).toEqual(["broke"]);
   });
 
   it("lists every freight task the naive agent broke against the careful one", async () => {
@@ -321,6 +333,34 @@ describe("regrade and report keep the comparison", () => {
     const html = await readFile(path.join(dir, "naive", "report.html"), "utf8");
     expect(html).toContain(`const C = {"baseline":{"runId":"${careful.runId}"`);
     expect(html).toContain('{"id":"book-at-posted-rate","change":"broken","before":{"passes":1,"trials":1},"after":{"passes":0,"trials":1}}');
+  });
+
+  it.skipIf(!process.features.typescript)("sandtable run --fail-on-regression exits 1 when a task broke since the baseline, and names it", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-regression-"));
+    const exec = (...args: string[]) =>
+      promisify(execFile)(process.execPath, [cli, ...args]).then((r) => ({ code: 0, ...r }), (e: { code: number; stdout: string; stderr: string }) => e);
+    const run = (agent: string, out: string, ...more: string[]) => exec("run", example, "--agent", agent, "--user", "scripted", "-t", "book-at-posted-rate", "-o", path.join(dir, out), "--no-html", ...more);
+    await run("scripted:careful", "careful");
+    const base = path.join(dir, "careful", "results.json");
+
+    // The naive agent breaks the booking: reported either way, a failed gate only under the flag.
+    expect((await run("scripted:naive", "naive", "--baseline", base)).code).toBe(0);
+    const gated = await run("scripted:naive", "naive-gated", "--baseline", base, "--fail-on-regression");
+    expect(gated.code).toBe(1);
+    expect(gated.stderr).toContain("✗ 1 task(s) broke since the baseline (--fail-on-regression): book-at-posted-rate 1/1 → 0/1");
+    // Nothing broke: the gate passes.
+    const same = await run("scripted:careful", "careful-again", "--baseline", base, "--fail-on-regression");
+    expect(same.code).toBe(0);
+    expect(same.stderr).not.toContain("--fail-on-regression");
+  });
+
+  it.skipIf(!process.features.typescript)("sandtable run --fail-on-regression without --baseline is a usage error, before any trial runs", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-regression-"));
+    const out = path.join(dir, "out");
+    const err = await promisify(execFile)(process.execPath, [cli, "run", example, "--agent", "scripted:careful", "--user", "scripted", "-o", out, "--fail-on-regression"]).catch((e: { code: number; stdout: string; stderr: string }) => e);
+    expect(err).toMatchObject({ code: 2, stdout: "" });
+    expect((err as { stderr: string }).stderr).toContain("error: --fail-on-regression needs --baseline <results>");
+    expect(await stat(out).catch(() => undefined)).toBeUndefined();
   });
 
   it.skipIf(!process.features.typescript)("sandtable run --baseline refuses another domain's run before any trial runs", async () => {

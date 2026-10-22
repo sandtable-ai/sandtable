@@ -127,6 +127,7 @@ npx sandtable-ai run ./my-domain --agent http://localhost:8787/step -k 4 --fail-
 | `--no-html` | skip the HTML report |
 | `--fail-under <pct>` | exit 1 if pass^k (k = `--trials`) is below this percentage, `0` to `100`. A trailing `%` is accepted |
 | `--baseline <results>` | a previous run's `results.json`: also show which tasks broke or got fixed since, and how pass^k moved. See [compare with a baseline](#compare-with-a-baseline) |
+| `--fail-on-regression` | with `--baseline`: exit 1 if a task that passed every trial in the baseline fails one now. Without `--baseline`, a usage error. See [compare with a baseline](#compare-with-a-baseline) |
 | `--open` | open the HTML report in the browser when the run finishes |
 | `--prices <file>` | extra model prices for the cost estimate: `{ "<model-id>": { "input", "output", "cacheRead", "cacheWrite" } }` in USD per million tokens. For Bedrock, [`scripts/bedrock-prices.mjs`](https://github.com/sandtable-ai/sandtable/blob/main/scripts/bedrock-prices.mjs) in the repo writes this file from the AWS Pricing API, and with `--verified` takes the models it doesn't list from [`prices/bedrock.verified.json`](https://github.com/sandtable-ai/sandtable/blob/main/prices/bedrock.verified.json), prices copied from AWS's model pages with their source |
 | `--provider`, `--region`, `--aws-profile` | where Claude runs, and the AWS settings for `bedrock:<model-id>`; see [provider options](#provider-options) |
@@ -185,7 +186,15 @@ Each task that ran in both, with the same test, is `broken` (it passed every tri
 
 A task's test is `changed` when its per-task hashes in `results.json` differ from the baseline's: `inputs`, what the agent and the caller are given and the world they act in (the policy, every tool's definition, the caller's prompt, opening and turn limit, the script for `--user scripted`, and the seed rows with the task's `given.rows`), or `grading`, how its trials are graded (its `expect` and `critical`, and every invariant with its `soft` flag, since a call to any tool can trip one). Its result is shown, but it isn't counted as fixed or broken, and it's left out of pass^k: the move may come from the edit, not the agent. Seed rows, tools and invariants are shared, so editing one marks every task changed. Accepting a drafted item (its `review`) changes neither hash. To compare like with like after changing how tasks are graded, regrade the baseline under the edited domain first (`regrade main-run/results.json -d ./my-domain -o main-regraded`) and pass that as `--baseline`. A baseline written before these hashes (by 0.1.x) can't show which tests changed, and the comparison says so in a `!` line.
 
-The baseline is read before any trial runs, so a missing file, a file that isn't a `results.json`, or a run of another domain stops the run before it calls a model. The comparison never changes the exit code: `--fail-under` still gates on this run's pass^k alone.
+The baseline is read before any trial runs, so a missing file, a file that isn't a `results.json`, or a run of another domain stops the run before it calls a model. On its own, the comparison never changes the exit code: `--fail-under` still gates on this run's pass^k alone.
+
+`--fail-on-regression` turns the comparison into a gate: the run exits 1 when any task is `broken`, and names each one:
+
+```text
+✗ 1 task(s) broke since the baseline (--fail-on-regression): expired-insurance 4/4 → 2/4
+```
+
+Only `broken` tasks gate. A `worse` task never passed every trial, and with a few trials its move is often noise; a `changed` task's test differs from the baseline's; a failing added task has nothing to compare with. They are still listed. The gate combines with `--fail-under` and critical tasks: any failed gate exits 1, and a run with skipped trials exits 2, as without it.
 
 `results.json` keeps what it needs of the baseline as [`baseline`](/reference/results-schema#baselinesnapshot), and the HTML report opens with the changes, regressions first, and marks each task that got worse. [`report`](#report) and [`regrade`](#regrade) show them again without the baseline's file.
 
@@ -328,6 +337,6 @@ As `grep` and `diff` do, a failed gate exits 1 and an error exits 2. See [Use it
 | Code | When |
 |---|---|
 | `0` | the command did its job and every gate passed; also `--help` and `--version` |
-| `1` | a gate failed on a complete result: `run` below `--fail-under`, a `run` in which any trial of a critical task failed, `validate` or `lint` on a domain that exists but is invalid, `validate --strict` with pending items, or `lint` errors |
+| `1` | a gate failed on a complete result: `run` below `--fail-under`, a `run` in which any trial of a critical task failed, a `run --fail-on-regression` in which a task broke since the baseline, `validate` or `lint` on a domain that exists but is invalid, `validate --strict` with pending items, or `lint` errors |
 | `2` | the command couldn't do its job: a usage error (an unknown command or option, a missing argument, an invalid value, or no command at all), a missing or unreadable file, no domain at the path, an invalid domain for any command but `validate` and `lint`, an unknown agent or user spec, missing credentials or package, an agent or simulated user that can't start (checked before a `run` or `demo --live` runs any trial), a `run` with a skipped trial (it ended in an error before the agent broke a rule, so the run is incomplete, even when a gate failed too), a `run` or `demo --live` in which every trial ended in an error, or a `leaderboard` on which every model failed or crashed |
 | `141` | the output was piped into a reader that stopped early, such as `head` or a `less` quit before the end: the command stops there quietly, without finishing, with the status a shell reports for a Unix tool stopped by `SIGPIPE` (128 + 13) |
