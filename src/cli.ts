@@ -8,7 +8,8 @@ import { freightScriptedAgent } from "./demo/freight-agents.ts";
 import { DEMO_USER_MODEL, demoLiveSides } from "./demo/live.ts";
 import { draftUsageLines, formatPercent, renderCompare, renderTerminal } from "./report/terminal.ts";
 import { renderHtml } from "./report/html.ts";
-import { criticalFailures, everyTrialFailed, runSuite, skippedTrials, tagsBelowFloor, trialStatus, type SuiteResult } from "./run/suite.ts";
+import { everyTrialFailed, runSuite, trialStatus, type SuiteResult } from "./run/suite.ts";
+import { runGates } from "./run/gates.ts";
 import { changedVerdicts, RegradeError, regradeSuite } from "./run/regrade.ts";
 import { baselineSnapshot, checkBaseline, compareRuns, regressions, type Comparison } from "./run/compare.ts";
 import { readResults, readUserFile, readUserText, userPathError } from "./run/read.ts";
@@ -158,16 +159,14 @@ function failIfNothingGraded(result: SuiteResult): boolean {
 }
 
 /**
- * A run with skipped trials is incomplete: they are left out of pass^k, so the score rests on fewer trials
- * than asked for, and an agent that crashes on hard tasks must not pass a gate the others would fail. Exit 2,
- * as for any run that couldn't do its job, even when a gate failed too: the fix is to rerun it.
+ * Print each gate a run failed and set the exit status: 2 for skipped trials, as for any run that couldn't do its
+ * job, even when a gate failed too, since the fix is to rerun it; 1 for a failed critical task or `--fail-under`.
  */
-function failIfIncomplete(result: SuiteResult): void {
-  const skipped = skippedTrials(result);
-  if (skipped.length === 0) return;
-  const trials = result.tasks.reduce((n, t) => n + t.trials.length, 0);
-  console.error(`\n✗ ${skipped.length} of ${trials} trial(s) ended in an error before the agent broke any rule, so they were skipped and this run is incomplete: rerun it. The first error:\n  ${skipped[0]!.error ?? "unknown error"}`);
-  exitWith(EXIT_ERROR);
+function failGates(result: SuiteResult, opts: { failUnder?: number } = {}): void {
+  for (const gate of runGates(result, opts)) {
+    console.error(`\n✗ ${gate.message}`);
+    exitWith(gate.status === 2 ? EXIT_ERROR : EXIT_GATE);
+  }
 }
 
 /** The `--fail-on-regression` gate: exit 1, naming each task, when any broke since the baseline. */
@@ -482,23 +481,8 @@ withProviderFlags(program
     console.log(`\n  results: ${path.join(out, "results.json")}${o.html ? `\n  report:  ${path.join(out, "report.html")}` : ""}`);
     if (failIfNothingGraded(result)) return;
     if (o.open && o.html) openInBrowser(path.join(out, "report.html"));
-    failIfIncomplete(result);
-    // A critical task is a release blocker: any failed trial fails the run, with or without --fail-under.
-    const blockers = criticalFailures(result);
-    if (blockers.length) {
-      console.error(`\n✗ ${blockers.length} critical task(s) did not pass every trial: ${blockers.map((t) => `${t.id} ${t.passes}/${t.graded ?? t.trials.length}`).join(", ")}`);
-      exitWith(EXIT_GATE);
-    }
-    const score = result.passHat[String(o.trials)] ?? 0;
-    if (o.failUnder !== undefined && !(score >= o.failUnder)) {
-      console.error(`\n✗ pass^${o.trials} ${formatPercent(score)} is below --fail-under ${formatPercent(o.failUnder)}`);
-      exitWith(EXIT_GATE);
-    }
-    const below = tagsBelowFloor(result);
-    if (below.length) {
-      console.error(`\n✗ ${below.length} tag(s) below their --floor: ${below.map((t) => `${t.tag} pass^${o.trials} ${formatPercent(t.passHatK)} < ${formatPercent(t.floor)}`).join(", ")}`);
-      exitWith(EXIT_GATE);
-    }
+    // Skipped trials, a critical task (a release blocker, with or without --fail-under), --fail-under and --floor.
+    failGates(result, { failUnder: o.failUnder });
     if (o.failOnRegression && result.baseline) failIfRegressed(compareRuns(result.baseline, result));
   });
 
@@ -592,6 +576,8 @@ withProviderFlags(program
       console.log(`\n  report: ${path.join(out, "report.html")}`);
       if (failIfNothingGraded(result)) return;
       if (shouldOpen) openInBrowser(path.join(out, "report.html"));
+      // The same gates as `run`: skipped trials exit 2, a failed critical task 1.
+      failGates(result);
       return;
     }
     console.log("Offline demo: two rule-based agents replay scripted carrier calls. No API key needed.\n");

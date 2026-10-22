@@ -114,12 +114,16 @@ describe("leaderboard", () => {
     expect(await run({ k: 1, taskIds: [taskIds[0]!], outDir: await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-quick-")) })).toEqual(["Careful rules:ran", "Naive rules:ran"]);
     expect(await run({ taskIds: [...taskIds].reverse() })).toEqual(["Careful rules:cached", "Naive rules:cached"]);
 
-    // A crashed trial is not a result, but the stored conversations are still kept: only that model is listed.
+    // A skipped trial is not a result, but the stored conversations are still kept: only that model is listed.
     const file = path.join(dir, "careful-rules", "results.json");
     const stored = JSON.parse(await readFile(file, "utf8"));
-    stored.tasks[0].trials[0].endReason = "error";
+    Object.assign(stored.tasks[0].trials[0], { endReason: "error", error: "throttled", skipped: true });
     await writeFile(file, JSON.stringify(stored));
-    await expect(run()).rejects.toThrow(/^1 model\(s\) have stored results .*\n  - Careful rules, in .* \(3 task\(s\) at k=2\): 1 trial\(s\) crashed\nNothing ran/);
+    await expect(run()).rejects.toThrow(/^1 model\(s\) have stored results .*\n  - Careful rules, in .* \(3 task\(s\) at k=2\): 1 trial\(s\) were skipped after an error\nNothing ran/);
+    // Whether it is skipped is decided again under the current rules, as `regrade` does.
+    delete stored.tasks[0].trials[0].skipped;
+    await writeFile(file, JSON.stringify(stored));
+    await expect(run()).rejects.toThrow(/\(3 task\(s\) at k=2\): 1 trial\(s\) are skipped under the current rules, since they ended in an error before the agent broke any\nNothing ran/);
   });
 
   it("refuses before it runs, regrades or writes anything for any model, when one model's stored results can't be reused", async () => {
@@ -303,9 +307,99 @@ describe("leaderboard", () => {
     expect(lb.rows.map((r) => r.label)).toEqual(["Careful rules", "Do-nothing baseline"]);
     const md = await readFile(path.join(dir, "LEADERBOARD.md"), "utf8");
     expect(md).toContain("on every task once");
-    expect(md).toContain("| # | Model | pass^1 | Rule violations |");
-    expect(md).toContain("| 1 | Careful rules | 100.0% | 0 |");
-    expect(await readFile(path.join(dir, "leaderboard.html"), "utf8")).toContain("<th>Model</th><th>pass^1</th><th>Rule violations</th>");
+    expect(md).toContain("| # | Model | pass^1 | Critical | Rule violations |");
+    expect(md).toContain("| 1 | Careful rules | 100.0% | 3/3 | 0 |");
+    expect(await readFile(path.join(dir, "leaderboard.html"), "utf8")).toContain("<th>Model</th><th>pass^1</th><th>Critical</th><th>Rule violations</th>");
+  });
+
+  it("ranks a model that failed a critical task below every model that failed none, whatever its pass^k", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const domain = await loadDomain(example);
+    // The careful agent, except that it books an uninsured carrier: it fails the critical refusal and passes the rest.
+    const careless: AgentAdapter = {
+      name: "careless",
+      createSession: async (ctx) => {
+        const careful = await freightScriptedAgent("careful").createSession(ctx);
+        return ctx.sessionId.includes("/expired-insurance#") ? freightScriptedAgent("naive").createSession(ctx) : careful;
+      },
+    };
+    const lb = await runLeaderboard({
+      domain,
+      entries: [
+        { label: "Careless", agent: "careless" },
+        { label: "Naive rules", agent: "scripted:naive" },
+        { label: "Careful rules", agent: "scripted:careful" },
+      ],
+      user: scriptedUser(),
+      k: 1,
+      outDir: dir,
+      resolveAgent: async (spec) => (spec === "careless" ? careless : agents[spec]!()),
+    });
+    const careful = lb.rows.find((r) => r.label === "Careful rules")!;
+    const carelessRow = lb.rows.find((r) => r.label === "Careless")!;
+    const naive = lb.rows.find((r) => r.label === "Naive rules")!;
+    expect(careful.critical).toEqual({ tasks: 3, failed: [] });
+    expect(carelessRow.critical).toEqual({ tasks: 3, failed: ["expired-insurance"] });
+    expect(naive.critical!.failed.length).toBeGreaterThan(0);
+    // Careless outscores the do-nothing baseline, yet ranks below it: it failed a release blocker, the baseline didn't.
+    expect(carelessRow.passHatK).toBeGreaterThan(lb.rows.find((r) => r.baseline)!.passHatK);
+    expect(lb.rows.map((r) => r.label)).toEqual(["Careful rules", "Do-nothing baseline", "Careless", "Naive rules"]);
+    const md = await readFile(path.join(dir, "LEADERBOARD.md"), "utf8");
+    expect(md).toContain("a model that failed one ranks below every model that failed none");
+    expect(md).toMatch(/\| 2 \| Careless \| [\d.]+% \| ✗ 2\/3: expired-insurance \|/);
+    const html = await readFile(path.join(dir, "leaderboard.html"), "utf8");
+    expect(html).toContain('<td class="err">✗ 2/3: expired-insurance</td>');
+    const json = JSON.parse(await readFile(path.join(dir, "leaderboard.json"), "utf8")) as { rows: { label: string; critical?: unknown }[] };
+    expect(json.rows.find((r) => r.label === "Careless")!.critical).toEqual({ tasks: 3, failed: ["expired-insurance"] });
+  });
+
+  it("has no Critical column when no task run is critical", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const lb = await runLeaderboard({
+      domain: await loadDomain(example),
+      entries: [{ label: "Careful rules", agent: "scripted:careful" }],
+      user: scriptedUser(),
+      k: 1,
+      taskIds: ["book-at-posted-rate"],
+      outDir: dir,
+      resolveAgent: async (spec) => agents[spec]!(),
+    });
+    expect(lb.rows.every((r) => r.critical === undefined)).toBe(true);
+    expect(await readFile(path.join(dir, "LEADERBOARD.md"), "utf8")).toContain("| # | Model | pass^1 | Rule violations |");
+  });
+
+  it("ranks a model whose trial ended in an error after it broke a rule, counting that trial as failed, as `run` does", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    // Books without vetting the carrier (a hard rule), then crashes before it answers.
+    const reckless: AgentAdapter = {
+      name: "reckless",
+      createSession: async () => ({
+        reply: async (_message, callTool) => {
+          await callTool("book_load", { load_id: "L-1001", mc_number: "100101", rate: 1800 });
+          throw new Error("throttled");
+        },
+      }),
+    };
+    const seen: string[] = [];
+    const lb = await runLeaderboard({
+      domain: await loadDomain(example),
+      entries: [{ label: "Reckless", agent: "reckless" }],
+      user: scriptedUser(),
+      k: 1,
+      taskIds: ["book-at-posted-rate"],
+      outDir: dir,
+      resolveAgent: async () => reckless,
+      onEntry: (label, status) => seen.push(`${label}:${status}`),
+    });
+    expect(seen).toEqual(["Reckless:ran"]);
+    const row = lb.rows.find((r) => r.label === "Reckless")!;
+    expect(row.error).toBeUndefined();
+    expect(row).toMatchObject({ passHat1: 0, trials: 1 });
+    expect(row.violations["verify-before-book"]).toBe(1);
+    // Its results are stored like any complete run's, and the next run reuses them.
+    const stored = JSON.parse(await readFile(path.join(dir, "reckless", "results.json"), "utf8"));
+    expect(stored.tasks[0].trials[0]).toMatchObject({ endReason: "error", error: "throttled", passed: false });
+    expect(stored.tasks[0].trials[0].skipped).toBeUndefined();
   });
 
   it("shows a model whose trials crashed as an error, not as a 0% score", async () => {
@@ -324,15 +418,16 @@ describe("leaderboard", () => {
       onEntry: (label, status, note) => seen.push(`${label}:${status}: ${note}`),
     });
     const crashedDir = path.join(dir, "no-credentials", "crashed");
-    expect(seen).toEqual([`No credentials:failed: 2 of 2 trial(s) crashed: Failed to resolve AWS credentials; the crashed run is in ${crashedDir}`]);
+    expect(seen).toEqual([`No credentials:failed: 2 of 2 trial(s) skipped after an error: Failed to resolve AWS credentials; the crashed run is in ${crashedDir}`]);
     // Nothing was stored before, so nothing is in the model's folder but the crashed run: the next run retries it.
     expect(JSON.parse(await readFile(path.join(crashedDir, "results.json"), "utf8")).tasks[0].trials[0].endReason).toBe("error");
     await expect(readFile(path.join(dir, "no-credentials", "results.json"))).rejects.toThrow();
     expect(lb.rows.map((r) => [r.label, r.error ?? ""])).toEqual([
       ["Do-nothing baseline", ""],
-      ["No credentials", "2 of 2 trial(s) crashed: Failed to resolve AWS credentials"],
+      ["No credentials", "2 of 2 trial(s) skipped after an error: Failed to resolve AWS credentials"],
     ]);
-    expect(await readFile(path.join(dir, "LEADERBOARD.md"), "utf8")).toContain("|  | No credentials | error |  | 2 of 2 trial(s) crashed: Failed to resolve AWS credentials |  |  |");
+    expect(lb.rows.find((r) => r.label === "No credentials")!.skipped).toBe(2);
+    expect(await readFile(path.join(dir, "LEADERBOARD.md"), "utf8")).toContain("|  | No credentials | error |  | 2 of 2 trial(s) skipped after an error: Failed to resolve AWS credentials |  |  |");
   });
 
   it("shows a baseline whose caller crashed as an error, not as the board's floor", async () => {
@@ -353,9 +448,9 @@ describe("leaderboard", () => {
       resolveAgent: async () => { throw new Error("no models on this board"); },
       onEntry: (label, status, note) => seen.push(`${label}:${status}: ${note}`),
     });
-    expect(seen).toEqual(["Do-nothing baseline:failed: 1 of 1 trial(s) crashed: expired token"]);
+    expect(seen).toEqual(["Do-nothing baseline:failed: 1 of 1 trial(s) skipped after an error: expired token"]);
     expect(lb.rows).toHaveLength(1);
-    expect(lb.rows[0]).toMatchObject({ label: "Do-nothing baseline", baseline: true, error: "1 of 1 trial(s) crashed: expired token" });
+    expect(lb.rows[0]).toMatchObject({ label: "Do-nothing baseline", baseline: true, error: "1 of 1 trial(s) skipped after an error: expired token" });
     expect(lb.rows[0]!.passHatK).toBeNaN();
     expect(await readFile(path.join(dir, "LEADERBOARD.md"), "utf8")).toContain("|  | _Do-nothing baseline_ | error |");
   });
@@ -375,8 +470,8 @@ describe("leaderboard", () => {
     const stored = await Promise.all(["results.json", "run.json", "report.html"].map((f) => readFile(path.join(model, f), "utf8")));
     // --no-resume forces the rerun, which is the only way past stored results; every trial of it crashes.
     const { seen, row } = await run(broken, false);
-    expect(seen).toEqual([`failed: 1 of 1 trial(s) crashed: Could not resolve authentication method; the crashed run is in ${path.join(model, "crashed")}, and the stored results are kept`]);
-    expect(row.error).toBe("1 of 1 trial(s) crashed: Could not resolve authentication method");
+    expect(seen).toEqual([`failed: 1 of 1 trial(s) skipped after an error: Could not resolve authentication method; the crashed run is in ${path.join(model, "crashed")}, and the stored results are kept`]);
+    expect(row.error).toBe("1 of 1 trial(s) skipped after an error: Could not resolve authentication method");
     expect(await Promise.all(["results.json", "run.json", "report.html"].map((f) => readFile(path.join(model, f), "utf8")))).toEqual(stored);
     expect(JSON.parse(await readFile(path.join(model, "crashed", "results.json"), "utf8")).tasks[0].trials[0]).toMatchObject({ endReason: "error" });
     // The stored results are still there to resume from, and the output points at the crashed run kept beside them.
@@ -415,7 +510,7 @@ describe("leaderboard", () => {
       const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
       const crashed = path.join(dir, "flaky", "crashed");
       // A full board whose model has no stored results crashes partway: its good trials are only in crashed/.
-      expect((await board(dir, flaky(5), 2))[0]).toMatch(/^failed: 20 of 100 trial\(s\) crashed: throttled; the crashed run is in .*crashed$/);
+      expect((await board(dir, flaky(5), 2))[0]).toMatch(/^failed: 20 of 100 trial\(s\) skipped after an error: throttled; the crashed run is in .*crashed$/);
       const full = await files(crashed);
       expect(await board(dir, flaky(Infinity), 1, quick)).toEqual([
         `ran: kept the earlier crashed run in ${crashed}, whose results are of another run (they are for k=2, not k=1): delete it before publishing this folder`,
@@ -432,12 +527,12 @@ describe("leaderboard", () => {
       await board(dir, flaky(5), 2);
       const full = await files(crashed);
       const besideFull = `kept the earlier crashed run in ${crashed}, whose results are of another run (they are for k=2, not k=1)`;
-      expect(await board(dir, flaky(1), 1, quick)).toEqual([`failed: 2 of 2 trial(s) crashed: throttled; the crashed run is in ${crashed2}; ${besideFull}`]);
+      expect(await board(dir, flaky(1), 1, quick)).toEqual([`failed: 2 of 2 trial(s) skipped after an error: throttled; the crashed run is in ${crashed2}; ${besideFull}`]);
       expect(await files(crashed)).toEqual(full);
       expect(await results(crashed2)).toMatchObject({ k: 1, tasks: [{}, {}] });
       // The same quick check crashing again replaces its own crashed run, and still leaves the full board's alone.
       await writeFile(path.join(crashed2, "results.json"), JSON.stringify({ ...(await results(crashed2)), stale: true }));
-      expect(await board(dir, flaky(1), 1, quick)).toEqual([`failed: 2 of 2 trial(s) crashed: throttled; the crashed run is in ${crashed2}; ${besideFull}`]);
+      expect(await board(dir, flaky(1), 1, quick)).toEqual([`failed: 2 of 2 trial(s) skipped after an error: throttled; the crashed run is in ${crashed2}; ${besideFull}`]);
       expect(await results(crashed2)).not.toHaveProperty("stale");
       expect(await files(crashed)).toEqual(full);
       // A good quick check removes only its own crashed run.
@@ -445,7 +540,7 @@ describe("leaderboard", () => {
       await expect(stat(crashed2)).rejects.toThrow();
       expect(await files(crashed)).toEqual(full);
       // A forced rerun that crashes goes beside both the stored results and the full board's crashed run.
-      expect(await board(dir, flaky(1), 1, quick, false)).toEqual([`failed: 2 of 2 trial(s) crashed: throttled; the crashed run is in ${crashed2}, and the stored results are kept; ${besideFull}`]);
+      expect(await board(dir, flaky(1), 1, quick, false)).toEqual([`failed: 2 of 2 trial(s) skipped after an error: throttled; the crashed run is in ${crashed2}, and the stored results are kept; ${besideFull}`]);
       expect(await board(dir, flaky(1), 1, quick)).toEqual([`cached: earlier crashed runs are still in ${crashed}, ${crashed2}: delete them before publishing this folder`]);
       expect(await files(crashed)).toEqual(full);
     });
@@ -454,7 +549,7 @@ describe("leaderboard", () => {
       const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
       const crashed = path.join(dir, "flaky", "crashed");
       await board(dir, flaky(5), 2);
-      expect(await board(dir, flaky(1), 2)).toEqual([`failed: 100 of 100 trial(s) crashed: throttled; the crashed run is in ${crashed}`]);
+      expect(await board(dir, flaky(1), 2)).toEqual([`failed: 100 of 100 trial(s) skipped after an error: throttled; the crashed run is in ${crashed}`]);
       expect((await results(crashed)).tasks.flatMap((t) => t.trials).every((t) => t.endReason === "error")).toBe(true);
       expect(await board(dir, flaky(Infinity), 2)).toEqual([`ran: removed the earlier crashed run in ${crashed}`]);
       await expect(stat(crashed)).rejects.toThrow();
@@ -467,7 +562,7 @@ describe("leaderboard", () => {
       await writeFile(path.join(crashed, "results.json"), '{"domain": "freight-carrier-sa');
       const corrupt = await files(crashed);
       const unread = `kept the earlier crashed run in ${crashed}, whose results.json can't be read`;
-      expect(await board(dir, flaky(5), 2)).toEqual([`failed: 20 of 100 trial(s) crashed: throttled; the crashed run is in ${crashed2}; ${unread}`]);
+      expect(await board(dir, flaky(5), 2)).toEqual([`failed: 20 of 100 trial(s) skipped after an error: throttled; the crashed run is in ${crashed2}; ${unread}`]);
       expect(await files(crashed)).toEqual(corrupt);
       expect(await board(dir, flaky(Infinity), 2)).toEqual([`ran: removed the earlier crashed run in ${crashed2}; ${unread}: delete it before publishing this folder`]);
       expect(await files(crashed)).toEqual(corrupt);

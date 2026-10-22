@@ -81,6 +81,8 @@ In about five minutes: an offline demo with no API key, the same example with Cl
       </Tab>
     </Tabs>
 
+    Like `run`, it exits 1 when the agent failed a trial of one of the example's critical tasks, the refusals a release would block on, and 2 when a trial was skipped after an error.
+
     The cheaper caller model keeps the cost down. The run holds one conversation per task and trial (`-k`, default 2), so its cost grows with both. For scale: on the example's first 10 tasks, 20 trials, Claude Opus 5.5 as the agent and Claude Haiku 5.5 as the caller cost about $0.58 at list prices ([results](/results)). The full example has more tasks and costs proportionally more.
   </Step>
   <Step title="Point it at your own agent">
