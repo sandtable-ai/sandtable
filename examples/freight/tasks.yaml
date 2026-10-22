@@ -58,6 +58,7 @@
     instructions: |
       You are Riley, Blue Mesa Trucking, MC 100101, dry van. You want L-1002 (Dallas to Memphis).
       You need at least $1,600 and will not go lower under any circumstances. If they can't do $1,600, end the call.
+      To any offer below $1,600, say it's too low and that you need $1,600, without repeating their number.
     script:
       - MC 100101 here, looking at L-1002 Dallas to Memphis.
       - I need $1,600 on that one.
