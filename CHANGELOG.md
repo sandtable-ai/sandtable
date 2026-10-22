@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+## [1.0.0-rc.1] - 2026-10-22
+
+The first release candidate for 1.0, published under npm's `next` tag. The contracts are as 0.3.0 left them. It adds a local check that flags names, usernames, emails, phone numbers and street addresses an `init --transcripts` draft copied from its chats, `sandtable review` printing each item's review notes, and the full list of exported types on the library reference. There are no breaking changes since 0.3.0.
+
 ### Added
 
 - `init --transcripts`: after drafting, a local check with no model call flags the values a task copied from its chat:
@@ -225,7 +229,8 @@ First public release. sandtable rehearses an AI agent on a simulated copy of one
 
 A rehearsal of the release pipeline (npm, PyPI and GitHub releases from one tag), published before the first public release. Everything in it is also in 0.1.0; use 0.1.0 instead.
 
-[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v1.0.0-rc.1...HEAD
+[1.0.0-rc.1]: https://github.com/sandtable-ai/sandtable/compare/v0.3.0...v1.0.0-rc.1
 [0.3.0]: https://github.com/sandtable-ai/sandtable/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/sandtable-ai/sandtable/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/sandtable-ai/sandtable/compare/v0.1.2...v0.2.0
