@@ -1,7 +1,7 @@
 import type { TokenUsage, UsageRecorder } from "../run/usage.ts";
 import type { ToolSchema } from "../world/tools.ts";
 import { STOP_TOKEN, USER_KICKOFF, userSystemPrompt } from "./prompts.ts";
-import { hasReasoning, stripReasoning } from "./reasoning.ts";
+import { hasReasoning, onlyReasoning, REASONING_RETRIES, stripReasoning } from "./reasoning.ts";
 import type { AgentAdapter, CallTool, UserSimulator } from "./types.ts";
 
 export const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
@@ -88,14 +88,8 @@ function chatCompletions(opts: OpenAICompatOptions, recordUsage?: UsageRecorder)
   };
 
   const maxRetries = opts.maxRetries ?? 4;
-  return async (messages: ChatMessage[], tools: FunctionTool[] = []) => {
-    const body = JSON.stringify({
-      model: opts.model,
-      messages,
-      // Servers reject an empty tools array.
-      ...(tools.length ? { tools } : {}),
-      ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
-    });
+  /** One completion, retried on rate limits, server errors and network failures. */
+  const send = async (body: string): Promise<ChatCompletion> => {
     let res: Response | undefined;
     for (let attempt = 0; ; attempt++) {
       try {
@@ -114,20 +108,39 @@ function chatCompletions(opts: OpenAICompatOptions, recordUsage?: UsageRecorder)
       break;
     }
     if (!res.ok) throw new Error(`${url} returned ${res.status}: ${(await res.text()).slice(0, 500)}`);
-    const data = (await res.json()) as ChatCompletion;
-    const choice = data.choices?.[0];
-    // Keyed by the requested name, not the served snapshot, so the price lookup is stable.
-    // Recorded even without a usage block, so an unpriced model shows cost n/a rather than $0.
-    // finish_reason "length": the reply hit the server's token limit and may be cut off.
-    // Reasoning inline in the text is removed before the other side hears it (textOf), and counted here.
-    const reasoning = choice?.message && hasReasoning(rawTextOf(choice.message.content));
-    recordUsage?.(opts.model, {
-      ...usageOf(data.usage),
-      ...(choice?.finish_reason === "length" ? { maxTokensStops: 1 } : {}),
-      ...(reasoning ? { reasoningStripped: 1 } : {}),
+    return (await res.json()) as ChatCompletion;
+  };
+
+  return async (messages: ChatMessage[], tools: FunctionTool[] = []) => {
+    const body = JSON.stringify({
+      model: opts.model,
+      messages,
+      // Servers reject an empty tools array.
+      ...(tools.length ? { tools } : {}),
+      ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
     });
-    if (!choice?.message) throw new Error(`${url} returned no choices`);
-    return { message: choice.message, finishReason: choice.finish_reason ?? null };
+    // A reply that is nothing but reasoning would reach the other side as silence, so it is asked for again, up to
+    // REASONING_RETRIES times; the caller only ever sees the reply that is returned.
+    for (let attempt = 0; ; attempt++) {
+      const data = await send(body);
+      const choice = data.choices?.[0];
+      const silent = choice?.message !== undefined && silentAfterStrip(choice.message, choice.finish_reason);
+      const again = silent && attempt < REASONING_RETRIES;
+      // Keyed by the requested name, not the served snapshot, so the price lookup is stable.
+      // Recorded even without a usage block, so an unpriced model shows cost n/a rather than $0.
+      // finish_reason "length": the reply hit the server's token limit and may be cut off.
+      // Reasoning inline in the text is removed before the other side hears it (textOf), and counted here.
+      // A reply still silent once its reasoning is removed, after the last try, is counted as emptyAfterStrip.
+      const reasoning = choice?.message && hasReasoning(rawTextOf(choice.message.content));
+      recordUsage?.(opts.model, {
+        ...usageOf(data.usage),
+        ...(choice?.finish_reason === "length" ? { maxTokensStops: 1 } : {}),
+        ...(reasoning ? { reasoningStripped: 1 } : {}),
+        ...(silent && !again ? { emptyAfterStrip: 1 } : {}),
+      });
+      if (!choice?.message) throw new Error(`${url} returned no choices`);
+      if (!again) return { message: choice.message, finishReason: choice.finish_reason ?? null };
+    }
   };
 }
 
@@ -151,6 +164,15 @@ function rawTextOf(content: AssistantMessage["content"]): string {
  */
 function textOf(content: AssistantMessage["content"]): string {
   return stripReasoning(rawTextOf(content));
+}
+
+/**
+ * A reply that ended normally, with no tool call or refusal, whose text is nothing but reasoning: once the reasoning is
+ * removed, the other side would hear silence. A reply cut off or filtered says so instead.
+ */
+function silentAfterStrip(message: AssistantMessage, finishReason: string | null | undefined): boolean {
+  if (finishReason === "length" || finishReason === "content_filter") return false;
+  return !message.tool_calls?.length && !message.refusal && onlyReasoning(rawTextOf(message.content));
 }
 
 /** Tool calls with the ids and type a follow-up request needs, filled in where a server left them out. */

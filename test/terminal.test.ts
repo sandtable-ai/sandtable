@@ -43,6 +43,9 @@ describe("terminal usage lines", () => {
     expect(plain(renderTerminal(r))).not.toContain("reasoning removed");
     r.usage.agent["openai.gpt-oss-120b-1:0"]!.reasoningStripped = 2;
     expect(plain(renderTerminal(r))).toContain("agent openai.gpt-oss-120b-1:0: 3 calls, 900 in, 1.7k out, 0 cache read, 0 cache write, 2 with reasoning removed");
+    expect(plain(renderTerminal(r))).not.toContain("silent");
+    r.usage.agent["openai.gpt-oss-120b-1:0"]!.emptyAfterStrip = 1;
+    expect(plain(renderTerminal(r))).toContain("2 with reasoning removed, 1 silent once it was removed");
   });
 });
 
