@@ -43,6 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ### Fixed
 
+- **Failure attribution** and the **Claude Code plugin**: a trial left with the default `agent` owner after a failed rule now quotes the rule's source in its evidence, or says the rule has none, so the rule gets checked before the agent is blamed. `running-and-reading-results` and `failure-triager` treat the stored attribution as a starting point, never as evidence: when their check finds another owner, such as the task spec for a rule stricter than the SOP, that owner is the answer instead of a caveat ([#385](https://github.com/sandtable-ai/sandtable/issues/385)).
 - **Docs**: the CLI reference lists `NO_COLOR`, and the spec reference describes `source: { file, quote }` on invariants and tasks. Tests now fail when a reference page misses a command's option, an environment variable, a spec key or a `results.json` field, so the pages stay complete ([#371](https://github.com/sandtable-ai/sandtable/issues/371)).
 
 ## [0.2.1] - 2026-10-22

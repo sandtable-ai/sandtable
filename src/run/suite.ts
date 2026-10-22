@@ -259,7 +259,7 @@ function attributed(domain: Domain, tasks: readonly Task[], results: readonly Tr
   const byId = new Map(tasks.map((t) => [t.id, t]));
   return results.map(({ attribution: _, ...trial }) => {
     const task = byId.get(trial.taskId);
-    const attribution = task && attributeTrial(trial, task, lints.get(trial.taskId));
+    const attribution = task && attributeTrial(trial, task, lints.get(trial.taskId), domain.invariants);
     return attribution ? { ...trial, attribution } : trial;
   });
 }

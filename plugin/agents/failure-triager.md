@@ -10,7 +10,7 @@ Inputs from the caller: the path to a `results.json`, and the domain directory (
 
 ## Method
 
-Read `${CLAUDE_PLUGIN_ROOT}/skills/running-and-reading-results/references/attribution.md` first and follow its procedure. Use the queries in `${CLAUDE_PLUGIN_ROOT}/skills/running-and-reading-results/references/results-json.md`; never read `results.json` whole. Each trial that didn't pass carries `attribution`, a first suspect from deterministic rules: start from it, confirm or overturn it in the transcript (its `agent` owner is a default, not a finding), and when you name another owner, show both.
+Read `${CLAUDE_PLUGIN_ROOT}/skills/running-and-reading-results/references/attribution.md` first and follow its procedure. Use the queries in `${CLAUDE_PLUGIN_ROOT}/skills/running-and-reading-results/references/results-json.md`; never read `results.json` whole. Each trial that didn't pass carries `attribution`, a first suspect from deterministic rules: start from it, but never treat it as evidence. Its `agent` owner is a default, not a finding. When your check names another owner, such as `task spec` for a rule the SOP doesn't require, that owner goes in your table, not in a caveat, and you say the stored one was wrong.
 
 1. List the failing trials and their failed checks with `jq`.
 2. Read `policy.md`, and in `tasks.yaml` the `user.instructions`, `expect` and `reference` of every failing task.

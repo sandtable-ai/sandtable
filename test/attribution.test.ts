@@ -5,6 +5,7 @@ import type { TaskLint } from "../src/grade/lint.ts";
 import { renderHtml } from "../src/report/html.ts";
 import { renderTerminal } from "../src/report/terminal.ts";
 import { attributeTrial } from "../src/run/attribution.ts";
+import type { Invariant } from "../src/spec/schema.ts";
 import type { TrajectoryEvent, TrialResult } from "../src/run/episode.ts";
 import { regradeSuite } from "../src/run/regrade.ts";
 import { runSuite, type SuiteResult } from "../src/run/suite.ts";
@@ -81,6 +82,16 @@ describe("attributeTrial", () => {
     const after = attributeTrial(failing(3), task, lintOk);
     expect(after?.owner).toBe("agent");
     expect(after?.evidence).toBe(`nothing points at the caller, the task or the harness; first failed check: verify-before-book: ${violation.detail}`);
+  });
+
+  it("says, for a failed rule left with the agent, what to check the rule against first", () => {
+    const failing = trial({ events, violations: [violation], checks: [failedInvariant] });
+    const rule = (source?: { file: string; quote?: string }) => [{ id: "verify-before-book", description: "", before: { first: "verify_carrier", then: "book_load", same: ["mc_number"] }, ...(source ? { source } : {}) }] as Invariant[];
+    expect(attributeTrial(failing, task, lintOk, rule({ file: "sop.md", quote: "Verify the carrier before you book." }))?.evidence).toBe(
+      `nothing points at the caller, the task or the harness; first failed check: verify-before-book: ${violation.detail}. Check the rule against its source before blaming the agent: "Verify the carrier before you book."`,
+    );
+    expect(attributeTrial(failing, task, lintOk, rule())?.evidence).toMatch(/\. The rule has no source quote: check it against policy\.md before blaming the agent$/);
+    expect(attributeTrial(failing, task, lintOk, rule({ file: "sop.md" }))?.evidence).toMatch(/no source quote/);
   });
 
   it("places a disclosure at the agent message that made it", () => {

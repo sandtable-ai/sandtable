@@ -562,7 +562,7 @@
           },
           "attribution": {
             "owner": "agent",
-            "evidence": "nothing points at the caller, the task or the harness; first failed check: account-before-order: get_order(order_id=\"O-2001\") was called without a prior successful lookup_account"
+            "evidence": "nothing points at the caller, the task or the harness; first failed check: account-before-order: get_order(order_id=\"O-2001\") was called without a prior successful lookup_account. The rule has no source quote: check it against policy.md before blaming the agent"
           }
         }
       ],
