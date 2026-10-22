@@ -65,10 +65,12 @@ export async function loadDomain(target: string): Promise<Domain> {
  * After unknown keys, the installed version: a key that a later release added then reads differently from a typo,
  * for an engineer who read newer docs and for a coding agent that would otherwise go looking in node_modules.
  */
-function unknownKeysNote(count: number, target: string): string {
+function unknownKeysNote(count: number, target?: string): string {
   if (count === 0) return "";
   const [these, their, them] = count === 1 ? ["this key", "its", "it"] : ["these keys", "their", "them"];
-  return `\nsandtable-ai ${version} doesn't know ${these}: check ${their} spelling, or whether a later release added ${them} (CHANGELOG.md, or \`npx sandtable-ai@latest validate ${shellWord(target)}\`).`;
+  // A domain built in code (parseDomain) has no path for the command to name.
+  const check = target === undefined ? "CHANGELOG.md" : `CHANGELOG.md, or \`npx sandtable-ai@latest validate ${shellWord(target)}\``;
+  return `\nsandtable-ai ${version} doesn't know ${these}: check ${their} spelling, or whether a later release added ${them} (${check}).`;
 }
 
 /**
@@ -78,6 +80,22 @@ function unknownKeysNote(count: number, target: string): string {
 function shellWord(s: string): string {
   const p = s.startsWith("-") ? `./${s}` : s;
   return /^[\w./@:+=,-]+$/.test(p) ? p : `'${p.replaceAll("'", `'\\''`)}'`;
+}
+
+/**
+ * A domain built in code, checked as loadDomain checks a file: the schema, then the cross-references. Unlike a
+ * sandtable.yaml, its values are the values themselves: a path to a policy or tasks file is not read. Throws a
+ * DomainError that says what is wrong.
+ */
+export function parseDomain(value: unknown): Domain {
+  const parsed = DomainSpec.safeParse(value);
+  if (!parsed.success) {
+    const unknown = parsed.error.issues.reduce((n, issue) => n + (issue.code === "unrecognized_keys" ? issue.keys.length : 0), 0);
+    throw new DomainError(z.prettifyError(parsed.error) + unknownKeysNote(unknown));
+  }
+  const problems = validateDomain(parsed.data);
+  if (problems.length) throw new DomainError(problems.map((p) => `  - ${p}`).join("\n"));
+  return parsed.data;
 }
 
 /** Items grouped by key, keys in the order they first appear. */

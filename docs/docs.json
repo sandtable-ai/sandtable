@@ -98,7 +98,7 @@
       },
       {
         "group": "Reference",
-        "pages": ["reference/spec", "reference/cli", "reference/http-protocol", "reference/results-schema"]
+        "pages": ["reference/spec", "reference/cli", "reference/http-protocol", "reference/results-schema", "reference/library"]
       },
       {
         "group": "Resources",

@@ -8,9 +8,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Library**: `parseDomain(value)` checks a domain built in code as `loadDomain` checks a file, the schema and then the cross-references, and throws a `DomainError`. A new page, [sandtable.dev/reference/library](https://sandtable.dev/reference/library), documents every export of the package ([#370](https://github.com/sandtable-ai/sandtable/issues/370)).
+
 ### Changed
 
 - **results.json**: `report`, `regrade`, `run --baseline` and `leaderboard` refuse a `results.json` whose format `version` is newer than the one they read, with exit 2 and a message saying to use a newer sandtable-ai, instead of reading fields that may have changed meaning. The version moves only when a field is removed or changes meaning, never for an added field, as `docs/reference/results-schema.mdx` now states. Every `results.json` sandtable has written is version 1, and a hand-made one without `version` is read as version 1, so none that loaded before is refused ([#349](https://github.com/sandtable-ai/sandtable/issues/349)).
+- **Breaking:** **Library**: the package exports only its documented API, which 1.0 will keep stable. Removed:
+  - the zod schemas (`DomainSpec`, `TaskSpec`, `ToolSpec`, `ParamSpec`, `TableSpec`, `OpSpec`, `CheckSpec`, `FieldRef`, `InvariantSpec`, `StateAssertSpec`, `CallExpectSpec`, `ExpectSpec`, `ReferenceCallSpec`, `PersonaSpec`, `GivenSpec`): use `parseDomain(value)` instead of `DomainSpec.parse(value)`. The TypeScript types (`Domain`, `Task`, `CallExpect`, …) are still exported, so zod's version is no longer part of sandtable's API.
+  - `runEpisode`, `gradeTrial`, `regradeTrial`, `checkCall`, `invariantTool`: use `runSuite` with `taskIds` and `k: 1`, or `regradeSuite`.
+  - `worldFor`, `seedFor`, `diffSnapshots`: use `new World(domain.world)` and its `snapshot()`.
+  - `agentSystemPrompt`: an agent receives the same prompt as `AgentContext.system`.
+  - `userSystemPrompt`, `STOP_TOKEN`, `callerNotes`, `binom`, `DEFAULT_MODEL`, `DEFAULT_OPENAI_BASE_URL`: internals with no replacement; a run's `results.json` still carries each trial's `callerNotes`.
+
+  Code that imports only the documented exports is unaffected ([#370](https://github.com/sandtable-ai/sandtable/issues/370)).
 
 ### Fixed
 

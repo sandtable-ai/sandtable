@@ -1,0 +1,90 @@
+---
+title: "Library API: use sandtable from TypeScript or JavaScript"
+sidebarTitle: "Library API"
+description: "Every export of the sandtable-ai package: load and check domains, run tools against the simulated world, write agent and simulated-user adapters, run, regrade and compare suites, and render reports."
+keywords: ["library", "API", "TypeScript", "runSuite", "AgentAdapter", "exports"]
+---
+
+The `sandtable-ai` package is also a library. The CLI is built on it, so anything a command does, your code can do: run a suite inside your own test runner, write an agent adapter for a framework, regrade stored trials, or compare two runs.
+
+```ts
+import { loadDomain, runSuite, scriptedUser, type AgentAdapter } from "sandtable-ai";
+```
+
+The package is an ES module. Its TypeScript types ship with it. The exports below are the whole API: anything not listed here is internal and can change in any release. From 1.0, adding an export comes in a minor release, and removing or renaming one only in a major release.
+
+## Domains
+
+| Export | What it does |
+|---|---|
+| `loadDomain(path): Promise<Domain>` | Reads a domain directory (with `sandtable.yaml`) or the file itself, inlines the `.md` and `.yaml` files it names, and checks it as `sandtable validate` does. Throws a `DomainError` that says what is wrong and in which file. |
+| `parseDomain(value): Domain` | Checks a domain built in code: the schema, then the cross-references. Its values are used as they are, so a path such as `./policy.md` is not read. Throws a `DomainError`. |
+| `validateDomain(domain): string[]` | The cross-reference problems of a parsed domain (an unknown tool, table or persona, a bad where clause), as readable lines. Empty when there are none. |
+| `pendingReview(domain): PendingItem[]` | The drafted items still marked `review: pending`, as `sandtable review` lists them. |
+| `DomainError` | The error `loadDomain` and `parseDomain` throw for an invalid domain. |
+| `DOMAIN_FILE` | `"sandtable.yaml"`. |
+
+The spec's shapes are TypeScript types: `Domain`, `Tool`, `Op`, `Invariant`, `Task`, `StateAssert`, `CallExpect`, `ReferenceCall`, `FieldRefSpec`, `Persona` and `Given`. [The spec reference](/reference/spec) describes every key.
+
+## The world and its tools
+
+For an agent that runs its own tool loop, or a test of a tool's behavior.
+
+| Export | What it does |
+|---|---|
+| `World` | The in-memory store of a domain's tables: `new World(domain.world)`, then `get(table, key)`, `list(table, where?, limit?)`, `insert`, `update`, `snapshot()` and `restore(snapshot)`. Each trial gets a fresh one. |
+| `toolSchema(tool): ToolSchema` | The tool as the agent sees it: name, description and a JSON Schema of its parameters. |
+| `coerceArgs(tool, raw)` | Checks and coerces a call's arguments as sandtable does before running a tool: `{ args }`, or `{ error }` for an unknown or missing argument or a wrong type. |
+| `executeTool(tool, world, args): ToolOutcome` | Runs the tool's checks and operations against the world, all or nothing: `{ ok: true, result }` or `{ ok: false, error }`. |
+
+## Agents and simulated users
+
+An agent is an `AgentAdapter`: a `name`, and `createSession(ctx)` that returns a session whose `reply(userMessage, callTool)` returns the agent's reply. `ctx` carries the domain, the default system prompt (`system`), the tools as `ToolSchema[]`, a `sessionId`, the task's `context`, and `recordUsage` to report tokens. A simulated user is a `UserSimulator`, whose session's `next(agentMessage)` returns `{ text, stop }`. These types, with `CallTool`, `AgentContext`, `AgentSession`, `UserContext`, `UserSession` and `UserTurn`, are exported. [Bring your agent](/guides/bring-your-agent) shows complete adapters.
+
+| Export | What it does |
+|---|---|
+| `claudeAgent(opts?)` | Claude with the domain's tools and policy, on the Anthropic API or Bedrock (`ClaudeAgentOptions`: `model`, `effort`, `provider`, `region`, `awsProfile`, …). What `--agent claude` runs. |
+| `claudeUser(opts?)` | Claude as the simulated caller (`ClaudeOptions`). What `--user claude` runs. |
+| `openaiCompatAgent(opts)` | Any OpenAI-compatible chat completions endpoint as the agent (`OpenAICompatAgentOptions`: `baseUrl`, `model`, `apiKey`, `headers`, `temperature`, …). |
+| `openaiCompatUser(opts)` | The same endpoint as the simulated caller (`OpenAICompatOptions`). |
+| `bedrockConverseAgent(opts)` | A Bedrock model through the Converse API (`BedrockConverseOptions`: `modelId`, `region`, `awsProfile`, …). What `--agent bedrock:<model-id>` runs. |
+| `httpAgent(url, opts?)` | An agent behind the [HTTP step protocol](/reference/http-protocol). `opts.headers` adds headers, such as an authorization header. |
+| `noopAgent()` | The do-nothing baseline: it never calls a tool. |
+| `scriptedUser()` | A caller that says each task's `user.script` lines in order, with no model. |
+
+## Running, regrading and comparing
+
+| Export | What it does |
+|---|---|
+| `runSuite(opts): Promise<SuiteResult>` | Runs every task, or `taskIds`, `k` times with `agent` and `user`, `concurrency` at a time, grades each trial and returns what `results.json` holds. `onTrial` is called as each trial ends. |
+| `regradeSuite(domain, stored): SuiteResult` | Grades a stored run's trials again under the domain's current rules, without calling a model, as `sandtable regrade` does. Throws `RegradeError` when the agent or the caller would now be given different prompts. |
+| `RegradeError` | The error `regradeSuite` throws for a run it can't regrade. |
+| `baselineSnapshot(result)` | The per-task results of a run, as `run --baseline` stores them in `results.json`. |
+| `compareRuns(baseline, now): Comparison` | What changed per task between a baseline snapshot and a new run: broken, worse, fixed, better, changed, added, removed. |
+| `criticalFailures(result)` | The critical tasks with a failed trial, which make `run` exit 1. |
+| `trialStatus(trial)` | `"passed"`, `"failed"` or `"skipped"`. |
+| `lintDomain(domain): LintReport` | What `sandtable lint` proves per task without a model call: ready, solvable, non-vacuous and graded. |
+| `passHatK(trials, k)`, `passAtK(trials, k)` | pass^k and pass@k over each task's trial outcomes (`boolean[][]`). |
+| `wilsonInterval(passes, trials, z?)` | The 95% Wilson interval of a pass rate, `{ low, high }`. |
+
+The result types are exported too: `SuiteResult`, `TaskSummary`, `TrialResult`, `TrajectoryEvent`, `CheckResult`, `Violation`, `Verdict`, `Comparison`, `TokenUsage` and the rest. [The results.json reference](/reference/results-schema) describes every field.
+
+## Reports
+
+| Export | What it does |
+|---|---|
+| `renderTerminal(result, opts?)` | The summary `sandtable run` prints. |
+| `renderHtml(result)` | The self-contained `report.html`. |
+
+## Example: a suite in your test runner
+
+```ts
+import { loadDomain, runSuite, scriptedUser } from "sandtable-ai";
+import { myAgent } from "./my-agent.ts";
+
+const domain = await loadDomain("./sandtable");
+const result = await runSuite({ domain, agent: myAgent, user: scriptedUser(), k: 2, taskIds: ["book-at-posted-rate"] });
+if (result.passHat["2"] !== 1) throw new Error("book-at-posted-rate didn't pass both trials");
+```
+
+A scripted user needs each task's `user.script`. For conversations, pass `claudeUser()` or `openaiCompatUser(...)`, which call a model.
