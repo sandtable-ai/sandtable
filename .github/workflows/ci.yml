@@ -26,6 +26,18 @@ jobs:
       # changelog checks, then offline smoke runs where the careful scripted agents pass every task.
       - run: npm run check
 
+  # Mintlify checks the docs' links only on pull requests into its deploy branch, docs-live (see
+  # CONTRIBUTING.md), so pull requests into main check them here.
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - working-directory: docs
+        run: npx --yes mint@4.2.981 broken-links
+
   python-launcher:
     runs-on: ubuntu-latest
     steps:

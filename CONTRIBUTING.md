@@ -55,6 +55,12 @@ npx mint broken-links   # check internal links
 
 Keep examples fictional, and check every flag against `npm run sandtable -- <command> --help`.
 
+[sandtable.dev](https://sandtable.dev) documents the latest release, not `main`: Mintlify deploys it from the `docs-live` branch, which each stable release moves to its tag (step 8 of [Releasing](AGENTS.md#releasing-maintainers-only)). So document a new flag or spec key on `main`, in the same pull request as the code, and it goes live with the release that ships it.
+
+- Mintlify builds automatic previews only for pull requests into `docs-live`, so a pull request into `main` gets none. Preview with `npx mint dev`, or create a custom preview of your branch on the Previews page of the Mintlify dashboard. A custom preview of `main` shows the docs of the next release.
+- A fix to a page about the released CLI, such as a wrong example or a broken link, can go live before the next release. After it merges into `main`, a maintainer cherry-picks its commit onto `docs-live`: `git fetch origin && git switch -c docs-fix origin/docs-live && git cherry-pick <sha> && git push origin HEAD:docs-live`. Never cherry-pick a page that documents unreleased work.
+- Change the docs through pull requests into `main`. Mintlify's web editor and the site's "suggest edits" link work on the deploy branch, `docs-live`, so a change made there skips `main`: open it against `main` instead.
+
 ## Pull requests and the changelog
 
 Every change starts from an issue and lands through a pull request with a Conventional Commit title (`fix(run): ...`), squash-merged once CI is green. Before you push, `npm run check` runs what CI runs.
