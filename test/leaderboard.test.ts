@@ -259,6 +259,7 @@ describe("leaderboard", () => {
       [results, stored.slice(0, 300), "is not valid JSON: "],
       [results, "", "is not valid JSON: Unexpected end of JSON input"],
       [results, "null", "is not a results.json written by `sandtable run`"],
+      [results, stored.replace('"version": 1', '"version": 2'), "is results.json format version 2, from a newer sandtable"],
       [runJson, '{"agent": "scripted:na', "is not valid JSON: "],
       [runJson, "[]", "is not a run.json written by `sandtable leaderboard`"],
     ];

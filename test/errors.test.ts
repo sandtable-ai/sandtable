@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -98,6 +98,18 @@ describe.skipIf(!process.features.typescript)("CLI errors", () => {
     expect(code).toBe(2);
     expect(stderr).toContain("is not a results.json written by `sandtable run`");
     expect(stderr).toContain("it is a leaderboard's leaderboard.json: each model's results.json is in its folder");
+  });
+
+  it("report, regrade and run --baseline refuse a results.json from a newer format, before running anything", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "sandtable-newer-"));
+    const file = path.join(dir, "results.json");
+    writeFileSync(file, readFileSync("plugin-evals/fixtures/wrenfield-run/results.json", "utf8").replace('"version": 1', '"version": 2'));
+    const newer = `${file} is results.json format version 2, from a newer sandtable; this one reads format version 1.`;
+    for (const args of [["report", file], ["regrade", file, "-d", "examples/freight"], ["run", "examples/freight", "--agent", "noop", "--user", "scripted", "--baseline", file]]) {
+      const { code, stderr } = await fail(args);
+      expect(code, args[0]).toBe(2);
+      expect(stderr, args[0]).toContain(newer);
+    }
   });
 
   describe("a path that names nothing says which option or argument it came from", () => {

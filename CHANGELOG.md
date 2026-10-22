@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **results.json**: `report`, `regrade`, `run --baseline` and `leaderboard` refuse a `results.json` whose format `version` is newer than the one they read, with exit 2 and a message saying to use a newer sandtable-ai, instead of reading fields that may have changed meaning. The version moves only when a field is removed or changes meaning, never for an added field, as `docs/reference/results-schema.mdx` now states. Every `results.json` sandtable has written is version 1, and a hand-made one without `version` is read as version 1, so none that loaded before is refused ([#349](https://github.com/sandtable-ai/sandtable/issues/349)).
+
 ### Fixed
 
 - **Docs**: the CLI reference lists `NO_COLOR`, and the spec reference describes `source: { file, quote }` on invariants and tasks. Tests now fail when a reference page misses a command's option, an environment variable, a spec key or a `results.json` field, so the pages stay complete ([#371](https://github.com/sandtable-ai/sandtable/issues/371)).
