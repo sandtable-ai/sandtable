@@ -105,6 +105,18 @@ beforeAll(async () => {
 });
 
 describe("pages that quote the bundled examples", () => {
+  it("the quickstart's toy agent remembers a verified carrier for the rest of the call (#270)", () => {
+    // Once verify_carrier succeeded in a trial, the agent's session_id state means it never asks for the MC number again.
+    const asksAgain = toy.tasks.flatMap((t) =>
+      t.trials.filter((tr) => {
+        const verified = tr.events.findIndex((e) => e.type === "tool" && e.name === "verify_carrier" && e.ok);
+        return verified >= 0 && tr.events.slice(verified).some((e) => e.type === "agent" && /What's your MC number\?/.test(e.text));
+      }).map((tr) => t.id),
+    );
+    expect(asksAgain).toEqual([]);
+    expect(toy.tasks.some((t) => t.trials.some((tr) => tr.events.some((e) => e.type === "agent" && /already verified/.test(e.text))))).toBe(true);
+  });
+
   it("the careful freight agent passes every task, as the pages say", () => {
     expect(passes(careful)).toBe(freight.tasks.length);
   });
