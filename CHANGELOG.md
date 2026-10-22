@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-22
+
+The last release before 1.0 that changes contracts. It adds:
+- `--fail-on-regression` and `sandtable compare` for regressions against a baseline
+- `--floor` per-tag gates
+- a likely owner for each trial that didn't pass
+- tool params that are objects and lists
+- a library API cut down to what is documented, `results.json` versions that readers check, and a stability policy for 1.0
+
+It also makes `leaderboard` and `demo --live` treat critical tasks and errored trials as `run` does, and requires Node.js 22 and Python 3.10. Read the six **Breaking:** entries under Changed before upgrading.
+
 ### Added
 
 - **Library**: `parseDomain(value)` checks a domain built in code as `loadDomain` checks a file, the schema and then the cross-references, and throws a `DomainError`. A new page, [sandtable.dev/reference/library](https://sandtable.dev/reference/library), documents every export of the package ([#370](https://github.com/sandtable-ai/sandtable/issues/370)).
@@ -198,7 +209,8 @@ First public release. sandtable rehearses an AI agent on a simulated copy of one
 
 A rehearsal of the release pipeline (npm, PyPI and GitHub releases from one tag), published before the first public release. Everything in it is also in 0.1.0; use 0.1.0 instead.
 
-[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/sandtable-ai/sandtable/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/sandtable-ai/sandtable/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/sandtable-ai/sandtable/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/sandtable-ai/sandtable/compare/v0.1.1...v0.1.2
