@@ -113,6 +113,7 @@ Update these in the same PR as the code change:
    - creates the GitHub release from that section
    - for a stable release, moves npm's `next` tag to it once it is live, unless `next` is a newer pre-release
 7. Approve the staged npm release on npmjs.com, or with `npm stage approve <id>`, soon after the tag: from the tag on, the plugin's skills describe the new release, which `npx sandtable-ai` serves only once it is approved. PyPI and the GitHub release follow within a minute. If you approve more than 2 hours after the tag, re-run the workflow's failed jobs.
+8. For a stable release, once npm serves it, publish its docs: `git fetch origin docs-live && git push --force-with-lease=docs-live origin "vX.Y.Z^{commit}:refs/heads/docs-live"`. sandtable.dev deploys from `docs-live`, so until you move it the site still documents the previous release. A pre-release leaves `docs-live` on the last stable release. The lease keeps a docs fix cherry-picked onto `docs-live` since your fetch; the tag already has it, because every fix lands on `main` first.
 
 ## Map
 
@@ -138,5 +139,5 @@ Update these in the same PR as the code change:
   - `examples/frameworks/` holds worked examples for agent frameworks. Each has its own dependencies and offline check (`npm run check` in its folder, the `frameworks` CI job); none is in the npm package.
   - `plugin/` and `.claude-plugin/` hold the Claude Code plugin, which is not in the npm package.
   - `python/` holds the PyPI launcher.
-  - `docs/` is the Mintlify site; its rules are in `CONTRIBUTING.md`.
+  - `docs/` is the Mintlify site, deployed from the `docs-live` branch at the latest release; its rules are in `CONTRIBUTING.md`.
   - `scripts/` holds the version sync, the changelog script and Bedrock prices.
