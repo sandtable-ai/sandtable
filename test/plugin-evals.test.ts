@@ -151,6 +151,34 @@ describe("the plugin eval suite's cases", () => {
     expect(paidStep.test(bash(`${paid} --dry-run; ls sandtable`))).toBe(false);
   });
 
+  it("count, in attribute-stored-run, handing the run to failure-triager as plugin use, as loading the skill is", () => {
+    const meta = front(path.join(evals, "attribute-stored-run", "graders", "skill-fired.md"));
+    // Under --ablation with-without it stays the plugin-fired indicator, as a `tool_used: Skill` grader is by default.
+    expect([meta.target, meta.arm]).toEqual(["trace", "with-only"]);
+    const fired = new RegExp(meta.pattern as string);
+    const event = (type: "assistant" | "user", ...content: object[]) => JSON.stringify({ type, message: { role: type, content } });
+    const call = (name: string, input: object) => event("assistant", { type: "tool_use", id: "t", name, input });
+    const skillText = event("user", { type: "text", text: "Base directory for this skill: … delegate the reading to the `failure-triager` agent …" });
+    const trace = (...lines: string[]) => `${lines.join("\n")}\n`;
+    const triager = (subagent_type: string) => call("Agent", { description: "Attribute the failures", prompt: "Read results.json …", subagent_type });
+    expect(fired.test(trace(call("Skill", { skill: "sandtable:running-and-reading-results" })))).toBe(true);
+    // The runs at d02ff40 and f720166 (#344) that delegated without loading the skill.
+    expect(fired.test(trace(triager("sandtable:failure-triager")))).toBe(true);
+    expect(fired.test(trace(skillText, triager("sandtable:failure-triager")))).toBe(true);
+    expect(fired.test(trace(skillText, triager("general-purpose")))).toBe(false);
+    expect(fired.test(trace(call("Skill", { skill: "sandtable:writing-good-tasks" }), call("Read", { file_path: "results.json" })))).toBe(false);
+  });
+
+  it("accept, in install-advice, either skill that says what to install", () => {
+    const fired = new RegExp(front(path.join(evals, "install-advice", "graders", "skill-fired.md")).input_match as string);
+    // tool_used matches input_match against the Skill call's input as JSON.
+    const skill = (name: string) => JSON.stringify({ skill: name });
+    expect(fired.test(skill("sandtable:drafting-a-domain"))).toBe(true);
+    expect(fired.test(skill("sandtable:running-and-reading-results"))).toBe(true);
+    expect(fired.test(skill("running-and-reading-results"))).toBe(true);
+    expect(fired.test(skill("sandtable:writing-good-tasks"))).toBe(false);
+  });
+
   it("set up their workspace with a scaffold script that bash can parse", () => {
     for (const c of cases.filter((c) => existsSync(path.join(evals, c, "case.yaml")))) {
       const meta = YAML.parse(readFileSync(path.join(evals, c, "case.yaml"), "utf8")) as { name: string; context: { scaffold_script: string } };
