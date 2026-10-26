@@ -22,6 +22,11 @@ export interface TranscriptDraft {
   copied: number;
   /** Tokens the drafting calls used, one per transcript, per model, for `init` to print with an estimated cost. */
   usage: UsageByModel;
+  /**
+   * The transcripts whose drafting call failed (an outage or throttling that outlasted the retries), in order, with the
+   * error. The others are still drafted, so one failed call doesn't throw away the chats already paid for.
+   */
+  failed: { file: string; error: string }[];
 }
 
 /**
@@ -226,7 +231,7 @@ export async function draftTasksFromTranscripts(input: {
 }): Promise<TranscriptDraft> {
   const client = await createClient(input.claude ?? {});
   const base = requestBase(input.claude ?? {}, "high");
-  const out: TranscriptDraft = { tasks: [], personas: [], rows: {}, warnings: [], notes: {}, redactions: 0, copied: 0, usage: {} };
+  const out: TranscriptDraft = { tasks: [], personas: [], rows: {}, warnings: [], notes: {}, redactions: 0, copied: 0, usage: {}, failed: [] };
   let domain = input.domain;
   // What the domain held before drafting: a value it already has, such as a seeded customer's name, isn't copied from a chat.
   const known = JSON.stringify({ world: input.domain.world, policy: input.domain.policy, tools: input.domain.tools, personas: input.domain.personas });
@@ -235,12 +240,19 @@ export async function draftTasksFromTranscripts(input: {
     const scrubbed = scrubPii(t.text);
     out.redactions += scrubbed.redactions;
     const schema = outputSchema(domain.tools.map((x) => x.name), Object.keys(domain.world.tables));
-    const response = await client.beta.messages.parse({
-      ...base,
-      output_config: { ...base.output_config, format: betaZodOutputFormat(schema) },
-      system: SYSTEM,
-      messages: [{ role: "user", content: `${describe(domain)}\n\n<transcript file="${t.file}">\n${scrubbed.text}\n</transcript>` }],
-    });
+    let response: Awaited<ReturnType<typeof client.beta.messages.parse>>;
+    try {
+      response = await client.beta.messages.parse({
+        ...base,
+        output_config: { ...base.output_config, format: betaZodOutputFormat(schema) },
+        system: SYSTEM,
+        messages: [{ role: "user", content: `${describe(domain)}\n\n<transcript file="${t.file}">\n${scrubbed.text}\n</transcript>` }],
+      });
+    } catch (err) {
+      // Keep going: the next chat's call may well succeed, and the chats drafted so far are kept.
+      out.failed.push({ file: t.file, error: err instanceof Error ? err.message : String(err) });
+      continue;
+    }
     recordDraftUsage(out.usage, input.claude ?? {}, base.model, response);
     if (response.stop_reason === "refusal" || !response.parsed_output) {
       out.warnings.push(`${t.file}: no usable proposal`);

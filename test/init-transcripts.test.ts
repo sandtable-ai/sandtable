@@ -370,6 +370,32 @@ describe("init from transcripts", () => {
     expect(res.tasks.map((t) => t.id)).toEqual(["load-stays-open"]);
     expect(res.tasks[0]!.expect.state[0]!.where).toEqual({ load_id: "L-1001", status: { $in: ["available", "pending"] }, booked_by: { $exists: false } });
   });
+
+  it("keeps the chats drafted around a failed call, and names the one that failed (#402)", async () => {
+    const domain = await loadDomain(path.resolve("examples/freight"));
+    const second = { ...JSON.parse(JSON.stringify(good).replaceAll("L-2001", "L-2002")), id: "negotiate-second-lane", new_persona: null, persona_id: "easygoing" };
+    const outputs = [good, second];
+    let calls = 0;
+    const client = {
+      beta: {
+        messages: {
+          parse: async () => {
+            if (++calls === 2) throw new Error("503 Bedrock is unable to process your request.");
+            return { stop_reason: "end_turn", parsed_output: outputs.shift(), content: [] };
+          },
+        },
+      },
+    } as unknown as Anthropic;
+    const res = await draftTasksFromTranscripts({
+      domain,
+      claude: { client },
+      transcripts: ["call-1.txt", "call-2.txt", "call-3.txt"].map((file) => ({ file, text: "..." })),
+    });
+    expect(calls).toBe(3);
+    expect(res.tasks.map((t) => t.id)).toEqual(["negotiate-new-lane", "negotiate-second-lane"]);
+    expect(res.rows.loads!.map((r) => r.load_id)).toEqual(["L-2001", "L-2002"]);
+    expect(res.failed).toEqual([{ file: "call-2.txt", error: "503 Bedrock is unable to process your request." }]);
+  });
 });
 
 describe("values a draft copied from its chat", () => {

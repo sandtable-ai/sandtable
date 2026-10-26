@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- `init --transcripts`: a transcript whose call fails after the client's retries, such as a Bedrock 503 on a long chat, no longer throws away the transcripts drafted before it. `init` writes what the others drafted, names each failed transcript with its error, prints the `init --transcripts` command that drafts only those, and still exits 2 ([#402](https://github.com/sandtable-ai/sandtable/issues/402)).
+
 ## [1.0.0] - 2026-10-22
 
 sandtable 1.0. The domain spec, `results.json`, the CLI and its exit codes, the HTTP step protocol and the library API are now stable: they change only in a major release, as the [stability policy](https://sandtable.dev/reference/stability) says. There are no breaking changes since 0.3.0. Coming from 0.3.0, read [1.0.0-rc.1](https://github.com/sandtable-ai/sandtable/blob/main/CHANGELOG.md#100-rc1---2026-10-22) as well. Since the release candidate, the drafting skill waits for a go-ahead after a dry run, and the docs settle the last contract questions.

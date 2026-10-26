@@ -166,6 +166,16 @@ Guardrails:
 - **Allowed values are shown and kept.** The model sees each param's allowed values, so a reference uses `by_mail`, not the transcript's "By Mail". When a drafted value still differs from one allowed value only in case, spaces or dashes, `init` uses that value and prints a warning such as `reference[3] update_order_return method "By Mail" → by_mail`. A value that matches none, or several, is left as drafted for the lint below to report.
 - **Each drafted task is linted** as `sandtable lint` would, replaying its `reference`. A task that fails, such as a reference that doesn't reach the expected state, is kept for review: `init` prints a warning and writes a `# TODO(review): lint: ...` comment above the task. A failing reference usually points at a wrong expectation or a missing seed row.
 - Survivors are `review: pending`, with the transcript and a verbatim excerpt as `source`.
+- **A failed call loses only its own transcript.** When a transcript's call still fails after the client's retries, such as a Bedrock 503 on a long chat, `init` keeps going. It writes what the other transcripts drafted, names each failed transcript with its error, and prints the command that drafts only those, then exits 2:
+
+  ```text
+  ✗ 1 of 9 transcripts' drafting calls failed, so nothing was drafted from it. The other 8 were drafted as above:
+      call-4.txt: 503 Bedrock is unable to process your request.
+    Draft it again with:
+      npx sandtable-ai init --transcripts calls/call-4.txt -o sandtable --provider bedrock
+  ```
+
+  The command keeps your model and provider flags and leaves out `--openapi` and `--sop`, whose drafts are already written.
 
 <Tip>
 Local scrubbing and the copied-value check catch patterns, not every identifying detail: a name the caller never introduces, a misspelled name the model corrected, or an address or account detail written another way still needs a person. Read transcripts before sending them anywhere, and keep the drafted domain's seed rows fictional.
