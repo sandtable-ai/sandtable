@@ -110,6 +110,25 @@ const tagList = (v: string, previous: string[] = []) => {
   return [...new Set([...previous, ...tags])];
 };
 
+/** The `--tasks` of `run` and `leaderboard`: the ids given, and whether a value was empty. */
+interface TaskList {
+  ids: string[];
+  empty: boolean;
+}
+/**
+ * `--tasks a,b`, repeatable like `--tag`: every id given, in order, without repeats. An empty value still selects every
+ * task, as before 1.1, but is deprecated: `warnEmptyTasks` says so, and 2.0 makes it a usage error, as `--tag` is.
+ */
+const taskList = (v: string, previous: TaskList = { ids: [], empty: false }): TaskList => {
+  const ids = v.split(",").map((s) => s.trim()).filter(Boolean);
+  return { ids: [...new Set([...previous.ids, ...ids])], empty: previous.empty || ids.length === 0 };
+};
+const EMPTY_TASKS = "warning: an empty --tasks runs every task; in sandtable-ai 2.0 it will be a usage error (exit 2). Leave --tasks out to run every task.";
+/** Say once, before anything runs, that an empty `--tasks` is deprecated. */
+function warnEmptyTasks(tasks: TaskList | undefined): void {
+  if (tasks?.empty) console.error(EMPTY_TASKS);
+}
+
 /**
  * The agent specs whose prompt sandtable writes, the built-in model agents: only they can be run `--without-policy`.
  * An HTTP or module agent brings its own prompt, and the scripted and noop agents have none.
@@ -550,7 +569,7 @@ withProviderFlags(program
   .option("--without-policy", "prompt a built-in model agent (claude, bedrock:, openai:) without the domain's policy: a careless agent whose broken rules show which ones your tasks catch, for report --audience customer --probe")
   .option("--openai-base-url <url>", `OpenAI-compatible endpoint for openai:<model> (default: OPENAI_BASE_URL or ${DEFAULT_OPENAI_BASE_URL}); key from OPENAI_API_KEY`)
   .option("-k, --trials <n>", "trials per task (pass^k is reported up to k)", int, 1)
-  .option("-t, --tasks <ids>", "comma-separated task ids to run")
+  .option("-t, --tasks <ids>", "comma-separated task ids to run (repeatable)", taskList)
   .option("--tag <tags>", "run only the tasks with at least one of these comma-separated tags (untagged: tasks with none; repeatable); with --tasks, the tasks in both", tagList)
   .option("-c, --concurrency <n>", "episodes in parallel", int, 4)
   .option("-o, --out <dir>", "output directory for results.json and report.html")
@@ -561,15 +580,16 @@ withProviderFlags(program
   .option("--fail-on-regression", "with --baseline: exit 1 if a task that passed every trial in the baseline fails one now (CI gate)")
   .option("--open", "open the HTML report in the browser when the run finishes")
   .option("--prices <file>", PRICES_HELP)
-  .action(async (domainPath: string, o: { agent: string; user: string; withoutPolicy?: boolean; openaiBaseUrl?: string; trials: number; tasks?: string; tag?: string[]; concurrency: number; out?: string; html: boolean; failUnder?: number; floor?: Record<string, number>; baseline?: string; failOnRegression?: boolean; open?: boolean; prices?: string } & ProviderFlags, command: Command) => {
+  .action(async (domainPath: string, o: { agent: string; user: string; withoutPolicy?: boolean; openaiBaseUrl?: string; trials: number; tasks?: TaskList; tag?: string[]; concurrency: number; out?: string; html: boolean; failUnder?: number; floor?: Record<string, number>; baseline?: string; failOnRegression?: boolean; open?: boolean; prices?: string } & ProviderFlags, command: Command) => {
     if (o.failOnRegression && o.baseline === undefined) command.error("error: --fail-on-regression needs --baseline <results>: the run it compares with");
+    warnEmptyTasks(o.tasks);
     if (o.withoutPolicy && !BUILT_IN_MODEL_AGENT.test(o.agent)) {
       command.error(`error: --without-policy needs a built-in model agent (claude, claude:<model>, bedrock:<model-id> or openai:<model>): sandtable doesn't write the prompt of --agent ${o.agent}, so it can't leave the policy out`);
     }
     await loadPrices(o.prices);
     const domain = await loadDomain(await resolveDomain(domainPath));
     if (domain.tasks.length === 0) throw new Error(`${domain.name} has no tasks yet: add some to tasks.yaml`);
-    const tasks = selectTasks(domain, o.tasks?.split(",").map((s) => s.trim()).filter(Boolean), o.tag);
+    const tasks = selectTasks(domain, o.tasks?.ids, o.tag);
     const taskIds = tasks.length < domain.tasks.length ? tasks.map((t) => t.id) : undefined;
     checkFloors(o.floor, tasks);
     // Read the baseline before any trial runs, so a wrong file costs no model calls.
@@ -618,13 +638,14 @@ withProviderFlags(program
   .requiredOption("-m, --models <file>", "(required) YAML file: { user?, k?, models: [{ label, agent, effort? }] } (agent specs as in `run --agent`; effort low|medium|high|xhigh|max, for claude: agents only)")
   .option("-u, --user <spec>", "simulated user for every model (overrides the models file; default claude)")
   .option("-k, --trials <n>", "trials per task (overrides the models file; default 4)", int)
-  .option("-t, --tasks <ids>", "comma-separated task ids to run, for every model and the baseline")
+  .option("-t, --tasks <ids>", "comma-separated task ids to run, for every model and the baseline (repeatable)", taskList)
   .option("-c, --concurrency <n>", "episodes in parallel per model", int, 4)
   .option("--openai-base-url <url>", "OpenAI-compatible endpoint for openai:<model> entries")
   .option("-o, --out <dir>", "output directory (default: leaderboard/<domain name>)")
   .option("--no-resume", "rerun every model and replace its stored results")
   .option("--prices <file>", PRICES_HELP)
-  .action(async (domainPath: string, o: { models: string; user?: string; trials?: number; tasks?: string; concurrency: number; openaiBaseUrl?: string; out?: string; resume: boolean; prices?: string } & ProviderFlags) => {
+  .action(async (domainPath: string, o: { models: string; user?: string; trials?: number; tasks?: TaskList; concurrency: number; openaiBaseUrl?: string; out?: string; resume: boolean; prices?: string } & ProviderFlags) => {
+    warnEmptyTasks(o.tasks);
     const prices = await loadPrices(o.prices);
     const domain = await loadDomain(await resolveDomain(domainPath));
     const parsed = ModelsFile.safeParse(YAML.parse(await readUserText(o.models, { from: "--models" })));
@@ -642,7 +663,7 @@ withProviderFlags(program
     const user = resolveUser(userSpec, p, o.openaiBaseUrl);
     const k = o.trials ?? cfg.k ?? 4;
     const out = o.out ?? path.join("leaderboard", domain.name);
-    const taskIds = o.tasks?.split(",").map((s) => s.trim()).filter(Boolean);
+    const taskIds = o.tasks?.ids;
     const tasks = taskIds?.length ? taskIds.length : domain.tasks.length;
     const runInfo: RunInfo = {
       sandtable: { version, ...sandtableCommit() },
