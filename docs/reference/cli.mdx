@@ -47,6 +47,8 @@ npx sandtable-ai init --openapi api.yaml --sop policy.md --transcripts calls/ -o
 
 At least one of `--openapi`, `--sop` and `--transcripts` is required. They run in that order. Without `--force`, `--openapi` refuses to overwrite existing files. Before the first model call, `init` prints a plan line, and after `--sop` and after `--transcripts` the step's token usage per model and an estimated cost: one call for the SOP, one per transcript.
 
+When a transcript's call fails after the client's retries, `init` still writes what the other transcripts drafted. It names each failed transcript with its error, prints the `init --transcripts` command that drafts only those (with your `-o`, `-m` and provider flags, without `--openapi` and `--sop`), and exits 2. When every transcript fails, it writes nothing from them. It goes on past an HTTP status of 400, 413, 429 or 500 and above, which concerns that transcript's call alone. It stops at a 401, 403 or 404, or at an error with no HTTP status, such as missing credentials, since every later call would fail the same way: it lists the transcripts it didn't send, with a command for each.
+
 `--dry-run` prints the same plan line and stops, so you can see what a draft will spend before it spends anything. It needs no API key, AWS credentials or Bedrock package: it reads the inputs, resolves the model and provider from the flags, and calls nothing. With `--openapi` in the same command it lists the files it would write, and writes none:
 
 ```text

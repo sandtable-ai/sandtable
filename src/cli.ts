@@ -224,15 +224,34 @@ async function loadPrices(file?: string): Promise<PricesFile | undefined> {
   return pricesFile(await realpath(file), bytes, await realpath(process.cwd()));
 }
 
-/** The transcripts `init --transcripts` drafts from: the file itself, or each .txt and .md file in the directory. */
-async function readTranscripts(p: string): Promise<{ file: string; text: string }[]> {
+/**
+ * The transcripts `init --transcripts` drafts from: the file itself, or each .txt and .md file in the directory. `path`
+ * is the file's path as the user would type it, for a command that drafts that one file again.
+ */
+async function readTranscripts(p: string): Promise<{ file: string; path: string; text: string }[]> {
   const how = { from: "--transcripts", what: "file or directory" };
   const info = await stat(p).catch(async (err: unknown) => {
     throw await userPathError(err, p, how);
   });
   const files = info.isDirectory() ? (await readdir(p)).filter((f) => /\.(txt|md)$/i.test(f)).sort().map((f) => path.join(p, f)) : [p];
   if (files.length === 0) throw new Error(`--transcripts: no .txt or .md file in ${p}`);
-  return Promise.all(files.map(async (f) => ({ file: path.basename(f), text: await readUserText(f, how) })));
+  return Promise.all(files.map(async (f) => ({ file: path.basename(f), path: f, text: await readUserText(f, how) })));
+}
+
+/**
+ * The `init` command that drafts these transcripts again into the same domain, with the model and provider flags given.
+ * It leaves out `--openapi` and `--sop`, whose drafts are already written.
+ */
+function transcriptsRerun(transcripts: string, o: { out: string; model?: string } & ProviderFlags): string {
+  const flags = [
+    `--transcripts ${shellWord(transcripts)}`,
+    `-o ${shellWord(o.out)}`,
+    ...(o.model ? [`-m ${shellWord(o.model)}`] : []),
+    ...(o.provider ? [`--provider ${o.provider}`] : []),
+    ...(o.region ? [`--region ${shellWord(o.region)}`] : []),
+    ...(o.awsProfile ? [`--aws-profile ${shellWord(o.awsProfile)}`] : []),
+  ];
+  return `${NEXT} init ${flags.join(" ")}`;
 }
 
 // Printed next steps use `npx sandtable-ai`: every way of installing sandtable needs Node.js and npm
@@ -353,6 +372,9 @@ withProviderFlags(program
       for (const l of draftUsageLines(res.usage)) console.log(l);
       for (const w of res.warnings) console.log(`  ! ${w}`);
     }
+    // Transcripts that drafted nothing: those whose call failed, and those never sent once a failure stopped drafting;
+    // `all` when that is every transcript.
+    let undrafted: { failed: { file: string; error: string }[]; notSent: string[]; all: boolean } | undefined;
     if (transcripts) {
       console.log(`Drafting tasks from ${transcripts.length} transcript(s) (PII scrubbed locally first)...`);
       const res = await draftTasksFromTranscripts({
@@ -368,8 +390,36 @@ withProviderFlags(program
       console.log(`  ${res.tasks.length} task(s), ${res.personas.length} persona(s), ${rows} seed row(s) drafted; ${res.redactions} PII redaction(s)${copied}`);
       for (const l of draftUsageLines(res.usage)) console.log(l);
       for (const w of res.warnings) console.log(`  ! ${w}`);
+      if (res.failed.length) undrafted = { failed: res.failed, notSent: res.notSent, all: res.failed.length + res.notSent.length === transcripts.length };
     }
-    console.log(`\nNext: accept or fix each drafted item, then validate:\n  ${NEXT} review ${o.out}\n  ${NEXT} validate ${o.out} --strict`);
+    // Nothing to review when the transcripts were the only step and none of them drafted.
+    if (!undrafted?.all || openapiDraft || sopText !== undefined) {
+      console.log(`\nNext: accept or fix each drafted item, then validate:\n  ${NEXT} review ${o.out}\n  ${NEXT} validate ${o.out} --strict`);
+    }
+    if (undrafted && transcripts && o.transcripts) {
+      // The chats that drafted are written above; the others are named, with a command that drafts only them.
+      const { failed, notSent, all } = undrafted;
+      const n = transcripts.length;
+      const left = failed.length + notSent.length;
+      const others = `The other ${n - left} ${n - left === 1 ? "was" : "were"} drafted as above:`;
+      if (notSent.length) {
+        // An error every later call would hit too stopped drafting: it is named once, at the chat it hit.
+        const sent = notSent.length === 1 ? "1 transcript wasn't sent" : `${notSent.length} transcripts weren't sent`;
+        console.error(`\n✗ Drafting stopped at ${failed.at(-1)!.file}: its call failed in a way every later call would too, so ${sent}. ${all ? "Nothing was drafted from the transcripts:" : others}`);
+      } else {
+        console.error(
+          all
+            ? `\n✗ ${n === 1 ? "The transcript's drafting call" : `All ${n} transcripts' drafting calls`} failed, so nothing was drafted from ${n === 1 ? "it" : "them"}:`
+            : `\n✗ ${failed.length} of ${n} transcripts' drafting calls failed, so nothing was drafted from ${failed.length === 1 ? "it" : "them"}. ${others}`,
+        );
+      }
+      for (const f of failed) console.error(`    ${f.file}: ${f.error}`);
+      if (notSent.length) console.error(`    not sent: ${notSent.join(", ")}`);
+      const paths = all ? [o.transcripts] : [...failed.map((f) => f.file), ...notSent].map((file) => transcripts.find((t) => t.file === file)!.path);
+      console.error(`  Draft ${left === 1 ? "it" : "them"} again with:`);
+      for (const p of paths) console.error(`    ${transcriptsRerun(p, o)}`);
+      exitWith(EXIT_ERROR);
+    }
   });
 
 program
