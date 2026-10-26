@@ -36,3 +36,4 @@ export { passHatK, passAtK, wilsonInterval } from "./grade/passk.ts";
 // Reports.
 export { renderTerminal } from "./report/terminal.ts";
 export { renderHtml } from "./report/html.ts";
+export { renderCustomerHtml, type CustomerReportOptions } from "./report/customer.ts";

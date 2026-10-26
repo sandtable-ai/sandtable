@@ -30,6 +30,7 @@ const EXPORTS = [
   "passHatK",
   "pendingReview",
   "regradeSuite",
+  "renderCustomerHtml",
   "renderHtml",
   "renderTerminal",
   "runSuite",

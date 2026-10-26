@@ -319,18 +319,30 @@ The offline demo runs the `scripted:naive` and `scripted:careful` agents against
 
 ## report
 
-Re-render the HTML report for a past run, for example after upgrading sandtable.
+Re-render the HTML report for a past run, for example after upgrading sandtable, or write the page a customer signs off on before go-live.
 
 ```bash
 npx sandtable-ai report .sandtable/runs/<run>/results.json [-o <folder> | -o <file>.html]
+npx sandtable-ai report <results.json> --audience customer [--probe <careless-run>/results.json]
 ```
 
 | Argument / option | Description |
 |---|---|
 | `<results>` | path to a `results.json` |
-| `-o, --out <path>` | a folder to write `report.html` into, as `run -o` and `regrade -o` take a folder, or a path ending in `.html` for the file itself. A folder that doesn't exist yet is created. Default: `report.html` next to `results.json` |
+| `-o, --out <path>` | a folder to write the report into, as `run -o` and `regrade -o` take a folder, or a path ending in `.html` for the file itself. A folder that doesn't exist yet is created. Default: next to `results.json` |
+| `--audience <who>` | `engineer` (default): the full report, `report.html`. `customer`: a plain-language page to sign off on, `customer-report.html` |
+| `--probe <results>` | with `--audience customer` only: a run of a deliberately careless agent on the same domain. The rules it broke show as caught |
 
 It prints the path it wrote. A run made with `--baseline` keeps its changes since the baseline, without the baseline's file.
+
+`--audience customer` writes a static page, with no script, that prints, with the conversations that show a rule broken or caught open. It is for a customer's operations lead, who doesn't need to know sandtable:
+- a summary in plain words, with the open items before go-live: drafted items still pending review, conversations that weren't graded, failed critical scenarios, broken rules and scenarios that didn't pass every conversation;
+- each rule with its `source` quote, how many conversations checked it, whether any broke it, the scenarios that checked it and an example conversation;
+- every scenario and its result, critical ones first;
+- what the rehearsal doesn't cover: rules no conversation checked, actions the agent never took, soft rules, and the limits of a simulation;
+- a sign-off block.
+
+A rule is checked when it applied to what the agent did, which doesn't show the scenario tries to make an agent break it. With `--probe`, the page also says which rules the rehearsal caught the careless agent breaking, with that conversation, and which it didn't. A soft rule never fails a conversation, so the page reports it as broken, never as caught. The page reads the run's [`coverage`](/reference/results-schema#coverage): a run written before 1.1 needs [`regrade`](#regrade) first, and `report` says so and exits 2, as it does for a `--probe` run of another domain. See [Get a customer's sign-off](/guides/customer-signoff).
 
 ## regrade
 
