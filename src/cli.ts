@@ -99,11 +99,14 @@ const floor = (v: string, floors: Record<string, number> = {}) => {
   if (Object.hasOwn(floors, tag)) throw new InvalidArgumentError(`${tag} has a floor already`);
   return { ...floors, [tag]: n / 100 };
 };
-/** `--tag a,b`: the tags, at least one. An empty value is a usage error, not a filter that selects every task. */
-const tagList = (v: string) => {
-  const tags = [...new Set(v.split(",").map((s) => s.trim()).filter(Boolean))];
+/**
+ * `--tag a,b`, repeatable like `--floor`: every tag given, at least one per value. An empty value is a usage error,
+ * not a filter that selects every task.
+ */
+const tagList = (v: string, previous: string[] = []) => {
+  const tags = v.split(",").map((s) => s.trim()).filter(Boolean);
   if (tags.length === 0) throw new InvalidArgumentError("give at least one tag, such as refusal or refusal,negotiation");
-  return tags;
+  return [...new Set([...previous, ...tags])];
 };
 
 const PRICES_HELP = "extra model prices, JSON in USD per million tokens: { \"<model-id>\": { input, output, cacheRead, cacheWrite } } (the sandtable repo's scripts/bedrock-prices.mjs writes one for Bedrock)";
@@ -523,7 +526,7 @@ withProviderFlags(program
   .option("--openai-base-url <url>", `OpenAI-compatible endpoint for openai:<model> (default: OPENAI_BASE_URL or ${DEFAULT_OPENAI_BASE_URL}); key from OPENAI_API_KEY`)
   .option("-k, --trials <n>", "trials per task (pass^k is reported up to k)", int, 1)
   .option("-t, --tasks <ids>", "comma-separated task ids to run")
-  .option("--tag <tags>", "run only the tasks with at least one of these comma-separated tags (untagged: tasks with none); with --tasks, the tasks in both", tagList)
+  .option("--tag <tags>", "run only the tasks with at least one of these comma-separated tags (untagged: tasks with none; repeatable); with --tasks, the tasks in both", tagList)
   .option("-c, --concurrency <n>", "episodes in parallel", int, 4)
   .option("-o, --out <dir>", "output directory for results.json and report.html")
   .option("--no-html", "skip the HTML report")

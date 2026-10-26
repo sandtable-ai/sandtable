@@ -61,6 +61,13 @@ describe.skipIf(!process.features.typescript)("`sandtable run --tag`", () => {
     expect(ran(r.out)).toEqual(ids.filter((id) => want.has(id)));
   });
 
+  it("adds the tags of a repeated --tag, as --floor adds floors", async () => {
+    const r = await run("examples/freight", "--tag", "handoff", "--tag", "callback");
+    expect(r.code).toBe(0);
+    const want = new Set([...tagged("handoff"), ...tagged("callback")]);
+    expect(ran(r.out)).toEqual(ids.filter((id) => want.has(id)));
+  });
+
   it("runs only the tasks both --tasks and --tag select", async () => {
     const [handoff] = tagged("handoff");
     const r = await run("examples/freight", "--tag", "handoff", "-t", `${handoff},${notHandoff}`);
