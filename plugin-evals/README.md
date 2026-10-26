@@ -46,7 +46,7 @@ That builds and packs this checkout's CLI into `plugin-evals/.cache/` (the scaff
 - `--allow-tools Bash Edit Write` lets the cases run the CLI and edit files, inside Claude Code's sandbox, with no network.
 - Pin `--model` so a model change isn't read as a skill change.
 - Results and the HTML report go to `plugin-evals/results/<time>/`. Add `--no-publish` to keep the report off claude.ai.
-- `--tag skill-298` runs only the cases for one issue, `--case <name>` one case, `--runs 1` one run per case, and `--ablation none` skips the no-plugin baseline.
+- `--tag skill-298` runs only the cases for one issue, `--case <glob>` the cases whose names match (one glob: a repeated `--case` keeps only the last), `--runs 1` one run per case, and `--ablation none` skips the no-plugin baseline.
 
 ### Before and after a skill change
 
@@ -73,7 +73,7 @@ Set `--max-cost-usd` to stop a run at a budget.
 
 ## Limits
 
-- Claude Code refuses to run a case that grants Bash when `~/.ssh` holds a symbolic link anywhere inside it, since its sandbox can't then reliably keep the agent out. The run then fails with "the SSH (~/.ssh) credential store on this machine holds a symbolic link". Keep `~/.ssh` free of links, or run the suite in CI or a container. `install-advice` and `install-new-folder` grant no Bash of their own, but `--allow-tools Bash` applies to every case, so run them alone with `--case install-advice --case install-new-folder` and without `--allow-tools` if you need to.
+- Claude Code refuses to run a case that grants Bash when `~/.ssh` holds a symbolic link anywhere inside it, since its sandbox can't then reliably keep the agent out. The run then fails with "the SSH (~/.ssh) credential store on this machine holds a symbolic link". Keep `~/.ssh` free of links, or run the suite in CI or a container. `install-advice` and `install-new-folder` grant no Bash of their own, but `--allow-tools Bash` applies to every case, so run them alone with `--case 'install-*'` and without `--allow-tools` if you need to.
 - The agent's commands have no network, so a case can't install packages itself. The scaffolds do it before the session starts.
 - `npm run evals:plugin` starts the eval without npm's `npm_config_globalconfig`. npm exports it to scripts, and with it in the environment Claude Code's sandbox blocks reads of the directory it names (`/opt/homebrew/etc` with Homebrew's npm), which also holds Homebrew OpenSSL's `openssl.cnf`. Node then fails at startup with `OpenSSL configuration error`, and every `npx sandtable-ai` in a case fails before sandtable runs. If you run `claude plugin eval` yourself from an npm script, drop that variable too.
 - `llm` graders vote three times per run on the last message, and a short rubric keeps them stable, but a single run is still noisy: compare at the default three runs.
