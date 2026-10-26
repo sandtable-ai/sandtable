@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-26
+
+A patch release with three fixes. A failed transcript call in `init --transcripts` no longer throws away the chats already drafted, and a configuration error stops it at once. `init`'s next-step commands run as printed for any folder name. The Claude Code plugin installs sandtable into the working folder's own project, never a parent's. There are no breaking changes.
+
 ### Fixed
 
 - `init --transcripts`: a transcript whose call fails after the client's retries no longer throws away the transcripts drafted before it. `init` writes what was drafted, names each failed transcript with its error, prints the `init --transcripts` command that drafts only the transcripts left, and still exits 2. It goes on past an error that concerns one transcript alone (an HTTP status of 400, 413, 429 or 5xx, such as a Bedrock 503 on a long chat). It stops at one that every later call would hit too (401, 403, 404, or no HTTP status, such as missing credentials), names it once and lists the transcripts it didn't send ([#402](https://github.com/sandtable-ai/sandtable/issues/402)).
@@ -248,7 +252,8 @@ First public release. sandtable rehearses an AI agent on a simulated copy of one
 
 A rehearsal of the release pipeline (npm, PyPI and GitHub releases from one tag), published before the first public release. Everything in it is also in 0.1.0; use 0.1.0 instead.
 
-[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/sandtable-ai/sandtable/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/sandtable-ai/sandtable/compare/v1.0.0-rc.1...v1.0.0
 [1.0.0-rc.1]: https://github.com/sandtable-ai/sandtable/compare/v0.3.0...v1.0.0-rc.1
 [0.3.0]: https://github.com/sandtable-ai/sandtable/compare/v0.2.1...v0.3.0
