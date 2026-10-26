@@ -210,7 +210,7 @@ invariants:
 
   - id: eligible-carrier
     description: Only book carriers (not brokers) with active authority, valid insurance, an acceptable safety rating and no do-not-use flag.
-    source: { file: policy.md, quote: "Do **not** book a carrier if any of these is true:" }
+    source: { file: policy.md, quote: "Do **not** book a carrier if any of these is true:\n  - authority type is not `carrier` (we don't hand loads to other brokers)\n  - operating authority is not `active`\n  - insurance is not `valid`\n  - safety rating is `unsatisfactory` (`conditional` is acceptable)\n  - the carrier is flagged do-not-use" }
     require:
       tool: book_load
       table: carriers

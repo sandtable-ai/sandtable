@@ -39,7 +39,7 @@ It fails, which is the point: `run` exits 1 on its failed critical scenarios.
 npx sandtable-ai report runs/agent/results.json --audience customer --probe runs/careless/results.json
 ```
 
-It writes `customer-report.html` next to `results.json` (or where `-o` says): one static file with no script, which you can attach, print or save as PDF. It holds:
+It writes `customer-report.html` next to `results.json` (or where `-o` says): one static file with no script, which you can attach, print or save as PDF. The conversations that show a rule broken or caught are open, so they print from any browser. The lists of scenarios print open from Chrome or Edge, and other examples print only when you open them first. It holds:
 
 - **A summary** in plain words: how many scenarios passed every conversation, critical scenarios, rules checked and broken, what the careless agent was caught doing, and the **open items before go-live**. Open items are drafted items still pending review, conversations that weren't graded, failed critical scenarios, broken rules, and scenarios that didn't pass every conversation.
 - **Each rule** of the procedure, with the sentence of the customer's document it comes from. For each rule:

@@ -335,7 +335,7 @@ npx sandtable-ai report <results.json> --audience customer [--probe <careless-ru
 
 It prints the path it wrote. A run made with `--baseline` keeps its changes since the baseline, without the baseline's file.
 
-`--audience customer` writes a static page, with no script, that prints. It is for a customer's operations lead, who doesn't need to know sandtable:
+`--audience customer` writes a static page, with no script, that prints, with the conversations that show a rule broken or caught open. It is for a customer's operations lead, who doesn't need to know sandtable:
 - a summary in plain words, with the open items before go-live: drafted items still pending review, conversations that weren't graded, failed critical scenarios, broken rules and scenarios that didn't pass every conversation;
 - each rule with its `source` quote, how many conversations checked it, whether any broke it, the scenarios that checked it and an example conversation;
 - every scenario and its result, critical ones first;

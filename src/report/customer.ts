@@ -27,7 +27,9 @@ export function renderCustomerHtml(r: SuiteResult, opts: CustomerReportOptions =
   const passedAll = r.tasks.filter(passedEvery);
   const critical = r.tasks.filter((t) => t.critical);
   const checked = rules.filter((x) => x.checked > 0);
-  const brokenHard = rules.filter((x) => x.broken > 0 && !x.soft);
+  const hard = rules.filter((x) => !x.soft);
+  const brokenHard = hard.filter((x) => x.broken > 0);
+  const softBroken = rules.filter((x) => x.broken > 0 && x.soft);
   const unchecked = rules.filter((x) => x.checked === 0);
   const idle = r.coverage.tools.filter((t) => t.calls === 0);
   const caught = probe ? new Map(probe.coverage!.rules.map((x) => [x.id, x])) : undefined;
@@ -49,9 +51,9 @@ export function renderCustomerHtml(r: SuiteResult, opts: CustomerReportOptions =
     `${esc(r.agent)} was rehearsed on ${count(r.tasks.length, "scenario")}, ${count(k, "conversation")} each (${trials} in all), with simulated callers and a simulated copy of your systems. Every conversation was graded by fixed rules, not by an AI judge.`,
     `${passedAll.length} of ${r.tasks.length} scenarios passed in every conversation.`,
     ...(critical.length ? [`${critical.filter(passedEvery).length} of ${critical.length} critical scenarios passed in every conversation.`] : []),
-    `${checked.length} of ${rules.length} rules were checked in these conversations${brokenHard.length ? `, and ${count(brokenHard.length, "rule")} ${brokenHard.length === 1 ? "was" : "were"} broken` : ", and none was broken"}.${unchecked.length ? ` ${count(unchecked.length, "rule")} ${unchecked.length === 1 ? "was" : "were"} never checked: see Not covered.` : ""}`,
+    `${checked.length} of ${rules.length} rules were checked in these conversations. ${brokenHard.length ? `${count(brokenHard.length, "rule")} that fail${brokenHard.length === 1 ? "s" : ""} a conversation ${brokenHard.length === 1 ? "was" : "were"} broken` : `None of the ${hard.length} rules that fail a conversation was broken`}${softBroken.length ? `, and ${count(softBroken.length, "soft rule")} ${softBroken.length === 1 ? "was" : "were"} broken (reported, never a failure)` : ""}.${unchecked.length ? ` ${count(unchecked.length, "rule")} ${unchecked.length === 1 ? "was" : "were"} never checked: see Not covered.` : ""}`,
     ...(probe && caught
-      ? [`A deliberately careless agent was rehearsed too. The rehearsal caught it breaking ${[...caught.values()].filter((x) => x.broken > 0 && !x.soft).length} of the ${rules.filter((x) => !x.soft).length} rules that fail a conversation.`]
+      ? [`A deliberately careless agent was rehearsed too. The rehearsal caught it breaking ${[...caught.values()].filter((x) => x.broken > 0 && !x.soft).length} of the ${hard.length} rules that fail a conversation.`]
       : []),
   ];
 
@@ -73,7 +75,7 @@ h1{font-size:24px;line-height:32px;margin:0 0 8px}h2{font-size:18px;margin:40px 
 ul{padding-left:20px;margin:8px 0}li{margin:4px 0}
 .rule{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:16px;margin:12px 0;break-inside:avoid}
 .rule.gap{border-left:4px solid var(--bad)}
-blockquote{margin:8px 0;padding:4px 12px;border-left:3px solid var(--line);color:var(--muted)}
+blockquote{margin:8px 0;padding:4px 12px;border-left:3px solid var(--line);color:var(--muted);white-space:pre-line}
 blockquote cite{display:block;font-style:normal;font-size:12px}
 .chip{display:inline-block;background:var(--chip);border-radius:2px;padding:0 8px;font-size:12px;line-height:20px;margin:0 4px 0 0;vertical-align:1px}
 .chip.bad{background:var(--bad);color:#fff}.chip.line{background:transparent;border:1px solid var(--bad);color:var(--bad-text)}
@@ -87,7 +89,7 @@ th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);verti
 .wrap{overflow-x:auto}
 .sign{margin-top:40px;border-top:1px solid var(--line);padding-top:16px;break-inside:avoid}
 .sign div{display:flex;gap:16px;flex-wrap:wrap;margin-top:24px}.sign span{flex:1 1 200px;border-bottom:1px solid var(--fg);padding-top:24px;font-size:12px;color:var(--muted)}
-@media print{body{background:#fff}main{padding:0}.status,.rule,table{background:#fff}}
+@media print{body{background:#fff}main{padding:0}.status,.rule,table{background:#fff}details.list::details-content{content-visibility:visible}details>summary{color:var(--fg)}}
 </style>
 </head>
 <body>
@@ -103,12 +105,12 @@ ${open.length ? `<b>Open items</b><ul>${open.map((o) => `<li>${o}</li>`).join(""
 </div>
 
 <h2>Rules from your operating procedure</h2>
-<p class="meta">Each rule the agent must follow, where it comes from, and what the rehearsal saw. A rule is <b>checked</b> in a conversation when the agent took the action it governs, or, for a rule about what the agent may say, saw information it must keep to itself. Checked means the rule applied, not that the scenario tried to make the agent break it.${probe ? " A rule is <b>caught</b> when a deliberately careless agent broke it and the rehearsal failed those conversations: that proves these scenarios catch the mistake." : " Which rules the rehearsal would catch a careless agent breaking isn't shown: rehearse a careless agent too to show it."}</p>
+<p class="meta">Each rule the agent must follow, where it comes from, and what the rehearsal saw. A rule is <b>checked</b> in a conversation when the agent took the action it governs, or, for a rule about what the agent may say, saw information it must keep to itself. Checked means the rule applied, not that the scenario tried to make the agent break it.${probe ? " A rule is <b>caught</b> when a deliberately careless agent broke it and the rehearsal failed those conversations: that shows these scenarios can catch that mistake." : " Which rules the rehearsal would catch a careless agent breaking isn't shown: rehearse a careless agent too to show it."}</p>
 ${rules.map((x) => ruleCard(x, r, probe, caught?.get(x.id))).join("\n")}
 
 <h2>Scenarios</h2>
 <div class="wrap"><table><thead><tr><th>Scenario</th><th>Result</th></tr></thead><tbody>
-${[...critical, ...r.tasks.filter((t) => !t.critical)].map((t) => `<tr><td>${esc(name(t))}${t.critical ? ' <span class="chip">critical</span>' : ""}<div class="meta">${esc(t.id)}${t.tags.length ? ` · ${t.tags.map(esc).join(", ")}` : ""}</div></td><td>${result(t)}</td></tr>`).join("\n")}
+${[...critical, ...r.tasks.filter((t) => !t.critical)].map((t) => `<tr><td>${esc(name(t))}${t.critical ? ' <span class="chip">critical</span>' : ""}<div class="meta">${esc(t.id)}</div></td><td>${result(t)}</td></tr>`).join("\n")}
 </tbody></table></div>
 
 <h2>Not covered by this rehearsal</h2>
@@ -127,6 +129,7 @@ ${rules.some((x) => x.soft) ? `<li><b>Soft rules</b> are reported but never fail
 <li>A <b>critical</b> scenario is a release blocker: it must pass every conversation.</li>
 <li>A rule <b>checked</b> in a conversation applied to what the agent did. ${probe ? "A rule <b>caught</b> was broken by a deliberately careless agent, and the rehearsal failed those conversations." : "To show which mistakes the rehearsal catches, an engineer can rehearse a deliberately careless agent and add it to this page."}</li>
 <li>Example conversations are copied from the rehearsal. Names, IDs and records in them are the rehearsal's own test data.</li>
+<li>The conversations that show a rule broken or caught are open, so they print with the page. Printed from Chrome or Edge, the lists of scenarios print open too. Other examples print only when you open them first.</li>
 </ul>
 
 <div class="sign">
@@ -168,9 +171,9 @@ function ruleCard(x: RuleCoverage, r: SuiteResult, probe: SuiteResult | undefine
 ${x.source?.quote ? `<blockquote>“${inline(x.source.quote)}”<cite>${esc(x.source.file)}</cite></blockquote>` : x.source ? `<blockquote><cite>from ${esc(x.source.file)}</cite></blockquote>` : ""}
 <p>${status}</p>
 ${caught}
-${cells.length ? `<details><summary>Scenarios that checked it (${cells.length})</summary><ul>${list}</ul></details>` : ""}
-${example ? `<details><summary>Example conversation: ${esc(name(example.task))}, conversation ${example.trial.trial + 1}${example.broke ? " (broke the rule)" : ""}</summary>${conversation(example.trial, r)}</details>` : ""}
-${probeExample ? `<details><summary>How the careless agent was caught: ${esc(name(probeExample.task))}</summary>${conversation(probeExample.trial, probe!)}</details>` : ""}
+${cells.length ? `<details class="list"><summary>Scenarios that checked it (${cells.length})</summary><ul>${list}</ul></details>` : ""}
+${example ? `<details${example.broke ? " open" : ""}><summary>Example conversation: ${esc(name(example.task))}, conversation ${example.trial.trial + 1}${example.broke ? " (broke the rule)" : ""}</summary>${conversation(example.trial, r)}</details>` : ""}
+${probeExample ? `<details open><summary>${x.soft ? "How the careless agent broke it (reported, not caught)" : "How the careless agent was caught"}: ${esc(name(probeExample.task))}</summary>${conversation(probeExample.trial, probe!)}</details>` : ""}
 <div class="meta">${esc(x.id)} · ${esc(x.kind)} · ${esc(x.tool ?? x.field ?? "")}</div>
 </div>`;
 }

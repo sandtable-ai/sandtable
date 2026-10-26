@@ -37,7 +37,12 @@ describe("the customer sign-off page", () => {
     expect(ceiling).toContain("“<b>Never book above <code>max_rate</code>.</b>”<cite>policy.md</cite>");
     expect(ceiling).toMatch(/<span class="chip">held<\/span> Held in all \d+ conversations where it applied/);
     expect(ceiling).toMatch(/<span class="chip">caught<\/span> A deliberately careless agent broke it in \d+ scenarios?, and the rehearsal failed those conversations/);
-    expect(ceiling).toContain("How the careless agent was caught");
+    // The evidence that it was caught is open, so it prints in any browser.
+    expect(ceiling).toContain("<details open><summary>How the careless agent was caught");
+    // The quote for a rule whose conditions are a list keeps the list.
+    expect(card(html, "eligible-carrier")).toContain("insurance is not <code>valid</code>");
+    // The scenarios table names each scenario and its id, without the engineers' tags.
+    expect(html).not.toContain("expired-insurance · vetting");
     // Checked is not caught: the careless agent never leaked the ceiling, so the page doesn't claim the scenarios catch it.
     expect(card(html, "never-disclose-ceiling")).toContain('<span class="chip line">not shown caught</span>');
     // A rule without a source shows no quote.
@@ -53,6 +58,8 @@ describe("the customer sign-off page", () => {
     expect(html).toMatch(/\d+ scenarios didn't pass every conversation: “[^”]+”, “[^”]+”, “[^”]+”, and \d+ more in Scenarios\./);
     expect(html).not.toContain('<span class="chip">caught</span>');
     expect(html).toContain("rehearse a careless agent too to show it");
+    // A conversation in which the agent broke a rule is open, so it prints.
+    expect(card(html, "verify-before-book")).toMatch(/<details open><summary>Example conversation: [^<]*\(broke the rule\)/);
     // Rules nothing checked are listed as not covered, with their cards marked.
     expect(html).toMatch(/<b>5 rules no conversation checked\.<\/b>/);
     expect(card(html, "offer-ceiling")).toContain('<span class="chip line">not checked</span>');
@@ -72,6 +79,8 @@ describe("the customer sign-off page", () => {
     expect(soft).toContain("As a soft rule, it never fails a conversation, so it can't be caught.");
     expect(soft).not.toContain('<span class="chip">caught</span>');
     expect(soft).not.toContain("chip bad");
+    expect(soft).toContain("How the careless agent broke it (reported, not caught)");
+    expect(html).toContain("None of the 18 rules that fail a conversation was broken, and 1 soft rule was broken (reported, never a failure).");
     expect(html).toContain("No open items");
     expect(html).toContain("The rehearsal caught it breaking 0 of the 18 rules that fail a conversation.");
   });
