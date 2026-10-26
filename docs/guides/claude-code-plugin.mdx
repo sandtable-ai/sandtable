@@ -68,6 +68,8 @@ The skills ask before any command that calls a model, because it needs keys and 
 | `init --openapi`, `validate`, `review`, `lint`, `report` | `init --sop`, `init --transcripts` |
 | `run --agent noop --user scripted`, `demo` | `run` with a model agent (`claude`, `openai:`, `bedrock:`) or a model user (the default `claude`, `openai:`), `demo --live` |
 
+A hook holds the agent to this for `init`. When Claude goes to run `init --sop` or `init --transcripts` without `--dry-run`, the plugin's `PreToolUse` hook checks the session's transcript, and stops the command unless Claude has dry-run it and then written you the plan: the calls and what they cost. Claude then gets the reason, writes the plan, and runs the command again; or, if you haven't allowed model steps, waits for your go-ahead. The hook needs Node.js, which `npx sandtable-ai` needs too, and it only ever stops a model-backed `init`. If it can't read the transcript, it lets the command run. It doesn't check that you said yes: the skills still ask for that. Settings that turn off hooks (`disableAllHooks`) turn it off too.
+
 ## A worked session
 
 This session drafts a domain from the fictional freight brokerage's sources that ship in the repository, [`examples/freight/source/openapi.yaml`](https://github.com/sandtable-ai/sandtable/tree/main/examples/freight/source) and [`examples/freight/policy.md`](https://github.com/sandtable-ai/sandtable/blob/main/examples/freight/policy.md), copied into `discovery/`. Every output below is from a real offline run.

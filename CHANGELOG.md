@@ -21,6 +21,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 - `examples/freight`: `do-not-use-carrier` and `do-not-use-capacity` now have a `reference` that looks the carrier up, so `lint` proves them solvable and finds the rule against telling a caller why it is flagged in play. Their caller prompts and grading are unchanged, so stored runs of them still regrade ([#30](https://github.com/sandtable-ai/sandtable/issues/30)).
 - `examples/freight`: 18 of its 19 rules now quote, as `source`, the sentence of `policy.md` they come from, so the customer report shows where each rule comes from. Grading is unchanged and stored runs still regrade. A trial that broke one of them now quotes that sentence in its attribution's evidence ([#31](https://github.com/sandtable-ai/sandtable/issues/31)).
 
+### Fixed
+
+- **Plugin**: a `PreToolUse` hook stops a model-backed `init` (`--sop` or `--transcripts` without `--dry-run`) until Claude has dry-run it and written the engineer the plan, the calls and what they cost. Claude Opus 5.5, the default model, sometimes ran the paid `init` straight after the dry run's output, though the drafting skill asks for the plan first. The hook holds on any model. It needs Node.js, and it lets the command run when it can't read the session's transcript ([#397](https://github.com/sandtable-ai/sandtable/issues/397)).
+
 ## [1.0.1] - 2026-10-26
 
 A patch release with three fixes. A failed transcript call in `init --transcripts` no longer throws away the chats already drafted, and a configuration error stops it at once. `init`'s next-step commands run as printed for any folder name. The Claude Code plugin installs sandtable into the working folder's own project, never a parent's. There are no breaking changes.
