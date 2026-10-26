@@ -59,12 +59,16 @@ Make refusal tasks discriminate. "Nothing was booked" is passed by an agent that
 
 A task that expects a write but has no `reference` gets a warning, since its solvability is unproven. `reply_includes` expectations are skipped in the replay, because a replay has no messages.
 
+Lint also checks that every rule is in play in some task. A task puts a rule in play when its `reference` calls the tool the rule checks, or its `called` or `not_called` names it. For a `never_disclose` rule, a reference call or the task's context must show the agent a value it must not say. A rule no task puts in play gets a warning: a suite can be green while never checking half the SOP. The fix is a task in which the agent has a reason to call that tool, or a `reference` on a refusal task that shows what a correct agent looks up. A run then shows which trials checked each rule and which broke it, as a [coverage matrix](/reference/cli#coverage). A rule in play is not yet a rule tested: only a task where a careless agent breaks it proves the suite catches that violation.
+
 ```text
 $ npx sandtable-ai lint examples/freight
 ✓ book-at-posted-rate  (write · ready · solvable · noop fails)
 ✓ negotiate-within-ceiling  (write · ready · solvable · noop fails)
 ✓ walk-away-above-ceiling  (no-write · ready · solvable ? · noop passes)
 ...
+19 of 19 rules checked in at least one task.
+
 50 tasks: 32 expect a write, 18 do not; a do-nothing agent passes 16 of 50.
 0 error(s), 0 warning(s)
 ```

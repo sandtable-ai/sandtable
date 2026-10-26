@@ -1,12 +1,13 @@
 import type { CheckKind } from "../grade/expectations.ts";
 import { invariantTool } from "../grade/invariants.ts";
-import { lintDomain } from "../grade/lint.ts";
+import { lintDomain, type LintReport } from "../grade/lint.ts";
 import { passAtK, passHatK, wilsonInterval } from "../grade/passk.ts";
 import { pendingReview, type PendingItem } from "../spec/load.ts";
 import type { Domain, Task } from "../spec/schema.ts";
 import type { AgentAdapter, UserSimulator } from "../sim/types.ts";
 import { attributeTrial, attributionCounts, type AttributionCounts } from "./attribution.ts";
 import type { BaselineSnapshot } from "./compare.ts";
+import { coverageOf, type Coverage } from "./coverage.ts";
 import { runEpisode, type TrialResult } from "./episode.ts";
 import { inputsFingerprint, taskFingerprints } from "./inputs.ts";
 import { percentile, sumUsage, type Usage } from "./usage.ts";
@@ -123,6 +124,11 @@ export interface SuiteResult {
   byTag: TagScore[];
   /** One entry per soft invariant in the domain, in spec order. Empty when there are none. */
   soft: SoftScore[];
+  /**
+   * What the run checked: for each rule, the tasks whose trials checked it and the trials that broke it, and for each
+   * tool, the trials that called it. Absent in results from before coverage, until `sandtable regrade` re-scores them.
+   */
+  coverage?: Coverage;
   usage: Usage;
   /** Drafted items not yet accepted; while non-empty, results are provisional. */
   pendingReview: PendingItem[];
@@ -202,8 +208,10 @@ export function summarize(
   k: number,
   /** The simulated user's name, which decides whether the task's script is part of its `inputs` hash. */
   user: string,
-): Pick<SuiteResult, "tasks" | "passHat" | "passAt" | "flipRate" | "flaky" | "skipped" | "callerNotes" | "attribution" | "failureModes" | "byTag" | "soft"> {
-  results = attributed(domain, tasks, results);
+): Pick<SuiteResult, "tasks" | "passHat" | "passAt" | "flipRate" | "flaky" | "skipped" | "callerNotes" | "attribution" | "failureModes" | "byTag" | "soft" | "coverage"> {
+  // Lint runs once for the domain, not per trial: attribution and coverage both read it.
+  const lint = lintDomain(domain);
+  results = attributed(domain, tasks, results, lint);
   const summaries: TaskSummary[] = tasks.map((task) => {
     const trials = results.filter((r) => r.taskId === task.id).sort((a, b) => a.trial - b.trial);
     const passes = trials.filter((t) => t.passed).length;
@@ -247,15 +255,16 @@ export function summarize(
     failureModes: failureModes(results),
     byTag: tagScores(summaries, k),
     soft: softScores(domain, results),
+    coverage: coverageOf(domain, tasks, results, lint),
   };
 }
 
 /**
  * Each trial with its attribution decided under the domain as it is now: a trial that didn't pass gets one, and a
- * trial that passed has none. Lint runs once for the domain, not per trial.
+ * trial that passed has none.
  */
-function attributed(domain: Domain, tasks: readonly Task[], results: readonly TrialResult[]): TrialResult[] {
-  const lints = new Map(lintDomain(domain).tasks.map((l) => [l.id, l]));
+function attributed(domain: Domain, tasks: readonly Task[], results: readonly TrialResult[], lint: LintReport): TrialResult[] {
+  const lints = new Map(lint.tasks.map((l) => [l.id, l]));
   const byId = new Map(tasks.map((t) => [t.id, t]));
   return results.map(({ attribution: _, ...trial }) => {
     const task = byId.get(trial.taskId);

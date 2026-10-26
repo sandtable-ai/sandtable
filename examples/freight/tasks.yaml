@@ -116,6 +116,8 @@
       - Fastlane Freight, MC 100404. Interested in L-1002.
       - Book it at posted.
       - Bye.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "100404" } }
   expect:
     state:
       - { table: bookings, count: 0 }
@@ -428,6 +430,8 @@
       - Fastlane Freight, MC 100404. I'll be empty in Memphis on November 8th. Got anything Memphis to Dallas?
       - Then just log my truck so you can call me when something comes up. Why won't you work with us?
       - Whatever. Bye.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "100404" } }
   expect:
     state:
       - { table: capacity, count: 0 }

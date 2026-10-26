@@ -39,6 +39,7 @@ The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`
 | `failureModes` | `FailureMode[]` | failed checks clustered across graded trials, most frequent first; a skipped trial's error is not one |
 | `byTag` | `TagScore[]` | scores per task tag (`untagged` for tasks without tags), weakest first |
 | `soft` | `SoftScore[]` | one entry per soft invariant in the domain, in spec order; empty when there are none |
+| `coverage` | `Coverage` | what the run checked: for each rule, the tasks whose trials checked it and the trials that broke it, and for each tool, the trials that called it. Absent in results from before coverage, until [`regrade`](/reference/cli#regrade) re-scores them |
 | `usage` | `Usage` | tokens and estimated cost, summed over trials |
 | `pendingReview` | `PendingItem[]` | drafted items not yet accepted; while non-empty, the run is provisional |
 | `latency` | object | `agentTurnP50Ms` and `agentTurnP95Ms`: time the agent took per user turn, tool calls included (`null` with no turns) |
@@ -95,6 +96,50 @@ How often a soft invariant (`soft: true`) was broken. Soft invariants never fail
 | `rate` | number or `null` | `broken / applied`, from 0 to 1; `null` when it never applied |
 | `tasks` | string[] | tasks with at least one trial that broke it |
 | `example` | string | the detail of the first violation, when there is one |
+
+### Coverage
+
+What the run checked. A rule that no trial checked, or a tool that no trial called, is a gap: a run that passes says nothing about it. A checked rule applied to what the agent did, which doesn't show that a task pushes the agent to break it; only `broken` shows that a task catches a violation. The [HTML report](/reference/cli#coverage) draws it as a rule × task matrix, and the terminal summary names the gaps. Coverage never changes a verdict or a score.
+
+| Field | Type | Description |
+|---|---|---|
+| `rules` | `RuleCoverage[]` | one per invariant in the domain, in spec order, soft ones included |
+| `tools` | `ToolCoverage[]` | one per tool in the domain, in spec order |
+
+### RuleCoverage
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | invariant id |
+| `description` | string | invariant description |
+| `kind` | string | the invariant's kind, its key in the spec: `before`, `require`, `limit`, `match`, `never` or `never_disclose` |
+| `tool` | string | the tool whose calls it checks; absent for `never_disclose` |
+| `field` | string | for `never_disclose` only: the `table.field` whose values the agent must never say |
+| `soft` | `true` | present on a soft invariant |
+| `source` | object | the invariant's `source` in the spec, `{ file, quote? }`, when it has one |
+| `tasks` | `CoverageCell[]` | one per task of the run that planned or checked the rule, in spec order; a task that did neither has none |
+| `checked` | number | trials that checked it, across the run |
+| `broken` | number | trials that broke it, across the run |
+
+### CoverageCell
+
+One task's part in testing one rule.
+
+| Field | Type | Description |
+|---|---|---|
+| `task` | string | task id |
+| `planned` | boolean | the task's spec puts the rule in play, as [`lint`](/reference/cli#lint) reads it: its `reference` calls the tool the rule checks, or its `called` or `not_called` names that tool. For `never_disclose`, the agent is shown a value it must not say in its system prompt (the policy and the task's `given.context`) or in a successful reference call's result |
+| `checked` | number | trials of the task that checked the rule: the agent called the tool it guards, whether or not the call succeeded. For `never_disclose`, a successful tool call or the system prompt showed the agent a value it must not say, from the task's seed or a row the trial wrote |
+| `broken` | number | trials of the task in which the agent broke the rule at least once: the evidence that the task catches a violation |
+
+### ToolCoverage
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | string | tool name |
+| `trials` | number | trials in which the agent called it |
+| `calls` | number | its calls across the run |
+| `tasks` | string[] | the tasks with a trial that called it, in spec order |
 
 ### BaselineSnapshot
 
@@ -263,6 +308,10 @@ jq -r '.failureModes[] | "\(.count)x \(.kind) \(.id)"' results.json
 
 # soft invariants: how often each was broken
 jq -r '.soft[] | "\(.id): \(.broken) of \(.applied) trials"' results.json
+
+# rules no trial checked, and tools no trial called
+jq -r '.coverage.rules[] | select(.checked == 0) | .id' results.json
+jq -r '.coverage.tools[] | select(.calls == 0) | .name' results.json
 
 # a run made with --baseline: each task's passes then and now
 jq -r '(.baseline.tasks | map({(.id): "\(.passes)/\(.trials)"}) | add) as $then

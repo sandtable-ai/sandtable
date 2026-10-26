@@ -1,10 +1,11 @@
 import { createToolRunner } from "../run/tool-runner.ts";
-import type { Domain, ReferenceCall, Task } from "../spec/schema.ts";
+import { agentSystemPrompt } from "../sim/prompts.ts";
+import type { Domain, Invariant, ReferenceCall, Task } from "../spec/schema.ts";
 import { matches } from "../world/match.ts";
-import { worldFor } from "../world/store.ts";
+import { worldFor, type World } from "../world/store.ts";
 import { coerceArgs } from "../world/tools.ts";
 import { expectedTool, gradeTrial } from "./expectations.ts";
-import { checkTranscript } from "./invariants.ts";
+import { checkTranscript, invariantTool, mentions, protectedValues, type CallRecord } from "./invariants.ts";
 
 export interface TaskLint {
   id: string;
@@ -16,13 +17,38 @@ export interface TaskLint {
   expectsWrite: boolean;
   /** A do-nothing agent passes this task. */
   noopPasses: boolean;
+  /**
+   * The rules (invariant ids) this task puts in play, in spec order: its reference calls the tool a rule
+   * checks, or its `called` or `not_called` names that tool. A never_disclose rule is in play when the
+   * agent is shown a value it must not say: in its system prompt (the policy and the task's context) or in the
+   * result of a successful reference call.
+   */
+  rules: string[];
   errors: string[];
+  warnings: string[];
+}
+
+/**
+ * Which tasks put one rule (invariant) in play, read from the spec without any model call. A rule in play is checked
+ * whenever the agent acts; only a run in which an agent breaks it shows that a task catches a violation.
+ */
+export interface RuleLint {
+  id: string;
+  /** The tasks whose `rules` include it, in spec order. */
+  tasks: string[];
+  /** One when no task puts it in play: a run that passes says nothing about it. */
   warnings: string[];
 }
 
 export interface LintReport {
   tasks: TaskLint[];
+  /** One per invariant, in spec order. */
+  rules: RuleLint[];
+  /** Tools no task's reference calls and no `called` or `not_called` names, in spec order. A note, not a warning: an agent may never need a tool. */
+  unusedTools: string[];
+  /** Errors in tasks: any one fails `lint`. */
   errors: number;
+  /** Warnings in tasks and rules: they never fail `lint`. */
   warnings: number;
 }
 
@@ -42,11 +68,51 @@ export function lintDomain(domain: Domain): LintReport {
     }
   }
   const tasks = domain.tasks.map((task) => lintTask(domain, task, changeable, writers));
+  const rules = domain.invariants.map((inv) => {
+    const ids = tasks.filter((t) => t.rules.includes(inv.id)).map((t) => t.id);
+    return { id: inv.id, tasks: ids, warnings: ids.length ? [] : [unchecked(inv)] };
+  });
+  const used = new Set(domain.tasks.flatMap(toolsNamed));
   return {
     tasks,
+    rules,
+    unusedTools: domain.tools.map((t) => t.name).filter((name) => !used.has(name)),
     errors: tasks.reduce((n, t) => n + t.errors.length, 0),
-    warnings: tasks.reduce((n, t) => n + t.warnings.length, 0),
+    warnings: [...tasks, ...rules].reduce((n, t) => n + t.warnings.length, 0),
   };
+}
+
+/** The tools a task's reference calls or its `called` and `not_called` name. */
+function toolsNamed(task: Task): string[] {
+  return [...(task.reference ?? []).map((c) => c.tool), ...[...task.expect.called, ...task.expect.not_called].map(expectedTool)];
+}
+
+/** Why a rule no task checks gets a warning, and what would put it in play. */
+function unchecked(inv: Invariant): string {
+  if ("never_disclose" in inv) {
+    const { table, field } = inv.never_disclose;
+    return `no task checks it: no task's reference or context shows the agent a ${table}.${field} value. Add a reference to a task in which the agent looks one up`;
+  }
+  const tool = invariantTool(inv)!;
+  return `no task checks it: no task's reference calls ${tool}, and no task's called or not_called names it. Add a task in which the agent has reason to call ${tool}`;
+}
+
+/**
+ * The rules a task puts in play (see TaskLint.rules). `worlds` hold the values a never_disclose rule protects:
+ * the seed, and the world after the reference replay, which has the rows its calls created. What the agent is shown
+ * is its system prompt, then the results of the reference's successful calls.
+ */
+function rulesInPlay(domain: Domain, task: Task, worlds: readonly World[], calls: readonly CallRecord[]): string[] {
+  const used = new Set(toolsNamed(task));
+  const shown = [agentSystemPrompt(domain, task), ...calls.filter((c) => c.ok).map((c) => JSON.stringify(c.result) ?? "")];
+  return domain.invariants
+    .filter((inv) => {
+      if (!("never_disclose" in inv)) return used.has(invariantTool(inv)!);
+      const { table, field } = inv.never_disclose;
+      const values = new Set(worlds.flatMap((w) => [...protectedValues(w.list(table), field)]));
+      return shown.some((text) => [...values].some((v) => mentions(text, v)));
+    })
+    .map((inv) => inv.id);
 }
 
 function lintTask(domain: Domain, task: Task, changeable: Set<string>, writers: Set<string>): TaskLint {
@@ -79,9 +145,13 @@ function lintTask(domain: Domain, task: Task, changeable: Set<string>, writers: 
   if (expectsWrite && noopPasses) errors.push("vacuous: the seed already satisfies the expected state, so a do-nothing agent passes");
 
   let solvable: boolean | null = null;
+  const worlds = [seed];
+  let replayed: readonly CallRecord[] = [];
   if (task.reference) {
     const world = worldFor(domain, task);
     const runner = createToolRunner(domain, world);
+    worlds.push(world);
+    replayed = runner.calls;
     task.reference.forEach((c, i) => {
       const problem = referenceProblem(domain, c);
       if (problem) {
@@ -107,7 +177,7 @@ function lintTask(domain: Domain, task: Task, changeable: Set<string>, writers: 
     warnings.push("no reference: add the tool calls a correct agent would make to prove the task is solvable");
   }
 
-  return { id: task.id, ready, solvable, expectsWrite, noopPasses, errors, warnings };
+  return { id: task.id, ready, solvable, expectsWrite, noopPasses, rules: rulesInPlay(domain, task, worlds, replayed), errors, warnings };
 }
 
 /**

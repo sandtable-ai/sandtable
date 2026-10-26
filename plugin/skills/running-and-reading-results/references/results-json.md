@@ -34,6 +34,13 @@ SuiteResult
                                frequent first; skipped trials' errors are not in it
   soft[]                       { id, description, tool?, applied, broken, rate, tasks[], example? }: one per soft
                                invariant; rate = broken / applied trials (null if it never applied). Never a failure
+  coverage                     { rules[], tools[] }: what the run checked (absent before 1.1 until regraded).
+                               rules[] = { id, description, kind, tool?, field?, soft?, source?, checked, broken,
+                               tasks[]: { task, planned, checked, broken } }: checked = trials that called the tool
+                               the rule guards (never_disclose: that showed the agent a protected value), planned =
+                               the task's reference or called/not_called involves it. tools[] = { name, trials,
+                               calls, tasks[] }. A rule with checked 0 or a tool with calls 0 is a gap. Checked is not
+                               tested: only broken > 0 shows a task catches a violation. Never a failure
   pendingReview[]              { kind, id, source? }: non-empty means the run is provisional
   usage                        { agent: {<model>: tokens}, user: {<model>: tokens}, costUsd }: costUsd is null when a
                                model has no known price (Claude, or passed with --prices). tokens = { calls, input,
@@ -168,6 +175,14 @@ Soft invariants (`soft: true`): how often each was broken, and in which trials. 
 ```bash
 jq -r '.soft[] | "\(.id): \(.broken) of \(.applied) trials \(if .rate == null then "" else "(\(.rate * 100 | round)%)" end)"' "$R"
 jq -r '.tasks[].trials[] | .taskId as $t | .trial as $n | .soft[] | select(.broken) | "\($t)#\($n) \(.id): \(.violations[0].detail)"' "$R"
+```
+
+Coverage: rules no trial checked and tools no trial called. A passing run says nothing about them. A checked rule only applied to what the agent did (a booking at the posted rate checks the rate ceiling without testing it), so don't report a checked rule as tested. To find which rules the suite catches, run a careless agent: rules it breaks show up with `broken` > 0, and those are violations the suite catches. For a rule never checked, add a task that gives the agent a reason to call its tool:
+
+```bash
+jq -r '.coverage.rules[] | select(.checked == 0) | "\(.id) (\(.kind) on \(.tool // .field)): never checked"' "$R"
+jq -r '.coverage.tools[] | select(.calls == 0) | .name' "$R"
+jq -r '.coverage.rules[] | "\(.id): checked in \(.checked) trials, broken in \(.broken)"' "$R"
 ```
 
 Trials that ran out of turns or crashed, and the skipped ones (crashed before the agent broke a rule, so not graded):

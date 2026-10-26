@@ -97,6 +97,13 @@ npx sandtable-ai lint ./my-domain
 
 Each task prints as `✓` (clean), `!` (warnings) or `✗` (errors), followed by whether it expects a write, is ready, is solvable (`solvable ?` when it has no `reference`), and whether the noop baseline passes it.
 
+Then it says how many of the domain's rules at least one task puts in play. A task puts a rule in play when its `reference` calls the tool the rule checks, or its `called` or `not_called` names that tool. For a `never_disclose` rule, its system prompt (the policy and its `given.context`) or a successful reference call's result must show the agent a value it must not say. A rule no task puts in play gets a warning, since a run that passes says nothing about it, and the tools no task uses are listed. Warnings never change the exit code. A rule in play is checked whenever the agent acts; whether a task pushes the agent to break it is what a [run's coverage](#coverage) with a careless agent shows.
+
+```text
+18 of 19 rules checked in at least one task.
+! never-disclose-dnu-reason: no task checks it: no task's reference or context shows the agent a carriers.dnu_reason value. Add a reference to a task in which the agent looks one up
+```
+
 ## review
 
 List drafted items that still need a person to accept them, each with its source quote and the `# TODO(review):` notes `init` left above it, such as a status code to encode or a value copied from a chat. See [Review workflow](/concepts/review-workflow).
@@ -223,6 +230,26 @@ The baseline is read before any trial runs, so a missing file, a file that isn't
 Only `broken` tasks gate. A `worse` task never passed every trial, and with a few trials its move is often noise; a `changed` task's test differs from the baseline's; a failing added task has nothing to compare with. They are still listed. The gate combines with `--fail-under` and critical tasks: any failed gate exits 1, and a run with skipped trials exits 2, as without it.
 
 `results.json` keeps what it needs of the baseline as [`baseline`](/reference/results-schema#baselinesnapshot), and the HTML report opens with the changes, regressions first, and marks each task that got worse. [`report`](#report) and [`regrade`](#regrade) show them again without the baseline's file.
+
+### Coverage
+
+A passing run says nothing about a rule that no trial checked. The summary says how many of the domain's rules the run checked and how many it caught broken, and names the rules no trial checked and the tools no trial called:
+
+```text
+  coverage: 14 of 19 rules checked (10 broken), 2 of 9 tools never called
+     never checked (verify-before-offer, offer-ceiling, … +3 more)
+     never called (verify_carrier, log_offer)
+```
+
+A trial checks a rule when the agent calls the tool the rule guards, whether or not the call succeeds. It checks a `never_disclose` rule when the agent is shown a value it must not say. Checked means the rule applied to what the agent did, not that the task pushes the agent to break it: a booking at the posted rate checks the rate ceiling without testing it. Only a broken rule shows that a task catches a violation. The HTML report's **Coverage** section draws the rule × task matrix:
+- a filled cell: a task whose trials checked the rule;
+- a terracotta cell: a trial broke it and failed, so the task caught it (click the cell to open that trial);
+- a hollow cell: a task whose reference or expectations involve the rule, though no trial checked it;
+- an outlined row: a rule nothing checked.
+
+`results.json` keeps the matrix as [`coverage`](/reference/results-schema#coverage). Coverage never changes a verdict, a score or the exit code.
+
+To learn which rules your tasks catch, also run a careless agent, such as an earlier version of yours or a prompt that skips the policy. Each rule it breaks is a violation the suite stops, and a rule it only checks may have no task that tempts an agent to break it. [`lint`](#lint) finds the rules no task puts in play from the spec alone, before any run.
 
 ## leaderboard
 

@@ -140,6 +140,18 @@ export function renderTerminal(r: SuiteResult, opts: { baseline?: string } = {})
   // A first suspect per trial that didn't pass (each trial's attribution in results.json); absent in older results.
   const owners = r.attribution ? OWNERS.filter((o) => r.attribution![o] > 0) : [];
   if (owners.length) lines.push(dim(`  not passed, by likely owner: ${owners.map((o) => `${o.replace("-", " ")} ${r.attribution![o]}`).join(" · ")}`));
+  // What the run checked (results.json's coverage); absent in older results. A gap is a rule no trial checked or
+  // a tool no trial called: a passing run says nothing about it.
+  const cov = r.coverage;
+  if (cov?.rules.length) {
+    const unchecked = cov.rules.filter((x) => x.checked === 0).map((x) => x.id);
+    const broken = cov.rules.filter((x) => x.broken > 0).length;
+    const idle = cov.tools.filter((t) => t.calls === 0).map((t) => t.name);
+    const line = `  coverage: ${cov.rules.length - unchecked.length} of ${cov.rules.length} rules checked${broken ? ` (${broken} broken)` : ""}, ${idle.length ? `${idle.length} of ${cov.tools.length} tools never called` : "every tool called"}`;
+    lines.push(unchecked.length || idle.length ? yellow(line) : dim(line));
+    if (unchecked.length) lines.push(dim(`     never checked ${fitList(unchecked, WIDTH - 19)}`));
+    if (idle.length) lines.push(dim(`     never called ${fitList(idle, WIDTH - 18)}`));
+  }
   // The estimators need k graded trials of a task to count it in pass^k and pass@k.
   const short = r.tasks.filter((t) => gradedOutcomes(t).length < r.k).length;
   if (short) {
