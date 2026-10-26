@@ -37,7 +37,7 @@ Credentials and endpoints:
 - `openai:` reads `OPENAI_API_KEY` and uses `--openai-base-url <url>`, else `OPENAI_BASE_URL`, else `https://api.openai.com/v1` (which requires the key; local servers such as Ollama do not). Agent and user share the endpoint, and the model must support tool calling on that server.
 - `bedrock:` needs `@aws-sdk/client-bedrock-runtime` (plus `@aws-sdk/credential-providers` when you pass `--aws-profile`), and takes `--region` and `--aws-profile`.
 - `--provider bedrock --region <region> --aws-profile <name>` moves the Claude agent and user to Amazon Bedrock (needs `@anthropic-ai/bedrock-sdk`).
-- Optional packages work only next to `sandtable-ai` in the same project (`npm install --save-dev sandtable-ai <package>`); `npx sandtable-ai` can't see one installed on its own. One-off: `npx -p sandtable-ai -p <package> sandtable <command>`.
+- Optional packages work only next to `sandtable-ai` in the same project (`npm install --save-dev sandtable-ai <package>`); `npx sandtable-ai` can't see one installed on its own. Install in the working folder's own project: when it has no `package.json`, run `npm init -y` there first, or npm installs into a parent project, even the engineer's home folder. Say which `package.json` you changed. One-off: `npx -p sandtable-ai -p <package> sandtable <command>`.
 
 **Comparing models.** Change only the agent: keep the same `--user`, k and tasks for every model, so differences come from the agent. Estimated cost covers Claude models, plus any model whose prices you pass with `--prices`; others show `n/a`.
 

@@ -17,6 +17,7 @@ Every company, person, order and chat here is invented.
 | `confirm-grading-fix` | `skill-300` | The too-strict rule was just made `soft: true` | Confirms with `regrade -o`, not a paid `run`; keeps the original run; reports 25% → 50% |
 | `check-cli-features` | `skill-301` | A project pinned to sandtable-ai 0.1.2 is asked for `critical: true`, which came later | Asks the CLI (`--version`, `--help`, `validate`); never reads sandtable's code, in npx's cache or `node_modules/sandtable-ai`; leaves the domain valid; says 0.1.2 can't and what to do instead |
 | `install-advice` | `skill-295` | What to install for Claude on Bedrock, without a global install | `npm install --save-dev … sandtable-ai`, `@anthropic-ai/bedrock-sdk`, `npx sandtable-ai validate ./sandtable`, no broken `-p` form |
+| `install-new-folder` | `skill-401` | The same question in a folder with no `package.json`, where npm would install into the nearest project above it | `npm init` before `npm install --save-dev … sandtable-ai` (weight 2), `@anthropic-ai/bedrock-sdk`, no broken `-p` form |
 
 Each case also has a `skill-fired` grader, which reports whether the expected skill loaded. In `attribute-stored-run`, handing the run to the plugin's `failure-triager` agent counts too, as the skill recommends, and `install-advice` accepts either skill that says what to install. Under the default `--ablation with-without` it is a plugin-fired indicator and doesn't count toward the score. Under `--ablation none`, the before/after method below, it counts like any other grader: a run in which no skill loaded scores lower, and the other graders then measure Claude without the skill's guidance, so read a change in `skill-fired` before reading the rest.
 
@@ -64,15 +65,15 @@ git checkout HEAD -- plugin                                                     
 
 | Scope | Runs | Claude Sonnet 5.5, roughly |
 |---|---|---|
-| The whole suite, with the no-plugin baseline (6 cases × 3 runs × 2 arms) | 36 | $7–14 |
-| The whole suite, `--ablation none` | 18 | $4–7 |
+| The whole suite, with the no-plugin baseline (8 cases × 3 runs × 2 arms) | 48 | $10–19 |
+| The whole suite, `--ablation none` | 24 | $5–10 |
 | One issue's cases, `--ablation none` (e.g. `--tag skill-298`: 1 case × 3 runs) | 3 | $0.60–1.20 |
 
 Set `--max-cost-usd` to stop a run at a budget.
 
 ## Limits
 
-- Claude Code refuses to run a case that grants Bash when `~/.ssh` holds a symbolic link anywhere inside it, since its sandbox can't then reliably keep the agent out. The run then fails with "the SSH (~/.ssh) credential store on this machine holds a symbolic link". Keep `~/.ssh` free of links, or run the suite in CI or a container. `install-advice` grants no Bash of its own, but `--allow-tools Bash` applies to every case, so run it alone with `--case install-advice` and without `--allow-tools` if you need to.
+- Claude Code refuses to run a case that grants Bash when `~/.ssh` holds a symbolic link anywhere inside it, since its sandbox can't then reliably keep the agent out. The run then fails with "the SSH (~/.ssh) credential store on this machine holds a symbolic link". Keep `~/.ssh` free of links, or run the suite in CI or a container. `install-advice` and `install-new-folder` grant no Bash of their own, but `--allow-tools Bash` applies to every case, so run them alone with `--case install-advice --case install-new-folder` and without `--allow-tools` if you need to.
 - The agent's commands have no network, so a case can't install packages itself. The scaffolds do it before the session starts.
 - `npm run evals:plugin` starts the eval without npm's `npm_config_globalconfig`. npm exports it to scripts, and with it in the environment Claude Code's sandbox blocks reads of the directory it names (`/opt/homebrew/etc` with Homebrew's npm), which also holds Homebrew OpenSSL's `openssl.cnf`. Node then fails at startup with `OpenSSL configuration error`, and every `npx sandtable-ai` in a case fails before sandtable runs. If you run `claude plugin eval` yourself from an npm script, drop that variable too.
 - `llm` graders vote three times per run on the last message, and a short rubric keeps them stable, but a single run is still noisy: compare at the default three runs.

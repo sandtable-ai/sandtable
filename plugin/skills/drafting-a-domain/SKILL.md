@@ -15,7 +15,10 @@ This plugin's version matches the CLI release it documents. To know what the ins
 
 Prefer one install in the project: it pins the version, and it is the only place the CLI finds its optional packages. A package installed anywhere else is invisible to `npx sandtable-ai`.
 
+Install into the working folder's own project, never a parent's, unless the engineer asks for that project. npm installs into the nearest folder above that has a `package.json`, which can be another project or the engineer's home folder. So when the working folder has no `package.json`, run `npm init -y` there first. Afterwards, tell the engineer which `package.json` you changed.
+
 ```bash
+npm init -y                                                      # only when the folder has no package.json
 npm install --save-dev sandtable-ai @anthropic-ai/bedrock-sdk   # the CLI, plus Claude on Bedrock
 npx sandtable-ai --version                                       # runs the project's copy
 ```
