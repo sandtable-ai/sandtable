@@ -97,6 +97,7 @@ npx sandtable-ai leaderboard ./sandtable -m models.yaml -k 4 --provider bedrock 
 
 - `results.json`: everything, including every trial's transcript, tool calls, checks and world diff. Read this one yourself with `jq`; [references/results-json.md](references/results-json.md) has the shape and ready-made queries.
 - `report.html`: one self-contained file for people. Give the engineer the path, or pass `--open`. `npx sandtable-ai report <results.json> [-o out.html]` re-renders it.
+- For the customer's go-live sign-off, `npx sandtable-ai report <results.json> --audience customer` writes `customer-report.html`: a plain-language page with the open items, each rule with its source quote and an example conversation, and what the rehearsal doesn't cover. Add `--probe <results.json>` from a deliberately careless agent's run of the same domain to show which rules the rehearsal catches. Without it the page only says which rules were checked, so don't present those as proven. A run from before 1.1 needs `regrade` first.
 
 Add `.sandtable/` to the project's `.gitignore` unless the engineer wants runs committed.
 

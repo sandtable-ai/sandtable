@@ -8,6 +8,7 @@ import { freightScriptedAgent } from "./demo/freight-agents.ts";
 import { DEMO_USER_MODEL, demoLiveSides } from "./demo/live.ts";
 import { draftUsageLines, formatPercent, renderCompare, renderTerminal } from "./report/terminal.ts";
 import { renderHtml } from "./report/html.ts";
+import { renderCustomerHtml } from "./report/customer.ts";
 import { everyTrialFailed, runSuite, trialStatus, type SuiteResult } from "./run/suite.ts";
 import { runGates } from "./run/gates.ts";
 import { changedVerdicts, RegradeError, regradeSuite } from "./run/regrade.ts";
@@ -241,12 +242,24 @@ async function failIfUnreachable(roles: Role[], p: ClaudeOptions): Promise<void>
 }
 
 /**
- * Where `report` writes: `-o` names a folder, as `run -o` and `regrade -o` do, and the report goes in it as
- * report.html; a path ending in .html (or .htm) is the file itself. Without -o, next to results.json.
+ * Where `report` writes: `-o` names a folder, as `run -o` and `regrade -o` do, and the report goes in it as `file`
+ * (report.html, or customer-report.html for `--audience customer`); a path ending in .html (or .htm) is the file
+ * itself. Without -o, next to results.json.
  */
-function reportPath(out: string | undefined, resultsPath: string): string {
-  if (out === undefined) return path.join(path.dirname(resultsPath), "report.html");
-  return /\.html?$/i.test(out) ? out : path.join(out, "report.html");
+function reportPath(out: string | undefined, resultsPath: string, file: string): string {
+  if (out === undefined) return path.join(path.dirname(resultsPath), file);
+  return /\.html?$/i.test(out) ? out : path.join(out, file);
+}
+
+const AUDIENCES = ["engineer", "customer"] as const;
+const audience = (v: string) => {
+  if (!(AUDIENCES as readonly string[]).includes(v)) throw new InvalidArgumentError(`must be ${AUDIENCES.join(" or ")}`);
+  return v as (typeof AUDIENCES)[number];
+};
+
+/** A results.json the customer report reads, which needs `coverage`: older runs get it from `regrade`. */
+function needCoverage(result: SuiteResult, file: string): void {
+  if (!result.coverage) throw new Error(`${file} has no coverage: it was written before sandtable-ai 1.1. Add it with \`${NEXT} regrade ${shellWord(file)} -d <domain>\`, then run report again`);
 }
 
 const STATUS_MARK = { passed: "✓", failed: "✗", skipped: "○" } as const;
@@ -699,14 +712,29 @@ withProviderFlags(program
 program
   .command("report")
   .argument("<results>", "path to a results.json")
-  .description("re-render the HTML report for a past run")
-  .option("-o, --out <path>", "a folder to write report.html into, as run's and regrade's -o, or a path ending in .html (default: next to results.json)")
-  .action(async (resultsPath: string, o: { out?: string }) => {
+  .description("re-render the HTML report for a past run, or write the page a customer signs off on before go-live")
+  .option("-o, --out <path>", "a folder to write the report into, as run's and regrade's -o, or a path ending in .html (default: next to results.json)")
+  .option("--audience <who>", "engineer: the full report, report.html; customer: a plain-language page to sign off on, customer-report.html", audience, "engineer")
+  .option("--probe <results>", "with --audience customer: a run of a deliberately careless agent on the same domain; the rules it broke show as caught")
+  .action(async (resultsPath: string, o: { out?: string; audience: (typeof AUDIENCES)[number]; probe?: string }, command: Command) => {
+    if (o.probe !== undefined && o.audience !== "customer") command.error("error: --probe is for --audience customer: it shows which rules the rehearsal caught a careless agent breaking");
     const result = await readResults(resultsPath, "report");
-    const out = reportPath(o.out, resultsPath);
+    let page: string;
+    if (o.audience === "customer") {
+      needCoverage(result, resultsPath);
+      const probe = o.probe === undefined ? undefined : await readResults(o.probe, "--probe");
+      if (probe) {
+        needCoverage(probe, o.probe!);
+        if (probe.domain !== result.domain) throw new Error(`--probe ${o.probe} is a run of ${probe.domain}, not ${result.domain}: pass a careless agent's run of the same domain`);
+      }
+      page = renderCustomerHtml(result, probe ? { probe } : {});
+    } else {
+      page = renderHtml(result);
+    }
+    const out = reportPath(o.out, resultsPath, o.audience === "customer" ? "customer-report.html" : "report.html");
     // Like run's and regrade's -o, a directory that doesn't exist yet is created.
     await mkdir(path.dirname(out), { recursive: true });
-    await writeFile(out, renderHtml(result));
+    await writeFile(out, page);
     console.log(out);
   });
 

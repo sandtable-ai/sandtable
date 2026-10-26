@@ -75,6 +75,7 @@ The result types are exported too. [The results.json reference](/reference/resul
 |---|---|
 | `renderTerminal(result, opts?)` | The summary `sandtable run` prints. |
 | `renderHtml(result)` | The self-contained `report.html`. |
+| `renderCustomerHtml(result, { probe? })` | The page `report --audience customer` writes, for a customer to sign off on. Throws when the run, or the probe, has no `coverage`, or the probe is of another domain. |
 
 ## Types
 
@@ -86,6 +87,7 @@ Every type the package exports, by what it describes. Like the values above, the
 | The world and its tools | `Change`, `Snapshot`, `ToolOutcome`, `ToolSchema` |
 | Agents and simulated users | `AgentAdapter`, `AgentContext`, `AgentSession`, `CallTool`, `UserSimulator`, `UserContext`, `UserSession`, `UserTurn`, `ClaudeOptions`, `ClaudeAgentOptions`, `OpenAICompatOptions`, `OpenAICompatAgentOptions`, `BedrockConverseOptions` |
 | A run and its results | `SuiteOptions`, `SuiteResult`, `TaskSummary`, `TrialResult`, `TrajectoryEvent`, `EndReason`, `CheckResult`, `CheckKind`, `CallRecord`, `Violation`, `SoftCheck`, `SoftScore`, `FailureMode`, `Verdict`, `CallerNote`, `Attribution`, `AttributionCounts`, `Owner`, `Coverage`, `RuleCoverage`, `CoverageCell`, `ToolCoverage`, `TokenUsage`, `UsageByModel`, `Usage`, `UsageRecorder` |
+| Reports | `CustomerReportOptions` |
 | Comparing runs, and lint | `BaselineSnapshot`, `Comparison`, `TaskDelta`, `TaskChange`, `LintReport`, `TaskLint`, `RuleLint` |
 
 ## Example: a suite in your test runner

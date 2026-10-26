@@ -1,0 +1,76 @@
+---
+title: "Get a customer's go-live sign-off on an AI agent"
+sidebarTitle: "Get a customer's sign-off"
+description: "Turn a rehearsal into a page a customer's operations lead can read and sign: each rule of their procedure with its quoted source, the scenarios that checked it, which mistakes the rehearsal catches, and what it doesn't cover."
+keywords: ["customer sign-off", "go-live", "acceptance", "report --audience customer", "--probe", "coverage", "SOP rules", "forward deployed engineer"]
+---
+
+The engineer's `report.html` answers "what failed and why". Before go-live, the customer asks something else: does the agent follow our procedure, how do you know, and what haven't you checked? `report --audience customer` answers that on one page, in plain words, from a run you already have.
+
+## 1. Rehearse your agent
+
+Run the suite with several conversations per scenario, so a mistake that happens one time in four has a chance to show up:
+
+```bash
+npx sandtable-ai run ./my-domain --agent http://localhost:8787/step -k 4 -o runs/agent
+```
+
+The bundled freight example runs offline, so you can try every step here for free:
+
+```bash
+npx sandtable-ai run examples/freight --agent scripted:careful --user scripted -k 2 -o runs/agent
+```
+
+## 2. Rehearse a careless agent
+
+A rule is **checked** in a conversation when it applied to what the agent did: the agent booked a load, so the rate ceiling was checked. That doesn't show the scenario would catch an agent breaking it. A booking at the posted rate checks the ceiling without testing it. The only evidence that your scenarios catch a mistake is a run in which an agent made it and the conversation failed.
+
+So rehearse a careless agent too: an earlier version of yours, or the same one with its guardrails or the procedure left out of its prompt. The do-nothing `noop` agent won't do, because it never acts. In the freight example, `scripted:naive` books without vetting and pays whatever is asked:
+
+```bash
+npx sandtable-ai run examples/freight --agent scripted:naive --user scripted -o runs/careless
+```
+
+It fails, which is the point: `run` exits 1 on its failed critical scenarios.
+
+## 3. Write the page
+
+```bash
+npx sandtable-ai report runs/agent/results.json --audience customer --probe runs/careless/results.json
+```
+
+It writes `customer-report.html` next to `results.json` (or where `-o` says): one static file with no script, which you can attach, print or save as PDF. It holds:
+
+- **A summary** in plain words: how many scenarios passed every conversation, critical scenarios, rules checked and broken, what the careless agent was caught doing, and the **open items before go-live**. Open items are drafted items still pending review, conversations that weren't graded, failed critical scenarios, broken rules, and scenarios that didn't pass every conversation.
+- **Each rule** of the procedure, with the sentence of the customer's document it comes from. For each rule:
+  - how many conversations checked it, and whether any broke it;
+  - whether the rehearsal caught the careless agent breaking it, or the rule is *not shown caught*;
+  - the scenarios that checked it, and an example conversation.
+- **Every scenario** and its result, critical ones first.
+- **What the rehearsal doesn't cover**: rules no conversation checked, actions the agent never took, soft rules, and the limits of a simulation (simulated callers and records, and nothing graded beyond the written rules and outcomes).
+- **A sign-off block** for a name, a role and a date.
+
+Each rule's quote comes from its `source` in the spec, which `init --sop` writes when it drafts the rule. Add one to a rule you wrote by hand, with the document and the exact sentence:
+
+```yaml
+- id: rate-ceiling
+  description: Never book above the load's max_rate.
+  source: { file: policy.md, quote: "**Never book above `max_rate`.**" }
+  limit: { tool: book_load, arg: rate, lte: { table: loads, key_arg: load_id, field: max_rate } }
+```
+
+A source changes nothing about grading, so stored runs still [regrade](/reference/cli#regrade).
+
+## 4. Close the gaps before you send it
+
+Read the page as the customer will, then fix what it shows:
+
+- **Open items**: fix the agent or the spec, then rerun. A drafted item pending review is the customer's rule, not yet confirmed: review it with them.
+- **Rules not checked**: add a scenario that gives the agent a reason to take the action the rule governs. `lint` lists the rules no scenario puts in play before you spend anything on a run.
+- **Rules not shown caught**: the careless agent never broke them, so no scenario has shown it catches that mistake. Add a scenario that tempts the agent, such as a caller who pushes past the limit, or a careless agent that makes the mistake.
+
+The decision to go live is the customer's. The page gives them the evidence and its limits, so they can make that decision.
+
+<Note>
+The page reads the run's [coverage](/reference/cli#coverage), which runs record since sandtable-ai 1.1. For an older run, [`regrade`](/reference/cli#regrade) it first.
+</Note>
