@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Domain, Task } from "../spec/schema.ts";
-import { agentSystemPrompt, taskContext, USER_KICKOFF, userSystemPrompt } from "../sim/prompts.ts";
+import { agentSystemPrompt, taskContext, USER_KICKOFF, userSystemPrompt, type AgentPromptOptions } from "../sim/prompts.ts";
 import { seedFor } from "../world/store.ts";
 import { toolSchema } from "../world/tools.ts";
 
@@ -19,11 +19,11 @@ const unreviewed = <T extends object>(item: T) => Object.fromEntries(Object.entr
  * - `grading`: how its trials are graded: the task's `expect` and `critical`, and every invariant (with `soft`),
  *   since a call to any tool can trip one.
  */
-export function taskFingerprints(domain: Domain, task: Task, user: string): { inputs: string; grading: string } {
+export function taskFingerprints(domain: Domain, task: Task, user: string, prompt: AgentPromptOptions = {}): { inputs: string; grading: string } {
   const persona = domain.personas.find((p) => p.id === task.persona);
   return {
     inputs: hash({
-      agent: agentSystemPrompt(domain, task),
+      agent: agentSystemPrompt(domain, task, prompt),
       tools: domain.tools.map(unreviewed),
       kickoff: USER_KICKOFF,
       caller: userSystemPrompt(domain, task, persona),
@@ -54,19 +54,19 @@ export function taskFingerprints(domain: Domain, task: Task, user: string): { in
  * a task's `given.rows` included, and what tools do are left out too: the agent sees them only through tool
  * results, which a regrade replays call by call. A task id missing from the domain hashes as missing.
  */
-export function inputsFingerprint(domain: Domain, taskIds: readonly string[], user: string): string {
+export function inputsFingerprint(domain: Domain, taskIds: readonly string[], user: string, prompt: AgentPromptOptions = {}): string {
   const tasks = taskIds.map((id) => {
     const task = domain.tasks.find((t) => t.id === id);
     if (!task) return { id, missing: true };
     const persona = domain.personas.find((p) => p.id === task.persona);
     return {
       id,
-      ...(taskContext(task) ? { agent: agentSystemPrompt(domain, task) } : {}),
+      ...(taskContext(task) ? { agent: agentSystemPrompt(domain, task, prompt) } : {}),
       caller: userSystemPrompt(domain, task, persona),
       opening: task.user.opening,
       maxTurns: task.max_turns ?? domain.max_turns,
       ...(user === "scripted" ? { script: task.user.script } : {}),
     };
   });
-  return hash({ agent: agentSystemPrompt(domain), tools: domain.tools.map(toolSchema), kickoff: USER_KICKOFF, tasks });
+  return hash({ agent: agentSystemPrompt(domain, undefined, prompt), tools: domain.tools.map(toolSchema), kickoff: USER_KICKOFF, tasks });
 }

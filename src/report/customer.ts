@@ -53,7 +53,7 @@ export function renderCustomerHtml(r: SuiteResult, opts: CustomerReportOptions =
     ...(critical.length ? [`${critical.filter(passedEvery).length} of ${critical.length} critical scenarios passed in every conversation.`] : []),
     `${checked.length} of ${rules.length} rules were checked in these conversations. ${brokenHard.length ? `${count(brokenHard.length, "rule")} that fail${brokenHard.length === 1 ? "s" : ""} a conversation ${brokenHard.length === 1 ? "was" : "were"} broken` : `None of the ${hard.length} rules that fail a conversation was broken`}${softBroken.length ? `, and ${count(softBroken.length, "soft rule")} ${softBroken.length === 1 ? "was" : "were"} broken (reported, never a failure)` : ""}.${unchecked.length ? ` ${count(unchecked.length, "rule")} ${unchecked.length === 1 ? "was" : "were"} never checked: see Not covered.` : ""}`,
     ...(probe && caught
-      ? [`A deliberately careless agent was rehearsed too. The rehearsal caught it breaking ${[...caught.values()].filter((x) => x.broken > 0 && !x.soft).length} of the ${hard.length} rules that fail a conversation.`]
+      ? [`${probe.withoutPolicy ? `A careless agent, ${esc(probe.agent.replace(/ \(without policy\)$/, ""))} without your procedure in its prompt, was` : "A deliberately careless agent was"} rehearsed too. The rehearsal caught it breaking ${[...caught.values()].filter((x) => x.broken > 0 && !x.soft).length} of the ${hard.length} rules that fail a conversation.`]
       : []),
   ];
 
@@ -105,7 +105,7 @@ ${open.length ? `<b>Open items</b><ul>${open.map((o) => `<li>${o}</li>`).join(""
 </div>
 
 <h2>Rules from your operating procedure</h2>
-<p class="meta">Each rule the agent must follow, where it comes from, and what the rehearsal saw. A rule is <b>checked</b> in a conversation when the agent took the action it governs, or, for a rule about what the agent may say, saw information it must keep to itself. Checked means the rule applied, not that the scenario tried to make the agent break it.${probe ? " A rule is <b>caught</b> when a deliberately careless agent broke it and the rehearsal failed those conversations: that shows these scenarios can catch that mistake." : " Which rules the rehearsal would catch a careless agent breaking isn't shown: rehearse a careless agent too to show it."}</p>
+<p class="meta">Each rule the agent must follow, where it comes from, and what the rehearsal saw. A rule is <b>checked</b> in a conversation when the agent took the action it governs, or, for a rule about what the agent may say, saw information it must keep to itself. Checked means the rule applied, not that the scenario tried to make the agent break it.${probe ? " A rule is <b>caught</b> when a deliberately careless agent broke it and the rehearsal failed those conversations: that shows these scenarios can catch that mistake." : " Which rules the rehearsal would catch a careless agent breaking isn't shown here. An engineer can show it by rehearsing a model without your procedure in its prompt (<code>run --without-policy</code>) and adding that run to this page."}</p>
 ${rules.map((x) => ruleCard(x, r, probe, caught?.get(x.id))).join("\n")}
 
 <h2>Scenarios</h2>
@@ -127,7 +127,7 @@ ${rules.some((x) => x.soft) ? `<li><b>Soft rules</b> are reported but never fail
 <ul>
 <li>A scenario <b>passed every conversation</b> when, in each of its ${count(k, "conversation")}, the records ended as expected and no rule was broken. One failed conversation is enough to count it as not passed.</li>
 <li>A <b>critical</b> scenario is a release blocker: it must pass every conversation.</li>
-<li>A rule <b>checked</b> in a conversation applied to what the agent did. ${probe ? "A rule <b>caught</b> was broken by a deliberately careless agent, and the rehearsal failed those conversations." : "To show which mistakes the rehearsal catches, an engineer can rehearse a deliberately careless agent and add it to this page."}</li>
+<li>A rule <b>checked</b> in a conversation applied to what the agent did. ${probe ? "A rule <b>caught</b> was broken by a deliberately careless agent, and the rehearsal failed those conversations." : "To show which mistakes the rehearsal catches, an engineer can rehearse a model without your procedure in its prompt (<code>run --without-policy</code>) and add that run to this page with <code>--probe</code>."}</li>
 <li>Example conversations are copied from the rehearsal. Names, IDs and records in them are the rehearsal's own test data.</li>
 <li>The conversations that show a rule broken or caught are open, so they print with the page. Printed from Chrome or Edge, the lists of scenarios print open too. Other examples print only when you open them first.</li>
 </ul>

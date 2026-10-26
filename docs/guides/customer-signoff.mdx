@@ -25,13 +25,21 @@ npx sandtable-ai run examples/freight --agent scripted:careful --user scripted -
 
 A rule is **checked** in a conversation when it applied to what the agent did: the agent booked a load, so the rate ceiling was checked. That doesn't show the scenario would catch an agent breaking it. A booking at the posted rate checks the ceiling without testing it. The only evidence that your scenarios catch a mistake is a run in which an agent made it and the conversation failed.
 
-So rehearse a careless agent too: an earlier version of yours, or the same one with its guardrails or the procedure left out of its prompt. The do-nothing `noop` agent won't do, because it never acts. In the freight example, `scripted:naive` books without vetting and pays whatever is asked:
+So rehearse a careless agent too. `--without-policy` makes one from a built-in model agent: the model keeps its tools, the generic instructions and each scenario's context, but not the customer's procedure. It acts sensibly without knowing their rules, so each rule it breaks that fails a conversation is one your scenarios catch. A soft rule it breaks is reported, never caught. It calls a model, so it costs money like any rehearsal:
+
+```bash
+npx sandtable-ai run ./my-domain --agent claude:claude-haiku-5-5 --without-policy -o runs/careless
+```
+
+Expect it to catch fewer rules than you might think. A capable model is cautious by default, and the tools' descriptions often carry the rules themselves ("Book a load for a vetted carrier"). On five freight tasks, Haiku without the policy still turned down the ineligible carriers and broke only one rule that fails a conversation: keeping the price ceiling to itself. An earlier or deliberately weakened version of your own agent usually makes more of the mistakes your scenarios are there to catch. Haiku is already the smallest Claude model; with `openai:` or `bedrock:` you can also try a smaller model of another family. Rules it never breaks stay *not shown caught* on the page, which is the honest answer. The do-nothing `noop` agent won't do, because it never acts.
+
+The freight example ships a careless agent of its own, so this step is free there: `scripted:naive` books without vetting and pays whatever is asked.
 
 ```bash
 npx sandtable-ai run examples/freight --agent scripted:naive --user scripted -o runs/careless
 ```
 
-It fails, which is the point: `run` exits 1 on its failed critical scenarios.
+A careless run fails, which is the point: `run` exits 1 on its failed critical scenarios.
 
 ## 3. Write the page
 

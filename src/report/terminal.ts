@@ -278,7 +278,8 @@ function renderComparison(c: Comparison, source: string | undefined): string[] {
   const b = c.baseline;
   const lines = [bold(`  Compared with ${source ?? "the baseline run"}`), dim(`  run ${b.runId} · started ${b.startedAt}`)];
   // The agent, the caller and k are this run's (in the first line of the summary) unless a line says otherwise.
-  for (const d of c.differences) lines.push(`  ${yellow("!")} ${clip(d, WIDTH - 4)}`);
+  // In full, not clipped to the terminal's width: a long agent name can differ only at its end, as "(without policy)" does.
+  for (const d of c.differences) lines.push(`  ${yellow("!")} ${d}`);
   if (!c.differences.length) lines.push(dim("  same agent, simulated user and k"));
 
   const moved = c.tasks.filter((d) => CHANGE_MARK[d.change]);

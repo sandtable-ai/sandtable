@@ -7,7 +7,10 @@ export type CallTool = (name: string, args: unknown) => Promise<ToolOutcome>;
 
 export interface AgentContext {
   domain: Domain;
-  /** Sandtable's default system prompt (domain description + policy, then the task's context). Your agent may use its own. */
+  /**
+   * Sandtable's default system prompt (domain description + policy, then the task's context); without the policy in a
+   * `run --without-policy` run. Your agent may use its own.
+   */
   system: string;
   tools: ToolSchema[];
   sessionId: string;

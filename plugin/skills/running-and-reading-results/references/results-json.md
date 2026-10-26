@@ -34,6 +34,8 @@ SuiteResult
                                frequent first; skipped trials' errors are not in it
   soft[]                       { id, description, tool?, applied, broken, rate, tasks[], example? }: one per soft
                                invariant; rate = broken / applied trials (null if it never applied). Never a failure
+  withoutPolicy                true in a `run --without-policy` run: the agent got no policy (a careless agent for
+                               report --probe), and `agent` ends in " (without policy)". Absent otherwise
   coverage                     { rules[], tools[] }: what the run checked (absent before 1.1 until regraded).
                                rules[] = { id, description, kind, tool?, field?, soft?, source?, checked, broken,
                                tasks[]: { task, planned, checked, broken } }: checked = trials that called the tool

@@ -129,6 +129,7 @@ npx sandtable-ai run ./my-domain --agent http://localhost:8787/step -k 4 --fail-
 | `<domain>` | domain directory (with `sandtable.yaml`) or the file itself |
 | `-a, --agent <spec>` | the agent under test; see below. Default: `claude` |
 | `-u, --user <spec>` | the simulated user: `claude`, `claude:<model>`, `openai:<model>` or `scripted`. Default: `claude` |
+| `--without-policy` | prompt a built-in model agent (`claude`, `claude:<model>`, `bedrock:<model-id>`, `openai:<model>`) without the domain's policy: a careless agent for [`report --audience customer --probe`](#report). Any other agent exits 2 before anything runs. See [Coverage](#coverage) |
 | `--openai-base-url <url>` | OpenAI-compatible endpoint for `openai:<model>`. Default: `OPENAI_BASE_URL`, else `https://api.openai.com/v1`; the key comes from `OPENAI_API_KEY` |
 | `-k, --trials <n>` | trials per task; pass^k is reported for every k up to n. Default: `1` |
 | `-t, --tasks <ids>` | comma-separated task ids to run (all by default) |
@@ -250,7 +251,13 @@ A trial checks a rule when the agent calls the tool the rule guards, whether or 
 
 `results.json` keeps the matrix as [`coverage`](/reference/results-schema#coverage). Coverage never changes a verdict, a score or the exit code.
 
-To learn which rules your tasks catch, also run a careless agent, such as an earlier version of yours or a prompt that skips the policy. Each rule it breaks is a violation the suite stops, and a rule it only checks may have no task that tempts an agent to break it. [`lint`](#lint) finds the rules no task puts in play from the spec alone, before any run.
+To learn which rules your tasks catch, also run a careless agent. Each rule it breaks that fails a conversation is a violation the suite stops; a soft rule it breaks is reported, never caught. A rule it only checks may have no task that tempts an agent to break it. `--without-policy` makes one from a built-in model agent: its prompt keeps the generic instructions, the tools and each task's context, and leaves out the domain's policy, so the agent acts sensibly without knowing the customer's rules. Such a run calls a model, so it costs money like any other.
+
+```bash
+npx sandtable-ai run ./my-domain --agent claude:claude-haiku-5-5 --without-policy -o runs/careless
+```
+
+Its `results.json` names the agent `claude:claude-sonnet-5-5 (without policy)` and records [`withoutPolicy`](/reference/results-schema), so it can't pass for a run of the real agent: its `inputs` hash differs, `--baseline` and `compare` list the agent change and every task as `changed`, and `regrade` grades it with the prompt it ran with. An HTTP, module, scripted or `noop` agent brings its own prompt or has none, so `--without-policy` refuses it with exit 2 before anything runs. An earlier version of your own agent makes a careless agent too. [`lint`](#lint) finds the rules no task puts in play from the spec alone, before any run.
 
 ## leaderboard
 
@@ -331,7 +338,7 @@ npx sandtable-ai report <results.json> --audience customer [--probe <careless-ru
 | `<results>` | path to a `results.json` |
 | `-o, --out <path>` | a folder to write the report into, as `run -o` and `regrade -o` take a folder, or a path ending in `.html` for the file itself. A folder that doesn't exist yet is created. Default: next to `results.json` |
 | `--audience <who>` | `engineer` (default): the full report, `report.html`. `customer`: a plain-language page to sign off on, `customer-report.html` |
-| `--probe <results>` | with `--audience customer` only: a run of a deliberately careless agent on the same domain. The rules it broke show as caught |
+| `--probe <results>` | with `--audience customer` only: a run of a deliberately careless agent on the same domain, such as a [`run --without-policy`](#coverage). The rules it broke that fail a conversation show as caught; a broken soft rule is reported, not caught |
 
 It prints the path it wrote. A run made with `--baseline` keeps its changes since the baseline, without the baseline's file.
 

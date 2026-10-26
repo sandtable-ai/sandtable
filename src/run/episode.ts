@@ -1,7 +1,7 @@
 import { gradeTrial, isSkipped, type CheckResult } from "../grade/expectations.ts";
 import { checkTranscript, invariantTool, type CallRecord, type Violation } from "../grade/invariants.ts";
 import type { Domain, Task } from "../spec/schema.ts";
-import { agentSystemPrompt, taskContext } from "../sim/prompts.ts";
+import { agentSystemPrompt, taskContext, type AgentPromptOptions } from "../sim/prompts.ts";
 import type { AgentAdapter, CallTool, UserSimulator } from "../sim/types.ts";
 import { diffSnapshots, worldFor, type Change, type Snapshot, type World } from "../world/store.ts";
 import { toolSchema } from "../world/tools.ts";
@@ -82,8 +82,10 @@ export async function runEpisode(input: {
   trial: number;
   /** Unique per suite run, so session ids never collide across runs. */
   runId?: string;
+  /** How the agent is prompted: with the domain's policy (the default) or without it. */
+  prompt?: AgentPromptOptions;
 }): Promise<TrialResult> {
-  const { domain, task, agent, user, trial } = input;
+  const { domain, task, agent, user, trial, prompt } = input;
   const started = performance.now();
   const world = worldFor(domain, task);
   const initial = world.snapshot();
@@ -103,7 +105,7 @@ export async function runEpisode(input: {
   try {
     const session = await agent.createSession({
       domain,
-      system: agentSystemPrompt(domain, task),
+      system: agentSystemPrompt(domain, task, prompt),
       tools: domain.tools.map(toolSchema),
       sessionId: `${input.runId ? `${input.runId}/` : ""}${task.id}#${trial}`,
       ...(context ? { context } : {}),
@@ -143,7 +145,7 @@ export async function runEpisode(input: {
   return {
     taskId: task.id,
     trial,
-    ...gradeEpisode({ domain, task, world, runner, events, agentMessages, error }),
+    ...gradeEpisode({ domain, task, world, runner, events, agentMessages, error, ...(prompt ? { prompt } : {}) }),
     events,
     changes: worldChanges(domain, initial, world),
     endReason,
@@ -174,9 +176,11 @@ export function gradeEpisode(input: {
   events: readonly TrajectoryEvent[];
   agentMessages: readonly string[];
   error?: string;
+  /** How the agent was prompted, so a value counts as shown to it only if its prompt held it. */
+  prompt?: AgentPromptOptions;
 }): Pick<TrialResult, "passed" | "skipped" | "checks" | "violations" | "soft" | "callerNotes"> {
-  const { domain, task, world, runner, events, agentMessages, error } = input;
-  const said = checkTranscript(domain, world, runner.calls, events, agentSystemPrompt(domain, task));
+  const { domain, task, world, runner, events, agentMessages, error, prompt } = input;
+  const said = checkTranscript(domain, world, runner.calls, events, agentSystemPrompt(domain, task, prompt));
   const violations: Violation[] = [...runner.violations, ...said.filter((v) => !v.soft)];
   const soft = softChecks(domain, runner.calls, agentMessages.length, [...runner.soft, ...said.filter((v) => v.soft)]);
   const { passed, checks } = gradeTrial({ task, world, calls: runner.calls, agentMessages, violations, error });

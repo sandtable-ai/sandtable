@@ -1,6 +1,6 @@
 import { invariantTool, mentions, protectedValues } from "../grade/invariants.ts";
 import type { LintReport } from "../grade/lint.ts";
-import { agentSystemPrompt } from "../sim/prompts.ts";
+import { agentSystemPrompt, type AgentPromptOptions } from "../sim/prompts.ts";
 import type { Domain, Invariant, Task } from "../spec/schema.ts";
 import { seedFor } from "../world/store.ts";
 import type { TrialResult } from "./episode.ts";
@@ -75,14 +75,14 @@ const KINDS = ["before", "require", "limit", "match", "never", "never_disclose"]
  * The coverage of a run's trials of `tasks`, from what they did and the domain's rules, without any model call.
  * `lint` is the domain's lint report, which says which rules each task's spec puts in play.
  */
-export function coverageOf(domain: Domain, tasks: readonly Task[], results: readonly TrialResult[], lint: LintReport): Coverage {
+export function coverageOf(domain: Domain, tasks: readonly Task[], results: readonly TrialResult[], lint: LintReport, prompt: AgentPromptOptions = {}): Coverage {
   const trialsOf = new Map(tasks.map((t) => [t.id, results.filter((r) => r.taskId === t.id)]));
   const planned = new Map(lint.tasks.map((t) => [t.id, new Set(t.rules)]));
   const rules = domain.invariants.map((inv): RuleCoverage => {
     const tool = invariantTool(inv);
     const cells = tasks.flatMap((task) => {
       const trials = trialsOf.get(task.id) ?? [];
-      const checks = tool !== undefined ? (tr: TrialResult) => called(tr, tool) : showsProtected(domain, task, inv);
+      const checks = tool !== undefined ? (tr: TrialResult) => called(tr, tool) : showsProtected(domain, task, inv, prompt);
       const checked = trials.filter(checks).length;
       const broken = trials.filter((tr) => broke(tr, inv.id)).length;
       const isPlanned = planned.get(task.id)?.has(inv.id) ?? false;
@@ -128,11 +128,11 @@ function broke(tr: TrialResult, id: string): boolean {
  * task's context) or in a successful tool call's result. The values are those of the task's seed and of the rows the
  * trial wrote, such as an id a tool created.
  */
-function showsProtected(domain: Domain, task: Task, inv: Invariant): (tr: TrialResult) => boolean {
+function showsProtected(domain: Domain, task: Task, inv: Invariant, prompt: AgentPromptOptions): (tr: TrialResult) => boolean {
   if (!("never_disclose" in inv)) return () => false;
   const { table, field } = inv.never_disclose;
   const seeded = [...protectedValues(seedFor(domain, task).tables[table]?.rows ?? [], field)];
-  const system = agentSystemPrompt(domain, task);
+  const system = agentSystemPrompt(domain, task, prompt);
   // The system prompt is the same in every trial of the task: shown there, shown in all of them.
   if (seeded.some((v) => mentions(system, v))) return () => true;
   return (tr) => {
