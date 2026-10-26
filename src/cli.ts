@@ -110,6 +110,12 @@ const tagList = (v: string, previous: string[] = []) => {
   return [...new Set([...previous, ...tags])];
 };
 
+/**
+ * The agent specs whose prompt sandtable writes, the built-in model agents: only they can be run `--without-policy`.
+ * An HTTP or module agent brings its own prompt, and the scripted and noop agents have none.
+ */
+const BUILT_IN_MODEL_AGENT = /^(?:claude(?::.+)?|bedrock:.+|openai:.+)$/;
+
 const PRICES_HELP = "extra model prices, JSON in USD per million tokens: { \"<model-id>\": { input, output, cacheRead, cacheWrite } } (the sandtable repo's scripts/bedrock-prices.mjs writes one for Bedrock)";
 
 interface ProviderFlags {
@@ -541,6 +547,7 @@ withProviderFlags(program
   .description("run every task k times against an agent and grade the results")
   .option("-a, --agent <spec>", "claude | claude:<model> | bedrock:<model-id> | openai:<model> | noop | http(s)://endpoint | ./my-agent.js | scripted:naive, scripted:careful, scripted:clinic-naive, scripted:clinic-careful (rule-based demo agents for the bundled examples)", "claude")
   .option("-u, --user <spec>", "simulated user: claude | claude:<model> | openai:<model> | scripted", "claude")
+  .option("--without-policy", "prompt a built-in model agent (claude, bedrock:, openai:) without the domain's policy: a careless agent whose broken rules show which ones your tasks catch, for report --audience customer --probe")
   .option("--openai-base-url <url>", `OpenAI-compatible endpoint for openai:<model> (default: OPENAI_BASE_URL or ${DEFAULT_OPENAI_BASE_URL}); key from OPENAI_API_KEY`)
   .option("-k, --trials <n>", "trials per task (pass^k is reported up to k)", int, 1)
   .option("-t, --tasks <ids>", "comma-separated task ids to run")
@@ -554,8 +561,11 @@ withProviderFlags(program
   .option("--fail-on-regression", "with --baseline: exit 1 if a task that passed every trial in the baseline fails one now (CI gate)")
   .option("--open", "open the HTML report in the browser when the run finishes")
   .option("--prices <file>", PRICES_HELP)
-  .action(async (domainPath: string, o: { agent: string; user: string; openaiBaseUrl?: string; trials: number; tasks?: string; tag?: string[]; concurrency: number; out?: string; html: boolean; failUnder?: number; floor?: Record<string, number>; baseline?: string; failOnRegression?: boolean; open?: boolean; prices?: string } & ProviderFlags, command: Command) => {
+  .action(async (domainPath: string, o: { agent: string; user: string; withoutPolicy?: boolean; openaiBaseUrl?: string; trials: number; tasks?: string; tag?: string[]; concurrency: number; out?: string; html: boolean; failUnder?: number; floor?: Record<string, number>; baseline?: string; failOnRegression?: boolean; open?: boolean; prices?: string } & ProviderFlags, command: Command) => {
     if (o.failOnRegression && o.baseline === undefined) command.error("error: --fail-on-regression needs --baseline <results>: the run it compares with");
+    if (o.withoutPolicy && !BUILT_IN_MODEL_AGENT.test(o.agent)) {
+      command.error(`error: --without-policy needs a built-in model agent (claude, claude:<model>, bedrock:<model-id> or openai:<model>): sandtable doesn't write the prompt of --agent ${o.agent}, so it can't leave the policy out`);
+    }
     await loadPrices(o.prices);
     const domain = await loadDomain(await resolveDomain(domainPath));
     if (domain.tasks.length === 0) throw new Error(`${domain.name} has no tasks yet: add some to tasks.yaml`);
@@ -580,6 +590,7 @@ withProviderFlags(program
       k: o.trials,
       concurrency: o.concurrency,
       taskIds,
+      ...(o.withoutPolicy ? { withoutPolicy: true } : {}),
       onTrial: (r) => {
         done++;
         if (process.stderr.isTTY) process.stderr.write(`\r  ${done}/${total} trials  ${STATUS_MARK[trialStatus(r)]} ${r.taskId}`.padEnd(70));

@@ -23,6 +23,7 @@ The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`
 | `runId` | string | unique per run, e.g. `20261018T210512-k3f9`; prefixes the agent session ids |
 | `domain` | string | the domain's `name` |
 | `agent` | string | the agent's name, such as `claude:claude-opus-5-5`, `openai:gpt-4.1-mini`, `http://localhost:8787/step` (an HTTP agent is named by its URL) |
+| `withoutPolicy` | `true` | present only in a run made with [`--without-policy`](/reference/cli#coverage): the agent was prompted without the domain's policy, a careless agent. `agent` then ends in ` (without policy)`, the `inputs` hashes cover the prompt it got, and [`regrade`](/reference/cli#regrade) grades it with that prompt |
 | `user` | string | the simulated user's name, such as `claude:claude-haiku-5-5` or `scripted` |
 | `k` | number | trials per task |
 | `inputs` | string | a hash of what the agent and the simulated user were given in these tasks: the agent's system prompt and tool schemas, and each task's caller prompt, opening line and turn limit (and script, for the scripted user). [`sandtable regrade`](/reference/cli#regrade) re-scores the run only while it is unchanged. Absent in results from before regrade |

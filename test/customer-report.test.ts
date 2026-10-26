@@ -57,7 +57,7 @@ describe("the customer sign-off page", () => {
     expect(html).toMatch(/The rule “A carrier must be looked up with verify_carrier before it is booked\.” was broken in \d+ conversations\./);
     expect(html).toMatch(/\d+ scenarios didn't pass every conversation: “[^”]+”, “[^”]+”, “[^”]+”, and \d+ more in Scenarios\./);
     expect(html).not.toContain('<span class="chip">caught</span>');
-    expect(html).toContain("rehearse a careless agent too to show it");
+    expect(html).toContain("An engineer can show it by rehearsing a model without your procedure in its prompt (<code>run --without-policy</code>)");
     // A conversation in which the agent broke a rule is open, so it prints.
     expect(card(html, "verify-before-book")).toMatch(/<details open><summary>Example conversation: [^<]*\(broke the rule\)/);
     // Rules nothing checked are listed as not covered, with their cards marked.

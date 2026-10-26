@@ -1,3 +1,4 @@
+import type { AgentPromptOptions } from "../sim/prompts.ts";
 import { pendingReview } from "../spec/load.ts";
 import type { Domain } from "../spec/schema.ts";
 import { worldFor } from "../world/store.ts";
@@ -13,13 +14,16 @@ export class RegradeError extends Error {}
 
 const outcomeOf = (o: ToolOutcome) => JSON.stringify({ ok: o.ok, result: o.result, error: o.error });
 
+/** How a stored run's agent was prompted: without the policy when `run --without-policy` wrote it. */
+const promptOf = (stored: Pick<SuiteResult, "withoutPolicy">): AgentPromptOptions => (stored.withoutPolicy ? { withoutPolicy: true } : {});
+
 /**
  * Re-score one stored trial under the domain's current invariants and expectations, without calling a
  * model: replay its tool calls in order against a fresh world for its task, then grade the conversation as
  * a live run would. The transcript, usage and timing stay as recorded. Throws a RegradeError when a call now
  * returns something other than what the agent saw, since the rest of the conversation could have gone otherwise.
  */
-export function regradeTrial(domain: Domain, trial: TrialResult): TrialResult {
+export function regradeTrial(domain: Domain, trial: TrialResult, prompt: AgentPromptOptions = {}): TrialResult {
   const task = domain.tasks.find((t) => t.id === trial.taskId);
   if (!task) throw new RegradeError(`task ${trial.taskId} is not in ${domain.name}`);
   const world = worldFor(domain, task);
@@ -40,7 +44,7 @@ export function regradeTrial(domain: Domain, trial: TrialResult): TrialResult {
   const { skipped: _, callerNotes: __, ...stored } = trial;
   return {
     ...stored,
-    ...gradeEpisode({ domain, task, world, runner, events, agentMessages, ...(trial.error !== undefined ? { error: trial.error } : {}) }),
+    ...gradeEpisode({ domain, task, world, runner, events, agentMessages, prompt, ...(trial.error !== undefined ? { error: trial.error } : {}) }),
     events,
     changes: worldChanges(domain, initial, world),
   };
@@ -56,7 +60,7 @@ export function regradeBlocker(domain: Domain, stored: SuiteResult): string | un
   const gone = stored.tasks.map((t) => t.id).filter((id) => !domain.tasks.some((t) => t.id === id));
   if (gone.length) return `${gone.length === 1 ? "task" : "tasks"} ${gone.join(", ")} ${gone.length === 1 ? "is" : "are"} no longer in the domain`;
   if (!stored.inputs) return "it was written by an older sandtable and records no inputs fingerprint, so nothing shows the agent and the caller would be given the same prompts";
-  if (stored.inputs !== inputsFingerprint(domain, stored.tasks.map((t) => t.id), stored.user)) {
+  if (stored.inputs !== inputsFingerprint(domain, stored.tasks.map((t) => t.id), stored.user, promptOf(stored))) {
     return "the agent or the caller would be given something else now: the policy, a tool's schema, or a task's caller prompt, opening, script or turn limit changed since it ran";
   }
   return undefined;
@@ -81,11 +85,12 @@ export function regradeSuite(domain: Domain, stored: SuiteResult): SuiteResult {
   const blocker = regradeBlocker(domain, stored);
   if (blocker) throw new RegradeError(blocker);
   const tasks = stored.tasks.map((s) => domain.tasks.find((t) => t.id === s.id)!);
-  const trials = stored.tasks.flatMap((s) => s.trials.map((trial) => regradeTrial(domain, trial)));
+  const prompt = promptOf(stored);
+  const trials = stored.tasks.flatMap((s) => s.trials.map((trial) => regradeTrial(domain, trial, prompt)));
   return {
     ...stored,
     sandtable: { ...stored.sandtable, regradedWith: version },
-    ...summarize(domain, tasks, trials, stored.k, stored.user),
+    ...summarize(domain, tasks, trials, stored.k, stored.user, prompt),
     pendingReview: pendingReview(domain),
   };
 }

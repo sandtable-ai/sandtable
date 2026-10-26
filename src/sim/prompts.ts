@@ -8,20 +8,29 @@ export function taskContext(task?: Pick<Task, "given">): Record<string, unknown>
   return context && Object.keys(context).length ? context : undefined;
 }
 
+/** How the built-in model agents are prompted: with the domain's policy, or without it (`run --without-policy`). */
+export interface AgentPromptOptions {
+  /**
+   * Leave the policy out: the agent keeps its tools, the generic instructions and the task's context, but doesn't
+   * know the customer's rules. A careless agent: the rules it breaks show which ones the tasks catch.
+   */
+  withoutPolicy?: boolean;
+}
+
 /**
  * Default system prompt for the reference agent: the customer's policy, verbatim. With a task whose
- * `given.context` is set, the context follows the policy as JSON, so the agent can read it.
+ * `given.context` is set, the context follows the policy as JSON, so the agent can read it. With `withoutPolicy`,
+ * the policy and the instruction to follow it are left out, and the rest is the same.
  */
-export function agentSystemPrompt(domain: Domain, task?: Pick<Task, "given">): string {
+export function agentSystemPrompt(domain: Domain, task?: Pick<Task, "given">, opts: AgentPromptOptions = {}): string {
   const context = taskContext(task);
   return [
     domain.description ? `You are the AI agent deployed for: ${domain.description}` : "You are a customer-facing AI agent.",
-    "Follow the operating policy below exactly. Use the tools to read and change records; never invent IDs, prices, statuses or confirmations.",
+    opts.withoutPolicy
+      ? "Use the tools to read and change records; never invent IDs, prices, statuses or confirmations."
+      : "Follow the operating policy below exactly. Use the tools to read and change records; never invent IDs, prices, statuses or confirmations.",
     "Keep replies short and conversational: this may be a phone call.",
-    "",
-    "<policy>",
-    domain.policy.trim(),
-    "</policy>",
+    ...(opts.withoutPolicy ? [] : ["", "<policy>", domain.policy.trim(), "</policy>"]),
     ...(context
       ? ["", "Context for this conversation, from the system that connected it (the caller has not said this):", "<context>", JSON.stringify(context, null, 2), "</context>"]
       : []),

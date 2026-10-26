@@ -4,6 +4,7 @@ import { lintDomain, type LintReport } from "../grade/lint.ts";
 import { passAtK, passHatK, wilsonInterval } from "../grade/passk.ts";
 import { pendingReview, type PendingItem } from "../spec/load.ts";
 import type { Domain, Task } from "../spec/schema.ts";
+import type { AgentPromptOptions } from "../sim/prompts.ts";
 import type { AgentAdapter, UserSimulator } from "../sim/types.ts";
 import { attributeTrial, attributionCounts, type AttributionCounts } from "./attribution.ts";
 import type { BaselineSnapshot } from "./compare.ts";
@@ -84,7 +85,13 @@ export interface SuiteResult {
   /** Unique per run; prefixes agent session ids (`<runId>/<task-id>#<trial>`). */
   runId: string;
   domain: string;
+  /** The agent's name; ` (without policy)` follows it in a `run --without-policy` run. */
   agent: string;
+  /**
+   * Set by `run --without-policy`: the agent was prompted without the domain's policy, a careless agent whose broken
+   * rules show which ones the tasks catch. `regrade` grades its trials with the same prompt. Absent otherwise.
+   */
+  withoutPolicy?: true;
   user: string;
   k: number;
   /**
@@ -159,11 +166,18 @@ export interface SuiteOptions {
   taskIds?: string[];
   concurrency?: number;
   onTrial?: (result: TrialResult) => void;
+  /**
+   * Prompt the agent without the domain's policy (`run --without-policy`): `ctx.system` keeps the generic instructions
+   * and the task's context. It means something only for an agent that takes `ctx.system` as its prompt, as the
+   * built-in model agents do. The result's `agent` name gets ` (without policy)`, and it records `withoutPolicy`.
+   */
+  withoutPolicy?: boolean;
 }
 
 export async function runSuite(opts: SuiteOptions): Promise<SuiteResult> {
   const { domain, agent, user } = opts;
   const k = opts.k ?? 1;
+  const prompt: AgentPromptOptions = opts.withoutPolicy ? { withoutPolicy: true } : {};
   const startedAt = new Date().toISOString();
   // e.g. 20261018T210512-k3f9: sortable and unique per run, used to namespace agent session ids.
   const runId = `${startedAt.replace(/[-:]/g, "").replace(/\.\d+Z$/, "")}-${Math.random().toString(36).slice(2, 6)}`;
@@ -175,7 +189,7 @@ export async function runSuite(opts: SuiteOptions): Promise<SuiteResult> {
 
   const jobs = tasks.flatMap((task) => Array.from({ length: k }, (_, trial) => ({ task, trial })));
   const results = await pool(jobs, opts.concurrency ?? 4, async ({ task, trial }) => {
-    const r = await runEpisode({ domain, task, agent, user, trial, runId });
+    const r = await runEpisode({ domain, task, agent, user, trial, runId, prompt });
     opts.onTrial?.(r);
     return r;
   });
@@ -187,13 +201,14 @@ export async function runSuite(opts: SuiteOptions): Promise<SuiteResult> {
     sandtable: { version },
     runId,
     domain: domain.name,
-    agent: agent.name,
+    agent: opts.withoutPolicy ? `${agent.name} (without policy)` : agent.name,
+    ...(opts.withoutPolicy ? { withoutPolicy: true as const } : {}),
     user: user.name,
     k,
-    inputs: inputsFingerprint(domain, tasks.map((t) => t.id), user.name),
+    inputs: inputsFingerprint(domain, tasks.map((t) => t.id), user.name, prompt),
     startedAt,
     durationMs: Math.round(performance.now() - started),
-    ...summarize(domain, tasks, results, k, user.name),
+    ...summarize(domain, tasks, results, k, user.name, prompt),
     usage: sumUsage(results.map((r) => r.usage)),
     pendingReview: pendingReview(domain),
     latency: { agentTurnP50Ms: percentile(turnLatencies, 50), agentTurnP95Ms: percentile(turnLatencies, 95) },
@@ -208,6 +223,8 @@ export function summarize(
   k: number,
   /** The simulated user's name, which decides whether the task's script is part of its `inputs` hash. */
   user: string,
+  /** How the agent was prompted (`run --without-policy`), part of each task's `inputs` hash and of coverage. */
+  prompt: AgentPromptOptions = {},
 ): Pick<SuiteResult, "tasks" | "passHat" | "passAt" | "flipRate" | "flaky" | "skipped" | "callerNotes" | "attribution" | "failureModes" | "byTag" | "soft" | "coverage"> {
   // Lint runs once for the domain, not per trial: attribution and coverage both read it.
   const lint = lintDomain(domain);
@@ -228,7 +245,7 @@ export function summarize(
       skipped: trials.length - graded,
       verdict: verdictOf(passes, graded),
       ...(interval ? { interval } : {}),
-      ...taskFingerprints(domain, task, user),
+      ...taskFingerprints(domain, task, user, prompt),
     };
   });
   const outcomes = summaries.map(gradedOutcomes);
@@ -255,7 +272,7 @@ export function summarize(
     failureModes: failureModes(results),
     byTag: tagScores(summaries, k),
     soft: softScores(domain, results),
-    coverage: coverageOf(domain, tasks, results, lint),
+    coverage: coverageOf(domain, tasks, results, lint, prompt),
   };
 }
 

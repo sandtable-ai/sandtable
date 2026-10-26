@@ -56,7 +56,7 @@ An agent is an `AgentAdapter`: a `name`, and `createSession(ctx)` that returns a
 
 | Export | What it does |
 |---|---|
-| `runSuite(opts): Promise<SuiteResult>` | Runs every task, or `taskIds`, `k` times with `agent` and `user`, `concurrency` at a time, grades each trial and returns what `results.json` holds. `onTrial` is called as each trial ends. |
+| `runSuite(opts): Promise<SuiteResult>` | Runs every task, or `taskIds`, `k` times with `agent` and `user`, `concurrency` at a time, grades each trial and returns what `results.json` holds. `onTrial` is called as each trial ends. `withoutPolicy: true` gives the agent `ctx.system` without the domain's policy, as `run --without-policy` does; it means something only for an agent that takes `ctx.system` as its prompt. |
 | `regradeSuite(domain, stored): SuiteResult` | Grades a stored run's trials again under the domain's current rules, without calling a model, as `sandtable regrade` does. Throws `RegradeError` when the agent or the caller would now be given different prompts. |
 | `RegradeError` | The error `regradeSuite` throws for a run it can't regrade. |
 | `baselineSnapshot(result)` | The per-task results of a run, as `run --baseline` stores them in `results.json`. |
