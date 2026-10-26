@@ -492,6 +492,11 @@ program
       for (const e of t.errors) console.log(`    ✗ ${e}`);
       for (const w of t.warnings) console.log(`    ! ${w}`);
     }
+    // Rules no task puts in play: a green run says nothing about them. A tool no task uses is a note, not a warning.
+    const idle = report.rules.filter((r) => r.warnings.length);
+    if (report.rules.length) console.log(`\n${report.rules.length - idle.length} of ${report.rules.length} rules in play in at least one task.`);
+    for (const r of idle) for (const w of r.warnings) console.log(`! ${r.id}: ${w}`);
+    if (report.unusedTools.length) console.log(`Tools no task uses: ${report.unusedTools.join(", ")}`);
     const noWrite = report.tasks.filter((t) => !t.expectsWrite).length;
     const noopPasses = report.tasks.filter((t) => t.noopPasses).length;
     console.log(`\n${report.tasks.length} tasks: ${report.tasks.length - noWrite} expect a write, ${noWrite} do not; a do-nothing agent passes ${noopPasses} of ${report.tasks.length}.`);

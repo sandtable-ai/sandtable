@@ -26,10 +26,11 @@ export type { CheckResult, CheckKind } from "./grade/expectations.ts";
 export type { CallRecord, Violation } from "./grade/invariants.ts";
 export type { CallerNote } from "./run/caller-notes.ts";
 export type { Attribution, AttributionCounts, Owner } from "./run/attribution.ts";
+export type { Coverage, RuleCoverage, CoverageCell, ToolCoverage } from "./run/coverage.ts";
 export type { TokenUsage, UsageByModel, Usage, UsageRecorder } from "./run/usage.ts";
 export { regradeSuite, RegradeError } from "./run/regrade.ts";
 export { compareRuns, baselineSnapshot, type Comparison, type TaskDelta, type TaskChange, type BaselineSnapshot } from "./run/compare.ts";
-export { lintDomain, type LintReport, type TaskLint } from "./grade/lint.ts";
+export { lintDomain, type LintReport, type TaskLint, type RuleLint } from "./grade/lint.ts";
 export { passHatK, passAtK, wilsonInterval } from "./grade/passk.ts";
 
 // Reports.

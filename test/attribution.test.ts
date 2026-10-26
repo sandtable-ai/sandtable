@@ -27,7 +27,7 @@ beforeAll(async () => {
   task = { ...freight.tasks.find((t) => t.id === "book-at-posted-rate")!, expect: { ...freight.tasks.find((t) => t.id === "book-at-posted-rate")!.expect, not_called: ["transfer_to_human"] } };
 });
 
-const lintOk: TaskLint = { id: "t", ready: true, solvable: true, expectsWrite: true, noopPasses: false, errors: [], warnings: [] };
+const lintOk: TaskLint = { id: "t", ready: true, solvable: true, expectsWrite: true, noopPasses: false, rules: [], errors: [], warnings: [] };
 const trial = (over: Partial<TrialResult>): TrialResult => ({
   taskId: "book-at-posted-rate",
   trial: 0,

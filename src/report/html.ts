@@ -50,7 +50,15 @@ code{font-family:var(--mono);font-size:.867em}code,.change,.tool{font-variant-li
 footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--line)}
 a{color:inherit}
 .warn{background:var(--chip);border:1px solid var(--line);border-radius:4px;padding:8px 16px;margin-top:16px}
-.regressed{color:var(--bad-text);border:1px solid var(--bad);background:transparent;font-weight:600}
+.regressed,.gapchip{color:var(--bad-text);border:1px solid var(--bad);background:transparent;font-weight:600}
+.cov{width:auto;overflow:visible}.cov th,.cov td{padding:4px 8px;white-space:nowrap}.cov td.c,.cov th.t{padding:4px 2px;text-align:center}
+.cov th.t{vertical-align:bottom;writing-mode:vertical-rl;transform:rotate(180deg);font:400 11px/16px var(--mono);color:var(--muted)}
+.cov th:first-child,.cov td:first-child{position:sticky;left:0;background:var(--card);z-index:1;border-right:1px solid var(--line);white-space:normal;min-width:200px;max-width:240px;overflow-wrap:anywhere}
+.cov .dot{margin:0;vertical-align:middle;cursor:default}.cov button.dot{cursor:pointer}
+.softb{background:repeating-linear-gradient(135deg,var(--bad) 0 2px,transparent 2px 4px);box-shadow:inset 0 0 0 1px var(--bad)}
+.cov tr.gap td:first-child,.keyrow{box-shadow:inset 3px 0 0 var(--bad)}
+.key{list-style:none;padding:0;margin:8px 0 16px;font-size:13px;color:var(--muted)}.key li{margin:4px 0}.key .dot{vertical-align:-1px;cursor:default}
+.keyrow{display:inline-block;width:12px;height:12px;vertical-align:-1px;background:var(--card);border:1px solid var(--line)}
 .notes{margin:8px 0 16px;padding-left:20px;color:var(--muted);font-size:13px}
 </style>
 </head>
@@ -69,6 +77,7 @@ a{color:inherit}
 <div id="callernotes"></div>
 <div id="tags"></div>
 <div id="soft"></div>
+<div id="coverage"></div>
 <h2>Failure modes</h2>
 <div class="wrap"><table><thead><tr><th>Count</th><th>Check</th><th>Tasks</th><th>Example</th></tr></thead><tbody id="modes"></tbody></table></div>
 <div id="detail"></div>
@@ -201,6 +210,45 @@ if (R.soft && R.soft.length) {
     R.soft.map((x) => "<tr><td><code>" + esc(x.id) + "</code><div class='meta'>" + esc(x.description) + "</div></td><td>" + rate(x) + "</td><td>" + x.broken + " of " + x.applied + " " + scope(x) + "</td><td>" +
       x.tasks.map((t) => '<span class="chip">' + esc(t) + "</span>").join("") + "</td><td>" + esc(x.example || "") + "</td></tr>").join("") +
     "</tbody></table></div>";
+}
+// Coverage: which rules the run checked, task by task, which it caught broken, and which tools it called. Absent in older results.
+if (R.coverage && R.coverage.rules.length) {
+  const cov = R.coverage;
+  const unchecked = cov.rules.filter((x) => x.checked === 0);
+  // A broken hard rule failed its trials, so the task caught it; a broken soft rule is only reported.
+  const caught = cov.rules.filter((x) => x.broken > 0 && !x.soft);
+  const softBroken = cov.rules.filter((x) => x.broken > 0 && x.soft);
+  const idle = cov.tools.filter((t) => t.calls === 0);
+  const what = (x) => "<code>" + esc(x.tool || x.field) + "</code>";
+  const checks = (x) => x.tool ? "called " + x.tool : "showed the agent a " + x.field + " value";
+  // The first trial of task ti that broke the rule, to open from its cell.
+  const brokeIn = (ti, id) => R.tasks[ti].trials.findIndex((tr) => tr.violations.some((v) => v.invariant === id) || (tr.soft || []).some((c) => c.id === id && c.broken));
+  const cell = (x, ti) => {
+    const t = R.tasks[ti], c = x.tasks.find((c) => c.task === t.id), n = t.trials.length;
+    if (!c) return "<td class='c'></td>";
+    if (c.broken && x.soft) return "<td class='c'><button class='dot softb' title='" + esc(t.id + ": soft rule broken in " + c.broken + " of " + n + " trial(s): reported, never fails a trial; open the first") + "' onclick='show(" + ti + "," + brokeIn(ti, x.id) + ")'></button></td>";
+    if (c.broken) return "<td class='c'><button class='dot bad' title='" + esc(t.id + ": broken in " + c.broken + " of " + n + " trial(s), which failed, so this task caught it; open the first") + "' onclick='show(" + ti + "," + brokeIn(ti, x.id) + ")'></button></td>";
+    if (c.checked) return "<td class='c'><span class='dot ok' title='" + esc(t.id + ": " + c.checked + " of " + n + " trial(s) " + checks(x) + ", so the rule was checked; never broken here") + "'></span></td>";
+    return "<td class='c'><span class='dot skip' title='" + esc(t.id + ": its reference or expectations put this rule in play, but no trial " + checks(x)) + "'></span></td>";
+  };
+  const key = (cls, text) => "<li><span class='dot " + cls + "'></span> " + text + "</li>";
+  $("coverage").innerHTML = "<h2>Coverage</h2><p class='explain' style='margin-top:0'>Which rules this run checked, and which it caught broken. " +
+    "Checked means the rule applied to what the agent did, not that the task pushes the agent to break it: a booking at the posted rate checks the rate ceiling without testing it. Run a careless agent too, to see which rules your tasks catch.</p>" +
+    "<ul class='key'>" +
+    key("ok", "<b>checked</b>: a trial of that task called the tool the rule guards or, for a rule about what the agent says, showed it a value it must not say") +
+    key("bad", "<b>caught</b>: a trial broke the rule and failed for it. Click to open the trial") +
+    key("softb", "<b>soft rule broken</b>: reported, never fails a trial") +
+    key("skip", "<b>in play, not checked</b>: the task's reference or expectations involve the rule, but no trial of this run checked it") +
+    "<li><span class='keyrow'></span> <b>never checked</b>: an outlined row; a passing run says nothing about that rule</li></ul>" +
+    "<p class='meta'>" + (cov.rules.length - unchecked.length) + " of " + cov.rules.length + " rules checked" + (unchecked.length ? ", " + unchecked.length + " never" : "") +
+    " · " + caught.length + " caught broken" + (softBroken.length ? " · " + softBroken.length + " soft broken (reported)" : "") + " · " + (idle.length ? idle.length + " of " + cov.tools.length + " tools never called" : "every tool called") + ".</p>" +
+    "<div class='wrap'><table class='cov'><thead><tr><th>Rule</th><th>Trials</th>" +
+    R.tasks.map((t) => "<th class='t' title='" + esc(t.description || "") + "'>" + esc(t.id) + "</th>").join("") + "</tr></thead><tbody>" +
+    cov.rules.map((x) => "<tr" + (x.checked === 0 ? " class='gap'" : "") + "><td title='" + esc(x.description + (x.source && x.source.quote ? "\\n“" + x.source.quote + "” (" + x.source.file + ")" : "")) + "'><code>" + esc(x.id) + "</code>" + (x.soft ? " <span class='chip'>soft</span>" : "") +
+      "<div class='meta'>" + esc(x.kind) + " · " + what(x) + "</div></td><td>" + (x.checked === 0 ? "<span class='chip gapchip'>never checked</span>" : x.checked + " checked" + (x.broken ? (x.soft ? "<div class='meta'>" + x.broken + " broken (soft)</div>" : "<div class='badt'>" + x.broken + " broken</div>") : "")) + "</td>" +
+      R.tasks.map((_, ti) => cell(x, ti)).join("") + "</tr>").join("") +
+    "</tbody></table></div>" +
+    "<p class='meta'>Tools: " + cov.tools.map((t) => t.calls ? "<span class='chip' title='" + esc("called in " + t.trials + " trial(s) of " + t.tasks.length + " task(s)") + "'><code>" + esc(t.name) + "</code> " + t.calls + "×</span>" : "<span class='chip gapchip' title='no trial called it'><code>" + esc(t.name) + "</code> never called</span>").join("") + "</p>";
 }
 $("modes").innerHTML = R.failureModes.length ? R.failureModes.map((m) =>
   "<tr><td class='badt'>" + m.count + "×</td><td><code>" + esc(m.id) + "</code><div class='meta'>" + esc(m.kind) + "</div></td><td>" +

@@ -627,6 +627,112 @@
     }
   ],
   "soft": [],
+  "coverage": {
+    "rules": [
+      {
+        "id": "verify-before-return",
+        "description": "Look up the customer's account before starting a return.",
+        "kind": "before",
+        "tool": "start_return",
+        "tasks": [
+          {
+            "task": "return-boots-silver",
+            "planned": true,
+            "checked": 1,
+            "broken": 0
+          },
+          {
+            "task": "guest-receipt",
+            "planned": false,
+            "checked": 1,
+            "broken": 0
+          },
+          {
+            "task": "return-jacket-gold",
+            "planned": false,
+            "checked": 1,
+            "broken": 0
+          }
+        ],
+        "checked": 3,
+        "broken": 0
+      },
+      {
+        "id": "account-before-order",
+        "description": "Look up the account before looking up any order.",
+        "kind": "before",
+        "tool": "get_order",
+        "tasks": [
+          {
+            "task": "return-boots-silver",
+            "planned": true,
+            "checked": 1,
+            "broken": 0
+          },
+          {
+            "task": "jacket-not-on-order",
+            "planned": false,
+            "checked": 1,
+            "broken": 0
+          },
+          {
+            "task": "guest-receipt",
+            "planned": false,
+            "checked": 1,
+            "broken": 0
+          },
+          {
+            "task": "return-jacket-gold",
+            "planned": false,
+            "checked": 1,
+            "broken": 1
+          }
+        ],
+        "checked": 4,
+        "broken": 1
+      }
+    ],
+    "tools": [
+      {
+        "name": "lookup_account",
+        "trials": 4,
+        "calls": 4,
+        "tasks": [
+          "return-boots-silver",
+          "jacket-not-on-order",
+          "guest-receipt",
+          "return-jacket-gold"
+        ]
+      },
+      {
+        "name": "get_order",
+        "trials": 4,
+        "calls": 4,
+        "tasks": [
+          "return-boots-silver",
+          "jacket-not-on-order",
+          "guest-receipt",
+          "return-jacket-gold"
+        ]
+      },
+      {
+        "name": "start_return",
+        "trials": 3,
+        "calls": 3,
+        "tasks": [
+          "return-boots-silver",
+          "guest-receipt",
+          "return-jacket-gold"
+        ]
+      },
+      {
+        "name": "transfer_to_human",
+        "trials": 0,
+        "calls": 0,
+        "tasks": []
+      }
+    ]
+  },
   "usage": {
     "agent": {},
     "user": {},
