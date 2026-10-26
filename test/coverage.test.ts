@@ -59,7 +59,7 @@ describe("lint: which tasks test each rule", () => {
     const report = lintDomain(DomainSpec.parse({ ...freight, tasks: only }));
     expect(report.errors).toBe(0);
     const warned = Object.fromEntries(report.rules.filter((r) => r.warnings.length).map((r) => [r.id, r.warnings[0]]));
-    expect(warned["offer-ceiling"]).toMatch(/no task checks it: no task's reference calls log_offer, and no task's called or not_called names it/);
+    expect(warned["offer-ceiling"]).toMatch(/no task puts it in play: no task's reference calls log_offer, and no task's called or not_called names it/);
     expect(warned["never-disclose-dnu-reason"]).toMatch(/no task's reference or context shows the agent a carriers.dnu_reason value/);
     expect(warned["rate-ceiling"]).toBeUndefined();
     expect(report.warnings).toBe(Object.keys(warned).length);
@@ -74,9 +74,9 @@ describe("lint: which tasks test each rule", () => {
     expect(report.unusedTools).not.toContain("log_offer");
   });
 
-  it("prints the rules checked and the gaps, and still exits 0", () => {
+  it("prints the rules in play and the gaps, and still exits 0", () => {
     const out = execFileSync(process.execPath, ["src/cli.ts", "lint", "examples/clinic"], { encoding: "utf8" });
-    expect(out).toContain("12 of 12 rules checked in at least one task.");
+    expect(out).toContain("12 of 12 rules in play in at least one task.");
     expect(out).toContain("Tools no task uses: list_providers");
   });
 });
@@ -134,10 +134,15 @@ describe("coverage in the reports", () => {
     const html = coverageSection(renderHtml(naive));
     expect(html).toContain("<h2>Coverage</h2>");
     expect(html).toContain("<span class='chip gapchip'>never checked</span>");
-    expect(html).toContain("dot none");
+    // A never-checked row is outlined; its cells stay empty except where a task puts the rule in play.
+    const row = html.split("<tr").find((r) => r.includes("<code>offer-ceiling</code>"))!;
+    expect(row).toContain(" class='gap'");
+    expect(row).not.toContain("dot ok");
+    expect(row).toContain("dot skip");
+    expect(row.match(/<td class='c'><\/td>/g)!.length).toBeGreaterThan(30);
     expect(html).toContain("never called");
     // The first naive task breaks verify-before-book in its only trial: its cell opens trial 0 of task 0.
-    expect(html).toMatch(/<button class='dot bad' title='book-at-posted-rate: broken in 1 of 1 trial\(s\), so this task caught it; open the first' onclick='show\(0,0\)'>/);
+    expect(html).toMatch(/<button class='dot bad' title='book-at-posted-rate: broken in 1 of 1 trial\(s\), which failed, so this task caught it; open the first' onclick='show\(0,0\)'>/);
     const clean = coverageSection(renderHtml(careful));
     expect(clean).toContain("19 of 19 rules checked · 0 caught broken · every tool called.");
     expect(clean).not.toContain("gapchip");
@@ -152,9 +157,29 @@ describe("coverage in the reports", () => {
 
   it("names the gaps in the terminal summary", () => {
     const out = renderTerminal(naive);
-    expect(out).toContain("coverage: 14 of 19 rules checked (10 broken), 2 of 9 tools never called");
+    expect(out).toContain("coverage: 14 of 19 rules checked (10 caught broken), 2 of 9 tools never called");
     expect(out).toMatch(/never checked \(verify-before-offer, offer-ceiling, /);
     expect(out).toContain("never called (verify_carrier, log_offer)");
     expect(renderTerminal(careful)).toContain("coverage: 19 of 19 rules checked, every tool called");
+  });
+
+  it("reports a broken soft rule apart: striped, never counted as caught", async () => {
+    // counter-at-ceiling with a bound every counter-offer breaks: soft, so the careful agent's trials still pass.
+    const strict = DomainSpec.parse({
+      ...freight,
+      invariants: freight.invariants.map((inv) => (inv.id === "counter-at-ceiling" && "limit" in inv ? { ...inv, limit: { tool: inv.limit.tool, arg: inv.limit.arg, lt: 100 } } : inv)),
+    });
+    const r = await runSuite({ domain: strict, agent: freightScriptedAgent("careful"), user: scriptedUser() });
+    expect(r.passHat["1"]).toBe(1);
+    const soft = r.coverage!.rules.find((x) => x.id === "counter-at-ceiling")!;
+    expect(soft.soft).toBe(true);
+    expect(soft.broken).toBeGreaterThan(0);
+    expect(renderTerminal(r)).toContain("coverage: 19 of 19 rules checked (1 soft broken), every tool called");
+    const html = coverageSection(renderHtml(r));
+    expect(html).toContain("0 caught broken · 1 soft broken (reported)");
+    expect(html).toMatch(/<button class='dot softb' title='[^']*soft rule broken in 1 of 1 trial\(s\): reported, never fails a trial/);
+    const row = html.split("<tr").find((x) => x.includes("<code>counter-at-ceiling</code>"))!;
+    expect(row).not.toContain("dot bad");
+    expect(row).toContain("broken (soft)");
   });
 });

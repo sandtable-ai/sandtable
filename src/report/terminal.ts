@@ -145,9 +145,12 @@ export function renderTerminal(r: SuiteResult, opts: { baseline?: string } = {})
   const cov = r.coverage;
   if (cov?.rules.length) {
     const unchecked = cov.rules.filter((x) => x.checked === 0).map((x) => x.id);
-    const broken = cov.rules.filter((x) => x.broken > 0).length;
+    // A broken hard rule failed its trials, so the run caught it; a broken soft rule is only reported.
+    const caught = cov.rules.filter((x) => x.broken > 0 && !x.soft).length;
+    const soft = cov.rules.filter((x) => x.broken > 0 && x.soft).length;
+    const broken = [caught ? `${caught} caught broken` : "", soft ? `${soft} soft broken` : ""].filter(Boolean).join(", ");
     const idle = cov.tools.filter((t) => t.calls === 0).map((t) => t.name);
-    const line = `  coverage: ${cov.rules.length - unchecked.length} of ${cov.rules.length} rules checked${broken ? ` (${broken} broken)` : ""}, ${idle.length ? `${idle.length} of ${cov.tools.length} tools never called` : "every tool called"}`;
+    const line = `  coverage: ${cov.rules.length - unchecked.length} of ${cov.rules.length} rules checked${broken ? ` (${broken})` : ""}, ${idle.length ? `${idle.length} of ${cov.tools.length} tools never called` : "every tool called"}`;
     lines.push(unchecked.length || idle.length ? yellow(line) : dim(line));
     if (unchecked.length) lines.push(dim(`     never checked ${fitList(unchecked, WIDTH - 19)}`));
     if (idle.length) lines.push(dim(`     never called ${fitList(idle, WIDTH - 18)}`));

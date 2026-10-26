@@ -130,7 +130,7 @@ One task's part in testing one rule.
 | `task` | string | task id |
 | `planned` | boolean | the task's spec puts the rule in play, as [`lint`](/reference/cli#lint) reads it: its `reference` calls the tool the rule checks, or its `called` or `not_called` names that tool. For `never_disclose`, the agent is shown a value it must not say in its system prompt (the policy and the task's `given.context`) or in a successful reference call's result |
 | `checked` | number | trials of the task that checked the rule: the agent called the tool it guards, whether or not the call succeeded. For `never_disclose`, a successful tool call or the system prompt showed the agent a value it must not say, from the task's seed or a row the trial wrote |
-| `broken` | number | trials of the task in which the agent broke the rule at least once: the evidence that the task catches a violation |
+| `broken` | number | trials of the task in which the agent broke the rule at least once. For a hard rule, those trials failed: the evidence that the task catches a violation. A soft rule's breaks are only reported |
 
 ### ToolCoverage
 

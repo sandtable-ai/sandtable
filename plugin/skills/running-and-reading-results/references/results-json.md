@@ -40,7 +40,8 @@ SuiteResult
                                the rule guards (never_disclose: that showed the agent a protected value), planned =
                                the task's reference or called/not_called involves it. tools[] = { name, trials,
                                calls, tasks[] }. A rule with checked 0 or a tool with calls 0 is a gap. Checked is not
-                               tested: only broken > 0 shows a task catches a violation. Never a failure
+                               tested: only broken > 0 on a hard rule shows a task catches a violation (a soft
+                               rule's breaks are only reported). Never a failure
   pendingReview[]              { kind, id, source? }: non-empty means the run is provisional
   usage                        { agent: {<model>: tokens}, user: {<model>: tokens}, costUsd }: costUsd is null when a
                                model has no known price (Claude, or passed with --prices). tokens = { calls, input,

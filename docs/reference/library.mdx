@@ -63,7 +63,7 @@ An agent is an `AgentAdapter`: a `name`, and `createSession(ctx)` that returns a
 | `compareRuns(baseline, now): Comparison` | What changed per task between a baseline snapshot and a new run: broken, worse, fixed, better, changed, added, removed. |
 | `criticalFailures(result)` | The critical tasks with a failed trial, which make `run` exit 1. |
 | `trialStatus(trial)` | `"passed"`, `"failed"` or `"skipped"`. |
-| `lintDomain(domain): LintReport` | What `sandtable lint` proves per task without a model call (ready, solvable, non-vacuous and graded), which tasks test each rule, and which tools no task uses. |
+| `lintDomain(domain): LintReport` | What `sandtable lint` proves per task without a model call (ready, solvable, non-vacuous and graded), which tasks put each rule in play, and which tools no task uses. |
 | `passHatK(trials, k)`, `passAtK(trials, k)` | pass^k and pass@k over each task's trial outcomes (`boolean[][]`). |
 | `wilsonInterval(passes, trials, z?)` | The 95% Wilson interval of a pass rate, `{ low, high }`. |
 

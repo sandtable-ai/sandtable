@@ -87,14 +87,14 @@ function toolsNamed(task: Task): string[] {
   return [...(task.reference ?? []).map((c) => c.tool), ...[...task.expect.called, ...task.expect.not_called].map(expectedTool)];
 }
 
-/** Why a rule no task checks gets a warning, and what would put it in play. */
+/** Why a rule no task puts in play gets a warning, and what would. */
 function unchecked(inv: Invariant): string {
   if ("never_disclose" in inv) {
     const { table, field } = inv.never_disclose;
-    return `no task checks it: no task's reference or context shows the agent a ${table}.${field} value. Add a reference to a task in which the agent looks one up`;
+    return `no task puts it in play: no task's reference or context shows the agent a ${table}.${field} value. Add a reference to a task in which the agent looks one up`;
   }
   const tool = invariantTool(inv)!;
-  return `no task checks it: no task's reference calls ${tool}, and no task's called or not_called names it. Add a task in which the agent has reason to call ${tool}`;
+  return `no task puts it in play: no task's reference calls ${tool}, and no task's called or not_called names it. Add a task in which the agent has reason to call ${tool}`;
 }
 
 /**
