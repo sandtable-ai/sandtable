@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `run --tag <tags>`: runs only the tasks with at least one of the comma-separated tags, such as `--tag refusal,negotiation`, or of every repeated `--tag`; `untagged` selects the tasks with none. With `--tasks`, it runs the tasks both select. A tag no task carries, an unknown task id, or `--tasks` and `--tag` with no task in common stops the run with exit 2 before anything runs ([#21](https://github.com/sandtable-ai/sandtable/issues/21)).
+
 ## [1.0.1] - 2026-10-26
 
 A patch release with three fixes. A failed transcript call in `init --transcripts` no longer throws away the chats already drafted, and a configuration error stops it at once. `init`'s next-step commands run as printed for any folder name. The Claude Code plugin installs sandtable into the working folder's own project, never a parent's. There are no breaking changes.

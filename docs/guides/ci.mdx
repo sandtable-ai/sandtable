@@ -41,6 +41,8 @@ npx sandtable-ai run ./sandtable --agent ./agent.ts -k 3 --fail-under 85 --floor
 
 Each floor gates its tag's pass^k from the **By tag** table ([details](/reference/cli#per-tag-floors)). For a single task that must never fail, mark it [`critical: true`](/reference/spec#critical-tasks) instead.
 
+To keep a pull request's job short, run only some groups with `--tag`, such as `--tag refusal --floor refusal=100`, and leave the full suite to a nightly job ([run some tasks](/reference/cli#run-some-tasks)).
+
 A step that treats any non-zero status as a failure needs nothing more. To let a failed gate through while an error still stops the job, as a step that renders a report for a failing agent does, accept only `1`: `npx sandtable-ai run ... || [ $? -eq 1 ]`.
 
 Don't pipe a gate's output into `head`: a command whose reader stops early stops there without finishing and exits 141, as Unix tools do. Under `set -o pipefail` the step then fails; without it, a pipeline's status is its last command's, so the gate's result is lost. To keep a log, use `tee`, which reads to the end.

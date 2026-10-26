@@ -125,6 +125,7 @@ npx sandtable-ai run ./my-domain --agent http://localhost:8787/step -k 4 --fail-
 | `--openai-base-url <url>` | OpenAI-compatible endpoint for `openai:<model>`. Default: `OPENAI_BASE_URL`, else `https://api.openai.com/v1`; the key comes from `OPENAI_API_KEY` |
 | `-k, --trials <n>` | trials per task; pass^k is reported for every k up to n. Default: `1` |
 | `-t, --tasks <ids>` | comma-separated task ids to run (all by default) |
+| `--tag <tags>` | run only the tasks with at least one of these comma-separated tags (repeatable); `untagged` selects the tasks with none. With `--tasks`, only the tasks both select. See [run some tasks](#run-some-tasks) |
 | `-c, --concurrency <n>` | episodes run in parallel. Default: `4` |
 | `-o, --out <dir>` | output directory for `results.json` and `report.html`. Default: `.sandtable/runs/<timestamp>-<domain>` |
 | `--no-html` | skip the HTML report |
@@ -159,6 +160,17 @@ The run prints a summary (per-task results, pass^k, latency, cost, per-tag score
 
 Each task row shows one mark per trial, `✓` passed, `✗` failed or `○` skipped, then passes out of graded trials, and `flaky` when some graded trials passed and others failed. With k > 1, the headline adds pass@k and the flip rate (the share of tasks with two or more graded trials that are flaky), and **Flaky tasks** lists those tasks with a 95% interval for each one's pass rate. A trial that ended in an error before the agent broke a rule is skipped: left out of pass^k and pass@k, and listed under **Skipped trials** with its error. A run with any skipped trial exits 2, since it is incomplete; see [pass^k and reliability](/concepts/pass-k#skipped-trials).
 
+### Run some tasks
+
+`--tasks` names the tasks to run, and `--tag` picks them by their tags: a task runs when it carries at least one of the tags given. Give them comma-separated, or repeat `--tag` as you repeat `--floor`: `--tag refusal --tag negotiation` is `--tag refusal,negotiation`. Tasks with no tags are `untagged`, as in the **By tag** table. Given both, `run` runs only the tasks in both lists:
+
+```bash
+npx sandtable-ai run ./my-domain --agent http://localhost:8787/step --tag refusal,negotiation -k 4
+npx sandtable-ai run ./my-domain --agent http://localhost:8787/step --tag hard --tasks walk-away-above-ceiling,expired-insurance
+```
+
+A tag that no task in the domain carries, an unknown task id, or a `--tasks` and `--tag` with no task in common stops the run before any trial with exit 2, so a typo can't run nothing, or everything. `--fail-under`, `--floor` and pass^k then cover only the tasks that ran.
+
 ### Per-tag floors
 
 `--fail-under` gates pass^k over every task, so a strong happy path can carry weak refusals over it. `--floor <tag>=<pct>` gates one tag's pass^k, as the **By tag** table reports it, over the graded trials of the tasks with that tag:
@@ -167,7 +179,7 @@ Each task row shows one mark per trial, `✓` passed, `✗` failed or `○` skip
 npx sandtable-ai run ./my-domain --agent http://localhost:8787/step -k 4 --fail-under 85 --floor refusal=100 --floor negotiation=70
 ```
 
-Repeat it for each tag, with or without `--fail-under`. When a tag is below its floor, `run` exits 1 and names it, as in `✗ 1 tag(s) below their --floor: refusal pass^4 87.5% < 100.0%`. Tasks with no tags count as `untagged`. A tag that no task in the run carries, after `--tasks`, stops the run before any trial with exit 2, so a misspelled tag can't make the gate pass. So does a value that isn't `<tag>=<pct>`, a percentage outside `0` to `100` (a decimal such as `refusal=97.5` is fine), or a tag given twice. The **By tag** table shows each floor next to its tag and marks a tag below it, in the terminal and in `report.html`, and `results.json` records the floors as `floors`. For one task that must pass every trial, mark it [`critical: true`](/reference/spec#critical-tasks) instead.
+Repeat it for each tag, with or without `--fail-under`. When a tag is below its floor, `run` exits 1 and names it, as in `✗ 1 tag(s) below their --floor: refusal pass^4 87.5% < 100.0%`. Tasks with no tags count as `untagged`. A tag that no task in the run carries, after `--tasks` and `--tag`, stops the run before any trial with exit 2, so a misspelled tag can't make the gate pass. So does a value that isn't `<tag>=<pct>`, a percentage outside `0` to `100` (a decimal such as `refusal=97.5` is fine), or a tag given twice. The **By tag** table shows each floor next to its tag and marks a tag below it, in the terminal and in `report.html`, and `results.json` records the floors as `floors`. For one task that must pass every trial, mark it [`critical: true`](/reference/spec#critical-tasks) instead.
 
 ### Compare with a baseline
 
