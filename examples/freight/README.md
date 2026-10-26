@@ -56,7 +56,7 @@ After the fixes in #90–#92 and #119, capable models passed nearly every call a
 | `conditional-yes-callback` | "Yes, as long as pickup moves a day", then a callback | §4: a yes that depends on something you can't do is not a yes; §6 |
 | `busy-lane-best-fit` | Five loads on a lane; the best-paying one that fits dates, equipment and weight | §2: equipment, dates and weight together |
 
-The `scripted:careful` agent passes all 18 with `--user scripted`, so `npm run smoke` still holds every freight task to 100%. The `scripted:naive` and `noop` agents pass none of them. Run only the hard tier with `--tasks`, or read its score under the `hard` tag in the per-tag table.
+The `scripted:careful` agent passes all 18 with `--user scripted`, so `npm run smoke` still holds every freight task to 100%. The `scripted:naive` and `noop` agents pass none of them. Run only the hard tier with `--tag hard`, or read its score under the `hard` tag in the per-tag table.
 
 How hard it is in practice: in October 2026 validation runs, with every task and caller bug fixed, Claude Haiku 5.5 and Claude Opus 5.5 passed every hard call at k=2 (see [live results](https://sandtable.dev/results)). The tier covers more of the policy, but on its own it doesn't yet separate those two models on pass^k.
 

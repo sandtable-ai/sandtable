@@ -17,6 +17,9 @@ A patch release with three fixes. A failed transcript call in `init --transcript
 - `init --transcripts`: a transcript whose call fails after the client's retries no longer throws away the transcripts drafted before it. `init` writes what was drafted, names each failed transcript with its error, prints the `init --transcripts` command that drafts only the transcripts left, and still exits 2. It goes on past an error that concerns one transcript alone (an HTTP status of 400, 413, 429 or 5xx, such as a Bedrock 503 on a long chat). It stops at one that every later call would hit too (401, 403, 404, or no HTTP status, such as missing credentials), names it once and lists the transcripts it didn't send ([#402](https://github.com/sandtable-ai/sandtable/issues/402)).
 - `init` and `validate`: the next-step commands they print quote a folder whose name has a space or another character the shell would split or expand, such as `npx sandtable-ai review 'dom three'`, so they run as printed ([#409](https://github.com/sandtable-ai/sandtable/issues/409)).
 - **Plugin**: the drafting and results skills install `sandtable-ai` and its optional packages into the working folder's own npm project. In a folder with no `package.json`, they run `npm init -y` first, since npm otherwise installs into the nearest project above it, even the engineer's home folder. Afterwards they say which `package.json` they changed ([#401](https://github.com/sandtable-ai/sandtable/issues/401)).
+### Added
+
+- `run --tag <tags>`: runs only the tasks with at least one of the comma-separated tags, such as `--tag refusal,negotiation`; `untagged` selects the tasks with none. With `--tasks`, it runs the tasks both select. A tag no task carries, an unknown task id, or `--tasks` and `--tag` with no task in common stops the run with exit 2 before anything runs ([#21](https://github.com/sandtable-ai/sandtable/issues/21)).
 
 ## [1.0.0] - 2026-10-22
 

@@ -31,7 +31,7 @@ import { shellWord } from "./shell.ts";
 import { reviewNotes } from "./spec/notes.ts";
 import { version } from "./version.ts";
 import { lintDomain } from "./grade/lint.ts";
-import type { Domain } from "./spec/schema.ts";
+import type { Domain, Task } from "./spec/schema.ts";
 import { bedrockRegion, bedrockUse, ModelsFile, pricesFile, renderLeaderboardMarkdown, runLeaderboard, type PricesFile, type RunInfo } from "./run/leaderboard.ts";
 import { z } from "zod";
 import YAML from "yaml";
@@ -99,6 +99,12 @@ const floor = (v: string, floors: Record<string, number> = {}) => {
   if (Object.hasOwn(floors, tag)) throw new InvalidArgumentError(`${tag} has a floor already`);
   return { ...floors, [tag]: n / 100 };
 };
+/** `--tag a,b`: the tags, at least one. An empty value is a usage error, not a filter that selects every task. */
+const tagList = (v: string) => {
+  const tags = [...new Set(v.split(",").map((s) => s.trim()).filter(Boolean))];
+  if (tags.length === 0) throw new InvalidArgumentError("give at least one tag, such as refusal or refusal,negotiation");
+  return tags;
+};
 
 const PRICES_HELP = "extra model prices, JSON in USD per million tokens: { \"<model-id>\": { input, output, cacheRead, cacheWrite } } (the sandtable repo's scripts/bedrock-prices.mjs writes one for Bedrock)";
 
@@ -148,6 +154,33 @@ function checkFloors(floors: Record<string, number> | undefined, tasks: readonly
   for (const tag of Object.keys(floors ?? {})) {
     if (!tags.has(tag)) throw new Error(`--floor: no task in this run is tagged "${tag}" (its tags: ${[...tags].sort().join(", ")})`);
   }
+}
+
+/** A task's tags as `byTag` and `--floor` name them: `untagged` for a task without any. */
+const tagsOf = (t: { tags: string[] }) => (t.tags.length ? t.tags : ["untagged"]);
+
+/**
+ * The tasks `run` runs: those `--tasks` names, those carrying at least one `--tag` tag, or, with both, the tasks in
+ * both. Checked before any trial, so an unknown task id, a tag no task carries or two filters with no task in common
+ * fail the command instead of running nothing.
+ */
+function selectTasks(domain: Domain, taskIds: string[] | undefined, tags: string[] | undefined): Task[] {
+  let tasks = domain.tasks;
+  if (taskIds?.length) {
+    const missing = taskIds.filter((id) => !domain.tasks.some((t) => t.id === id));
+    if (missing.length) throw new Error(`unknown task id(s): ${missing.join(", ")}`);
+    tasks = tasks.filter((t) => taskIds.includes(t.id));
+  }
+  if (!tags?.length) return tasks;
+  const known = new Set(domain.tasks.flatMap(tagsOf));
+  for (const tag of tags) {
+    if (!known.has(tag)) throw new Error(`--tag: no task in ${domain.name} is tagged "${tag}" (its tags: ${[...known].sort().join(", ")})`);
+  }
+  const selected = tasks.filter((t) => tagsOf(t).some((tag) => tags.includes(tag)));
+  if (selected.length === 0) {
+    throw new Error(`--tasks and --tag have no task in common: none of ${tasks.map((t) => t.id).join(", ")} is tagged ${tags.join(" or ")}`);
+  }
+  return selected;
 }
 
 /** A run where every trial ended in an error graded nothing: say so and exit 2, whatever the score. */
@@ -490,6 +523,7 @@ withProviderFlags(program
   .option("--openai-base-url <url>", `OpenAI-compatible endpoint for openai:<model> (default: OPENAI_BASE_URL or ${DEFAULT_OPENAI_BASE_URL}); key from OPENAI_API_KEY`)
   .option("-k, --trials <n>", "trials per task (pass^k is reported up to k)", int, 1)
   .option("-t, --tasks <ids>", "comma-separated task ids to run")
+  .option("--tag <tags>", "run only the tasks with at least one of these comma-separated tags (untagged: tasks with none); with --tasks, the tasks in both", tagList)
   .option("-c, --concurrency <n>", "episodes in parallel", int, 4)
   .option("-o, --out <dir>", "output directory for results.json and report.html")
   .option("--no-html", "skip the HTML report")
@@ -499,13 +533,14 @@ withProviderFlags(program
   .option("--fail-on-regression", "with --baseline: exit 1 if a task that passed every trial in the baseline fails one now (CI gate)")
   .option("--open", "open the HTML report in the browser when the run finishes")
   .option("--prices <file>", PRICES_HELP)
-  .action(async (domainPath: string, o: { agent: string; user: string; openaiBaseUrl?: string; trials: number; tasks?: string; concurrency: number; out?: string; html: boolean; failUnder?: number; floor?: Record<string, number>; baseline?: string; failOnRegression?: boolean; open?: boolean; prices?: string } & ProviderFlags, command: Command) => {
+  .action(async (domainPath: string, o: { agent: string; user: string; openaiBaseUrl?: string; trials: number; tasks?: string; tag?: string[]; concurrency: number; out?: string; html: boolean; failUnder?: number; floor?: Record<string, number>; baseline?: string; failOnRegression?: boolean; open?: boolean; prices?: string } & ProviderFlags, command: Command) => {
     if (o.failOnRegression && o.baseline === undefined) command.error("error: --fail-on-regression needs --baseline <results>: the run it compares with");
     await loadPrices(o.prices);
     const domain = await loadDomain(await resolveDomain(domainPath));
     if (domain.tasks.length === 0) throw new Error(`${domain.name} has no tasks yet: add some to tasks.yaml`);
-    const taskIds = o.tasks?.split(",").map((s) => s.trim()).filter(Boolean);
-    checkFloors(o.floor, taskIds?.length ? domain.tasks.filter((t) => taskIds.includes(t.id)) : domain.tasks);
+    const tasks = selectTasks(domain, o.tasks?.split(",").map((s) => s.trim()).filter(Boolean), o.tag);
+    const taskIds = tasks.length < domain.tasks.length ? tasks.map((t) => t.id) : undefined;
+    checkFloors(o.floor, tasks);
     // Read the baseline before any trial runs, so a wrong file costs no model calls.
     let baseline: SuiteResult | undefined;
     if (o.baseline !== undefined) {
@@ -516,7 +551,7 @@ withProviderFlags(program
     const user = resolveUser(o.user, providerOpts(o), o.openaiBaseUrl);
     await failIfUnreachable([{ role: "agent", spec: o.agent }, { role: "simulated user", spec: o.user }], providerOpts(o));
     let done = 0;
-    const total = (o.tasks ? o.tasks.split(",").length : domain.tasks.length) * o.trials;
+    const total = tasks.length * o.trials;
     const result = await runSuite({
       domain,
       agent,
