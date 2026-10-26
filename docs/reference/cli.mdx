@@ -342,7 +342,7 @@ It prints the path it wrote. A run made with `--baseline` keeps its changes sinc
 - what the rehearsal doesn't cover: rules no conversation checked, actions the agent never took, soft rules, and the limits of a simulation;
 - a sign-off block.
 
-A rule is checked when it applied to what the agent did, which doesn't show the scenario tries to make an agent break it. With `--probe`, the page also says which rules the rehearsal caught the careless agent breaking, with that conversation, and which it didn't. The page reads the run's [`coverage`](/reference/results-schema#coverage): a run written before 1.1 needs [`regrade`](#regrade) first, and `report` says so and exits 2, as it does for a `--probe` run of another domain. See [Get a customer's sign-off](/guides/customer-signoff).
+A rule is checked when it applied to what the agent did, which doesn't show the scenario tries to make an agent break it. With `--probe`, the page also says which rules the rehearsal caught the careless agent breaking, with that conversation, and which it didn't. A soft rule never fails a conversation, so the page reports it as broken, never as caught. The page reads the run's [`coverage`](/reference/results-schema#coverage): a run written before 1.1 needs [`regrade`](#regrade) first, and `report` says so and exits 2, as it does for a `--probe` run of another domain. See [Get a customer's sign-off](/guides/customer-signoff).
 
 ## regrade
 

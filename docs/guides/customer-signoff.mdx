@@ -44,7 +44,7 @@ It writes `customer-report.html` next to `results.json` (or where `-o` says): on
 - **A summary** in plain words: how many scenarios passed every conversation, critical scenarios, rules checked and broken, what the careless agent was caught doing, and the **open items before go-live**. Open items are drafted items still pending review, conversations that weren't graded, failed critical scenarios, broken rules, and scenarios that didn't pass every conversation.
 - **Each rule** of the procedure, with the sentence of the customer's document it comes from. For each rule:
   - how many conversations checked it, and whether any broke it;
-  - whether the rehearsal caught the careless agent breaking it, or the rule is *not shown caught*;
+  - whether the rehearsal caught the careless agent breaking it, or the rule is *not shown caught*. A soft rule never fails a conversation, so it is reported, never caught;
   - the scenarios that checked it, and an example conversation.
 - **Every scenario** and its result, critical ones first.
 - **What the rehearsal doesn't cover**: rules no conversation checked, actions the agent never took, soft rules, and the limits of a simulation (simulated callers and records, and nothing graded beyond the written rules and outcomes).

@@ -51,7 +51,7 @@ export function renderCustomerHtml(r: SuiteResult, opts: CustomerReportOptions =
     ...(critical.length ? [`${critical.filter(passedEvery).length} of ${critical.length} critical scenarios passed in every conversation.`] : []),
     `${checked.length} of ${rules.length} rules were checked in these conversations${brokenHard.length ? `, and ${count(brokenHard.length, "rule")} ${brokenHard.length === 1 ? "was" : "were"} broken` : ", and none was broken"}.${unchecked.length ? ` ${count(unchecked.length, "rule")} ${unchecked.length === 1 ? "was" : "were"} never checked: see Not covered.` : ""}`,
     ...(probe && caught
-      ? [`A deliberately careless agent was rehearsed too. The rehearsal caught it breaking ${[...caught.values()].filter((x) => x.broken > 0).length} of the ${rules.length} rules.`]
+      ? [`A deliberately careless agent was rehearsed too. The rehearsal caught it breaking ${[...caught.values()].filter((x) => x.broken > 0 && !x.soft).length} of the ${rules.filter((x) => !x.soft).length} rules that fail a conversation.`]
       : []),
   ];
 
@@ -115,7 +115,7 @@ ${[...critical, ...r.tasks.filter((t) => !t.critical)].map((t) => `<tr><td>${esc
 <ul>
 ${unchecked.length ? `<li><b>${count(unchecked.length, "rule")} no conversation checked.</b> A passing rehearsal says nothing about ${unchecked.length === 1 ? "it" : "them"}: ${unchecked.map((x) => quoted(x.description)).join("; ")}.</li>` : "<li>Every rule was checked in at least one conversation.</li>"}
 ${idle.length ? `<li><b>Actions the agent never took:</b> ${idle.map((t) => `<code>${esc(t.name)}</code>`).join(", ")}. Whatever those actions do in your systems wasn't rehearsed.</li>` : ""}
-${rules.some((x) => x.soft) ? `<li><b>Soft rules</b> are reported but never fail a conversation: ${rules.filter((x) => x.soft).map((x) => `${quoted(x.description)} (broken in ${x.broken} of ${x.checked} conversations where it applied)`).join("; ")}.</li>` : ""}
+${rules.some((x) => x.soft) ? `<li><b>Soft rules</b> are reported but never fail a conversation, so the rehearsal can't catch them: ${rules.filter((x) => x.soft).map((x) => `${quoted(x.description)} (broken in ${x.broken} of ${x.checked} conversations where it applied)`).join("; ")}.</li>` : ""}
 <li>Callers are simulated from written instructions. The agent's tools act on a simulated copy of your systems holding the records of this rehearsal, not on your live systems.</li>
 <li>Conversations are graded only by the rules and expected outcomes on this page. Tone, wording and anything not written down as a rule or an expected outcome aren't graded.</li>
 <li>Each scenario ran ${count(k, "time")}. A rare mistake can still happen in production: more conversations per scenario make a rare one more likely to show up here.</li>
@@ -147,12 +147,18 @@ function ruleCard(x: RuleCoverage, r: SuiteResult, probe: SuiteResult | undefine
     x.checked === 0
       ? `<span class="chip line">not checked</span> No conversation in this rehearsal reached this rule.`
       : x.broken > 0
-        ? `<span class="chip bad">broken</span> Broken in ${x.broken} of the ${count(x.checked, "conversation")} where it applied${x.soft ? ", which doesn't fail a conversation: it is a soft rule" : ""}.`
+        ? x.soft
+          ? `<span class="chip">reported</span> Broken in ${x.broken} of the ${count(x.checked, "conversation")} where it applied. It is a soft rule: reported, never a reason to fail a conversation.`
+          : `<span class="chip bad">broken</span> Broken in ${x.broken} of the ${count(x.checked, "conversation")} where it applied.`
         : `<span class="chip">held</span> Held in all ${count(x.checked, "conversation")} where it applied, across ${count(cells.length, "scenario")}.`;
+  // Caught means a careless agent broke the rule and the rehearsal failed it for that. A soft rule never fails a
+  // conversation, so the most a probe shows for one is that the rehearsal reports it.
   const caught = !probe
     ? ""
     : careless && careless.broken > 0
-      ? `<p><span class="chip">caught</span> A deliberately careless agent broke it in ${count(careless.tasks.filter((c) => c.broken > 0).length, "scenario")}, and ${x.soft ? "the rehearsal flagged those conversations (a soft rule never fails one)" : "the rehearsal failed those conversations"}.</p>`
+      ? x.soft
+        ? `<p><span class="chip">reported</span> A deliberately careless agent broke it in ${count(careless.tasks.filter((c) => c.broken > 0).length, "scenario")}, and the rehearsal reported it. As a soft rule, it never fails a conversation, so it can't be caught.</p>`
+        : `<p><span class="chip">caught</span> A deliberately careless agent broke it in ${count(careless.tasks.filter((c) => c.broken > 0).length, "scenario")}, and the rehearsal failed those conversations.</p>`
       : `<p><span class="chip line">not shown caught</span> The careless agent didn't break it, so these scenarios aren't shown to catch this mistake.</p>`;
   const example = exampleTrial(r, x);
   const probeExample = probe && careless && careless.broken > 0 ? exampleTrial(probe, careless, true) : undefined;

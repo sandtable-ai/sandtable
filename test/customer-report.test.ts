@@ -8,12 +8,14 @@ import { renderCustomerHtml } from "../src/report/customer.ts";
 import { runSuite, type SuiteResult } from "../src/run/suite.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
 import { loadDomain } from "../src/spec/load.ts";
+import { DomainSpec, type Domain } from "../src/spec/schema.ts";
 
+let freight: Domain;
 let careful: SuiteResult;
 let naive: SuiteResult;
 
 beforeAll(async () => {
-  const freight = await loadDomain(path.resolve("examples/freight"));
+  freight = await loadDomain(path.resolve("examples/freight"));
   careful = await runSuite({ domain: freight, agent: freightScriptedAgent("careful"), user: scriptedUser() });
   naive = await runSuite({ domain: freight, agent: freightScriptedAgent("naive"), user: scriptedUser() });
 });
@@ -29,7 +31,7 @@ describe("the customer sign-off page", () => {
     const html = renderCustomerHtml(careful, { probe: naive });
     expect(html).not.toContain("<script");
     expect(html).toContain("No open items");
-    expect(html).toContain("A deliberately careless agent was rehearsed too. The rehearsal caught it breaking 10 of the 19 rules.");
+    expect(html).toContain("A deliberately careless agent was rehearsed too. The rehearsal caught it breaking 10 of the 18 rules that fail a conversation.");
     const ceiling = card(html, "rate-ceiling");
     // The quote keeps its Markdown bold and code, as the customer's document has them.
     expect(ceiling).toContain("“<b>Never book above <code>max_rate</code>.</b>”<cite>policy.md</cite>");
@@ -55,6 +57,23 @@ describe("the customer sign-off page", () => {
     expect(html).toMatch(/<b>5 rules no conversation checked\.<\/b>/);
     expect(card(html, "offer-ceiling")).toContain('<span class="chip line">not checked</span>');
     expect(html).toContain("<code>log_offer</code>");
+  });
+
+  it("never calls a broken soft rule caught: it is reported, and it is no open item", async () => {
+    // counter-at-ceiling with a bound every counter-offer breaks: soft, so the trials that break it still pass.
+    const strict = DomainSpec.parse({
+      ...freight,
+      invariants: freight.invariants.map((inv) => (inv.id === "counter-at-ceiling" && "limit" in inv ? { ...inv, limit: { tool: inv.limit.tool, arg: inv.limit.arg, lt: 100 } } : inv)),
+    });
+    const probe = await runSuite({ domain: strict, agent: freightScriptedAgent("careful"), user: scriptedUser() });
+    const html = renderCustomerHtml(probe, { probe });
+    const soft = card(html, "counter-at-ceiling");
+    expect(soft).toContain('<span class="chip">reported</span> Broken in');
+    expect(soft).toContain("As a soft rule, it never fails a conversation, so it can't be caught.");
+    expect(soft).not.toContain('<span class="chip">caught</span>');
+    expect(soft).not.toContain("chip bad");
+    expect(html).toContain("No open items");
+    expect(html).toContain("The rehearsal caught it breaking 0 of the 18 rules that fail a conversation.");
   });
 
   it("names drafted items pending review and ungraded conversations as open items", () => {
