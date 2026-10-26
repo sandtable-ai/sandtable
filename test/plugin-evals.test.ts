@@ -73,7 +73,7 @@ describe("the plugin eval suite's cases", () => {
   const front = (file: string) => YAML.parse(/^---\n([\s\S]*?)\n---/.exec(readFileSync(file, "utf8"))![1]!) as Record<string, unknown>;
 
   it("each load the plugin under test, grade with at least one check, and tag the skill issue they cover", () => {
-    expect(cases.sort()).toEqual(["attribute-stored-run", "check-cli-features", "confirm-grading-fix", "draft-from-sources", "draft-preauthorized", "install-advice", "review-drafted-domain"]);
+    expect(cases.sort()).toEqual(["attribute-stored-run", "check-cli-features", "confirm-grading-fix", "draft-from-sources", "draft-preauthorized", "install-advice", "install-new-folder", "review-drafted-domain"]);
     for (const c of cases) {
       const meta = front(path.join(evals, c, "prompt.md"));
       expect(meta.plugins, c).toEqual(["../../plugin"]);
@@ -177,6 +177,16 @@ describe("the plugin eval suite's cases", () => {
     expect(fired.test(skill("sandtable:running-and-reading-results"))).toBe(true);
     expect(fired.test(skill("running-and-reading-results"))).toBe(true);
     expect(fired.test(skill("sandtable:writing-good-tasks"))).toBe(false);
+  });
+
+  it("ask, in install-new-folder, for npm init before the install, so npm doesn't install into a parent project", () => {
+    const first = new RegExp(front(path.join(evals, "install-new-folder", "graders", "init-before-install.md")).pattern as string, "i");
+    const install = "npm install --save-dev sandtable-ai @anthropic-ai/bedrock-sdk";
+    expect(first.test(`\`\`\`bash\nnpm init -y\n${install}\nnpx sandtable-ai --version\n\`\`\``)).toBe(true);
+    expect(first.test(`npm init -y && ${install}`)).toBe(true);
+    // The 1.0.0 session in #401: the install alone, in a folder with no package.json.
+    expect(first.test(`\`\`\`bash\n${install}\n\`\`\``)).toBe(false);
+    expect(first.test(`${install}\n(If npm complains about a missing package.json, run npm init first.)`)).toBe(false);
   });
 
   it("set up their workspace with a scaffold script that bash can parse", () => {
