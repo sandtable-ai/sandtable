@@ -394,7 +394,8 @@ withProviderFlags(program
     }
     // Nothing to review when the transcripts were the only step and none of them drafted.
     if (!undrafted?.all || openapiDraft || sopText !== undefined) {
-      console.log(`\nNext: accept or fix each drafted item, then validate:\n  ${NEXT} review ${o.out}\n  ${NEXT} validate ${o.out} --strict`);
+      // Quoted, so each command runs as printed even when the folder's name has a space.
+      console.log(`\nNext: accept or fix each drafted item, then validate:\n  ${NEXT} review ${shellWord(o.out)}\n  ${NEXT} validate ${shellWord(o.out)} --strict`);
     }
     if (undrafted && transcripts && o.transcripts) {
       // The chats that drafted are written above; the others are named, with a command that drafts only them.
@@ -434,7 +435,7 @@ program
     for (const w of domainWarnings(d)) console.log(`⚠ ${w}`);
     const pending = pendingReview(d);
     if (pending.length) {
-      console.log(`⚠ ${pending.length} drafted item(s) pending review (${NEXT} review ${domainPath})`);
+      console.log(`⚠ ${pending.length} drafted item(s) pending review (${NEXT} review ${shellWord(domainPath)})`);
       if (o.strict) exitWith(EXIT_GATE);
     }
   });

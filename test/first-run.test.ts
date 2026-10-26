@@ -28,7 +28,27 @@ describe.skipIf(!process.features.typescript)("the next steps", () => {
     const validate = (await promisify(execFile)(process.execPath, [cli, "validate", out])).stdout;
     expect(validate).toContain(`pending review (npx sandtable-ai review ${out})`);
   });
+
+  it("after init into a folder whose name has a space: commands that run as printed (#409)", async () => {
+    const out = path.join(mkdtempSync(path.join(tmpdir(), "sandtable-init-")), "dom three");
+    const { stdout } = await promisify(execFile)(process.execPath, [cli, "init", "--openapi", path.resolve("examples/freight/source/openapi.yaml"), "-o", out]);
+    const [review, validate] = nextSteps(stdout).slice(1).map((l) => l.trim());
+    expect(review).toBe(`npx sandtable-ai review '${out}'`);
+    expect(validate).toBe(`npx sandtable-ai validate '${out}' --strict`);
+    // Through a shell, as a user pastes them: the folder arrives as one argument.
+    const sh = (command: string) => promisify(execFile)("/bin/sh", ["-c", command.replace("npx sandtable-ai", `${shellQuote(process.execPath)} ${shellQuote(cli)}`)]);
+    expect((await sh(review!)).stdout).toContain("pending");
+    const strict = await sh(validate!).catch((err: { code: number; stdout: string }) => err);
+    // Exit 1: drafted items are pending review, which --strict fails on. A split path would exit 2 on its arguments.
+    expect((strict as { code?: number }).code).toBe(1);
+    expect((strict as { stdout: string }).stdout).toContain(`pending review (npx sandtable-ai review '${out}')`);
+  });
 });
+
+/** A word the shell reads as itself: for this test's own paths, such as node's. */
+function shellQuote(s: string): string {
+  return `'${s.replaceAll("'", `'\\''`)}'`;
+}
 
 describe("first-run names and help", () => {
   it("names an HTTP agent by its URL", () => {
