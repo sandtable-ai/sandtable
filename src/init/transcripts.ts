@@ -23,10 +23,26 @@ export interface TranscriptDraft {
   /** Tokens the drafting calls used, one per transcript, per model, for `init` to print with an estimated cost. */
   usage: UsageByModel;
   /**
-   * The transcripts whose drafting call failed (an outage or throttling that outlasted the retries), in order, with the
-   * error. The others are still drafted, so one failed call doesn't throw away the chats already paid for.
+   * The transcripts whose drafting call failed, in order, with the error. A failure that concerns only that chat (an
+   * outage, throttling or an oversized request that outlasted the retries) lets the others be drafted, so one failed
+   * call doesn't throw away the chats already paid for. Any other failure stops drafting: see `notSent`.
    */
   failed: { file: string; error: string }[];
+  /**
+   * The transcripts never sent, in order: after the last entry of `failed` hit an error every later call would hit too,
+   * such as missing credentials, a denied or unknown model, or no connection. Empty when drafting went to the end.
+   */
+  notSent: string[];
+}
+
+/**
+ * Whether a failed drafting call says nothing about the next transcript's: a status the API returns for one request,
+ * such as a request too large (400, 413), throttling (429) or an outage (5xx). Any other error, such as 401, 403 or
+ * 404, or one with no HTTP status (missing credentials, no SDK package, no connection), will hit every call.
+ */
+export function onlyThisTranscript(err: unknown): boolean {
+  const status = typeof err === "object" && err !== null ? (err as { status?: unknown }).status : undefined;
+  return typeof status === "number" && (status === 400 || status === 413 || status === 429 || status >= 500);
 }
 
 /**
@@ -231,12 +247,12 @@ export async function draftTasksFromTranscripts(input: {
 }): Promise<TranscriptDraft> {
   const client = await createClient(input.claude ?? {});
   const base = requestBase(input.claude ?? {}, "high");
-  const out: TranscriptDraft = { tasks: [], personas: [], rows: {}, warnings: [], notes: {}, redactions: 0, copied: 0, usage: {}, failed: [] };
+  const out: TranscriptDraft = { tasks: [], personas: [], rows: {}, warnings: [], notes: {}, redactions: 0, copied: 0, usage: {}, failed: [], notSent: [] };
   let domain = input.domain;
   // What the domain held before drafting: a value it already has, such as a seeded customer's name, isn't copied from a chat.
   const known = JSON.stringify({ world: input.domain.world, policy: input.domain.policy, tools: input.domain.tools, personas: input.domain.personas });
 
-  for (const t of input.transcripts) {
+  for (const [i, t] of input.transcripts.entries()) {
     const scrubbed = scrubPii(t.text);
     out.redactions += scrubbed.redactions;
     const schema = outputSchema(domain.tools.map((x) => x.name), Object.keys(domain.world.tables));
@@ -249,9 +265,12 @@ export async function draftTasksFromTranscripts(input: {
         messages: [{ role: "user", content: `${describe(domain)}\n\n<transcript file="${t.file}">\n${scrubbed.text}\n</transcript>` }],
       });
     } catch (err) {
-      // Keep going: the next chat's call may well succeed, and the chats drafted so far are kept.
       out.failed.push({ file: t.file, error: err instanceof Error ? err.message : String(err) });
-      continue;
+      // An error about this chat alone lets the next one go: its call may well succeed. Any other would fail every
+      // remaining chat the same way, after its retries, so stop and keep the chats drafted so far.
+      if (onlyThisTranscript(err)) continue;
+      out.notSent = input.transcripts.slice(i + 1).map((x) => x.file);
+      break;
     }
     recordDraftUsage(out.usage, input.claude ?? {}, base.model, response);
     if (response.stop_reason === "refusal" || !response.parsed_output) {

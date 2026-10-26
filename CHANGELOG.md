@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ### Fixed
 
-- `init --transcripts`: a transcript whose call fails after the client's retries, such as a Bedrock 503 on a long chat, no longer throws away the transcripts drafted before it. `init` writes what the others drafted, names each failed transcript with its error, prints the `init --transcripts` command that drafts only those, and still exits 2 ([#402](https://github.com/sandtable-ai/sandtable/issues/402)).
+- `init --transcripts`: a transcript whose call fails after the client's retries no longer throws away the transcripts drafted before it. `init` writes what was drafted, names each failed transcript with its error, prints the `init --transcripts` command that drafts only the transcripts left, and still exits 2. It goes on past an error that concerns one transcript alone (an HTTP status of 400, 413, 429 or 5xx, such as a Bedrock 503 on a long chat). It stops at one that every later call would hit too (401, 403, 404, or no HTTP status, such as missing credentials), names it once and lists the transcripts it didn't send ([#402](https://github.com/sandtable-ai/sandtable/issues/402)).
 
 ## [1.0.0] - 2026-10-22
 

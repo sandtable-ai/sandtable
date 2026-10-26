@@ -7,7 +7,7 @@ import { freightScriptedAgent } from "../src/demo/freight-agents.ts";
 import { appendRows, appendToDomainList } from "../src/init/merge.ts";
 import { lintDomain } from "../src/grade/lint.ts";
 import { copiedValueNotes } from "../src/init/copied.ts";
-import { draftTasksFromTranscripts, reusedRowConflicts, scrubPii } from "../src/init/transcripts.ts";
+import { draftTasksFromTranscripts, onlyThisTranscript, reusedRowConflicts, scrubPii } from "../src/init/transcripts.ts";
 import { runSuite } from "../src/run/suite.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
 import { DOMAIN_FILE, loadDomain, pendingReview } from "../src/spec/load.ts";
@@ -371,7 +371,8 @@ describe("init from transcripts", () => {
     expect(res.tasks[0]!.expect.state[0]!.where).toEqual({ load_id: "L-1001", status: { $in: ["available", "pending"] }, booked_by: { $exists: false } });
   });
 
-  it("keeps the chats drafted around a failed call, and names the one that failed (#402)", async () => {
+  /** Draft call-1 to call-3, with the second call (or the one at `failAt`) throwing `error`. */
+  async function draftWithFailure(error: Error, failAt = 2) {
     const domain = await loadDomain(path.resolve("examples/freight"));
     const second = { ...JSON.parse(JSON.stringify(good).replaceAll("L-2001", "L-2002")), id: "negotiate-second-lane", new_persona: null, persona_id: "easygoing" };
     const outputs = [good, second];
@@ -380,7 +381,7 @@ describe("init from transcripts", () => {
       beta: {
         messages: {
           parse: async () => {
-            if (++calls === 2) throw new Error("503 Bedrock is unable to process your request.");
+            if (++calls === failAt) throw error;
             return { stop_reason: "end_turn", parsed_output: outputs.shift(), content: [] };
           },
         },
@@ -391,10 +392,39 @@ describe("init from transcripts", () => {
       claude: { client },
       transcripts: ["call-1.txt", "call-2.txt", "call-3.txt"].map((file) => ({ file, text: "..." })),
     });
+    return { res, calls };
+  }
+
+  it("keeps the chats drafted around a call that failed for that chat alone, and names it (#402)", async () => {
+    const { res, calls } = await draftWithFailure(Object.assign(new Error("503 Bedrock is unable to process your request."), { status: 503 }));
     expect(calls).toBe(3);
     expect(res.tasks.map((t) => t.id)).toEqual(["negotiate-new-lane", "negotiate-second-lane"]);
     expect(res.rows.loads!.map((r) => r.load_id)).toEqual(["L-2001", "L-2002"]);
     expect(res.failed).toEqual([{ file: "call-2.txt", error: "503 Bedrock is unable to process your request." }]);
+    expect(res.notSent).toEqual([]);
+  });
+
+  it("stops at an error every later call would hit too, keeping what was drafted and listing the chats not sent", async () => {
+    // A denied model, after the first chat drafted.
+    const denied = await draftWithFailure(Object.assign(new Error("403 You don't have access to the model with the specified model ID."), { status: 403 }));
+    expect(denied.calls).toBe(2);
+    expect(denied.res.tasks.map((t) => t.id)).toEqual(["negotiate-new-lane"]);
+    expect(denied.res.failed).toEqual([{ file: "call-2.txt", error: "403 You don't have access to the model with the specified model ID." }]);
+    expect(denied.res.notSent).toEqual(["call-3.txt"]);
+    // Missing credentials have no HTTP status: nothing more is sent after the first chat.
+    const noCredentials = await draftWithFailure(new Error("no AWS credentials for profile no-such-profile"), 1);
+    expect(noCredentials.calls).toBe(1);
+    expect(noCredentials.res.tasks).toEqual([]);
+    expect(noCredentials.res.failed).toEqual([{ file: "call-1.txt", error: "no AWS credentials for profile no-such-profile" }]);
+    expect(noCredentials.res.notSent).toEqual(["call-2.txt", "call-3.txt"]);
+  });
+
+  it("goes on only after an error that can concern one chat alone", () => {
+    const status = (s: number) => Object.assign(new Error(`${s}`), { status: s });
+    for (const s of [400, 413, 429, 500, 503, 529]) expect(onlyThisTranscript(status(s))).toBe(true);
+    for (const s of [401, 403, 404]) expect(onlyThisTranscript(status(s))).toBe(false);
+    expect(onlyThisTranscript(new Error("Connection error."))).toBe(false);
+    expect(onlyThisTranscript("not an error")).toBe(false);
   });
 });
 

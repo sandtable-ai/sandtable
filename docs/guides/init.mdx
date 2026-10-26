@@ -177,6 +177,8 @@ Guardrails:
 
   The command keeps your model and provider flags and leaves out `--openapi` and `--sop`, whose drafts are already written.
 
+  `init` goes on past an error that can only concern that transcript: an HTTP status of 400, 413, 429 or 500 and above, such as a request too large or an outage. It stops at an error that every later call would hit too: a 401, 403 or 404 (a denied or unknown model or region), or an error with no HTTP status, such as missing credentials or no connection. It names that error once, says which transcripts weren't sent, and prints a command for each of them as well.
+
 <Tip>
 Local scrubbing and the copied-value check catch patterns, not every identifying detail: a name the caller never introduces, a misspelled name the model corrected, or an address or account detail written another way still needs a person. Read transcripts before sending them anywhere, and keep the drafted domain's seed rows fictional.
 </Tip>

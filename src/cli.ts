@@ -372,8 +372,9 @@ withProviderFlags(program
       for (const l of draftUsageLines(res.usage)) console.log(l);
       for (const w of res.warnings) console.log(`  ! ${w}`);
     }
-    // Transcripts whose drafting call failed; `all` when none of them drafted.
-    let failed: { failed: { file: string; error: string }[]; all: boolean } | undefined;
+    // Transcripts that drafted nothing: those whose call failed, and those never sent once a failure stopped drafting;
+    // `all` when that is every transcript.
+    let undrafted: { failed: { file: string; error: string }[]; notSent: string[]; all: boolean } | undefined;
     if (transcripts) {
       console.log(`Drafting tasks from ${transcripts.length} transcript(s) (PII scrubbed locally first)...`);
       const res = await draftTasksFromTranscripts({
@@ -389,23 +390,33 @@ withProviderFlags(program
       console.log(`  ${res.tasks.length} task(s), ${res.personas.length} persona(s), ${rows} seed row(s) drafted; ${res.redactions} PII redaction(s)${copied}`);
       for (const l of draftUsageLines(res.usage)) console.log(l);
       for (const w of res.warnings) console.log(`  ! ${w}`);
-      failed = res.failed.length ? { failed: res.failed, all: res.failed.length === transcripts.length } : undefined;
+      if (res.failed.length) undrafted = { failed: res.failed, notSent: res.notSent, all: res.failed.length + res.notSent.length === transcripts.length };
     }
-    // Nothing to review when the transcripts were the only step and every one of them failed.
-    if (!failed?.all || openapiDraft || sopText !== undefined) {
+    // Nothing to review when the transcripts were the only step and none of them drafted.
+    if (!undrafted?.all || openapiDraft || sopText !== undefined) {
       console.log(`\nNext: accept or fix each drafted item, then validate:\n  ${NEXT} review ${o.out}\n  ${NEXT} validate ${o.out} --strict`);
     }
-    if (failed && transcripts && o.transcripts) {
-      // The chats that drafted are written above; the failed ones are named, with a command that drafts only them.
+    if (undrafted && transcripts && o.transcripts) {
+      // The chats that drafted are written above; the others are named, with a command that drafts only them.
+      const { failed, notSent, all } = undrafted;
       const n = transcripts.length;
-      console.error(
-        failed.all
-          ? `\n✗ ${n === 1 ? "The transcript's drafting call" : `All ${n} transcripts' drafting calls`} failed, so nothing was drafted from ${n === 1 ? "it" : "them"}:`
-          : `\n✗ ${failed.failed.length} of ${n} transcripts' drafting calls failed, so nothing was drafted from ${failed.failed.length === 1 ? "it" : "them"}. The other ${n - failed.failed.length} were drafted as above:`,
-      );
-      for (const f of failed.failed) console.error(`    ${f.file}: ${f.error}`);
-      const paths = failed.all ? [o.transcripts] : failed.failed.map((f) => transcripts.find((t) => t.file === f.file)!.path);
-      console.error(`  Draft ${failed.failed.length === 1 ? "it" : "them"} again with:`);
+      const left = failed.length + notSent.length;
+      const others = `The other ${n - left} ${n - left === 1 ? "was" : "were"} drafted as above:`;
+      if (notSent.length) {
+        // An error every later call would hit too stopped drafting: it is named once, at the chat it hit.
+        const sent = notSent.length === 1 ? "1 transcript wasn't sent" : `${notSent.length} transcripts weren't sent`;
+        console.error(`\n✗ Drafting stopped at ${failed.at(-1)!.file}: its call failed in a way every later call would too, so ${sent}. ${all ? "Nothing was drafted from the transcripts:" : others}`);
+      } else {
+        console.error(
+          all
+            ? `\n✗ ${n === 1 ? "The transcript's drafting call" : `All ${n} transcripts' drafting calls`} failed, so nothing was drafted from ${n === 1 ? "it" : "them"}:`
+            : `\n✗ ${failed.length} of ${n} transcripts' drafting calls failed, so nothing was drafted from ${failed.length === 1 ? "it" : "them"}. ${others}`,
+        );
+      }
+      for (const f of failed) console.error(`    ${f.file}: ${f.error}`);
+      if (notSent.length) console.error(`    not sent: ${notSent.join(", ")}`);
+      const paths = all ? [o.transcripts] : [...failed.map((f) => f.file), ...notSent].map((file) => transcripts.find((t) => t.file === file)!.path);
+      console.error(`  Draft ${left === 1 ? "it" : "them"} again with:`);
       for (const p of paths) console.error(`    ${transcriptsRerun(p, o)}`);
       exitWith(EXIT_ERROR);
     }

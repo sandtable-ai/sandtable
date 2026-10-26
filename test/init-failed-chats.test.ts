@@ -49,17 +49,24 @@ const drafts: Record<string, ReturnType<typeof proposal>> = {
 };
 
 /**
- * A stand-in for the Messages API on localhost: it answers a chat in `drafts` with its proposal, and any other chat
- * with a 503 the client must not retry.
+ * A stand-in for the Messages API on localhost: it answers a chat in `drafts` with its proposal, a chat in `denied`
+ * with a 403, and any other chat with a 503 the client must not retry. `seen` lists the chats it was sent, in order.
  */
-async function stubApi(): Promise<{ url: string; server: Server }> {
+async function stubApi(denied: string[] = []): Promise<{ url: string; server: Server; seen: string[] }> {
+  const seen: string[] = [];
   const server = createServer((req, res) => {
     let body = "";
     req.on("data", (c: Buffer) => (body += c.toString()));
     req.on("end", () => {
       // The prompt arrives inside JSON, so its quotes are escaped.
       const file = /<transcript file=\\"([^"\\]+)\\">/.exec(body)?.[1] ?? "";
+      seen.push(file);
       const draft = drafts[file];
+      if (denied.includes(file)) {
+        res.writeHead(403, { "content-type": "application/json" });
+        res.end(JSON.stringify({ message: "You don't have access to the model with the specified model ID." }));
+        return;
+      }
       if (!draft) {
         res.writeHead(503, { "content-type": "application/json", "x-should-retry": "false" });
         res.end(JSON.stringify({ message: "Bedrock is unable to process your request." }));
@@ -81,7 +88,7 @@ async function stubApi(): Promise<{ url: string; server: Server }> {
     });
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, server };
+  return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, server, seen };
 }
 
 let server: Server | undefined;
@@ -142,5 +149,30 @@ describe.skipIf(!process.features.typescript)("init --transcripts when a chat's 
     expect(r.stdout).not.toContain("Next: accept or fix");
     expect(r.stderr).toContain("✗ All 3 transcripts' drafting calls failed, so nothing was drafted from them:");
     expect(r.stderr).toContain(`  Draft them again with:\n    npx sandtable-ai init --transcripts ${chats} -o ${domain}\n`);
+  });
+
+  it("stops at an error every later chat would hit too, names it once, and lists the chats not sent with their commands", async () => {
+    // A denied model fails every call the same way: after it, no chat is sent, and nothing waits on retries per chat.
+    const stub = await stubApi(["call-2.txt"]);
+    server = stub.server;
+    const { domain, chats } = await setup(["call-1.txt", "call-2.txt", "call-3.txt"]);
+    const r = await init(stub.url, "--transcripts", chats, "-o", domain);
+    expect(r.code).toBe(2);
+    expect(stub.seen).toEqual(["call-1.txt", "call-2.txt"]);
+    const tasks = await readFile(path.join(domain, "tasks.yaml"), "utf8");
+    expect(tasks).toContain("id: negotiate-first-lane");
+    expect(tasks).not.toContain("id: negotiate-third-lane");
+    expect(r.stdout).toContain("Next: accept or fix each drafted item");
+    expect(r.stderr).toContain(
+      [
+        "✗ Drafting stopped at call-2.txt: its call failed in a way every later call would too, so 1 transcript wasn't sent. The other 1 was drafted as above:",
+        "    call-2.txt: 403 You don't have access to the model with the specified model ID.",
+        "    not sent: call-3.txt",
+        "  Draft them again with:",
+        `    npx sandtable-ai init --transcripts ${path.join(chats, "call-2.txt")} -o ${domain}`,
+        `    npx sandtable-ai init --transcripts ${path.join(chats, "call-3.txt")} -o ${domain}`,
+      ].join("\n"),
+    );
+    expect(r.stderr.match(/403/g)).toHaveLength(1);
   });
 });
