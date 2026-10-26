@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { renderCustomerHtml } from "../src/report/customer.ts";
+import { renderCompare } from "../src/report/terminal.ts";
 import { baselineSnapshot, compareRuns } from "../src/run/compare.ts";
 import { RegradeError, regradeSuite } from "../src/run/regrade.ts";
 import { runSuite, type SuiteResult } from "../src/run/suite.ts";
@@ -89,6 +90,13 @@ describe("runSuite withoutPolicy", () => {
     const compared = compareRuns(baselineSnapshot(normal), careless);
     expect(compared.differences).toContain("agent recorder → recorder (without policy)");
     expect(compared.tasks.every((d) => d.change === "changed")).toBe(true);
+  });
+
+  it("names the whole agent where compare prints what differs, however long its name", () => {
+    const long = "bedrock:eu.anthropic.claude-haiku-5-5-20261001-v1:0";
+    const was = { ...normal, agent: long };
+    const now: SuiteResult = { ...careless, agent: `${long} (without policy)`, baseline: baselineSnapshot(was) };
+    expect(renderCompare(now, { baseline: "was.json", results: "now.json" })).toContain(`agent ${long} → ${long} (without policy)`);
   });
 
   it("counts a value as shown only when the prompt the agent got held it", () => {
