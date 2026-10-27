@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-10-27
+
+A patch release with two fixes to `init`'s messages. `--sop` and `--transcripts` with no domain yet say to draft one with `--openapi` first. A drafting reply cut off at the output limit, as Claude Haiku 5.5 can be while thinking, says so, notes that the call was still paid for, and names a larger model to try. There are no breaking changes.
+
 ### Fixed
 
 - `init --sop` and `init --transcripts` with no domain at `-o`, and no `--openapi`, now say that they add to an existing domain and give the command that creates one, `init --openapi <spec> -o <dir>`, or say to pass `--openapi` in the same run. Before, the error said to draft the domain with `init`, the command that had just failed. They still exit 2 before any model call. `init --help` says that `-o` is created by `--openapi` ([#421](https://github.com/sandtable-ai/sandtable/issues/421)).
@@ -292,7 +296,8 @@ First public release. sandtable rehearses an AI agent on a simulated copy of one
 
 A rehearsal of the release pipeline (npm, PyPI and GitHub releases from one tag), published before the first public release. Everything in it is also in 0.1.0; use 0.1.0 instead.
 
-[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/sandtable-ai/sandtable/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/sandtable-ai/sandtable/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/sandtable-ai/sandtable/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/sandtable-ai/sandtable/compare/v1.0.0...v1.0.1
