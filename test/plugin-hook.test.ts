@@ -30,11 +30,11 @@ function dryRun(output: unknown = `${PLAN_LINE}\nDry run: no model was called an
 
 type Output = { systemMessage?: string; hookSpecificOutput?: { hookEventName: string; permissionDecision: string; permissionDecisionReason: string } };
 
-/** What the hook prints for a Bash command after a transcript of these lines, parsed, or undefined when it prints nothing. */
-function run(command: string, lines: string[], tool = "Bash"): Output | undefined {
+/** What the hook prints for a Bash command run in `cwd` after a transcript of these lines, parsed, or undefined when it prints nothing. */
+function run(command: string, lines: string[], tool = "Bash", cwd = dir): Output | undefined {
   const transcript = path.join(dir, `t-${Math.random().toString(36).slice(2)}.jsonl`);
   writeFileSync(transcript, lines.join("\n") + "\n");
-  const input = JSON.stringify({ session_id: "s", transcript_path: transcript, cwd: dir, hook_event_name: "PreToolUse", tool_name: tool, tool_input: { command }, tool_use_id: "toolu_now" });
+  const input = JSON.stringify({ session_id: "s", transcript_path: transcript, hook_event_name: "PreToolUse", tool_name: tool, tool_input: { command }, tool_use_id: "toolu_now", cwd });
   const res = spawnSync(process.execPath, [hook], { input, encoding: "utf8" });
   expect(res.status).toBe(0);
   return res.stdout.trim() ? (JSON.parse(res.stdout) as Output) : undefined;
@@ -47,8 +47,8 @@ const denial = (command: string, lines: string[]) => {
   return out!.hookSpecificOutput!.permissionDecisionReason;
 };
 
-const shown = (command: string, lines: string[]) => {
-  const out = run(command, lines);
+const shown = (command: string, lines: string[], cwd = dir) => {
+  const out = run(command, lines, "Bash", cwd);
   // It never decides for the call: the engineer's permission settings apply as they would without the plugin.
   expect(out?.hookSpecificOutput).toBeUndefined();
   return out?.systemMessage;
@@ -123,6 +123,9 @@ describe("the plugin's plan-before-paid-init hook", () => {
     // Another region, set either way, or none the command shows: the eu plan doesn't describe it.
     expect(shown(`AWS_REGION=us-east-1 ${noRegion}`, euDry)).toBe(differs);
     expect(shown(`export AWS_REGION="us-east-1"; ${noRegion}`, euDry)).toBe(differs);
+    // A bare assignment reaches init too when the variable is exported already.
+    expect(shown(`AWS_REGION=us-east-1; ${noRegion}`, euDry)).toBe(differs);
+    expect(shown(`AWS_REGION=eu-west-1; ${noRegion}`, euDry)).toContain(PLAN_LINE.replace("Plan: ", ""));
     expect(shown(noRegion, euDry)).toBe(differs);
     const noProvider = PAID.replace(" --provider bedrock", "");
     expect(shown(`SANDTABLE_PROVIDER=anthropic ${noProvider}`, dryRun(undefined, `SANDTABLE_PROVIDER=bedrock ${noProvider} --dry-run`))).toBe(differs);
@@ -130,6 +133,37 @@ describe("the plugin's plan-before-paid-init hook", () => {
     // --region and --provider override the environment, and other variables don't change the calls.
     expect(shown(`AWS_REGION=us-east-1 SANDTABLE_PROVIDER=anthropic ${PAID}`, dryRun())).toContain(PLAN_LINE.replace("Plan: ", ""));
     expect(shown(`AWS_PROFILE=demo-profile NO_COLOR=1 ${PAID}`, dryRun())).toContain(PLAN_LINE.replace("Plan: ", ""));
+  });
+
+  it("compares paths by the folder each init ran in: the transcript's cwd, and any cd in the command", () => {
+    const plan = PLAN_LINE.replace("Plan: ", "");
+    const differs = "sandtable: Claude is running a model-backed init that differs from its dry runs, so its plan isn't known. It calls a model and costs money.";
+    const eng = path.join(dir, "engagement");
+    const withCwd = (line: string, cwd: string) => JSON.stringify({ ...JSON.parse(line), cwd });
+    const prompt = (cwd: string) => withCwd(JSON.stringify({ type: "user", message: { role: "user", content: "Draft the domain." } }), cwd);
+    // Claude Code writes a response's lines after its tool calls ran, with the folder the shell is in by then: a dry
+    // run started in the folder of the line before its response.
+    const dryAt = (start: string, command = DRY, after = start) => [prompt(start), ...dryRun(undefined, command).map((l) => withCwd(l, after))];
+    // A dry run in one folder, then the same relative paths after a cd, which name other files (#427).
+    expect(shown(`cd engagement && ${PAID}`, dryAt(dir))).toBe(differs);
+    expect(shown(PAID, dryAt(dir), eng)).toBe(differs);
+    // The same folder, however each command got there.
+    expect(shown(`cd engagement && ${PAID}`, dryAt(dir, `cd engagement && ${DRY}`, eng))).toContain(plan);
+    expect(shown(PAID, dryAt(dir, `cd engagement && ${DRY}`, eng), eng)).toContain(plan);
+    expect(shown(`cd ${eng} && ${PAID}`, dryAt(eng))).toContain(plan);
+    expect(shown(`cd .. && ${PAID}`, dryAt(dir), eng)).toContain(plan);
+    // Absolute paths and ~ name the same files from any folder.
+    const abs = `npx sandtable-ai init --sop ${dir}/discovery/sop.md -o ~/sandtable --provider bedrock --region eu-west-1 -m claude-sonnet-5-5`;
+    expect(shown(`cd engagement && ${abs}`, dryAt(dir, `${abs} --dry-run`))).toContain(plan);
+    // A folder change it can't follow makes the plan unknown.
+    expect(shown(`cd $ENG && ${PAID}`, dryAt(dir))).toBe(differs);
+    expect(shown(`(cd engagement && ${PAID})`, dryAt(dir, `(cd engagement && ${DRY})`))).toBe(differs);
+    // So does a dry run after another Bash call in the same response changed folder: it started where that left it.
+    const cd = bash("cd engagement");
+    const dry = bash(DRY);
+    const response = [assistant(cd), assistant(dry)].map((l) => JSON.stringify({ ...JSON.parse(l), message: { ...JSON.parse(l).message, id: "msg_1" } }));
+    const lines = [prompt(dir), ...[...response, result(cd.id, ""), result(dry.id, PLAN_LINE)].map((l) => withCwd(l, eng))];
+    expect(shown(PAID, lines)).toBe(differs);
   });
 
   it("still says what the call is when the dry run of it printed no plan, or has no output yet", () => {
@@ -144,7 +178,7 @@ describe("the plugin's plan-before-paid-init hook", () => {
     expect(denial('for f in discovery/transcripts/*.txt; do npx sandtable-ai init --transcripts "$f" -o ./sandtable; done', [])).toMatch(/--dry-run` first/);
     expect(denial("npx -p sandtable-ai -p @anthropic-ai/bedrock-sdk sandtable init --sop ./discovery/sop.md -o ./sandtable --provider bedrock", [])).toMatch(/--dry-run` first/);
     expect(denial("npx sandtable-ai@1.1.0 init --transcripts ./calls -o ./sandtable", [])).toMatch(/--dry-run` first/);
-    expect(shown(`cd engagement && ${PAID} 2>&1 | tail -20`, dryRun())).toContain(PLAN_LINE.replace("Plan: ", ""));
+    expect(shown(`cd engagement && ${PAID} 2>&1 | tail -20`, dryRun(undefined, `cd engagement && ${DRY}`))).toContain(PLAN_LINE.replace("Plan: ", ""));
     const args = PAID.split(" init ")[1];
     for (const form of ["npm exec sandtable-ai --", "npm exec --yes sandtable-ai@1.1.2 --", "npm run sandtable --", "npx sandtable-ai --"]) {
       expect(denial(`${form} init ${args}`, [])).toMatch(/--dry-run` first/);
