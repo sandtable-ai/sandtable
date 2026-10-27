@@ -115,6 +115,7 @@ describe("the plugin eval suite's cases", () => {
     const dry = `${paid} --dry-run`;
     const plan = "Plan: 5 model calls (1 for the SOP, 4 for transcripts) to claude-sonnet-5-5 on Bedrock (eu-west-1); at most about $0.94 at list prices";
     const openapiDry = "npx sandtable-ai init --openapi discovery/openapi.yaml -o sandtable --dry-run";
+    const denied = "Hook PreToolUse:Bash denied this tool call: sandtable plugin: this `init` calls a model and costs money.";
     const trace = (...lines: string[]) => `${lines.join("\n")}\n`;
     // [name, trace, dry run first, dry run then the paid init, paid init with no estimate said before it]
     const cases: [string, string, boolean, boolean, boolean][] = [
@@ -125,6 +126,10 @@ describe("the plugin eval suite's cases", () => {
       ["an estimate said, then the run, no dry run", trace(skill, say("5 model calls, at most about $0.94."), bash(paid)), false, false, false],
       ["the run, then a dry run", trace(skill, bash(paid), bash(dry)), false, false, true],
       ["only --openapi dry-run, then the run", trace(skill, bash(openapiDry), bash(paid)), false, false, true],
+      // The plugin's hook (#397) denies a paid init before its dry run; a denied call never ran, so it doesn't count.
+      ["dry run, the run denied, the plan said, then the run", trace(skill, bash(dry), result(plan), bash(paid), result(`${denied} Run the same command with --dry-run first`), say(`${plan}. Authorized, so I'm running it.`), bash(paid)), true, true, false],
+      ["the run denied, then the dry run, the plan and the run", trace(skill, bash(paid), result(`${denied} Run the same command with --dry-run first`), bash(dry), result(plan), say(`${plan}. Running it.`), bash(paid)), true, true, false],
+      ["dry run, the run denied, never retried", trace(skill, bash(dry), result(plan), bash(paid), result(`${denied} Run the same command with --dry-run first`)), true, false, false],
     ];
     for (const [name, t, first, then, unannounced] of cases) {
       expect(dryRunFirst.test(t), name).toBe(first);
