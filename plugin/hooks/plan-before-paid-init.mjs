@@ -57,10 +57,13 @@ const ENV_FLAGS = { AWS_REGION: "--region", AWS_DEFAULT_REGION: "--region", SAND
 
 const ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/;
 
-/** Records a `NAME=value` word in `env` when NAME is one of ENV_FLAGS. */
-function assign(env, word) {
+/**
+ * Records a `NAME=value` word in `env` when NAME is one of ENV_FLAGS: exported, as a prefix or an `export` sets it, or
+ * not, as a bare assignment does, which reaches init only when NAME was exported before.
+ */
+function assign(env, word, exported) {
   const m = word.match(ASSIGNMENT);
-  if (m && m[1] in ENV_FLAGS) env[m[1]] = m[2].replace(/^(["'])(.*)\1$/, "$2");
+  if (m && m[1] in ENV_FLAGS) env[m[1]] = { value: m[2].replace(/^(["'])(.*)\1$/, "$2"), exported };
 }
 
 /** The folder a `cd` argument names, from `dir`; undefined for one it can't follow, such as `cd -`, `cd $X`, or a relative `cd` from an unknown folder. */
@@ -89,7 +92,7 @@ function initKey(segment, env = {}, dir = undefined) {
   const all = words(segment);
   const at = all.findIndex((w, i) => w === "init" && (BIN.test(all[i - 1] ?? "") || (all[i - 1] === "--" && BIN.test(all[i - 2] ?? ""))));
   const vars = { ...env };
-  for (const w of all.slice(0, Math.max(at, 0))) assign(vars, w);
+  for (const w of all.slice(0, Math.max(at, 0))) assign(vars, w, true);
   const opts = { "--out": "sandtable" };
   const rest = [];
   const args = all.slice(at + 1);
@@ -114,15 +117,19 @@ function initKey(segment, env = {}, dir = undefined) {
     opts[name] = resolvePath(opts[name], dir);
     if (opts[name] === undefined) return undefined;
   }
-  for (const [name, value] of Object.entries(vars)) if (!(ENV_FLAGS[name] in opts)) opts[name] = value;
+  // A bare assignment matches only the same bare assignment: whether it reaches init depends on the shell.
+  for (const [name, { value, exported }] of Object.entries(vars)) if (!(ENV_FLAGS[name] in opts)) opts[exported ? name : `${name} (if exported)`] = value;
   return JSON.stringify([Object.entries(opts).sort(([a], [b]) => (a < b ? -1 : 1)), rest]);
 }
 
 /** A word that changes the shell's folder: `cd`, `pushd` or `popd`, also as `(cd` at the start of a subshell. */
 const CHDIR = /^\(?(?:cd|pushd|popd)$/;
 
+/** Whether a segment's words change the shell's folder: CHDIR as a command, first or after `(`, `{`, `!`, `do`, `then` or `else`. */
+const chdir = (all) => all.some((w, i) => CHDIR.test(w) && (i === 0 || /^(?:\(|\{|!|do|then|else)$/.test(all[i - 1])));
+
 /** Whether a command changes the shell's folder anywhere in it. */
-const changesDir = (command) => segments(command).some((s) => words(s).some((w) => CHDIR.test(w)));
+const changesDir = (command) => segments(command).some((s) => chdir(words(s)));
 
 /**
  * The keys of a command's `init` segments of one kind, in order. Each counts what the command set before it: the
@@ -136,10 +143,14 @@ function initKeys(command, kind, dir) {
   for (const segment of segments(command)) {
     const all = words(segment);
     if (all[0] === "cd") dir = cdTarget(all[1], dir);
-    else if (all.some((w) => CHDIR.test(w))) dir = undefined;
-    // `export NAME=value`, or a bare `NAME=value` with no command, which also reaches init when NAME is exported already.
-    if (all[0] === "export") all.slice(1).forEach((w) => assign(env, w));
-    else if (all.length && all.every((w) => ASSIGNMENT.test(w))) all.forEach((w) => assign(env, w));
+    else if (chdir(all)) dir = undefined;
+    if (all[0] === "export") {
+      // `export NAME=value`, or `export NAME` for a NAME assigned before.
+      for (const w of all.slice(1)) {
+        if (ASSIGNMENT.test(w)) assign(env, w, true);
+        else if (env[w]) env[w].exported = true;
+      }
+    } else if (all.length && all.every((w) => ASSIGNMENT.test(w))) all.forEach((w) => assign(env, w, false));
     if (initKind(segment) === kind) keys.push(initKey(segment, env, dir));
   }
   return keys;
@@ -156,10 +167,12 @@ function resultText(content) {
  * The dry runs in a transcript in Claude Code's JSONL format (one line per content block, a tool's result as a `user`
  * line), in order: what each dry-run segment of the command runs, and the command's output once its result is in.
  *
- * Each line records the session's folder (`cwd`) when it was written, and a response's lines are written after its tool
- * calls ran: a dry run's own line has the folder after it, `cd`s included. So a dry run started in the folder of the
- * last line before its response, unless an earlier Bash call in that response changed folder; then it's unknown.
- * `cwd` is the hook's own folder, for a transcript whose lines record none.
+ * Each line records the session's folder (`cwd`), but at a time that depends on the session: an interactive one writes a
+ * response's lines after its tool calls ran, so a call's own line can have the folder after it, while a headless (`-p`)
+ * one has the folder before it. In both, the last line before a response has the folder the response started in, so a
+ * dry run started there. Unless an earlier Bash call in its response changed folder: Claude Code runs read-only calls
+ * in parallel and the others in order, so the dry run may have started in either folder, and it's unknown. `cwd` is
+ * the hook's own folder, for a transcript whose lines record none.
  */
 function dryRuns(transcript, cwd) {
   const runs = [];

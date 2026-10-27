@@ -123,9 +123,11 @@ describe("the plugin's plan-before-paid-init hook", () => {
     // Another region, set either way, or none the command shows: the eu plan doesn't describe it.
     expect(shown(`AWS_REGION=us-east-1 ${noRegion}`, euDry)).toBe(differs);
     expect(shown(`export AWS_REGION="us-east-1"; ${noRegion}`, euDry)).toBe(differs);
-    // A bare assignment reaches init too when the variable is exported already.
+    // A bare assignment reaches init only when the variable is exported already, so it matches only itself.
     expect(shown(`AWS_REGION=us-east-1; ${noRegion}`, euDry)).toBe(differs);
-    expect(shown(`AWS_REGION=eu-west-1; ${noRegion}`, euDry)).toContain(PLAN_LINE.replace("Plan: ", ""));
+    expect(shown(`AWS_REGION=eu-west-1; ${noRegion}`, euDry)).toBe(differs);
+    expect(shown(`AWS_REGION=eu-west-1; ${noRegion}`, dryRun(undefined, `AWS_REGION=eu-west-1; ${noRegion} --dry-run`))).toContain(PLAN_LINE.replace("Plan: ", ""));
+    expect(shown(`AWS_REGION=eu-west-1; export AWS_REGION; ${noRegion}`, euDry)).toContain(PLAN_LINE.replace("Plan: ", ""));
     expect(shown(noRegion, euDry)).toBe(differs);
     const noProvider = PAID.replace(" --provider bedrock", "");
     expect(shown(`SANDTABLE_PROVIDER=anthropic ${noProvider}`, dryRun(undefined, `SANDTABLE_PROVIDER=bedrock ${noProvider} --dry-run`))).toBe(differs);
@@ -157,6 +159,9 @@ describe("the plugin's plan-before-paid-init hook", () => {
     expect(shown(`cd engagement && ${abs}`, dryAt(dir, `${abs} --dry-run`))).toContain(plan);
     // A folder change it can't follow makes the plan unknown.
     expect(shown(`cd $ENG && ${PAID}`, dryAt(dir))).toBe(differs);
+    expect(shown(`for d in a; do cd $d; done; ${PAID}`, dryAt(dir))).toBe(differs);
+    // A cd that isn't a command changes nothing.
+    expect(shown(`echo cd && grep -c pushd notes.md; ${PAID}`, dryAt(dir))).toContain(plan);
     expect(shown(`(cd engagement && ${PAID})`, dryAt(dir, `(cd engagement && ${DRY})`))).toBe(differs);
     // So does a dry run after another Bash call in the same response changed folder: it started where that left it.
     const cd = bash("cd engagement");
@@ -164,6 +169,9 @@ describe("the plugin's plan-before-paid-init hook", () => {
     const response = [assistant(cd), assistant(dry)].map((l) => JSON.stringify({ ...JSON.parse(l), message: { ...JSON.parse(l).message, id: "msg_1" } }));
     const lines = [prompt(dir), ...[...response, result(cd.id, ""), result(dry.id, PLAN_LINE)].map((l) => withCwd(l, eng))];
     expect(shown(PAID, lines)).toBe(differs);
+    const grep = bash("grep -c cd notes.md");
+    const after = [assistant(grep), assistant(dry)].map((l) => JSON.stringify({ ...JSON.parse(l), message: { ...JSON.parse(l).message, id: "msg_2" } }));
+    expect(shown(PAID, [prompt(dir), ...[...after, result(grep.id, "0"), result(dry.id, PLAN_LINE)].map((l) => withCwd(l, dir))])).toContain(plan);
   });
 
   it("still says what the call is when the dry run of it printed no plan, or has no output yet", () => {
