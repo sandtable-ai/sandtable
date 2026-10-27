@@ -279,7 +279,8 @@ export async function draftTasksFromTranscripts(input: {
     if (response.stop_reason === "refusal" || !response.parsed_output) {
       const cut = cutOff(response, base.max_tokens);
       if (cut) cutOffs++;
-      out.warnings.push(`${t.file}: no usable proposal${cut ? `: ${cut}` : ""}`);
+      const why = cut ?? (response.stop_reason === "refusal" ? "the model declined to draft from this chat" : undefined);
+      out.warnings.push(`${t.file}: no usable proposal${why ? `: ${why}` : ""}`);
       continue;
     }
     const conv = proposalToTask(response.parsed_output, t.file);
@@ -337,7 +338,9 @@ export async function draftTasksFromTranscripts(input: {
     for (const [table, rows] of Object.entries(conv.rows)) (out.rows[table] ??= []).push(...rows);
   }
   if (cutOffs) {
-    out.warnings.push(`${cutOffs} of ${input.transcripts.length} ${input.transcripts.length === 1 ? "chat" : "chats"} got a reply cut off at the ${base.max_tokens}-token output limit, and those calls were still paid for. ${cutOffHint(base.model, "chat")}`);
+    // Out of the chats sent: after an early stop, the rest were never sent.
+    const sent = input.transcripts.length - out.notSent.length;
+    out.warnings.push(`${cutOffs} of ${sent} ${sent === 1 ? "chat" : "chats"} got a reply cut off at the ${base.max_tokens}-token output limit, and those calls were still paid for. ${cutOffHint(base.model, "chat")}`);
   }
   return out;
 }

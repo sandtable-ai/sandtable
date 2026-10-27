@@ -115,3 +115,42 @@ describe("a drafting reply cut off at max_tokens", () => {
     expect(res.usage).toEqual({ "claude-haiku-5-5": { calls: 2, input: 24000, output: 32000, cacheRead: 0, cacheWrite: 0, maxTokensStops: 2 } });
   });
 });
+
+describe("why a transcript drafted nothing", () => {
+  it("names a refusal, counts cut-offs out of the chats sent, and hints both ways for a model it can't place", async () => {
+    const domain = await loadDomain(path.resolve("examples/freight"));
+    const replies = [
+      { stop_reason: "max_tokens", content: [{ type: "redacted_thinking" }] },
+      { stop_reason: "refusal", content: [] },
+      { stop_reason: "end_turn", content: [] },
+    ];
+    let n = 0;
+    const client = { beta: { messages: { parse: async () => ({ ...replies[n++]!, parsed_output: null, model: "m", usage }) } } } as unknown as Anthropic;
+    const arn = "arn:aws:bedrock:eu-west-1:000000000000:application-inference-profile/demo";
+    const res = await draftTasksFromTranscripts({ domain, claude: { client, model: arn }, transcripts: ["a.txt", "b.txt", "c.txt"].map((file) => ({ file, text: "..." })) });
+    expect(res.warnings).toEqual([
+      "a.txt: no usable proposal: the reply hit the 16000-token output limit while thinking, before it wrote anything",
+      "b.txt: no usable proposal: the model declined to draft from this chat",
+      "c.txt: no usable proposal",
+      "1 of 3 chats got a reply cut off at the 16000-token output limit, and those calls were still paid for. Try a larger model, or a shorter chat.",
+    ]);
+  });
+
+  it("leaves out of the count the chats never sent after an early stop", async () => {
+    const domain = await loadDomain(path.resolve("examples/freight"));
+    let n = 0;
+    const client = {
+      beta: {
+        messages: {
+          parse: async () => {
+            if (n++ === 0) return { stop_reason: "max_tokens", content: [{ type: "thinking" }], parsed_output: null, model: "claude-haiku-5-5", usage };
+            throw Object.assign(new Error("401 invalid x-api-key"), { status: 401 });
+          },
+        },
+      },
+    } as unknown as Anthropic;
+    const res = await draftTasksFromTranscripts({ domain, claude: { client, model: "claude-haiku-5-5" }, transcripts: ["a.txt", "b.txt", "c.txt", "d.txt"].map((file) => ({ file, text: "..." })) });
+    expect(res.notSent).toEqual(["c.txt", "d.txt"]);
+    expect(res.warnings.at(-1)).toBe("1 of 2 chats got a reply cut off at the 16000-token output limit, and those calls were still paid for. Try a larger model, such as -m claude-sonnet-5-5.");
+  });
+});

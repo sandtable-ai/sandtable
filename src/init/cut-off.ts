@@ -10,9 +10,13 @@ export function cutOff(response: { stop_reason?: string | null; content?: readon
   return `the reply hit the ${maxTokens}-token output limit ${thinkingOnly ? "while thinking, before it wrote anything" : "before it finished"}`;
 }
 
-/** What to try after a cut-off reply: the next larger model, or a shorter document on the largest. */
+/**
+ * What to try after a cut-off reply: the next larger model, or a shorter document on the largest. A model ID that
+ * names none of them, such as an inference-profile ARN, gets both.
+ */
 export function cutOffHint(model: string, document: string): string {
   if (/haiku/.test(model)) return "Try a larger model, such as -m claude-sonnet-5-5.";
   if (/sonnet/.test(model)) return `Try a larger model, such as -m ${DEFAULT_MODEL}, the default.`;
-  return `Try a shorter ${document}.`;
+  if (/opus/.test(model)) return `Try a shorter ${document}.`;
+  return `Try a larger model, or a shorter ${document}.`;
 }
