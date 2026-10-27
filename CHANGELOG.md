@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-27
+
+A minor release for customer sign-off, with no breaking changes. `run` shows which rules its trials checked and which they caught broken, `lint` says which rules the tasks put in play, and `report --audience customer` writes a page a customer's operations lead signs off on before go-live, with `run --without-policy` as the careless agent that shows the scenarios can catch a mistake. `run --tag` runs only the tasks with those tags, a repeated `--tasks` adds its tasks, and the Claude Code plugin keeps `npm install` of sandtable in the working folder's own project. An empty `--tasks` is deprecated: it still runs every task, but warns, and 2.0 will make it a usage error.
+
 ### Added
 
 - `run --tag <tags>`: runs only the tasks with at least one of the comma-separated tags, such as `--tag refusal,negotiation`, or of every repeated `--tag`; `untagged` selects the tasks with none. With `--tasks`, it runs the tasks both select. A tag no task carries, an unknown task id, or `--tasks` and `--tag` with no task in common stops the run with exit 2 before anything runs ([#21](https://github.com/sandtable-ai/sandtable/issues/21)).
@@ -275,7 +279,8 @@ First public release. sandtable rehearses an AI agent on a simulated copy of one
 
 A rehearsal of the release pipeline (npm, PyPI and GitHub releases from one tag), published before the first public release. Everything in it is also in 0.1.0; use 0.1.0 instead.
 
-[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/sandtable-ai/sandtable/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/sandtable-ai/sandtable/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/sandtable-ai/sandtable/compare/v1.0.0-rc.1...v1.0.0
 [1.0.0-rc.1]: https://github.com/sandtable-ai/sandtable/compare/v0.3.0...v1.0.0-rc.1
