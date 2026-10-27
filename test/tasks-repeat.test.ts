@@ -11,7 +11,7 @@ import { loadDomain } from "../src/spec/load.ts";
 
 const cli = path.resolve("src/cli.ts");
 const tmp = (prefix: string) => mkdtempSync(path.join(tmpdir(), prefix));
-const WARNING = "warning: an empty --tasks runs every task; in sandtable-ai 2.0 it will be a usage error (exit 2). Leave --tasks out to run every task.";
+const WARNING = "warning: an empty --tasks value is deprecated; in sandtable-ai 2.0 it will be a usage error (exit 2). To run every task, leave --tasks out.";
 
 const exec = (args: string[], cwd?: string) =>
   promisify(execFile)(process.execPath, [cli, ...args], cwd ? { cwd } : {}).then(

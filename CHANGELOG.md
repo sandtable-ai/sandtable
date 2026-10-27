@@ -24,7 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ### Deprecated
 
-- `run` and `leaderboard`: an empty `--tasks` (`--tasks ""`, as an unset CI variable gives) still runs every task, but now warns on stderr. sandtable-ai 2.0 will make it a usage error (exit 2), as an empty `--tag` is. To run every task, leave `--tasks` out ([#403](https://github.com/sandtable-ai/sandtable/issues/403)).
+- `run` and `leaderboard`: an empty `--tasks` (`--tasks ""`, as an unset CI variable gives) still runs every task, and an empty value next to task ids still adds nothing, but both now warn on stderr. sandtable-ai 2.0 will make it a usage error (exit 2), as an empty `--tag` is. To run every task, leave `--tasks` out ([#403](https://github.com/sandtable-ai/sandtable/issues/403)).
 
 ## [1.0.1] - 2026-10-26
 

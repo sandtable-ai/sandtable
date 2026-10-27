@@ -179,7 +179,7 @@ npx sandtable-ai run ./my-domain --agent http://localhost:8787/step --tag hard -
 
 A tag that no task in the domain carries, an unknown task id, or a `--tasks` and `--tag` with no task in common stops the run before any trial with exit 2, so a typo can't run nothing, or everything. `--fail-under`, `--floor` and pass^k then cover only the tasks that ran.
 
-An empty `--tasks`, such as `--tasks ""` from an unset CI variable, still runs every task, but it is deprecated. It prints `warning: an empty --tasks runs every task; in sandtable-ai 2.0 it will be a usage error (exit 2). Leave --tasks out to run every task.` on stderr, and 2.0 will make it exit 2, as an empty `--tag` already does. To run every task, leave `--tasks` out.
+An empty `--tasks`, such as `--tasks ""` from an unset CI variable, still runs every task, but it is deprecated. Next to task ids, an empty value adds nothing. Either way it prints `warning: an empty --tasks value is deprecated; in sandtable-ai 2.0 it will be a usage error (exit 2). To run every task, leave --tasks out.` on stderr, and 2.0 will make it exit 2, as an empty `--tag` already does.
 
 ### Per-tag floors
 

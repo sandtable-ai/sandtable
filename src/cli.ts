@@ -123,7 +123,7 @@ const taskList = (v: string, previous: TaskList = { ids: [], empty: false }): Ta
   const ids = v.split(",").map((s) => s.trim()).filter(Boolean);
   return { ids: [...new Set([...previous.ids, ...ids])], empty: previous.empty || ids.length === 0 };
 };
-const EMPTY_TASKS = "warning: an empty --tasks runs every task; in sandtable-ai 2.0 it will be a usage error (exit 2). Leave --tasks out to run every task.";
+const EMPTY_TASKS = "warning: an empty --tasks value is deprecated; in sandtable-ai 2.0 it will be a usage error (exit 2). To run every task, leave --tasks out.";
 /** Say once, before anything runs, that an empty `--tasks` is deprecated. */
 function warnEmptyTasks(tasks: TaskList | undefined): void {
   if (tasks?.empty) console.error(EMPTY_TASKS);
