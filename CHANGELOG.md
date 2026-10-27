@@ -26,6 +26,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 - `run` and `leaderboard`: an empty `--tasks` (`--tasks ""`, as an unset CI variable gives) still runs every task, and an empty value next to task ids still adds nothing, but both now warn on stderr. sandtable-ai 2.0 will make it a usage error (exit 2), as an empty `--tag` is. To run every task, leave `--tasks` out ([#403](https://github.com/sandtable-ai/sandtable/issues/403)).
 
+### Fixed
+
+- **Plugin**: a `PreToolUse` hook stops `npm install` of `sandtable-ai` in a folder with no `package.json`, and tells Claude to run `npm init -y` there first. Without that step npm installs into the nearest project above the folder, even the engineer's home folder. The skills already asked for it (1.0.1); the hook holds on any model, even when no skill loaded ([#412](https://github.com/sandtable-ai/sandtable/issues/412)).
+
 ## [1.0.1] - 2026-10-26
 
 A patch release with three fixes. A failed transcript call in `init --transcripts` no longer throws away the chats already drafted, and a configuration error stops it at once. `init`'s next-step commands run as printed for any folder name. The Claude Code plugin installs sandtable into the working folder's own project, never a parent's. There are no breaking changes.
