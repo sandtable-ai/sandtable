@@ -69,3 +69,49 @@ describe("init drafting usage", () => {
     expect(draftUsageLines({})).toEqual([]);
   });
 });
+
+describe("a drafting reply cut off at max_tokens", () => {
+  /** A client whose every reply spent the whole limit thinking, as Claude Haiku 5.5 does at the drafting effort. */
+  function thinkingOnly(model: string, content: { type: string }[] = [{ type: "thinking" }]) {
+    const client = {
+      beta: { messages: { parse: async () => ({ stop_reason: "max_tokens", parsed_output: null, content, model, usage: { ...usage, output_tokens: 16000 } }) } },
+    };
+    return client as unknown as Anthropic;
+  }
+
+  it("says the SOP reply was cut off while thinking, that it was paid for, and what to try", async () => {
+    const domain = await loadDomain(path.resolve("examples/freight"));
+    const draft = (model: string, content?: { type: string }[]) => draftInvariantsFromSop({ domain, sop: "Look the carrier up first.", sopFile: "sop.md", claude: { client: thinkingOnly(model, content), model } });
+    await expect(draft("claude-haiku-5-5")).rejects.toThrow(
+      "the reply hit the 16000-token output limit while thinking, before it wrote anything, so it drafted no invariants, and the call was still paid for. Try a larger model, such as -m claude-sonnet-5-5.",
+    );
+    await expect(draft("claude-sonnet-5-5")).rejects.toThrow("Try a larger model, such as -m claude-opus-5-5, the default.");
+    await expect(draft("claude-opus-5-5", [{ type: "thinking" }, { type: "text" }])).rejects.toThrow(
+      "the reply hit the 16000-token output limit before it finished, so it drafted no invariants, and the call was still paid for. Try a shorter SOP.",
+    );
+  });
+
+  it("keeps the old message for a reply with no answer that wasn't cut off", async () => {
+    const domain = await loadDomain(path.resolve("examples/freight"));
+    await expect(draftInvariantsFromSop({ domain, sop: "Look the carrier up first.", sopFile: "sop.md", claude: { client: fakeClient([null]) } })).rejects.toThrow(/^the model returned no parseable invariants$/);
+  });
+
+  it("says why on each transcript, and once what to try", async () => {
+    const domain = await loadDomain(path.resolve("examples/freight"));
+    const res = await draftTasksFromTranscripts({
+      domain,
+      claude: { client: thinkingOnly("claude-haiku-5-5"), model: "claude-haiku-5-5" },
+      transcripts: [
+        { file: "call-1.txt", text: "..." },
+        { file: "call-2.txt", text: "..." },
+      ],
+    });
+    expect(res.warnings).toEqual([
+      "call-1.txt: no usable proposal: the reply hit the 16000-token output limit while thinking, before it wrote anything",
+      "call-2.txt: no usable proposal: the reply hit the 16000-token output limit while thinking, before it wrote anything",
+      "2 of 2 chats got a reply cut off at the 16000-token output limit, and those calls were still paid for. Try a larger model, such as -m claude-sonnet-5-5.",
+    ]);
+    // Usage already counts the replies that stopped at the limit.
+    expect(res.usage).toEqual({ "claude-haiku-5-5": { calls: 2, input: 24000, output: 32000, cacheRead: 0, cacheWrite: 0, maxTokensStops: 2 } });
+  });
+});

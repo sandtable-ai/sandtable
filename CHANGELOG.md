@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 ### Fixed
 
 - `init --sop` and `init --transcripts` with no domain at `-o`, and no `--openapi`, now say that they add to an existing domain and give the command that creates one, `init --openapi <spec> -o <dir>`, or say to pass `--openapi` in the same run. Before, the error said to draft the domain with `init`, the command that had just failed. They still exit 2 before any model call. `init --help` says that `-o` is created by `--openapi` ([#421](https://github.com/sandtable-ai/sandtable/issues/421)).
+- `init --sop` and `init --transcripts`: when a drafting reply stops at the 16,000-token output limit, as Claude Haiku 5.5 can while thinking, `init` now says so. It says the call was still paid for and names a larger model to try, such as `-m claude-sonnet-5-5`. Before, `--sop` failed with "the model returned no parseable invariants" and `--transcripts` warned "no usable proposal" for each chat, with no reason. Each chat's warning now gives the reason, and one more says what to try ([#422](https://github.com/sandtable-ai/sandtable/issues/422)).
 
 ## [1.1.1] - 2026-10-27
 

@@ -4,6 +4,7 @@ import { validateDomain } from "../spec/load.ts";
 import { InvariantSpec, type Domain, type Invariant } from "../spec/schema.ts";
 import type { UsageByModel } from "../run/usage.ts";
 import { createClient, recordDraftUsage, requestBase, type ClaudeOptions } from "../sim/claude.ts";
+import { cutOff, cutOffHint } from "./cut-off.ts";
 
 /**
  * A rule the SOP states that no drafted invariant checks (or checks only in part). It is written as a
@@ -309,7 +310,10 @@ export async function draftInvariantsFromSop(input: {
   recordDraftUsage(usage, input.claude ?? {}, base.model, response);
   if (response.stop_reason === "refusal") throw new Error("the model declined to draft invariants from this SOP");
   const out = response.parsed_output;
-  if (!out) throw new Error("the model returned no parseable invariants");
+  if (!out) {
+    const cut = cutOff(response, base.max_tokens);
+    throw new Error(cut ? `${cut}, so it drafted no invariants, and the call was still paid for. ${cutOffHint(base.model, "SOP")}` : "the model returned no parseable invariants");
+  }
 
   const warnings: string[] = [];
   const invariants: Invariant[] = [];
