@@ -39,7 +39,7 @@ npx sandtable-ai init --openapi api.yaml --sop policy.md --transcripts calls/ -o
 | `--openapi <file>` | OpenAPI 3.x spec (YAML or JSON): drafts tables and tools, no model needed |
 | `--sop <file>` | SOP or policy document: drafts invariants with Claude, each quoting its source |
 | `--transcripts <path>` | call or chat transcripts (a file, or a directory of `.txt`/`.md` files): drafts personas and tasks with Claude |
-| `-o, --out <dir>` | domain directory to create, or to add to when it already exists. Default: `sandtable` |
+| `-o, --out <dir>` | domain directory: `--openapi` creates it, and `--sop` and `--transcripts` add to it. Without `--openapi`, a domain must already be there, or `init` exits 2 and says to draft one with `--openapi` first. Default: `sandtable` |
 | `-m, --model <id>` | Claude model for the drafting steps. Default: `claude-opus-5-5` |
 | `--force` | overwrite existing files when drafting from `--openapi` |
 | `--dry-run` | print the plan for `--sop` and `--transcripts` (model calls, model, provider, a cost bound) and the files `--openapi` would write, then stop: no model call, nothing written, no credentials needed |

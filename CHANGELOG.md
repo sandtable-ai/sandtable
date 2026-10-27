@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- `init --sop` and `init --transcripts` with no domain at `-o`, and no `--openapi`, now say that they add to an existing domain and give the command that creates one, `init --openapi <spec> -o <dir>`, or say to pass `--openapi` in the same run. Before, the error said to draft the domain with `init`, the command that had just failed. They still exit 2 before any model call. `init --help` says that `-o` is created by `--openapi` ([#421](https://github.com/sandtable-ai/sandtable/issues/421)).
+
 ## [1.1.1] - 2026-10-27
 
 A patch release with one fix, to the Claude Code plugin: when Claude runs a model-backed `init`, the engineer sees the plan of its dry run, the calls and what they cost, on any model, and Claude must dry-run it first. There are no breaking changes.

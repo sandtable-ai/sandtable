@@ -332,6 +332,13 @@ function transcriptsRerun(transcripts: string, o: { out: string; model?: string 
 // (the PyPI launcher runs npx itself), so the line runs as written for every user.
 const NEXT = "npx sandtable-ai";
 
+/** Whether a domain is at `target`: a sandtable.yaml in that directory, or the file itself. */
+async function domainExists(target: string): Promise<boolean> {
+  const info = await stat(target).catch(() => undefined);
+  if (!info) return false;
+  return info.isDirectory() ? stat(path.join(target, DOMAIN_FILE)).then(() => true, () => false) : true;
+}
+
 function defaultOut(label: string): string {
   return path.join(".sandtable", "runs", `${new Date().toISOString().replace(/[:.]/g, "-")}-${label}`);
 }
@@ -366,7 +373,7 @@ withProviderFlags(program
   .option("--openapi <file>", "OpenAPI 3.x spec (YAML or JSON): drafts tables and tools, no model needed")
   .option("--sop <file>", "SOP / policy document: drafts invariants with Claude, each quoting its source")
   .option("--transcripts <path>", "call/chat transcripts (a file or a directory of .txt/.md): drafts personas and tasks with Claude")
-  .option("-o, --out <dir>", "domain directory to create, or to add to when it already exists", "sandtable")
+  .option("-o, --out <dir>", "domain directory: --openapi creates it, and --sop and --transcripts add to it", "sandtable")
   .option("-m, --model <id>", "Claude model for drafting steps")
   .option("--force", "overwrite existing files when drafting from --openapi")
   .option("--dry-run", "print the plan for --sop and --transcripts (model calls, model, provider, a cost bound) and the files --openapi would write, then stop: no model call, nothing written, no credentials needed")
@@ -376,6 +383,14 @@ withProviderFlags(program
     const sopText = o.sop ? await readUserText(o.sop, { from: "--sop" }) : undefined;
     const transcripts = o.transcripts ? await readTranscripts(o.transcripts) : undefined;
     const openapiText = o.openapi ? await readUserText(o.openapi, { from: "--openapi" }) : undefined;
+    // --sop and --transcripts draft into a domain; only --openapi creates one. Say so, rather than the loader's
+    // "draft it with init", which is the command that just ran.
+    if (!o.openapi && !(await domainExists(o.out))) {
+      const steps = [o.sop ? "--sop" : "", o.transcripts ? "--transcripts" : ""].filter(Boolean);
+      throw new DomainNotFoundError(
+        `${steps.join(" and ")} ${steps.length > 1 ? "add" : "adds"} to an existing domain, and there is no ${DOMAIN_FILE} at ${o.out}. Draft one first with \`${NEXT} init --openapi <spec> -o ${shellWord(o.out)}\`, or pass --openapi <spec> in this same run.`,
+      );
+    }
     let fields: Record<string, string[]> = {};
     let draftedDomainChars: number | undefined;
     let openapiDraft: { draft: ReturnType<typeof draftFromOpenApi>; files: Record<string, string> } | undefined;

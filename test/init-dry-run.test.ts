@@ -79,6 +79,21 @@ describe.skipIf(!process.features.typescript)("`sandtable init --dry-run`, with 
     mkdirSync(path.join(empty, "nothing"));
     const noDomain = await scrubbed("init", "--sop", sop, "-o", path.join(empty, "nothing"), "--dry-run");
     expect(noDomain.code).toBe(2);
-    expect(noDomain.stderr).toContain("no sandtable.yaml found");
+    // It says --sop needs a domain that --openapi creates, not "draft it with init", the command that just ran.
+    const out = path.join(empty, "nothing");
+    expect(noDomain.stderr).toContain(`--sop adds to an existing domain, and there is no sandtable.yaml at ${out}. Draft one first with \`npx sandtable-ai init --openapi <spec> -o ${out}\`, or pass --openapi <spec> in this same run.`);
+    expect(noDomain.stderr).not.toContain("draft it with `npx sandtable-ai init`");
+  });
+
+  it("names both steps, quotes the folder, and holds before any model call, with or without --dry-run", async () => {
+    const parent = mkdtempSync(path.join(tmpdir(), "sandtable-dry-"));
+    const out = path.join(parent, "new domain");
+    for (const dry of [["--dry-run"], []]) {
+      const r = await scrubbed("init", "--sop", sop, "--transcripts", sop, "-o", out, ...dry);
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain(`--sop and --transcripts add to an existing domain, and there is no sandtable.yaml at ${out}.`);
+      expect(r.stderr).toContain(`-o '${out}'\``);
+      expect(r.stdout).not.toContain("Plan:");
+    }
   });
 });
