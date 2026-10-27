@@ -113,6 +113,25 @@ describe("the plugin's plan-before-paid-init hook", () => {
     expect(shown(sopOnly, dryRun(`${sopPlan}\n${PLAN_LINE}`, both))).toContain("$0.19");
   });
 
+  it("counts the environment that picks the region, provider or Bedrock client, unless a flag overrides it", () => {
+    const differs = "sandtable: Claude is running a model-backed init that differs from its dry runs, so its plan isn't known. It calls a model and costs money.";
+    const noRegion = PAID.replace(" --region eu-west-1", "");
+    const euDry = dryRun(undefined, `AWS_REGION=eu-west-1 ${noRegion} --dry-run`);
+    expect(shown(`AWS_REGION=eu-west-1 ${noRegion}`, euDry)).toContain(PLAN_LINE.replace("Plan: ", ""));
+    expect(shown(`env AWS_REGION=eu-west-1 ${noRegion}`, euDry)).toContain(PLAN_LINE.replace("Plan: ", ""));
+    expect(shown(`export AWS_REGION=eu-west-1 && ${noRegion}`, euDry)).toContain(PLAN_LINE.replace("Plan: ", ""));
+    // Another region, set either way, or none the command shows: the eu plan doesn't describe it.
+    expect(shown(`AWS_REGION=us-east-1 ${noRegion}`, euDry)).toBe(differs);
+    expect(shown(`export AWS_REGION="us-east-1"; ${noRegion}`, euDry)).toBe(differs);
+    expect(shown(noRegion, euDry)).toBe(differs);
+    const noProvider = PAID.replace(" --provider bedrock", "");
+    expect(shown(`SANDTABLE_PROVIDER=anthropic ${noProvider}`, dryRun(undefined, `SANDTABLE_PROVIDER=bedrock ${noProvider} --dry-run`))).toBe(differs);
+    expect(shown(`SANDTABLE_BEDROCK_CLIENT=mantle ${PAID}`, dryRun())).toBe(differs);
+    // --region and --provider override the environment, and other variables don't change the calls.
+    expect(shown(`AWS_REGION=us-east-1 SANDTABLE_PROVIDER=anthropic ${PAID}`, dryRun())).toContain(PLAN_LINE.replace("Plan: ", ""));
+    expect(shown(`AWS_PROFILE=demo-profile NO_COLOR=1 ${PAID}`, dryRun())).toContain(PLAN_LINE.replace("Plan: ", ""));
+  });
+
   it("still says what the call is when the dry run of it printed no plan, or has no output yet", () => {
     const none = "sandtable: Claude is running a model-backed init, which calls a model and costs money. Its dry run printed no plan.";
     expect(shown(PAID, dryRun("error: --sop: no such file ./discovery/sop.md"))).toBe(none);
@@ -120,12 +139,20 @@ describe("the plugin's plan-before-paid-init hook", () => {
     expect(shown(PAID, [assistant(bash(DRY))])).toBe(none);
   });
 
-  it("sees a paid init in a chained command, a loop and the -p form", () => {
+  it("sees a paid init in a chained command, a loop, the -p form and the forms with -- before init", () => {
     expect(denial(`${DRY} && ${PAID}`, [])).toMatch(/--dry-run` first/);
     expect(denial('for f in discovery/transcripts/*.txt; do npx sandtable-ai init --transcripts "$f" -o ./sandtable; done', [])).toMatch(/--dry-run` first/);
     expect(denial("npx -p sandtable-ai -p @anthropic-ai/bedrock-sdk sandtable init --sop ./discovery/sop.md -o ./sandtable --provider bedrock", [])).toMatch(/--dry-run` first/);
     expect(denial("npx sandtable-ai@1.1.0 init --transcripts ./calls -o ./sandtable", [])).toMatch(/--dry-run` first/);
     expect(shown(`cd engagement && ${PAID} 2>&1 | tail -20`, dryRun())).toContain(PLAN_LINE.replace("Plan: ", ""));
+    const args = PAID.split(" init ")[1];
+    for (const form of ["npm exec sandtable-ai --", "npm exec --yes sandtable-ai@1.1.2 --", "npm run sandtable --", "npx sandtable-ai --"]) {
+      expect(denial(`${form} init ${args}`, [])).toMatch(/--dry-run` first/);
+      expect(run(`${form} init ${args} --dry-run`, [])).toBeUndefined();
+      // The same init however it is called: a dry run in one form gives its plan to a paid run in another.
+      expect(shown(`${form} init ${args}`, dryRun())).toContain(PLAN_LINE.replace("Plan: ", ""));
+      expect(shown(PAID, dryRun(undefined, `${form} init ${args} --dry-run`))).toContain(PLAN_LINE.replace("Plan: ", ""));
+    }
   });
 
   it("lets the call through without a word when it can't read the transcript or its input", () => {

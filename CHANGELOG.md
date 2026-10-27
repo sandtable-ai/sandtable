@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **Plugin**: the hook that shows a model-backed `init`'s plan now also catches `npm exec sandtable-ai -- init`, `npm run sandtable -- init` and `npx sandtable-ai -- init`, which ran with no dry run and no message before. It compares the environment variables that pick the provider and region too, so a paid run under another `AWS_REGION=` than its dry run says the plan isn't known, instead of showing the other region's plan ([#415](https://github.com/sandtable-ai/sandtable/issues/415)).
+- **Plugin**: the hook that keeps sandtable in the working folder's own project now covers `pnpm add`, `pnpm install <package>` and `yarn add`, which also install into the nearest project above a folder with no `package.json`. It tells Claude to run `pnpm init` or `yarn init -y` first, and checks the folder that yarn's `--cwd` names ([#415](https://github.com/sandtable-ai/sandtable/issues/415)).
+
 ## [1.1.2] - 2026-10-27
 
 A patch release with two fixes to `init`'s messages. `--sop` and `--transcripts` with no domain yet say to draft one with `--openapi` first. A drafting reply cut off at the output limit, as a Claude Haiku 5.5 reply can be while thinking, says so, notes that the call was still paid for, and names a larger model to try. There are no breaking changes.
