@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-27
+
+A patch release with one fix, to the Claude Code plugin: when Claude runs a model-backed `init`, the engineer sees the plan of its dry run, the calls and what they cost, on any model, and Claude must dry-run it first. There are no breaking changes.
+
 ### Fixed
 
 - **Plugin**: when Claude runs a model-backed `init` (`--sop` or `--transcripts` without `--dry-run`), a hook shows the engineer the plan of its dry run, the calls and what they cost, as a message from the plugin, and stops the command if Claude hasn't dry-run it first. The plan comes from a dry run of the same command; for a command no dry run covered, the message says the plan isn't known. Claude Opus 5.5, the default model, often ran the paid `init` straight after the dry run without writing the plan, though the drafting skill asks for it. The hook doesn't wait for a go-ahead; the skills still ask for that. It needs Node.js, and it lets the command run when it can't read the session's transcript ([#397](https://github.com/sandtable-ai/sandtable/issues/397)).
@@ -283,7 +287,8 @@ First public release. sandtable rehearses an AI agent on a simulated copy of one
 
 A rehearsal of the release pipeline (npm, PyPI and GitHub releases from one tag), published before the first public release. Everything in it is also in 0.1.0; use 0.1.0 instead.
 
-[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/sandtable-ai/sandtable/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/sandtable-ai/sandtable/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/sandtable-ai/sandtable/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/sandtable-ai/sandtable/compare/v1.0.0-rc.1...v1.0.0
