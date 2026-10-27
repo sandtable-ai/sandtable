@@ -57,17 +57,20 @@ describe("the plugin's install-in-own-project hook", () => {
     expect(decide(`cd $DIR && ${INSTALL}`, parent)).toBeUndefined();
   });
 
-  it("holds pnpm and yarn installs in a bare folder too, and names their own init and target option", () => {
+  it("holds pnpm and yarn installs in a bare folder too, says npm init -y for them as well, and names their own target option", () => {
     // Both add the package to the nearest package.json above, as npm does: pnpm add and pnpm install <pkg>, yarn add.
     for (const command of ["pnpm add -D sandtable-ai", "pnpm install sandtable-ai", "pnpm i sandtable-ai@1.1.2"]) {
       const reason = decide(command, bare);
       expect(reason).toContain(`${bare} has no package.json, so pnpm would install sandtable-ai`);
-      expect(reason).toContain(`Run \`pnpm init\` in ${bare} first (as \`pnpm init && ${command}\`)`);
+      expect(reason).toContain(`Run \`npm init -y\` in ${bare} first (as \`npm init -y && ${command}\`)`);
+      // pnpm 11's own init writes a devEngines field that makes npx refuse to run (#432).
+      expect(reason).toContain("`pnpm init` adds a `devEngines` field that makes `npx sandtable-ai` refuse to run");
       expect(reason).toContain("install there with `--dir <that folder>` instead");
     }
     const reason = decide("yarn add --dev sandtable-ai", bare);
     expect(reason).toContain("so yarn would install sandtable-ai");
-    expect(reason).toContain("Run `yarn init -y` in");
+    expect(reason).toContain(`Run \`npm init -y\` in ${bare} first (as \`npm init -y && yarn add --dev sandtable-ai\`)`);
+    expect(reason).toContain("Use `npm init -y` even with yarn");
     expect(reason).toContain("install there with `--cwd <that folder>` instead");
     expect(decide("pnpm add -D sandtable-ai", own)).toBeUndefined();
     expect(decide("pnpm init && pnpm add -D sandtable-ai", bare)).toBeUndefined();
@@ -79,7 +82,7 @@ describe("the plugin's install-in-own-project hook", () => {
   it("checks the folder yarn's --cwd names, which looks for a package.json above it as a cd would", () => {
     const reason = decide("yarn --cwd engagement add --dev sandtable-ai", parent);
     expect(reason).toContain(`${bare} has no package.json, so yarn would install`);
-    expect(reason).toContain("(as `yarn --cwd engagement init -y && yarn --cwd engagement add --dev sandtable-ai`)");
+    expect(reason).toContain(`(as \`cd ${bare} && npm init -y && yarn add --dev sandtable-ai\`)`);
     expect(decide("yarn add --dev sandtable-ai --cwd=engagement", parent)).toContain(`${bare} has no package.json`);
     expect(decide("yarn --cwd engagement init -y && yarn --cwd engagement add sandtable-ai", parent)).toBeUndefined();
     expect(decide("yarn --cwd own add sandtable-ai", parent)).toBeUndefined();
@@ -87,9 +90,39 @@ describe("the plugin's install-in-own-project hook", () => {
     expect(decide("yarn --cwd $DIR add sandtable-ai", parent)).toBeUndefined();
     // A quoted folder with a space, before or after add.
     expect(decide('yarn add sandtable-ai --cwd "my dir"', parent)).toContain(`${spaced} has no package.json, so yarn would install sandtable-ai`);
-    expect(decide('yarn add sandtable-ai --cwd "my dir"', parent)).toContain('(as `yarn --cwd "my dir" init -y && yarn add sandtable-ai --cwd "my dir"`)');
+    expect(decide('yarn add sandtable-ai --cwd "my dir"', parent)).toContain(`(as \`cd '${spaced}' && npm init -y && yarn add sandtable-ai\`)`);
     expect(decide("yarn --cwd 'my dir' add sandtable-ai", parent)).toContain(`${spaced} has no package.json`);
     expect(decide('yarn --cwd "my dir" init -y && yarn --cwd "my dir" add sandtable-ai', parent)).toBeUndefined();
+  });
+
+  it("suggests a command that, run from the same folder, it lets through and that installs into the folder it checked", () => {
+    const cases: [string, string][] = [
+      [INSTALL, bare],
+      ["npm i -D sandtable-ai", bare],
+      [`cd engagement && ${INSTALL}`, parent],
+      ["pnpm add -D sandtable-ai", bare],
+      ["pnpm install sandtable-ai", bare],
+      ["yarn add --dev sandtable-ai", bare],
+      ["yarn --cwd engagement add --dev sandtable-ai", parent],
+      ["yarn add sandtable-ai --cwd=engagement", parent],
+      ['yarn add sandtable-ai --cwd "my dir"', parent],
+      ["yarn --cwd 'my dir' add sandtable-ai", parent],
+      // After a cd in the same command, the suggestion moves there first: without it, the install would run in the parent.
+      [`cd engagement && pnpm add -D sandtable-ai`, parent],
+      [`cd "my dir" && yarn add sandtable-ai`, parent],
+      [`pnpm init && cd engagement && pnpm add -D sandtable-ai`, parent],
+      [`cd ${bare} && npm install sandtable-ai`, own],
+    ];
+    for (const [command, cwd] of cases) {
+      const reason = decide(command, cwd)!;
+      const target = reason.match(/^sandtable plugin: (.+?) has no package\.json/)![1];
+      const fix = reason.match(/\(as `([^`]+)`\)/)?.[1];
+      expect(fix, command).toBeDefined();
+      expect(decide(fix!, cwd), fix).toBeUndefined();
+      expect(fix).not.toMatch(/pnpm init|yarn init/);
+      // Without its npm init, the suggestion is held for the same folder: that's where it installs.
+      expect(decide(fix!.replace("npm init -y && ", ""), cwd), fix).toContain(`${target} has no package.json`);
+    }
   });
 
   it("leaves other commands alone: global, --prefix and --dir installs, other packages, npx, other tools", () => {

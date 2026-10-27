@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // A PreToolUse hook for Bash: an install of sandtable-ai with npm, pnpm or yarn runs only in a folder that is its own
 // project. All three install into the nearest folder above that has a package.json, which can be another project or the
-// engineer's home folder (#401), so in a folder without one the agent runs `npm init -y` (or `pnpm init`, `yarn init -y`)
-// first. The drafting and results skills ask for it; this holds the agent to it on any model, even when no skill
+// engineer's home folder (#401), so in a folder without one the agent runs `npm init -y` first, whichever manager installs
+// (#432). The drafting and results skills ask for it; this holds the agent to it on any model, even when no skill
 // loaded. Anything it can't read, it lets through.
 
 import { existsSync, readFileSync } from "node:fs";
@@ -16,14 +16,15 @@ function segments(command) {
 /** yarn's `--cwd <folder>`, the folder quoted or a single word. */
 const CWD_OPT = String.raw`--cwd(?:=|\s+)(?:"[^"]*"|'[^']*'|\S+)`;
 /**
- * Each package manager's install command, the command that makes a folder its own project, and the option that
- * installs into a folder of the engineer's choice. yarn's `--cwd` runs it as if in that folder, parent lookup included,
- * so the hook checks the folder it names.
+ * Each package manager's install command, the option that installs into a folder of the engineer's choice, and why the
+ * agent makes a folder a project with `npm init -y` even when it installs with that manager. npm comes with Node, which
+ * this hook needs too. yarn's `--cwd` runs it as if in that folder, parent lookup included, so the hook checks the
+ * folder it names.
  */
 const MANAGERS = {
-  npm: { install: /^npm\s+(?:install|i|add|isntall)\b/, init: "npm init -y", into: "--prefix" },
-  pnpm: { install: /^pnpm\s+(?:add|install|i)\b/, init: "pnpm init", into: "--dir" },
-  yarn: { install: new RegExp(String.raw`^yarn(?:\s+${CWD_OPT})?\s+add\b`), init: "yarn init -y", into: "--cwd" },
+  npm: { install: /^npm\s+(?:install|i|add|isntall)\b/, into: "--prefix", why: "" },
+  pnpm: { install: /^pnpm\s+(?:add|install|i)\b/, into: "--dir", why: " Use `npm init -y` even with pnpm: `pnpm init` adds a `devEngines` field that makes `npx sandtable-ai` refuse to run." },
+  yarn: { install: new RegExp(String.raw`^yarn(?:\s+${CWD_OPT})?\s+add\b`), into: "--cwd", why: " Use `npm init -y` even with yarn: `yarn init -y` can write a package name that `yarn add` rejects." },
 };
 const ENV = /^(?:\S+=\S*\s+)*/;
 const SANDTABLE = /(?:^|\s)sandtable-ai(?:@\S*)?(?=\s|$)/;
@@ -42,6 +43,9 @@ function cdTarget(arg, dir) {
   if (target === "~" || target.startsWith("~/")) return undefined;
   return path.resolve(dir, target);
 }
+
+/** A path as one shell word: as it is when it needs no quoting, else in single quotes. */
+const shellWord = (p) => (/^[\w@%+=:,./-]+$/.test(p) ? p : `'${p.replace(/'/g, "'\\''")}'`);
 
 /**
  * Why this Bash command must not run, or undefined when it may: it installs sandtable-ai into a folder that has no
@@ -68,9 +72,12 @@ function denial(command, cwd) {
     const manager = Object.keys(MANAGERS).find((m) => MANAGERS[m].install.test(run));
     if (!manager || !SANDTABLE.test(run) || ELSEWHERE.test(run) || target === undefined) continue;
     if (initialized.has(target) || existsSync(path.join(target, "package.json"))) continue;
-    const { init, into } = MANAGERS[manager];
-    const first = cwdArg === undefined ? init : init.replace(/^yarn/, `yarn --cwd ${cwdArg}`);
-    return `sandtable plugin: ${target} has no package.json, so ${manager} would install sandtable-ai into the nearest folder above it that has one, which may be another project or the engineer's home folder. Run \`${init}\` in ${target} first (as \`${first} && ${segment}\`), then tell the engineer which package.json you changed. If the engineer wants sandtable in a project above it, install there with \`${into} <that folder>\` instead.`;
+    const { into, why } = MANAGERS[manager];
+    // The command to run from where this one starts. npm init has no option for another folder, so when the install
+    // runs elsewhere (after a cd, or with yarn's --cwd), it moves there first, and installs without --cwd.
+    const install = cwdArg === undefined ? segment : segment.replace(new RegExp(String.raw`\s+${CWD_OPT}`), "");
+    const fix = target === path.resolve(cwd) ? `npm init -y && ${install}` : `cd ${shellWord(target)} && npm init -y && ${install}`;
+    return `sandtable plugin: ${target} has no package.json, so ${manager} would install sandtable-ai into the nearest folder above it that has one, which may be another project or the engineer's home folder. Run \`npm init -y\` in ${target} first (as \`${fix}\`), then tell the engineer which package.json you changed.${why} If the engineer wants sandtable in a project above it, install there with \`${into} <that folder>\` instead.`;
   }
   return undefined;
 }
