@@ -128,6 +128,8 @@ describe("the plugin's plan-before-paid-init hook", () => {
     expect(shown(`AWS_REGION=eu-west-1; ${noRegion}`, euDry)).toBe(differs);
     expect(shown(`AWS_REGION=eu-west-1; ${noRegion}`, dryRun(undefined, `AWS_REGION=eu-west-1; ${noRegion} --dry-run`))).toContain(PLAN_LINE.replace("Plan: ", ""));
     expect(shown(`AWS_REGION=eu-west-1; export AWS_REGION; ${noRegion}`, euDry)).toContain(PLAN_LINE.replace("Plan: ", ""));
+    // Reassigning an exported variable keeps it exported.
+    expect(shown(`export AWS_REGION=us-east-1; AWS_REGION=eu-west-1; ${noRegion}`, euDry)).toContain(PLAN_LINE.replace("Plan: ", ""));
     expect(shown(noRegion, euDry)).toBe(differs);
     const noProvider = PAID.replace(" --provider bedrock", "");
     expect(shown(`SANDTABLE_PROVIDER=anthropic ${noProvider}`, dryRun(undefined, `SANDTABLE_PROVIDER=bedrock ${noProvider} --dry-run`))).toBe(differs);
@@ -160,6 +162,11 @@ describe("the plugin's plan-before-paid-init hook", () => {
     // A folder change it can't follow makes the plan unknown.
     expect(shown(`cd $ENG && ${PAID}`, dryAt(dir))).toBe(differs);
     expect(shown(`for d in a; do cd $d; done; ${PAID}`, dryAt(dir))).toBe(differs);
+    // cd as the command of an if, while, until or case branch, through a builtin, or in an eval: the init may run in
+    // engagement, so the plan isn't known.
+    for (const before of ["if cd engagement; then", "if ! cd engagement; then", "while cd engagement; do", "until cd engagement; do", "command cd engagement;", "builtin cd engagement;", "time cd engagement;", 'eval "cd engagement";', "case x in x) cd engagement;; esac;"]) {
+      expect(shown(`${before} ${PAID}`, dryAt(dir))).toBe(differs);
+    }
     // A cd that isn't a command changes nothing.
     expect(shown(`echo cd && grep -c pushd notes.md; ${PAID}`, dryAt(dir))).toContain(plan);
     expect(shown(`(cd engagement && ${PAID})`, dryAt(dir, `(cd engagement && ${DRY})`))).toBe(differs);

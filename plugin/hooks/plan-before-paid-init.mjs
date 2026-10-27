@@ -125,8 +125,16 @@ function initKey(segment, env = {}, dir = undefined) {
 /** A word that changes the shell's folder: `cd`, `pushd` or `popd`, also as `(cd` at the start of a subshell. */
 const CHDIR = /^\(?(?:cd|pushd|popd)$/;
 
-/** Whether a segment's words change the shell's folder: CHDIR as a command, first or after `(`, `{`, `!`, `do`, `then` or `else`. */
-const chdir = (all) => all.some((w, i) => CHDIR.test(w) && (i === 0 || /^(?:\(|\{|!|do|then|else)$/.test(all[i - 1])));
+/** The words after which the next word is a command: shell keywords, a case pattern's `)`, and builtins that run one. */
+const BEFORE_COMMAND = /^(?:\(|\{|!|do|then|else|if|elif|while|until|time|command|builtin)$|\)$/;
+
+/**
+ * Whether a segment's words change the shell's folder: CHDIR as a command, first or after BEFORE_COMMAND, or any
+ * mention of it in an `eval`.
+ */
+const chdir = (all) =>
+  all.some((w, i) => CHDIR.test(w) && (i === 0 || BEFORE_COMMAND.test(all[i - 1]))) ||
+  all.some((w, i) => w === "eval" && (i === 0 || BEFORE_COMMAND.test(all[i - 1])) && all.slice(i + 1).some((a) => /\b(?:cd|pushd|popd)\b/.test(a)));
 
 /** Whether a command changes the shell's folder anywhere in it. */
 const changesDir = (command) => segments(command).some((s) => chdir(words(s)));
@@ -150,7 +158,10 @@ function initKeys(command, kind, dir) {
         if (ASSIGNMENT.test(w)) assign(env, w, true);
         else if (env[w]) env[w].exported = true;
       }
-    } else if (all.length && all.every((w) => ASSIGNMENT.test(w))) all.forEach((w) => assign(env, w, false));
+    } else if (all.length && all.every((w) => ASSIGNMENT.test(w))) {
+      // A bare `NAME=value` keeps NAME exported if it was.
+      for (const w of all) assign(env, w, env[w.match(ASSIGNMENT)[1]]?.exported === true);
+    }
     if (initKind(segment) === kind) keys.push(initKey(segment, env, dir));
   }
   return keys;
