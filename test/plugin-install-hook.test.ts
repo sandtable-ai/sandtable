@@ -13,6 +13,9 @@ const parent = mkdtempSync(path.join(os.tmpdir(), "sandtable-install-"));
 writeFileSync(path.join(parent, "package.json"), JSON.stringify({ name: "someone-elses-project" }));
 const bare = path.join(parent, "engagement");
 mkdirSync(path.join(bare, "customer-docs"), { recursive: true });
+// A bare folder whose name has a space, for a quoted yarn --cwd.
+const spaced = path.join(parent, "my dir");
+mkdirSync(spaced);
 const own = path.join(parent, "own");
 mkdirSync(own);
 writeFileSync(path.join(own, "package.json"), JSON.stringify({ name: "own" }));
@@ -82,6 +85,11 @@ describe("the plugin's install-in-own-project hook", () => {
     expect(decide("yarn --cwd own add sandtable-ai", parent)).toBeUndefined();
     expect(decide("yarn --cwd .. add sandtable-ai", bare)).toBeUndefined();
     expect(decide("yarn --cwd $DIR add sandtable-ai", parent)).toBeUndefined();
+    // A quoted folder with a space, before or after add.
+    expect(decide('yarn add sandtable-ai --cwd "my dir"', parent)).toContain(`${spaced} has no package.json, so yarn would install sandtable-ai`);
+    expect(decide('yarn add sandtable-ai --cwd "my dir"', parent)).toContain('(as `yarn --cwd "my dir" init -y && yarn add sandtable-ai --cwd "my dir"`)');
+    expect(decide("yarn --cwd 'my dir' add sandtable-ai", parent)).toContain(`${spaced} has no package.json`);
+    expect(decide('yarn --cwd "my dir" init -y && yarn --cwd "my dir" add sandtable-ai', parent)).toBeUndefined();
   });
 
   it("leaves other commands alone: global, --prefix and --dir installs, other packages, npx, other tools", () => {

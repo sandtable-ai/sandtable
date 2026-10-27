@@ -18,18 +18,20 @@ function segments(command) {
  * installs into a folder of the engineer's choice. yarn's `--cwd` runs it as if in that folder, parent lookup included,
  * so the hook checks the folder it names.
  */
+/** yarn's `--cwd <folder>`, the folder quoted or a single word. */
+const CWD_OPT = String.raw`--cwd(?:=|\s+)(?:"[^"]*"|'[^']*'|\S+)`;
 const MANAGERS = {
   npm: { install: /^npm\s+(?:install|i|add|isntall)\b/, init: "npm init -y", into: "--prefix" },
   pnpm: { install: /^pnpm\s+(?:add|install|i)\b/, init: "pnpm init", into: "--dir" },
-  yarn: { install: /^yarn(?:\s+--cwd(?:=|\s+)\S+)?\s+add\b/, init: "yarn init -y", into: "--cwd" },
+  yarn: { install: new RegExp(String.raw`^yarn(?:\s+${CWD_OPT})?\s+add\b`), init: "yarn init -y", into: "--cwd" },
 };
 const ENV = /^(?:\S+=\S*\s+)*/;
 const SANDTABLE = /(?:^|\s)sandtable-ai(?:@\S*)?(?=\s|$)/;
 // Global installs, and npm's --prefix (-C) and pnpm's --dir (-C), which install into the folder they name, creating its
 // package.json if need be.
 const ELSEWHERE = /(?:^|\s)(?:-g|--global|--location[= ]global|(?:--prefix|--dir|-C)(?:[= ]\S+)?)(?=\s|$)/;
-const INIT = /^(?:npm|pnpm|yarn(?:\s+--cwd(?:=|\s+)\S+)?)\s+init\b/;
-const CWD = /(?:^|\s)--cwd(?:=|\s+)(\S+)/;
+const INIT = new RegExp(String.raw`^(?:npm|pnpm|yarn(?:\s+${CWD_OPT})?)\s+init\b`);
+const CWD = /(?:^|\s)--cwd(?:=|\s+)("[^"]*"|'[^']*'|\S+)/;
 const CD = /^cd(?:\s+(.+))?$/;
 
 /** The folder a `cd` argument names, from `dir`; undefined for one it can't follow, such as `cd -` or `cd $X`. */
