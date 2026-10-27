@@ -1,7 +1,13 @@
 {
-  "description": "Holds a model-backed sandtable init until the agent has dry-run it and told the engineer its plan.",
+  "description": "Holds a model-backed sandtable init until the agent has dry-run it, and after the dry run tells the agent to write the engineer its plan.",
   "hooks": {
     "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/plan-before-paid-init.mjs"], "timeout": 10 }]
+      }
+    ],
+    "PostToolUse": [
       {
         "matcher": "Bash",
         "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/plan-before-paid-init.mjs"], "timeout": 10 }]

@@ -1,8 +1,14 @@
 #!/usr/bin/env node
-// A PreToolUse hook for Bash: a model-backed `sandtable init` (with --sop or --transcripts, without --dry-run) runs only
-// after a dry run of it and a message of the agent's own, since that dry run, that tells the engineer the plan: the
-// calls and a dollar amount. The drafting skill asks for both; this holds the agent to it on any model. Anything it
-// can't read, it lets through: the hook only ever blocks a call it knows is a paid init without its plan.
+// A hook for Bash, on PreToolUse and PostToolUse: a model-backed `sandtable init` (with --sop or --transcripts, without
+// --dry-run) runs only after a dry run of it, and once that dry run has printed its plan, the agent is told to write
+// the engineer that plan as its own message before the paid run. The drafting skill asks for both; this holds the
+// agent to them on any model. Anything it can't read, it lets through: the hook only ever blocks a call it knows is a
+// paid init with no dry run before it.
+//
+// Why the plan message itself isn't checked before the paid run: Claude Code writes a response to the transcript only
+// after its tool calls have run, so when PreToolUse fires, the transcript ends at the previous response. A plan written
+// in the same response as the paid init, which is the usual way to write it, can't be seen yet. The dry run is always
+// in an earlier response, since its output is what the plan comes from.
 
 import { readFileSync } from "node:fs";
 
@@ -29,17 +35,8 @@ function isDryRun(command) {
   return kinds.includes("dry") && !kinds.includes("paid");
 }
 
-/** A message that gives the plan: the calls and what they cost, as "Plan: 5 calls … at most about $0.94". */
-const PLAN = (text) => /\bcalls?\b/i.test(text) && /\$\s?\d|\d\s?(?:usd|dollars?)\b|\b(?:usd|us\$)\s?\d/i.test(text);
-
-/** This hook's own reasons start with this, so a denied call can be found again in the transcript. */
-const MARK = "sandtable plugin: ";
-
-/**
- * The agent's text blocks and Bash commands, and this hook's denials, in order, from a transcript in Claude Code's
- * JSONL format: one line per content block, a tool's result as a `user` line.
- */
-function events(transcript) {
+/** The Bash commands the agent ran, in order, from a transcript in Claude Code's JSONL format: one line per content block. */
+function commands(transcript) {
   const out = [];
   for (const line of transcript.split("\n")) {
     if (!line.trim()) continue;
@@ -49,45 +46,37 @@ function events(transcript) {
     } catch {
       continue;
     }
-    if (!Array.isArray(entry?.message?.content)) continue;
-    if (entry.type === "user") {
-      for (const block of entry.message.content) {
-        if (block?.type === "tool_result" && JSON.stringify(block.content ?? "").includes(MARK)) out.push({ kind: "denied" });
-      }
-      continue;
-    }
-    if (entry.type !== "assistant") continue;
+    if (entry?.type !== "assistant" || !Array.isArray(entry?.message?.content)) continue;
     for (const block of entry.message.content) {
-      if (block?.type === "text" && typeof block.text === "string") out.push({ kind: "text", text: block.text });
-      if (block?.type === "tool_use" && block.name === "Bash" && typeof block.input?.command === "string") out.push({ kind: "bash", command: block.input.command });
+      if (block?.type === "tool_use" && block.name === "Bash" && typeof block.input?.command === "string") out.push(block.input.command);
     }
   }
   return out;
 }
 
-const NO_DRY_RUN =
-  "sandtable plugin: this `init` calls a model and costs money. Run the same command with `--dry-run` first, then write its plan to the engineer as your own message: the calls, the model, the provider and the dollar bound. If they haven't authorized model steps, end your turn there and wait for their go-ahead. Then run it.";
-const NO_PLAN =
-  'sandtable plugin: before this model-backed `init`, write the engineer the dry run\'s plan as your own message: the calls, the model, the provider and the dollar bound, such as "Plan: 5 calls to claude-sonnet-5-5 on Bedrock, at most about $0.94. You authorized model steps, so I\'m running it." The `Plan:` line in the command\'s output doesn\'t count: the engineer reads your messages, not tool output. If they haven\'t authorized model steps, end your turn after the plan and wait for their go-ahead instead. Then run the command again.';
+/** The dry run's plan line, as `init --dry-run` prints it: "Plan: 5 model calls (…) to claude-sonnet-5-5 on Bedrock (…); at most about $0.94 at list prices". */
+const PLAN_LINE = /^Plan: \d+ model calls?\b.*$/m;
 
-/**
- * Why this Bash call must not run yet, or undefined when it may: it isn't a paid init, or the transcript shows a dry run
- * followed by the agent's own plan message. After this hook has denied a call once since the dry run, any message of
- * the agent's counts, so a plan worded in a way this hook doesn't recognise can't block it again and again.
- */
+/** This hook's own messages start with this, so a denied call can be found again in a transcript. */
+const MARK = "sandtable plugin: ";
+
+const NO_DRY_RUN = `${MARK}this \`init\` calls a model and costs money. Run the same command with \`--dry-run\` first, then write its plan to the engineer as your own message: the calls, the model, the provider and the dollar bound. If they haven't authorized model steps, end your turn there and wait for their go-ahead. Then run it.`;
+
+const writeThePlan = (plan) =>
+  `${MARK}that was the dry run, so nothing was spent. Its plan: "${plan}". Before you run the command without \`--dry-run\`, write the engineer this plan as your own message: the calls, the model, the provider and the dollar bound, such as "Plan: 5 calls to claude-sonnet-5-5 on Bedrock, at most about $0.94. You authorized model steps, so I'm running it." The engineer reads your messages, not tool output. If they haven't authorized model steps, end your turn after the plan and wait for their go-ahead.`;
+
+/** Before a Bash call: why it must not run yet, or undefined when it may. Only a paid init with no dry run before it is held. */
 function denial(command, transcript) {
   if (!isPaidInit(command)) return undefined;
-  const seen = events(transcript);
-  let dry = -1;
-  seen.forEach((e, i) => {
-    if (e.kind === "bash" && isDryRun(e.command)) dry = i;
-  });
-  if (dry < 0) return NO_DRY_RUN;
-  const after = seen.slice(dry + 1);
-  if (after.some((e) => e.kind === "text" && PLAN(e.text))) return undefined;
-  const firstDenial = after.findIndex((e) => e.kind === "denied");
-  if (firstDenial >= 0 && after.slice(firstDenial + 1).some((e) => e.kind === "text" && e.text.trim())) return undefined;
-  return NO_PLAN;
+  return commands(transcript).some(isDryRun) ? undefined : NO_DRY_RUN;
+}
+
+/** After a Bash call: what the agent is told next, or undefined. Only a dry run that printed its plan gets a message. */
+function afterCall(command, response) {
+  if (!isDryRun(command)) return undefined;
+  const output = typeof response === "string" ? response : [response?.stdout, response?.stderr].filter((s) => typeof s === "string").join("\n") || JSON.stringify(response ?? "");
+  const plan = PLAN_LINE.exec(output)?.[0].trim();
+  return plan ? writeThePlan(plan) : undefined;
 }
 
 function main() {
@@ -98,7 +87,13 @@ function main() {
     return;
   }
   const command = input?.tool_input?.command;
-  if (input?.tool_name !== "Bash" || typeof command !== "string" || !isPaidInit(command)) return;
+  if (input?.tool_name !== "Bash" || typeof command !== "string") return;
+  if (input.hook_event_name === "PostToolUse") {
+    const context = afterCall(command, input.tool_response);
+    if (context) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: context } }));
+    return;
+  }
+  if (!isPaidInit(command)) return;
   let transcript;
   try {
     transcript = readFileSync(input.transcript_path, "utf8");

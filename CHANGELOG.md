@@ -23,7 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ### Fixed
 
-- **Plugin**: a `PreToolUse` hook stops a model-backed `init` (`--sop` or `--transcripts` without `--dry-run`) until Claude has dry-run it and written the engineer the plan, the calls and what they cost. Claude Opus 5.5, the default model, sometimes ran the paid `init` straight after the dry run's output, though the drafting skill asks for the plan first. The hook holds on any model. It needs Node.js, and it lets the command run when it can't read the session's transcript ([#397](https://github.com/sandtable-ai/sandtable/issues/397)).
+- **Plugin**: a hook stops a model-backed `init` (`--sop` or `--transcripts` without `--dry-run`) that Claude hasn't dry-run first, and once the dry run has printed its plan, tells Claude to write the engineer that plan, the calls and what they cost, before the paid run. Claude Opus 5.5, the default model, sometimes ran the paid `init` straight after the dry run's output, though the drafting skill asks for the plan first. The hook needs Node.js, and it lets the command run when it can't read the session's transcript ([#397](https://github.com/sandtable-ai/sandtable/issues/397)).
 
 ## [1.0.1] - 2026-10-26
 
