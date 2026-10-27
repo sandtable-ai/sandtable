@@ -90,8 +90,31 @@ describe("the plugin's plan-before-paid-init hook", () => {
     expect(shown(PAID, dryRun(`npm warn exec …\n${PLAN_LINE}`, `${DRY} 2>&1 | tail -5`))).toContain(PLAN_LINE.replace("Plan: ", ""));
   });
 
-  it("still says what the call is when the latest dry run printed no plan, or has no output yet", () => {
-    const none = "sandtable: Claude is running a model-backed init, which calls a model and costs money. Its last dry run printed no plan.";
+  it("quotes a plan only from a dry run of the same init, however it is spelled", () => {
+    const plan = PLAN_LINE.replace("Plan: ", "");
+    // The same calls: short and long flags, --x=v, ./ and trailing slashes, -o left at its default, redirections, and
+    // flags that don't change the calls (the free --openapi step, the AWS profile, --force) on either side.
+    const spelled = "npx -p sandtable-ai -p @anthropic-ai/bedrock-sdk sandtable init --transcripts=discovery/transcripts/ --sop discovery/sop.md --model claude-sonnet-5-5 --region eu-west-1 --provider bedrock --out sandtable --aws-profile demo-profile --force 2>&1";
+    expect(shown(spelled, dryRun())).toContain(plan);
+    expect(shown(PAID, dryRun(undefined, `npx sandtable-ai init --openapi ./discovery/openapi.yaml ${DRY.split(" init ")[1]} > plan.txt`))).toContain(plan);
+    const differs = "sandtable: Claude is running a model-backed init that differs from its dry runs, so its plan isn't known. It calls a model and costs money.";
+    // A dry run of the SOP alone says nothing about a run that drafts the transcripts too, or one on another model.
+    const sopOnly = "npx sandtable-ai init --sop ./discovery/sop.md -o ./sandtable --provider bedrock --region eu-west-1 -m claude-sonnet-5-5";
+    const sopPlan = "Plan: 1 model call (1 for the SOP) to claude-sonnet-5-5 on Bedrock (eu-west-1, eu.anthropic.claude-sonnet-5-5); at most about $0.19 at list prices";
+    expect(shown(PAID, dryRun(sopPlan, `${sopOnly} --dry-run`))).toBe(differs);
+    expect(shown(sopOnly, dryRun())).toBe(differs);
+    expect(shown(PAID.replace("claude-sonnet-5-5", "claude-opus-5-5"), dryRun())).toBe(differs);
+    expect(shown(PAID.replace("-o ./sandtable", "-o ./other"), dryRun())).toBe(differs);
+    // The latest dry run of that same init counts, even with another dry run after it.
+    expect(shown(sopOnly, [...dryRun(sopPlan, `${sopOnly} --dry-run`), ...dryRun()])).toContain("1 model call (1 for the SOP)");
+    // In a dry run of two inits, each plan line goes with its init, in order.
+    const both = `${sopOnly} --dry-run; ${DRY}`;
+    expect(shown(PAID, dryRun(`${sopPlan}\n${PLAN_LINE}`, both))).toContain(plan);
+    expect(shown(sopOnly, dryRun(`${sopPlan}\n${PLAN_LINE}`, both))).toContain("$0.19");
+  });
+
+  it("still says what the call is when the dry run of it printed no plan, or has no output yet", () => {
+    const none = "sandtable: Claude is running a model-backed init, which calls a model and costs money. Its dry run printed no plan.";
     expect(shown(PAID, dryRun("error: --sop: no such file ./discovery/sop.md"))).toBe(none);
     expect(shown(PAID, [...dryRun(), ...dryRun("error: --region: unknown")])).toBe(none);
     expect(shown(PAID, [assistant(bash(DRY))])).toBe(none);

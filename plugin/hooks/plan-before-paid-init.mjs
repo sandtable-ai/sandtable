@@ -11,6 +11,7 @@
 // are, since they came in an earlier response.
 
 import { readFileSync } from "node:fs";
+import path from "node:path";
 
 /** The shell commands in one Bash call, split where one ends and another can start. */
 function segments(command) {
@@ -35,6 +36,49 @@ function isDryRun(command) {
   return kinds.includes("dry") && !kinds.includes("paid");
 }
 
+/** A shell command's words, with quotes removed: enough to compare two `init` commands, not a full shell parser. */
+function words(segment) {
+  const out = [];
+  for (const m of segment.matchAll(/"((?:[^"\\]|\\.)*)"|'([^']*)'|(\S+)/g)) out.push(m[1] ?? m[2] ?? m[3]);
+  return out;
+}
+
+/** init's options that take a value, by every name they go by. */
+const VALUE_FLAGS = { "--provider": "--provider", "--region": "--region", "--aws-profile": "--aws-profile", "--openapi": "--openapi", "--sop": "--sop", "--transcripts": "--transcripts", "-o": "--out", "--out": "--out", "-m": "--model", "--model": "--model" };
+/** Options that don't change what the model-backed steps call or cost: the free --openapi step, the AWS profile, --force, --dry-run. */
+const IGNORED = new Set(["--openapi", "--aws-profile", "--force", "--dry-run", "-h", "--help"]);
+const PATHS = new Set(["--openapi", "--sop", "--transcripts", "--out"]);
+
+/**
+ * What an `init` segment runs, as a string two segments share when they make the same model calls: its options after
+ * `init`, by long name, with paths normalized and the options that don't change the plan left out. `-o` defaults to
+ * `sandtable`, as the CLI's does.
+ */
+function initKey(segment) {
+  const all = words(segment);
+  const at = all.findIndex((w, i) => w === "init" && /\bsandtable(?:-ai)?(?:@[\w.^~-]+)?$/.test(all[i - 1] ?? ""));
+  const opts = { "--out": "sandtable" };
+  const rest = [];
+  const args = all.slice(at + 1);
+  for (let i = 0; i < args.length; i++) {
+    let w = args[i];
+    // Redirections: `2>&1`, `>/dev/null`, `2> log` and the like end nothing here, but aren't init's.
+    if (/^\d*[<>]/.test(w) || /^&>/.test(w)) {
+      if (/^\d*[<>]{1,2}&?$/.test(w) || w === "&>") i++;
+      continue;
+    }
+    let value;
+    const eq = w.match(/^(--[\w-]+)=(.*)$/);
+    if (eq) [w, value] = [eq[1], eq[2]];
+    const name = VALUE_FLAGS[w];
+    if (name) {
+      value ??= args[++i];
+      if (!IGNORED.has(name)) opts[name] = PATHS.has(name) && value ? path.posix.normalize(value).replace(/\/+$/, "") : value;
+    } else if (!IGNORED.has(w)) rest.push(w);
+  }
+  return JSON.stringify([Object.entries(opts).sort(([a], [b]) => (a < b ? -1 : 1)), rest]);
+}
+
 /** The text of a tool result's content, a string or a list of text blocks. */
 function resultText(content) {
   if (typeof content === "string") return content;
@@ -44,7 +88,7 @@ function resultText(content) {
 
 /**
  * The dry runs in a transcript in Claude Code's JSONL format (one line per content block, a tool's result as a `user`
- * line), in order, each with its output once its result is in.
+ * line), in order: what each dry-run segment of the command runs, and the command's output once its result is in.
  */
 function dryRuns(transcript) {
   const runs = [];
@@ -61,7 +105,7 @@ function dryRuns(transcript) {
     if (!Array.isArray(content)) continue;
     for (const block of content) {
       if (entry.type === "assistant" && block?.type === "tool_use" && block.name === "Bash" && typeof block.input?.command === "string" && isDryRun(block.input.command)) {
-        const run = { output: "" };
+        const run = { keys: segments(block.input.command).filter((seg) => initKind(seg) === "dry").map(initKey), output: "" };
         runs.push(run);
         if (typeof block.id === "string") byId.set(block.id, run);
       }
@@ -71,27 +115,45 @@ function dryRuns(transcript) {
   return runs;
 }
 
-/** The dry run's plan line, as `init --dry-run` prints it: "Plan: 5 model calls (…) to claude-sonnet-5-5 on Bedrock (…); at most about $0.94 at list prices". */
-const PLAN_LINE = /^Plan: \d+ model calls?\b.*$/m;
+/** A dry run's plan lines, as `init --dry-run` prints them: "Plan: 5 model calls (…) to claude-sonnet-5-5 on Bedrock (…); at most about $0.94 at list prices". */
+const PLAN_LINES = /^Plan: \d+ model calls?\b.*$/gm;
+
+/**
+ * The plan of the latest dry run of the same `init` as this paid segment: its plan line, null when that dry run printed
+ * none it can be matched with, or undefined when no dry run ran the same command.
+ */
+function planFor(paid, runs) {
+  const key = initKey(paid);
+  for (const run of [...runs].reverse()) {
+    const at = run.keys.lastIndexOf(key);
+    if (at < 0) continue;
+    const plans = run.output.match(PLAN_LINES) ?? [];
+    // One plan line per dry-run segment, in order, when every one of them printed its plan.
+    return plans.length === run.keys.length ? plans[at].trim().replace(/^Plan: /, "") : null;
+  }
+  return undefined;
+}
 
 const NO_DRY_RUN =
   "sandtable plugin: this `init` calls a model and costs money. Run the same command with `--dry-run` first, then write its plan to the engineer as your own message: the calls, the model, the provider and the dollar bound. If they haven't authorized model steps, end your turn there and wait for their go-ahead. Then run it.";
 
 /**
  * What the hook does with a Bash command, given the session's transcript: nothing for anything but a paid init;
- * a denial for a paid init with no dry run before it; otherwise a message for the engineer with the latest dry run's
- * plan, or with what it costs in general when that dry run printed none.
+ * a denial for a paid init with no dry run before it; otherwise a message for the engineer with the plan of the latest
+ * dry run of that same init, or with what it costs in general when no dry run of it printed a plan.
  */
 function decide(command, transcript) {
   if (!isPaidInit(command)) return undefined;
   const runs = dryRuns(transcript);
   if (!runs.length) return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: NO_DRY_RUN } };
-  const plan = PLAN_LINE.exec(runs.at(-1).output)?.[0].trim();
-  return {
-    systemMessage: plan
-      ? `sandtable: Claude is running a model-backed init. Its dry run's plan: ${plan.replace(/^Plan: /, "")}.`
-      : "sandtable: Claude is running a model-backed init, which calls a model and costs money. Its last dry run printed no plan.",
-  };
+  const plans = segments(command).filter((seg) => initKind(seg) === "paid").map((seg) => planFor(seg, runs));
+  if (plans.every((p) => typeof p === "string")) {
+    return { systemMessage: `sandtable: Claude is running a model-backed init. ${plans.length === 1 ? "Its dry run's plan" : "Its dry runs' plans"}: ${plans.join("; then ")}.` };
+  }
+  if (plans.some((p) => p === undefined)) {
+    return { systemMessage: "sandtable: Claude is running a model-backed init that differs from its dry runs, so its plan isn't known. It calls a model and costs money." };
+  }
+  return { systemMessage: "sandtable: Claude is running a model-backed init, which calls a model and costs money. Its dry run printed no plan." };
 }
 
 function main() {

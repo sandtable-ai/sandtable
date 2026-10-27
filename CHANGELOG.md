@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ### Fixed
 
-- **Plugin**: when Claude runs a model-backed `init` (`--sop` or `--transcripts` without `--dry-run`), a hook shows the engineer its dry run's plan, the calls and what they cost, as a message from the plugin, and stops the command if Claude hasn't dry-run it first. Claude Opus 5.5, the default model, often ran the paid `init` straight after the dry run without writing the plan, though the drafting skill asks for it. The hook doesn't wait for a go-ahead; the skills still ask for that. It needs Node.js, and it lets the command run when it can't read the session's transcript ([#397](https://github.com/sandtable-ai/sandtable/issues/397)).
+- **Plugin**: when Claude runs a model-backed `init` (`--sop` or `--transcripts` without `--dry-run`), a hook shows the engineer the plan of its dry run, the calls and what they cost, as a message from the plugin, and stops the command if Claude hasn't dry-run it first. The plan comes from a dry run of the same command; for a command no dry run covered, the message says the plan isn't known. Claude Opus 5.5, the default model, often ran the paid `init` straight after the dry run without writing the plan, though the drafting skill asks for it. The hook doesn't wait for a go-ahead; the skills still ask for that. It needs Node.js, and it lets the command run when it can't read the session's transcript ([#397](https://github.com/sandtable-ai/sandtable/issues/397)).
 
 ## [1.1.0] - 2026-10-27
 
