@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-10-27
+
+A patch release with fixes to the Claude Code plugin's two hooks. The plan hook also catches `init` run through `npm exec` or `npm run`. It no longer shows a dry run's plan for a paid run in another folder or region. The install hook covers pnpm and yarn as well as npm. There are no breaking changes.
+
 ### Fixed
 
 - **Plugin**: the hook that shows a model-backed `init`'s plan now also catches `npm exec sandtable-ai -- init`, `npm run sandtable -- init` and `npx sandtable-ai -- init`, which ran with no dry run and no message before. It compares the environment variables that pick the provider and region too, so a paid run under another `AWS_REGION=` than its dry run says the plan isn't known, instead of showing the other region's plan ([#415](https://github.com/sandtable-ai/sandtable/issues/415)).
@@ -302,7 +306,8 @@ First public release. sandtable rehearses an AI agent on a simulated copy of one
 
 A rehearsal of the release pipeline (npm, PyPI and GitHub releases from one tag), published before the first public release. Everything in it is also in 0.1.0; use 0.1.0 instead.
 
-[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v1.1.2...HEAD
+[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v1.1.3...HEAD
+[1.1.3]: https://github.com/sandtable-ai/sandtable/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/sandtable-ai/sandtable/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/sandtable-ai/sandtable/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/sandtable-ai/sandtable/compare/v1.0.1...v1.1.0
