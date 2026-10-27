@@ -5,6 +5,7 @@ import { validateDomain } from "../spec/load.ts";
 import { PersonaSpec, TaskSpec, type Domain, type Persona, type Task } from "../spec/schema.ts";
 import type { UsageByModel } from "../run/usage.ts";
 import { createClient, recordDraftUsage, requestBase, type ClaudeOptions } from "../sim/claude.ts";
+import { cutOff, cutOffHint } from "./cut-off.ts";
 import { copiedValueNotes, type Place } from "./copied.ts";
 import { ConditionSpec, describeTools, whereOf } from "./sop.ts";
 import { equal } from "../world/match.ts";
@@ -251,6 +252,8 @@ export async function draftTasksFromTranscripts(input: {
   let domain = input.domain;
   // What the domain held before drafting: a value it already has, such as a seeded customer's name, isn't copied from a chat.
   const known = JSON.stringify({ world: input.domain.world, policy: input.domain.policy, tools: input.domain.tools, personas: input.domain.personas });
+  // Replies cut off at max_tokens: said once at the end, with what to try, as well as on each chat.
+  let cutOffs = 0;
 
   for (const [i, t] of input.transcripts.entries()) {
     const scrubbed = scrubPii(t.text);
@@ -274,7 +277,10 @@ export async function draftTasksFromTranscripts(input: {
     }
     recordDraftUsage(out.usage, input.claude ?? {}, base.model, response);
     if (response.stop_reason === "refusal" || !response.parsed_output) {
-      out.warnings.push(`${t.file}: no usable proposal`);
+      const cut = cutOff(response, base.max_tokens);
+      if (cut) cutOffs++;
+      const why = cut ?? (response.stop_reason === "refusal" ? "the model declined to draft from this chat" : undefined);
+      out.warnings.push(`${t.file}: no usable proposal${why ? `: ${why}` : ""}`);
       continue;
     }
     const conv = proposalToTask(response.parsed_output, t.file);
@@ -330,6 +336,11 @@ export async function draftTasksFromTranscripts(input: {
       out.personas.push(conv.persona);
     }
     for (const [table, rows] of Object.entries(conv.rows)) (out.rows[table] ??= []).push(...rows);
+  }
+  if (cutOffs) {
+    // Out of the chats sent: after an early stop, the rest were never sent.
+    const sent = input.transcripts.length - out.notSent.length;
+    out.warnings.push(`${cutOffs} of ${sent} ${sent === 1 ? "chat" : "chats"} got a reply cut off at the ${base.max_tokens}-token output limit, and those calls were still paid for. ${cutOffHint(base.model, "chat")}`);
   }
   return out;
 }

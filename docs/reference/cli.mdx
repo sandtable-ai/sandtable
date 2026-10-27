@@ -40,7 +40,7 @@ npx sandtable-ai init --openapi api.yaml --sop policy.md --transcripts calls/ -o
 | `--sop <file>` | SOP or policy document: drafts invariants with Claude, each quoting its source |
 | `--transcripts <path>` | call or chat transcripts (a file, or a directory of `.txt`/`.md` files): drafts personas and tasks with Claude |
 | `-o, --out <dir>` | domain directory: `--openapi` creates it, and `--sop` and `--transcripts` add to it. Without `--openapi`, a domain must already be there, or `init` exits 2 and says to draft one with `--openapi` first. Default: `sandtable` |
-| `-m, --model <id>` | Claude model for the drafting steps. Default: `claude-opus-5-5` |
+| `-m, --model <id>` | Claude model for the drafting steps. A small model such as `claude-haiku-5-5` can spend a call's whole output limit, 16,000 tokens, thinking and write no draft; `init` then says the reply was cut off, which is still billed, and names a larger model to try. Default: `claude-opus-5-5` |
 | `--force` | overwrite existing files when drafting from `--openapi` |
 | `--dry-run` | print the plan for `--sop` and `--transcripts` (model calls, model, provider, a cost bound) and the files `--openapi` would write, then stop: no model call, nothing written, no credentials needed |
 | `--provider`, `--region`, `--aws-profile` | where Claude runs; see [provider options](#provider-options) |
