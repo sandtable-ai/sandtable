@@ -44,6 +44,9 @@ function cdTarget(arg, dir) {
   return path.resolve(dir, target);
 }
 
+/** A path as one shell word: as it is when it needs no quoting, else in single quotes. */
+const shellWord = (p) => (/^[\w@%+=:,./-]+$/.test(p) ? p : `'${p.replace(/'/g, "'\\''")}'`);
+
 /**
  * Why this Bash command must not run, or undefined when it may: it installs sandtable-ai into a folder that has no
  * package.json, and no earlier command in it runs `npm init`, `pnpm init` or `yarn init` there. A `cd` the hook can't
@@ -70,8 +73,10 @@ function denial(command, cwd) {
     if (!manager || !SANDTABLE.test(run) || ELSEWHERE.test(run) || target === undefined) continue;
     if (initialized.has(target) || existsSync(path.join(target, "package.json"))) continue;
     const { into, why } = MANAGERS[manager];
-    // npm init has no option for another folder, so with yarn's --cwd the agent moves there, and installs without it.
-    const fix = cwdArg === undefined ? `npm init -y && ${segment}` : `cd ${cwdArg} && npm init -y && ${segment.replace(new RegExp(String.raw`\s+${CWD_OPT}`), "")}`;
+    // The command to run from where this one starts. npm init has no option for another folder, so when the install
+    // runs elsewhere (after a cd, or with yarn's --cwd), it moves there first, and installs without --cwd.
+    const install = cwdArg === undefined ? segment : segment.replace(new RegExp(String.raw`\s+${CWD_OPT}`), "");
+    const fix = target === path.resolve(cwd) ? `npm init -y && ${install}` : `cd ${shellWord(target)} && npm init -y && ${install}`;
     return `sandtable plugin: ${target} has no package.json, so ${manager} would install sandtable-ai into the nearest folder above it that has one, which may be another project or the engineer's home folder. Run \`npm init -y\` in ${target} first (as \`${fix}\`), then tell the engineer which package.json you changed.${why} If the engineer wants sandtable in a project above it, install there with \`${into} <that folder>\` instead.`;
   }
   return undefined;
