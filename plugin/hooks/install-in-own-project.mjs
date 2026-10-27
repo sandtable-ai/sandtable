@@ -13,13 +13,13 @@ function segments(command) {
   return command.split(/&&|\|\||[;|\n]/).map((s) => s.trim());
 }
 
+/** yarn's `--cwd <folder>`, the folder quoted or a single word. */
+const CWD_OPT = String.raw`--cwd(?:=|\s+)(?:"[^"]*"|'[^']*'|\S+)`;
 /**
  * Each package manager's install command, the command that makes a folder its own project, and the option that
  * installs into a folder of the engineer's choice. yarn's `--cwd` runs it as if in that folder, parent lookup included,
  * so the hook checks the folder it names.
  */
-/** yarn's `--cwd <folder>`, the folder quoted or a single word. */
-const CWD_OPT = String.raw`--cwd(?:=|\s+)(?:"[^"]*"|'[^']*'|\S+)`;
 const MANAGERS = {
   npm: { install: /^npm\s+(?:install|i|add|isntall)\b/, init: "npm init -y", into: "--prefix" },
   pnpm: { install: /^pnpm\s+(?:add|install|i)\b/, init: "pnpm init", into: "--dir" },
