@@ -167,6 +167,8 @@ describe("the plugin's plan-before-paid-init hook", () => {
     for (const before of ["if cd engagement; then", "if ! cd engagement; then", "while cd engagement; do", "until cd engagement; do", "command cd engagement;", "builtin cd engagement;", "time cd engagement;", 'eval "cd engagement";', "case x in x) cd engagement;; esac;"]) {
       expect(shown(`${before} ${PAID}`, dryAt(dir))).toBe(differs);
     }
+    expect(shown(`bash -c "cd engagement && ${PAID} 2>&1"`, dryAt(dir))).toBe(differs);
+    expect(shown(`sh -c 'cd engagement; ${PAID}'`, dryAt(dir))).toBe(differs);
     // A cd that isn't a command changes nothing.
     expect(shown(`echo cd && grep -c pushd notes.md; ${PAID}`, dryAt(dir))).toContain(plan);
     expect(shown(`(cd engagement && ${PAID})`, dryAt(dir, `(cd engagement && ${DRY})`))).toBe(differs);

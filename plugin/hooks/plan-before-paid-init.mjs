@@ -130,11 +130,11 @@ const BEFORE_COMMAND = /^(?:\(|\{|!|do|then|else|if|elif|while|until|time|comman
 
 /**
  * Whether a segment's words change the shell's folder: CHDIR as a command, first or after BEFORE_COMMAND, or any
- * mention of it in an `eval`.
+ * mention of it after an `eval` or a shell such as `bash -c`, whose quoted script segments() splits mid-word.
  */
 const chdir = (all) =>
   all.some((w, i) => CHDIR.test(w) && (i === 0 || BEFORE_COMMAND.test(all[i - 1]))) ||
-  all.some((w, i) => w === "eval" && (i === 0 || BEFORE_COMMAND.test(all[i - 1])) && all.slice(i + 1).some((a) => /\b(?:cd|pushd|popd)\b/.test(a)));
+  all.some((w, i) => /^(?:eval|bash|sh|zsh|dash)$/.test(w) && (i === 0 || BEFORE_COMMAND.test(all[i - 1])) && all.slice(i + 1).some((a) => /\b(?:cd|pushd|popd)\b/.test(a)));
 
 /** Whether a command changes the shell's folder anywhere in it. */
 const changesDir = (command) => segments(command).some((s) => chdir(words(s)));
