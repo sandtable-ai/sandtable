@@ -48,14 +48,14 @@ Issues and milestones on GitHub are the source of truth; this page is the overvi
 ## In 1.1
 - [x] Coverage: `run` shows which rules its trials checked and which they caught broken, and `lint` says which rules the tasks put in play (#30)
 - [x] A customer sign-off report, `report --audience customer`: each rule with its source, the scenarios that checked it and the open items, with `run --without-policy` as a careless agent that shows the scenarios can catch a mistake (#31, #405)
-- [x] `run --tag` runs only some tags (#21), and a repeated `--tasks` adds its tasks (#403)
+- [x] `run --tag` runs only the tasks with those tags (#21), and a repeated `--tasks` adds its tasks (#403)
 - [x] The Claude Code plugin keeps `npm install` of sandtable in the working folder's own project (#412)
 
 ## Next (milestone black-box)
-- [ ] Black-box and platform on-ramps: serve the world as REST, MCP and webhook tools for hosted agent platforms (#14), import voice-agent platform configs as draft domains (#34, #35), fault profiles (#15)
+- [ ] Black-box and platform on-ramps: serve the world as REST, MCP and webhook tools for hosted agent platforms (#14), import voice-agent platform configs as draft domains (#34), fault profiles (#15)
 
 ## Later
-PR comments with pass^k deltas (#13), LLM-judged checks (#16), voice transport and timing metrics (#17, #43), exports to other harness formats (#18), negotiation invariants (#36), simulation clock (#38), outcome grading (#39), business metrics (#40), persona × condition matrix (#41), multi-session tasks (#42), Python agents in-process (#44).
+PR comments with pass^k deltas (#13), importing Retell and ElevenLabs agent exports (#35), LLM-judged checks (#16), voice transport and timing metrics (#17, #43), exports to other harness formats (#18), negotiation invariants (#36), simulation clock (#38), outcome grading (#39), business metrics (#40), persona × condition matrix (#41), multi-session tasks (#42), Python agents in-process (#44).
 
 ## Good first issues
 `$regex` in where clauses (#20).
