@@ -1,10 +1,13 @@
 {
-  "description": "Installs sandtable-ai only into the working folder's own npm project.",
+  "description": "Installs sandtable-ai only into the working folder's own npm project, and holds a model-backed sandtable init until the agent has dry-run it, then shows the engineer the dry run's plan as it runs.",
   "hooks": {
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/install-in-own-project.mjs"], "timeout": 10 }]
+        "hooks": [
+          { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/install-in-own-project.mjs"], "timeout": 10 },
+          { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/plan-before-paid-init.mjs"], "timeout": 10 }
+        ]
       }
     ]
   }

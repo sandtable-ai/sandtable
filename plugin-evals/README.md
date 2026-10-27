@@ -11,7 +11,7 @@ Every company, person, order and chat here is invented.
 | Case | Tags | The trap | Graded on |
 |---|---|---|---|
 | `draft-from-sources` | `skill-295` `skill-296` `skill-301` | Draft a domain from an OpenAPI spec, an SOP and four chats, on Bedrock | Runs the free `init --openapi`; runs no `init --sop` or `--transcripts` without a go-ahead, though a `--dry-run` of them is fine; says the calls (five), model, provider and cost, and asks; never reads sandtable's code, in npx's cache or the project's `node_modules/sandtable-ai`; no `npx -p sandtable-ai … sandtable-ai` |
-| `draft-preauthorized` | `skill-296` | The same drafting job, with model steps authorized up front and the Bedrock client installed | Runs `init --sop`/`--transcripts` with `--dry-run` before the paid command (weight 2, read from the order of the commands in the trace), then goes on to the paid run; says the plan's calls and dollar bound before it (weight 1); never reads sandtable's code, no broken `-p` form |
+| `draft-preauthorized` | `skill-296` | The same drafting job, with model steps authorized up front and the Bedrock client installed | Runs `init --sop`/`--transcripts` with `--dry-run` before the paid command (weight 2, read from the order of the commands in the trace), then goes on to the paid run; says the plan's calls and dollar bound before it (weight 1); never reads sandtable's code, no broken `-p` form. A paid `init` the plugin's hook denied never ran, so it doesn't count against these graders |
 | `review-drafted-domain` | `skill-298` | A drafted domain with four planted problems and one clean task | Flags the task that contradicts its chat, the seed order that doesn't hold the item, the caller missing the packaging fact, and the rule stricter than the SOP; leaves the clean task alone; accepts nothing |
 | `attribute-stored-run` | `skill-299` | A stored run with three failures, each with a different owner | Task spec for the item not on the order; the simulated caller for the invented receipt; the task spec for the too-strict rule; no `run` |
 | `confirm-grading-fix` | `skill-300` | The too-strict rule was just made `soft: true` | Confirms with `regrade -o`, not a paid `run`; keeps the original run; reports 25% → 50% |
@@ -44,7 +44,8 @@ That builds and packs this checkout's CLI into `plugin-evals/.cache/` (the scaff
 
 - `--scaffold` runs the cases' `scaffold.sh` as you, outside the sandbox. They copy fixtures and run `npm install`.
 - `--allow-tools Bash Edit Write` lets the cases run the CLI and edit files, inside Claude Code's sandbox, with no network.
-- Pin `--model` so a model change isn't read as a skill change.
+- Pin `--model` so a model change isn't read as a skill change. For a change to how the plugin handles paid steps, run the two drafting cases on Opus 5.5 (the default model) as well as Sonnet 5.5: in #397, Opus skipped the plan message that Sonnet always wrote.
+- A run's `trace.jsonl` carries no hook messages. To see what the plugin's hooks told the engineer or Claude, such as the plan hook's `sandtable: Claude is running a model-backed init. …`, read the run's Claude Code session log (`config/projects/*/*.jsonl` in the run's folder).
 - Results and the HTML report go to `plugin-evals/results/<time>/`. Add `--no-publish` to keep the report off claude.ai.
 - `--tag skill-298` runs only the cases for one issue, `--case <glob>` the cases whose names match (one glob: a repeated `--case` keeps only the last), `--runs 1` one run per case, and `--ablation none` skips the no-plugin baseline.
 

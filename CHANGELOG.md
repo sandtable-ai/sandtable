@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **Plugin**: when Claude runs a model-backed `init` (`--sop` or `--transcripts` without `--dry-run`), a hook shows the engineer its dry run's plan, the calls and what they cost, as a message from the plugin, and stops the command if Claude hasn't dry-run it first. Claude Opus 5.5, the default model, often ran the paid `init` straight after the dry run without writing the plan, though the drafting skill asks for it. The hook doesn't wait for a go-ahead; the skills still ask for that. It needs Node.js, and it lets the command run when it can't read the session's transcript ([#397](https://github.com/sandtable-ai/sandtable/issues/397)).
+
 ## [1.1.0] - 2026-10-27
 
 A minor release for customer sign-off, with no breaking changes. `run` shows which rules its trials checked and which they caught broken, `lint` says which rules the tasks put in play, and `report --audience customer` writes a page a customer's operations lead signs off on before go-live, with `run --without-policy` as the careless agent that shows the scenarios can catch a mistake. `run --tag` runs only the tasks with those tags, a repeated `--tasks` adds its tasks, and the Claude Code plugin keeps `npm install` of sandtable in the working folder's own project. An empty `--tasks` is deprecated: it still runs every task, but warns, and 2.0 will make it a usage error.
