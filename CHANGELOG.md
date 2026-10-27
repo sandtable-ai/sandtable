@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [1.1.2] - 2026-10-27
 
-A patch release with two fixes to `init`'s messages. `--sop` and `--transcripts` with no domain yet say to draft one with `--openapi` first. A drafting reply cut off at the output limit, as Claude Haiku 5.5 can be while thinking, says so, notes that the call was still paid for, and names a larger model to try. There are no breaking changes.
+A patch release with two fixes to `init`'s messages. `--sop` and `--transcripts` with no domain yet say to draft one with `--openapi` first. A drafting reply cut off at the output limit, as a Claude Haiku 5.5 reply can be while thinking, says so, notes that the call was still paid for, and names a larger model to try. There are no breaking changes.
 
 ### Fixed
 
