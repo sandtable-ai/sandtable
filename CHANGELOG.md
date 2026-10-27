@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 - `examples/freight`: `do-not-use-carrier` and `do-not-use-capacity` now have a `reference` that looks the carrier up, so `lint` proves them solvable and finds the rule against telling a caller why it is flagged in play. Their caller prompts and grading are unchanged, so stored runs of them still regrade ([#30](https://github.com/sandtable-ai/sandtable/issues/30)).
 - `examples/freight`: 18 of its 19 rules now quote, as `source`, the sentence of `policy.md` they come from, so the customer report shows where each rule comes from. Grading is unchanged and stored runs still regrade. A trial that broke one of them now quotes that sentence in its attribution's evidence ([#31](https://github.com/sandtable-ai/sandtable/issues/31)).
 - `run` and `leaderboard`: a repeated `--tasks` adds its task ids, as `--tag` and `--floor` do, so `--tasks a --tasks b` runs both. Before, only the last `--tasks` counted ([#403](https://github.com/sandtable-ai/sandtable/issues/403)).
+- **Roadmap**: `ROADMAP.md` and sandtable.dev/roadmap list what 1.1.0 ships, under In 1.1, instead of under Next. PR comments with pass^k deltas and Retell and ElevenLabs imports move to Later, matching their milestones, and `--tag` is no longer a good first issue ([#416](https://github.com/sandtable-ai/sandtable/issues/416)).
 
 ### Deprecated
 
