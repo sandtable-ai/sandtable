@@ -13,6 +13,9 @@ const parent = mkdtempSync(path.join(os.tmpdir(), "sandtable-install-"));
 writeFileSync(path.join(parent, "package.json"), JSON.stringify({ name: "someone-elses-project" }));
 const bare = path.join(parent, "engagement");
 mkdirSync(path.join(bare, "customer-docs"), { recursive: true });
+// A bare folder whose name has a space, for a quoted yarn --cwd.
+const spaced = path.join(parent, "my dir");
+mkdirSync(spaced);
 const own = path.join(parent, "own");
 mkdirSync(own);
 writeFileSync(path.join(own, "package.json"), JSON.stringify({ name: "own" }));
@@ -54,9 +57,50 @@ describe("the plugin's install-in-own-project hook", () => {
     expect(decide(`cd $DIR && ${INSTALL}`, parent)).toBeUndefined();
   });
 
-  it("leaves other commands alone: global and --prefix installs, other packages, npx, other tools", () => {
+  it("holds pnpm and yarn installs in a bare folder too, and names their own init and target option", () => {
+    // Both add the package to the nearest package.json above, as npm does: pnpm add and pnpm install <pkg>, yarn add.
+    for (const command of ["pnpm add -D sandtable-ai", "pnpm install sandtable-ai", "pnpm i sandtable-ai@1.1.2"]) {
+      const reason = decide(command, bare);
+      expect(reason).toContain(`${bare} has no package.json, so pnpm would install sandtable-ai`);
+      expect(reason).toContain(`Run \`pnpm init\` in ${bare} first (as \`pnpm init && ${command}\`)`);
+      expect(reason).toContain("install there with `--dir <that folder>` instead");
+    }
+    const reason = decide("yarn add --dev sandtable-ai", bare);
+    expect(reason).toContain("so yarn would install sandtable-ai");
+    expect(reason).toContain("Run `yarn init -y` in");
+    expect(reason).toContain("install there with `--cwd <that folder>` instead");
+    expect(decide("pnpm add -D sandtable-ai", own)).toBeUndefined();
+    expect(decide("pnpm init && pnpm add -D sandtable-ai", bare)).toBeUndefined();
+    expect(decide("yarn init -y && yarn add --dev sandtable-ai", bare)).toBeUndefined();
+    // One manager's init makes the folder a project for another's install.
+    expect(decide("npm init -y && pnpm add -D sandtable-ai", bare)).toBeUndefined();
+  });
+
+  it("checks the folder yarn's --cwd names, which looks for a package.json above it as a cd would", () => {
+    const reason = decide("yarn --cwd engagement add --dev sandtable-ai", parent);
+    expect(reason).toContain(`${bare} has no package.json, so yarn would install`);
+    expect(reason).toContain("(as `yarn --cwd engagement init -y && yarn --cwd engagement add --dev sandtable-ai`)");
+    expect(decide("yarn add --dev sandtable-ai --cwd=engagement", parent)).toContain(`${bare} has no package.json`);
+    expect(decide("yarn --cwd engagement init -y && yarn --cwd engagement add sandtable-ai", parent)).toBeUndefined();
+    expect(decide("yarn --cwd own add sandtable-ai", parent)).toBeUndefined();
+    expect(decide("yarn --cwd .. add sandtable-ai", bare)).toBeUndefined();
+    expect(decide("yarn --cwd $DIR add sandtable-ai", parent)).toBeUndefined();
+    // A quoted folder with a space, before or after add.
+    expect(decide('yarn add sandtable-ai --cwd "my dir"', parent)).toContain(`${spaced} has no package.json, so yarn would install sandtable-ai`);
+    expect(decide('yarn add sandtable-ai --cwd "my dir"', parent)).toContain('(as `yarn --cwd "my dir" init -y && yarn add sandtable-ai --cwd "my dir"`)');
+    expect(decide("yarn --cwd 'my dir' add sandtable-ai", parent)).toContain(`${spaced} has no package.json`);
+    expect(decide('yarn --cwd "my dir" init -y && yarn --cwd "my dir" add sandtable-ai', parent)).toBeUndefined();
+  });
+
+  it("leaves other commands alone: global, --prefix and --dir installs, other packages, npx, other tools", () => {
     expect(decide("npm install -g sandtable-ai", bare)).toBeUndefined();
     expect(decide("npm install --prefix ./tools sandtable-ai", bare)).toBeUndefined();
+    expect(decide("npm install -C ./tools sandtable-ai", bare)).toBeUndefined();
+    // pnpm's --dir creates the package.json in the folder it names.
+    expect(decide("pnpm add --dir ./engagement sandtable-ai", parent)).toBeUndefined();
+    expect(decide("pnpm add -g sandtable-ai", bare)).toBeUndefined();
+    expect(decide("yarn global add sandtable-ai", bare)).toBeUndefined();
+    expect(decide("pnpm dlx sandtable-ai validate ./sandtable", bare)).toBeUndefined();
     expect(decide("npm install --save-dev typescript", bare)).toBeUndefined();
     expect(decide("npx sandtable-ai validate ./sandtable", bare)).toBeUndefined();
     expect(decide("npm view sandtable-ai version", bare)).toBeUndefined();

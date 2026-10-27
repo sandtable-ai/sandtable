@@ -18,7 +18,10 @@ function segments(command) {
   return command.split(/&&|\|\||[;|\n]/);
 }
 
-const INIT = /\bsandtable(?:-ai)?(?:@[\w.^~-]+)?\s+init\b/;
+/** The CLI as a word: `sandtable`, `sandtable-ai` or `sandtable-ai@<version>`. */
+const BIN = /\bsandtable(?:-ai)?(?:@[\w.^~-]+)?$/;
+// `npm exec sandtable-ai -- init` and `npm run sandtable -- init` put a `--` before init.
+const INIT = /\bsandtable(?:-ai)?(?:@[\w.^~-]+)?\s+(?:--\s+)?init\b/;
 const MODEL_BACKED = /--(?:sop|transcripts)\b/;
 const DRY_RUN = /--dry-run\b/;
 
@@ -48,15 +51,26 @@ const VALUE_FLAGS = { "--provider": "--provider", "--region": "--region", "--aws
 /** Options that don't change what the model-backed steps call or cost: the free --openapi step, the AWS profile, --force, --dry-run. */
 const IGNORED = new Set(["--openapi", "--aws-profile", "--force", "--dry-run", "-h", "--help"]);
 const PATHS = new Set(["--openapi", "--sop", "--transcripts", "--out"]);
+/** The environment variables that pick init's provider, region or Bedrock client, and the flag that overrides each. */
+const ENV_FLAGS = { AWS_REGION: "--region", AWS_DEFAULT_REGION: "--region", SANDTABLE_PROVIDER: "--provider", SANDTABLE_BEDROCK_CLIENT: undefined };
+
+/** Records a `NAME=value` word in `env` when NAME is one of ENV_FLAGS. */
+function assign(env, word) {
+  const m = word.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
+  if (m && m[1] in ENV_FLAGS) env[m[1]] = m[2].replace(/^(["'])(.*)\1$/, "$2");
+}
 
 /**
  * What an `init` segment runs, as a string two segments share when they make the same model calls: its options after
  * `init`, by long name, with paths normalized and the options that don't change the plan left out. `-o` defaults to
- * `sandtable`, as the CLI's does.
+ * `sandtable`, as the CLI's does. The environment variables in ENV_FLAGS count too, from `env` (what the command
+ * exported before this segment) and the segment's own `NAME=value` prefix, unless a flag overrides them.
  */
-function initKey(segment) {
+function initKey(segment, env = {}) {
   const all = words(segment);
-  const at = all.findIndex((w, i) => w === "init" && /\bsandtable(?:-ai)?(?:@[\w.^~-]+)?$/.test(all[i - 1] ?? ""));
+  const at = all.findIndex((w, i) => w === "init" && (BIN.test(all[i - 1] ?? "") || (all[i - 1] === "--" && BIN.test(all[i - 2] ?? ""))));
+  const vars = { ...env };
+  for (const w of all.slice(0, Math.max(at, 0))) assign(vars, w);
   const opts = { "--out": "sandtable" };
   const rest = [];
   const args = all.slice(at + 1);
@@ -76,7 +90,20 @@ function initKey(segment) {
       if (!IGNORED.has(name)) opts[name] = PATHS.has(name) && value ? path.posix.normalize(value).replace(/\/+$/, "") : value;
     } else if (!IGNORED.has(w)) rest.push(w);
   }
+  for (const [name, value] of Object.entries(vars)) if (!(ENV_FLAGS[name] in opts)) opts[name] = value;
   return JSON.stringify([Object.entries(opts).sort(([a], [b]) => (a < b ? -1 : 1)), rest]);
+}
+
+/** The keys of a command's `init` segments of one kind, in order, each with what the command exported before it. */
+function initKeys(command, kind) {
+  const env = {};
+  const keys = [];
+  for (const segment of segments(command)) {
+    const [first, ...rest] = words(segment);
+    if (first === "export") rest.forEach((w) => assign(env, w));
+    if (initKind(segment) === kind) keys.push(initKey(segment, env));
+  }
+  return keys;
 }
 
 /** The text of a tool result's content, a string or a list of text blocks. */
@@ -105,7 +132,7 @@ function dryRuns(transcript) {
     if (!Array.isArray(content)) continue;
     for (const block of content) {
       if (entry.type === "assistant" && block?.type === "tool_use" && block.name === "Bash" && typeof block.input?.command === "string" && isDryRun(block.input.command)) {
-        const run = { keys: segments(block.input.command).filter((seg) => initKind(seg) === "dry").map(initKey), output: "" };
+        const run = { keys: initKeys(block.input.command, "dry"), output: "" };
         runs.push(run);
         if (typeof block.id === "string") byId.set(block.id, run);
       }
@@ -119,11 +146,10 @@ function dryRuns(transcript) {
 const PLAN_LINES = /^Plan: \d+ model calls?\b.*$/gm;
 
 /**
- * The plan of the latest dry run of the same `init` as this paid segment: its plan line, null when that dry run printed
- * none it can be matched with, or undefined when no dry run ran the same command.
+ * The plan of the latest dry run of the same `init` as a paid segment's key: its plan line, null when that dry run
+ * printed none it can be matched with, or undefined when no dry run ran the same command.
  */
-function planFor(paid, runs) {
-  const key = initKey(paid);
+function planFor(key, runs) {
   for (const run of [...runs].reverse()) {
     const at = run.keys.lastIndexOf(key);
     if (at < 0) continue;
@@ -146,7 +172,7 @@ function decide(command, transcript) {
   if (!isPaidInit(command)) return undefined;
   const runs = dryRuns(transcript);
   if (!runs.length) return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: NO_DRY_RUN } };
-  const plans = segments(command).filter((seg) => initKind(seg) === "paid").map((seg) => planFor(seg, runs));
+  const plans = initKeys(command, "paid").map((key) => planFor(key, runs));
   if (plans.every((p) => typeof p === "string")) {
     return { systemMessage: `sandtable: Claude is running a model-backed init. ${plans.length === 1 ? "Its dry run's plan" : "Its dry runs' plans"}: ${plans.join("; then ")}.` };
   }
