@@ -57,7 +57,7 @@ npx sandtable-ai run ./sandtable --agent http://localhost:8787/step -k 4 --fail-
 ```
 
 - Runs with a model-backed agent or user cost money: say how many trials (tasks × k) and get the engineer's go-ahead. For Claude, the terminal shows an estimated cost at list prices after each run; use it to size the next one.
-- `-t, --tasks a,b` reruns only some tasks, and `--tag refusal,negotiation` only the tasks with at least one of those tags (`untagged`: tasks with none); with both, only the tasks in both. A tag no task carries is an error before any trial runs. `-c, --concurrency <n>` (default 4) lowers parallelism when the API rate-limits.
+- `-t, --tasks a,b` reruns only some tasks, and `--tag refusal,negotiation` only the tasks with at least one of those tags (`untagged`: tasks with none); with both, only the tasks in both. Both are repeatable. Leave `--tasks` out to run every task: an empty `--tasks` is deprecated. A tag no task carries is an error before any trial runs. `-c, --concurrency <n>` (default 4) lowers parallelism when the API rate-limits.
 - `--fail-under <pct>` exits 1 when pass^k (k = `-k`) is below the percentage. Put it in CI after `validate --strict` and `lint`.
 - `run` also exits 1, with or without `--fail-under`, when any trial of a `critical: true` task fails, and names those tasks. Reports list critical tasks first.
 - `--floor <tag>=<pct>`, repeatable, exits 1 when that tag's pass^k is below the percentage, e.g. `--floor refusal=100 --floor negotiation=70`, so a strong happy path can't carry weak refusals over `--fail-under`. A tag no task in the run carries is an error before any trial runs. Suggest floors when a suite's tags need different bars; never lower one to make a run pass.

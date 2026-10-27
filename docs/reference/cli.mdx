@@ -132,7 +132,7 @@ npx sandtable-ai run ./my-domain --agent http://localhost:8787/step -k 4 --fail-
 | `--without-policy` | prompt a built-in model agent (`claude`, `claude:<model>`, `bedrock:<model-id>`, `openai:<model>`) without the domain's policy: a careless agent for [`report --audience customer --probe`](#report). Any other agent exits 2 before anything runs. See [Coverage](#coverage) |
 | `--openai-base-url <url>` | OpenAI-compatible endpoint for `openai:<model>`. Default: `OPENAI_BASE_URL`, else `https://api.openai.com/v1`; the key comes from `OPENAI_API_KEY` |
 | `-k, --trials <n>` | trials per task; pass^k is reported for every k up to n. Default: `1` |
-| `-t, --tasks <ids>` | comma-separated task ids to run (all by default) |
+| `-t, --tasks <ids>` | comma-separated task ids to run (all by default; repeatable). An empty value is deprecated: see [run some tasks](#run-some-tasks) |
 | `--tag <tags>` | run only the tasks with at least one of these comma-separated tags (repeatable); `untagged` selects the tasks with none. With `--tasks`, only the tasks both select. See [run some tasks](#run-some-tasks) |
 | `-c, --concurrency <n>` | episodes run in parallel. Default: `4` |
 | `-o, --out <dir>` | output directory for `results.json` and `report.html`. Default: `.sandtable/runs/<timestamp>-<domain>` |
@@ -170,7 +170,7 @@ Each task row shows one mark per trial, `✓` passed, `✗` failed or `○` skip
 
 ### Run some tasks
 
-`--tasks` names the tasks to run, and `--tag` picks them by their tags: a task runs when it carries at least one of the tags given. Give them comma-separated, or repeat `--tag` as you repeat `--floor`: `--tag refusal --tag negotiation` is `--tag refusal,negotiation`. Tasks with no tags are `untagged`, as in the **By tag** table. Given both, `run` runs only the tasks in both lists:
+`--tasks` names the tasks to run, and `--tag` picks them by their tags: a task runs when it carries at least one of the tags given. Give either one comma-separated, or repeat it as you repeat `--floor`: `--tag refusal --tag negotiation` is `--tag refusal,negotiation`, and `--tasks a --tasks b` is `--tasks a,b`. Tasks with no tags are `untagged`, as in the **By tag** table. Given both, `run` runs only the tasks in both lists:
 
 ```bash
 npx sandtable-ai run ./my-domain --agent http://localhost:8787/step --tag refusal,negotiation -k 4
@@ -178,6 +178,8 @@ npx sandtable-ai run ./my-domain --agent http://localhost:8787/step --tag hard -
 ```
 
 A tag that no task in the domain carries, an unknown task id, or a `--tasks` and `--tag` with no task in common stops the run before any trial with exit 2, so a typo can't run nothing, or everything. `--fail-under`, `--floor` and pass^k then cover only the tasks that ran.
+
+An empty `--tasks`, such as `--tasks ""` from an unset CI variable, still runs every task, but it is deprecated. Next to task ids, an empty value adds nothing. Either way it prints `warning: an empty --tasks value is deprecated; in sandtable-ai 2.0 it will be a usage error (exit 2). To run every task, leave --tasks out.` on stderr, and 2.0 will make it exit 2, as an empty `--tag` already does.
 
 ### Per-tag floors
 
@@ -286,7 +288,7 @@ The repo has the freight leaderboard's own, [`leaderboard/models.yaml`](https://
 | `-m, --models <file>` | **required**: the models file, YAML: `{ user?, k?, models: [{ label, agent, effort? }] }`; `agent` takes the same specs as `run --agent`; `effort` (`low`, `medium`, `high`, `xhigh` or `max`) is for `claude:` agents only |
 | `-u, --user <spec>` | simulated user for every model; overrides the models file. Default: `claude` |
 | `-k, --trials <n>` | trials per task; overrides the models file. Default: `4` |
-| `-t, --tasks <ids>` | comma-separated task ids to run, for every model and the baseline. Default: all tasks |
+| `-t, --tasks <ids>` | comma-separated task ids to run, for every model and the baseline (repeatable). Default: all tasks. An empty value is deprecated, as for `run` |
 | `-c, --concurrency <n>` | episodes in parallel per model. Default: `4` |
 | `--openai-base-url <url>` | OpenAI-compatible endpoint for `openai:<model>` entries |
 | `-o, --out <dir>` | output directory. Default: `leaderboard/<domain name>` |
