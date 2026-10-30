@@ -207,6 +207,9 @@ describe("the plugin's plan-before-paid-init hook", () => {
     // --prefix and -C name the package root.
     expect(shown(`npm run --prefix sub sandtable -- init ${args}`, dryAt(sub), root)).toContain(plan);
     expect(shown(`npm -C ${sub} run sandtable -- init ${args}`, dryAt(sub), deep)).toContain(plan);
+    // npm's options can come after the script's name too, before its -- (#439).
+    expect(shown(`npm run sandtable -C .. -- init ${args}`, dryAt(root), sub)).toContain(plan);
+    expect(shown(`npm run sandtable --prefix=sub -- init ${args}`, dryAt(sub), root)).toContain(plan);
     expect(shown(`npm run --prefix=sub sandtable -- init ${args}`, dryAt(root), root)).toBe(differs);
     // As for npm, a node_modules folder marks a package root too.
     const nm = path.join(root, "vendor");
@@ -233,7 +236,7 @@ describe("the plugin's plan-before-paid-init hook", () => {
     expect(denial("npx sandtable-ai@1.1.0 init --transcripts ./calls -o ./sandtable", [])).toMatch(/--dry-run` first/);
     expect(shown(`cd engagement && ${PAID} 2>&1 | tail -20`, dryRun(undefined, `cd engagement && ${DRY}`))).toContain(PLAN_LINE.replace("Plan: ", ""));
     const args = PAID.split(" init ")[1];
-    for (const form of ["npm exec sandtable-ai --", "npm exec --yes sandtable-ai@1.1.2 --", "npm run sandtable --", "npx sandtable-ai --"]) {
+    for (const form of ["npm exec sandtable-ai --", "npm exec --yes sandtable-ai@1.1.2 --", "npm run sandtable --", "npx sandtable-ai --", "npm run sandtable --silent --", "npm run-script sandtable -s --if-present --"]) {
       expect(denial(`${form} init ${args}`, [])).toMatch(/--dry-run` first/);
       expect(run(`${form} init ${args} --dry-run`, [])).toBeUndefined();
       // The same init however it is called: a dry run in one form gives its plan to a paid run in another.

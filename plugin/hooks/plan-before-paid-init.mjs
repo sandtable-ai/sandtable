@@ -21,8 +21,9 @@ function segments(command) {
 
 /** The CLI as a word: `sandtable`, `sandtable-ai` or `sandtable-ai@<version>`. */
 const BIN = /\bsandtable(?:-ai)?(?:@[\w.^~-]+)?$/;
-// `npm exec sandtable-ai -- init` and `npm run sandtable -- init` put a `--` before init.
-const INIT = /\bsandtable(?:-ai)?(?:@[\w.^~-]+)?\s+(?:--\s+)?init\b/;
+// `npm exec sandtable-ai -- init` and `npm run sandtable -- init` put a `--` before init, and npm's own options can come
+// before that `--`, each with at most one value: `npm run sandtable --silent -- init`, `npm run sandtable -C .. -- init`.
+const INIT = /\bsandtable(?:-ai)?(?:@[\w.^~-]+)?(?:\s+-\S*(?:\s+[^-\s]\S*)?)*?\s+(?:--\s+)?init\b/;
 const MODEL_BACKED = /--(?:sop|transcripts)\b/;
 const DRY_RUN = /--dry-run\b/;
 
@@ -81,8 +82,19 @@ function resolvePath(value, dir) {
   return dir === undefined ? undefined : path.resolve(dir, value);
 }
 
-/** Where `init` is in a segment's words: right after the CLI, or after the CLI and a `--`; -1 when it isn't there. */
-const initAt = (all) => all.findIndex((w, i) => w === "init" && (BIN.test(all[i - 1] ?? "") || (all[i - 1] === "--" && BIN.test(all[i - 2] ?? ""))));
+/** Where `init` is in a segment's words: after the CLI, its options as INIT allows them, and a `--`; -1 when it isn't there. */
+const initAt = (all) => all.findIndex((w, i) => w === "init" && cliBefore(all, all[i - 1] === "--" ? i - 1 : i));
+
+/** Whether the words just before `end` are the CLI and then only options, each with at most one value. */
+function cliBefore(all, end) {
+  for (let j = end - 1; j >= 0; j--) {
+    if (!BIN.test(all[j])) continue;
+    let k = j + 1;
+    while (k < end && all[k].startsWith("-")) k += k + 1 < end && !all[k + 1].startsWith("-") ? 2 : 1;
+    if (k === end) return true;
+  }
+  return false;
+}
 
 /** npm's names for `npm run`. */
 const NPM_RUN = new Set(["run", "run-script", "rum", "urn"]);
