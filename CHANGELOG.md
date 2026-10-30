@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **Plugin**: the plan hook now resolves the relative paths of `npm run sandtable -- init` from the package root, where npm runs the script, instead of from the shell's folder. In a project with a `sandtable` script, a paid run from a subfolder now gets the plan of a dry run of the same files, and no longer gets the plan of a dry run that read other files. The root is the nearest folder with a `package.json` or a `node_modules` folder, or the one `--prefix` names, as for npm; for a workspace's script (`-w`), the plan isn't known ([#430](https://github.com/sandtable-ai/sandtable/issues/430)).
+
 ## [1.1.3] - 2026-10-27
 
 A patch release with fixes to the Claude Code plugin's two hooks. The plan hook also catches `init` run through `npm exec` or `npm run`. It no longer shows a dry run's plan for a paid run in another folder or region. The install hook covers pnpm and yarn as well as npm. It suggests `npm init -y` with each of them, and a command that installs into the folder it checked. There are no breaking changes.
