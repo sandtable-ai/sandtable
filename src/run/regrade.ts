@@ -29,7 +29,7 @@ export function regradeTrial(domain: Domain, trial: TrialResult, prompt: AgentPr
   const world = worldFor(domain, task);
   const initial = world.snapshot();
   const events: TrajectoryEvent[] = [];
-  const runner = createToolRunner(domain, world, (e) => events.push(toolEvent(e)));
+  const runner = createToolRunner(domain, world, (e) => events.push(toolEvent(e)), task);
   for (const e of trial.events) {
     if (e.type !== "tool") {
       events.push(e);

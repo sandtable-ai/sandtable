@@ -3,7 +3,7 @@
 
 // Domains: load, parse and check them. The spec's types are TypeScript types only, so the schema library behind
 // them is not part of the API.
-export type { Domain, Tool, Op, Invariant, Task, StateAssert, CallExpect, ReferenceCall, FieldRefSpec, Persona, Given } from "./spec/schema.ts";
+export type { Domain, Tool, Op, Invariant, Task, StateAssert, CallExpect, ReferenceCall, FieldRefSpec, Persona, Given, Fault, TaskEvent } from "./spec/schema.ts";
 export { loadDomain, parseDomain, validateDomain, pendingReview, DomainError, DOMAIN_FILE, type PendingItem } from "./spec/load.ts";
 
 // The simulated world and its tools, for an agent that runs tools itself.
@@ -23,7 +23,7 @@ export { scriptedUser } from "./sim/scripted.ts";
 export { runSuite, criticalFailures, trialStatus, type SuiteOptions, type SuiteResult, type TaskSummary, type Verdict, type FailureMode, type SoftScore } from "./run/suite.ts";
 export type { TrialResult, TrajectoryEvent, EndReason, SoftCheck } from "./run/episode.ts";
 export type { CheckResult, CheckKind } from "./grade/expectations.ts";
-export type { CallRecord, Violation } from "./grade/invariants.ts";
+export type { CallRecord, Violation, FaultApplied } from "./grade/invariants.ts";
 export type { CallerNote } from "./run/caller-notes.ts";
 export type { Attribution, AttributionCounts, Owner } from "./run/attribution.ts";
 export type { Coverage, RuleCoverage, CoverageCell, ToolCoverage } from "./run/coverage.ts";

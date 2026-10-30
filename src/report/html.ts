@@ -264,7 +264,9 @@ function show(ti, i) {
       const v = (e.violations.length ? ' · <span class="viol">violates ' + e.violations.map((id) => "<code>" + esc(id) + "</code>").join(", ") + "</span>" : "") +
         (e.soft && e.soft.length ? ' · <span class="softv">soft ' + e.soft.map((id) => "<code>" + esc(id) + "</code>").join(", ") + "</span>" : "");
       const out = e.ok ? json(e.result) : "ERROR " + e.error;
-      return '<div class="ev tool"><small><b>tool</b> #' + e.index + v + "</small>" + esc(e.name) + "(" + esc(json(e.args)) + ")\\n→ " + esc(out) + "</div>";
+      const f = e.fault ? ' · <span class="softv">fault: ' + esc(fault(e.fault)) + "</span>" : "";
+      const then = e.eventChanges ? "\\n⟳ then, by the task's events: " + e.eventChanges.map((c) => c.kind + " " + c.table + " " + c.key + " " + json(c.after)).join("; ") : "";
+      return '<div class="ev tool"><small><b>tool</b> #' + e.index + v + f + "</small>" + esc(e.name) + "(" + esc(json(e.args)) + ")\\n→ " + esc(out) + esc(then) + "</div>";
     }
     const lat = e.type === "agent" && e.latencyMs !== undefined ? " · " + ms(e.latencyMs) : "";
     const note = e.type === "user" && noteAt[++turn] ? ' · <span class="softv">caller note: ' + esc(noteAt[turn].why) + "</span>" : "";
@@ -279,6 +281,13 @@ function show(ti, i) {
     "</div>" + (tr.attribution ? '<div class="meta">likely owner: <b>' + esc(tr.attribution.owner.replace("-", " ")) + "</b> · " + esc(tr.attribution.evidence) + "</div>" : "") +
     "<h2>Checks</h2>" + checks + "<h2>World changes</h2>" + changes + "<h2>Transcript</h2>" + evs + "</div>";
   $("detail").scrollIntoView({ behavior: "smooth" });
+}
+// A fault the task injected into a call: its error with the HTTP status, a delay, and whether a write behind it landed.
+function fault(f) {
+  const what = f.error ? f.error.replace("_", " ") + " (" + f.status + (f.retryAfter !== undefined ? ", retry after " + f.retryAfter + "s" : "") + ")" : "";
+  const delay = f.latencyMs !== undefined ? (what ? ", " : "") + "latency " + ms(f.latencyMs) : "";
+  const commit = f.committed === undefined ? "" : f.committed ? ", after its write landed" : ", and its write failed";
+  return what + delay + commit;
 }
 // An update shows only the fields it changed, before → after, with the whole row behind a toggle; an insert or a
 // delete shows the row.

@@ -1197,3 +1197,53 @@
     state:
       - { table: bookings, where: { load_id: L-1025, mc_number: "101111" }, count: 1 }
       - { table: bookings, count: 1 }
+
+# Faults: the TMS fails the way a flaky dependency does. A fault replaces what the agent sees for one call; with
+# after_commit, the call's write still lands.
+- id: booking-times-out-after-it-lands
+  description: The booking call times out after the booking went through; the agent looks the load up instead of booking it again, and tells the caller it's booked.
+  persona: easygoing
+  tags: [faults, confirmation]
+  faults:
+    - { tool: book_load, call: 1, error: timeout, after_commit: true }
+  user:
+    instructions: |
+      You are Dana, dispatcher at Blue Mesa Trucking, MC 100101, dry van. You want L-1001 (Dallas to Atlanta) at its posted rate and won't negotiate.
+      If the agent says their system had a problem, wait while they check. Once you know whether the load is booked for you, say thanks and end the call.
+    script:
+      - Hi, Dana with Blue Mesa Trucking, MC 100101. I want L-1001, Dallas to Atlanta, at the posted rate.
+      - Yes, book it.
+      - Thanks, bye.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "100101" } }
+    - { tool: get_load, args: { load_id: L-1001 } }
+    - { tool: book_load, args: { load_id: L-1001, mc_number: "100101", rate: 2100 }, expect_error: timed out }
+    - { tool: get_load, args: { load_id: L-1001 } }
+  expect:
+    state:
+      - { table: bookings, where: { load_id: L-1001, mc_number: "100101" }, count: 1 }
+      - { table: bookings, count: 1 }
+
+- id: search-rate-limited
+  description: The first load search is rate limited; the agent searches again instead of telling the caller there's nothing, and books the load.
+  persona: easygoing
+  tags: [faults, search]
+  faults:
+    - { tool: search_loads, call: 1, error: rate_limit, retry_after: 1 }
+  user:
+    instructions: |
+      You are Dana, dispatcher at Blue Mesa Trucking, MC 100101. You run dry vans.
+      You want a load from Dallas to Atlanta picking up around Nov 4. You're happy with the posted rate and won't negotiate.
+      If the agent says there's nothing, say thanks and end the call. Once you have a confirmation number, say thanks and end the call.
+    script:
+      - Hi, this is Dana with Blue Mesa Trucking, MC 100101. Got anything Dallas to Atlanta for a dry van?
+      - Sounds good, book it at that rate.
+      - Thanks, bye.
+  reference:
+    - { tool: verify_carrier, args: { mc_number: "100101" } }
+    - { tool: search_loads, args: { origin: Dallas, destination: Atlanta, equipment: dry_van }, expect_error: "429" }
+    - { tool: search_loads, args: { origin: Dallas, destination: Atlanta, equipment: dry_van } }
+    - { tool: book_load, args: { load_id: L-1001, mc_number: "100101", rate: 2100 } }
+  expect:
+    state:
+      - { table: bookings, where: { load_id: L-1001, mc_number: "100101" }, count: 1 }

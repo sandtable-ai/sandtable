@@ -17,7 +17,7 @@ Simulated callers talk to your agent, its tool calls hit stateful mocks of the c
 
 **[Docs](https://sandtable.dev)** · **[Quickstart](https://sandtable.dev/quickstart)** · **[Examples](https://github.com/sandtable-ai/sandtable/tree/main/examples)** · **[Sample report](https://sandtable-ai.github.io/sandtable/)** · **[Comparisons](https://sandtable.dev/compare/overview)**
 
-On a fictional freight brokerage's carrier-sales desk, an agent that books whatever it is asked to passes 5 of 50 calls. sandtable names the rule each failing call broke: 43 calls booked without vetting the carrier, 13 booked above the load's rate ceiling, 9 booked a carrier that may not be booked. An agent that follows the desk's SOP passes all 50. Same callers, same records, same result on every run.
+On a fictional freight brokerage's carrier-sales desk, an agent that books whatever it is asked to passes 5 of 52 calls. sandtable names the rule each failing call broke: 44 calls booked without vetting the carrier, 13 booked above the load's rate ceiling, 9 booked a carrier that may not be booked. An agent that follows the desk's SOP passes all 52. Same callers, same records, same result on every run.
 
 ![sandtable demo: the naive agent's failing task table and its top failure modes, then the careful agent passing every call](https://github.com/sandtable-ai/sandtable/raw/main/assets/demo.gif)
 
@@ -28,7 +28,7 @@ npx sandtable-ai demo      # Node.js 22+
 uvx sandtable-ai demo      # or through Python's uv (still needs Node.js 22+)
 ```
 
-No API key and no model calls: two rule-based agents take the same 50 scripted calls. Each run writes `results.json` and a self-contained `report.html` under `.sandtable/runs/`, and the naive agent's report opens in your browser.
+No API key and no model calls: two rule-based agents take the same 52 scripted calls. Each run writes `results.json` and a self-contained `report.html` under `.sandtable/runs/`, and the naive agent's report opens in your browser.
 
 To watch a real model, `npx sandtable-ai demo --live` has Claude play both the caller (Claude Haiku 5.5, the cheaper model) and the agent, two trials per task. It needs `ANTHROPIC_API_KEY` and costs money.
 
@@ -77,7 +77,7 @@ Guide: [draft a domain with init](https://sandtable.dev/guides/init). Spec: [ref
 
 ## Leaderboard
 
-The [freight leaderboard](https://sandtable.dev/leaderboard) runs 13 models as the agent on the freight example's 50 calls, four trials each, against the same simulated caller. Grading is deterministic, and models rank by pass^4. Six models pass all 200 of their trials: Claude Opus 5.5, Claude Sonnet 5.5, Claude Haiku 5.5, GPT-6 Astra, GPT-6.1 Sol and Grok 4.7. For five of the seven others, most failed trials include telling the caller a load's ceiling rate. Every conversation is published in [sandtable-ai/leaderboard](https://github.com/sandtable-ai/leaderboard), and the page has the commands to reproduce the board.
+The [freight leaderboard](https://sandtable.dev/leaderboard) runs 13 models as the agent on the 50 calls of the freight example's first version, four trials each, against the same simulated caller. Grading is deterministic, and models rank by pass^4. Six models pass all 200 of their trials: Claude Opus 5.5, Claude Sonnet 5.5, Claude Haiku 5.5, GPT-6 Astra, GPT-6.1 Sol and Grok 4.7. For five of the seven others, most failed trials include telling the caller a load's ceiling rate. Every conversation is published in [sandtable-ai/leaderboard](https://github.com/sandtable-ai/leaderboard), and the page has the commands to reproduce the board.
 
 `sandtable leaderboard` ranks several agents on one domain under the same simulated callers, next to a do-nothing baseline, by pass^k with rule violations, cost per trial and latency. A model that failed a critical task ranks below every model that failed none:
 
@@ -158,7 +158,7 @@ A `failure-triager` subagent reads the failing trials of a large run outside the
 4. **Tasks.** A simulated caller with a persona and a hidden goal, plus the end state that counts as success.
 5. **Grading.** A trial passes only if the end state matches, the required tools ran, the forbidden ones didn't, no invariant was violated, and no protected value appeared in what the agent said.
 
-More: [how it works](https://sandtable.dev/how-it-works). The bundled examples are [`examples/freight`](https://github.com/sandtable-ai/sandtable/tree/main/examples/freight) (50 tasks, 19 invariants) and [`examples/clinic`](https://github.com/sandtable-ai/sandtable/tree/main/examples/clinic) (a clinic front desk, 25 tasks, 12 invariants). Both run offline.
+More: [how it works](https://sandtable.dev/how-it-works). The bundled examples are [`examples/freight`](https://github.com/sandtable-ai/sandtable/tree/main/examples/freight) (52 tasks, 20 invariants) and [`examples/clinic`](https://github.com/sandtable-ai/sandtable/tree/main/examples/clinic) (a clinic front desk, 25 tasks, 12 invariants). Both run offline.
 
 ## How it compares
 

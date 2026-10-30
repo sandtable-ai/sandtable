@@ -9,7 +9,8 @@ import { operatorProblems, substitute } from "../world/match.ts";
 import { shellWord } from "../shell.ts";
 import { version } from "../version.ts";
 import { coerceArgs } from "../world/tools.ts";
-import { DomainSpec, type Domain, type Given, type Tool } from "./schema.ts";
+import { seedFor } from "../world/store.ts";
+import { DomainSpec, type Domain, type Given, type Task, type Tool } from "./schema.ts";
 
 export const DOMAIN_FILE = "sandtable.yaml";
 
@@ -227,6 +228,8 @@ export function validateDomain(d: Domain): string[] {
     });
     task.reference?.forEach((c, i) => tool(c.tool, `${where}.reference[${i}]`));
     if (task.given) problems.push(...givenProblems(d, task.given, `${where}.given`, tables));
+    task.faults?.forEach((f, i) => tool(f.tool, `${where}.faults[${i}]`));
+    if (task.events) problems.push(...eventProblems(d, task, where, tables, tool));
     for (const list of ["called", "not_called"] as const) {
       task.expect[list].forEach((e, i) => {
         tool(expectedTool(e), `${where}.expect`);
@@ -236,6 +239,34 @@ export function validateDomain(d: Domain): string[] {
       });
     }
   }
+  return problems;
+}
+
+/**
+ * What's wrong with a task's `events`: an unknown tool or table, an update of a row the task doesn't start with and no
+ * earlier event creates, or a create of a key that already exists.
+ */
+function eventProblems(d: Domain, task: Task, where: string, tables: Set<string>, tool: (name: string, where: string) => void): string[] {
+  const problems: string[] = [];
+  const seed = seedFor(d, task);
+  const keys = new Map(Object.entries(seed.tables).map(([name, t]) => [name, new Set(t.rows.map((r) => String(r[t.key])))]));
+  task.events!.forEach((e, i) => {
+    const at = `${where}.events[${i}]`;
+    tool(e.after.tool, at);
+    const table = "update" in e ? e.update : e.create;
+    if (!tables.has(table)) {
+      problems.push(`${at}: unknown table "${table}"`);
+      return;
+    }
+    if ("update" in e) {
+      if (!keys.get(table)!.has(e.key)) problems.push(`${at}: ${table} ${e.key} is not in the task's world, and no earlier event creates it`);
+      return;
+    }
+    const key = e.values[seed.tables[table]!.key];
+    if (key === undefined) return;
+    if (keys.get(table)!.has(String(key))) problems.push(`${at}: ${table} ${String(key)} already exists`);
+    keys.get(table)!.add(String(key));
+  });
   return problems;
 }
 

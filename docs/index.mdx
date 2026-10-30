@@ -40,13 +40,13 @@ sandtable · freight-carrier-sales · agent scripted:naive · user scripted · k
   do-not-use-carrier              ✗       0/1  critical
   book-at-posted-rate             ✗       0/1
   ...
-  pass^1 10.0%
+  pass^1 9.6%
   critical 0 of 3 passed every trial
   ...
   Top failure modes
-  43× invariant verify-before-book (book-at-posted-rate, … +42 more)
+  44× invariant verify-before-book (book-at-posted-rate, … +43 more)
      e.g. book_load(load_id="L-1001", mc_number="100101", rate=2100) was called…
-  23× state state:bookings#1 (negotiate-within-ceiling, … +22 more)
+  24× state state:bookings#1 (negotiate-within-ceiling, … +23 more)
      e.g. 0 bookings row(s) match {"load_id":"L-1001","mc_number":"100101","rat…
   13× invariant rate-ceiling (negotiate-within-ceiling, … +12 more)
      e.g. book_load rate=2600 exceeds the limit 2350

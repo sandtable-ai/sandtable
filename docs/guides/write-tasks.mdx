@@ -60,6 +60,9 @@ It has a firm hidden goal with numbers, a clear exit, a script for offline runs,
   <Step title="Change only what the scenario changes">
     When a scenario needs a slightly different world, such as a carrier whose insurance lapsed this morning, patch it in the task with `given.rows` instead of adding a seed row that only this task uses, or copying the domain. Pair it with a success task on the unpatched row, so the two show the agent tells them apart. Put what the phone system or trigger already knows, such as the caller ID, in `given.context`. See [per-task world and context](/reference/spec#per-task-world-and-context).
   </Step>
+  <Step title="Rehearse what happens when a tool fails">
+    Real dependencies time out, throttle and fail, and an agent that retries carelessly books twice. A task's `faults` make one of its tool calls fail the way an API does: a timeout, a 429 rate limit or a 5xx, or a timeout after the write already landed (`after_commit: true`). Its `events` change the world between calls, such as another carrier booking the load mid-call. Write what the agent must do into the policy first, then add an invariant that a careless retry breaks. The freight example's `booking-times-out-after-it-lands` catches an agent that books again after a timeout, with `book-available-load`. See [faults and events](/reference/spec#faults-and-events).
+  </Step>
   <Step title="Give the caller a firm, specific goal">
     Write `user.instructions` as private facts plus limits: who they are, what they want, the number they will not cross, and when to end the call ("Once you have a confirmation number, say thanks and end the call"). Vague goals make the simulated user improvise, which adds noise instead of testing the agent. Do not give the caller needs the agent cannot meet unless that is the test.
   </Step>

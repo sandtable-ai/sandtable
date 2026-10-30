@@ -31,7 +31,7 @@ describe("the customer sign-off page", () => {
     const html = renderCustomerHtml(careful, { probe: naive });
     expect(html).not.toContain("<script");
     expect(html).toContain("No open items");
-    expect(html).toContain("A deliberately careless agent was rehearsed too. The rehearsal caught it breaking 10 of the 18 rules that fail a conversation.");
+    expect(html).toContain("A deliberately careless agent was rehearsed too. The rehearsal caught it breaking 11 of the 19 rules that fail a conversation.");
     const ceiling = card(html, "rate-ceiling");
     // The quote keeps its Markdown bold and code, as the customer's document has them.
     expect(ceiling).toContain("“<b>Never book above <code>max_rate</code>.</b>”<cite>policy.md</cite>");
@@ -80,9 +80,9 @@ describe("the customer sign-off page", () => {
     expect(soft).not.toContain('<span class="chip">caught</span>');
     expect(soft).not.toContain("chip bad");
     expect(soft).toContain("How the careless agent broke it (reported, not caught)");
-    expect(html).toContain("None of the 18 rules that fail a conversation was broken, and 1 soft rule was broken (reported, never a failure).");
+    expect(html).toContain("None of the 19 rules that fail a conversation was broken, and 1 soft rule was broken (reported, never a failure).");
     expect(html).toContain("No open items");
-    expect(html).toContain("The rehearsal caught it breaking 0 of the 18 rules that fail a conversation.");
+    expect(html).toContain("The rehearsal caught it breaking 0 of the 19 rules that fail a conversation.");
   });
 
   it("names drafted items pending review and ungraded conversations as open items", () => {

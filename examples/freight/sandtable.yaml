@@ -251,6 +251,13 @@ invariants:
     description: Only book a load that exists; never make up a load ID.
     require: { tool: book_load, table: loads, key_arg: load_id, where: {} }
 
+  # A booking that timed out may have gone through: booking the load again (here, a load no longer available) is the
+  # double booking a retry risks. The faults in booking-times-out-after-it-lands set that trap.
+  - id: book-available-load
+    description: Only call book_load on a load that is available; after a booking fails, look the load up before booking it again.
+    source: { file: policy.md, quote: "Never call `book_load` again on that load: look the load up with `get_load` first, because the booking may have gone through." }
+    require: { tool: book_load, table: loads, key_arg: load_id, where: { status: available }, skip_missing: true }
+
   - id: rep-confirm-not-booked
     description: Never book a rep-confirm load directly; submit it for a rep instead.
     source: { file: policy.md, quote: "Loads with `booking_mode: rep_confirm` (high-value freight): never book them yourself." }

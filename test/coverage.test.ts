@@ -144,9 +144,9 @@ describe("coverage in the reports", () => {
     // The first naive task breaks verify-before-book in its only trial: its cell opens trial 0 of task 0.
     expect(html).toMatch(/<button class='dot bad' title='book-at-posted-rate: broken in 1 of 1 trial\(s\), which failed, so this task caught it; open the first' onclick='show\(0,0\)'>/);
     const clean = coverageSection(renderHtml(careful));
-    expect(clean).toContain("19 of 19 rules checked · 0 caught broken · every tool called.");
+    expect(clean).toContain("20 of 20 rules checked · 0 caught broken · every tool called.");
     expect(clean).not.toContain("gapchip");
-    expect(coverageSection(renderHtml(naive))).toContain("14 of 19 rules checked, 5 never · 10 caught broken · 2 of 9 tools never called.");
+    expect(coverageSection(renderHtml(naive))).toContain("15 of 20 rules checked, 5 never · 11 caught broken · 2 of 9 tools never called.");
   });
 
   it("leaves the section out for results from before coverage", () => {
@@ -157,10 +157,10 @@ describe("coverage in the reports", () => {
 
   it("names the gaps in the terminal summary", () => {
     const out = renderTerminal(naive);
-    expect(out).toContain("coverage: 14 of 19 rules checked (10 caught broken), 2 of 9 tools never called");
+    expect(out).toContain("coverage: 15 of 20 rules checked (11 caught broken), 2 of 9 tools never called");
     expect(out).toMatch(/never checked \(verify-before-offer, offer-ceiling, /);
     expect(out).toContain("never called (verify_carrier, log_offer)");
-    expect(renderTerminal(careful)).toContain("coverage: 19 of 19 rules checked, every tool called");
+    expect(renderTerminal(careful)).toContain("coverage: 20 of 20 rules checked, every tool called");
   });
 
   it("reports a broken soft rule apart: striped, never counted as caught", async () => {
@@ -174,7 +174,7 @@ describe("coverage in the reports", () => {
     const soft = r.coverage!.rules.find((x) => x.id === "counter-at-ceiling")!;
     expect(soft.soft).toBe(true);
     expect(soft.broken).toBeGreaterThan(0);
-    expect(renderTerminal(r)).toContain("coverage: 19 of 19 rules checked (1 soft broken), every tool called");
+    expect(renderTerminal(r)).toContain("coverage: 20 of 20 rules checked (1 soft broken), every tool called");
     const html = coverageSection(renderHtml(r));
     expect(html).toContain("0 caught broken · 1 soft broken (reported)");
     expect(html).toMatch(/<button class='dot softb' title='[^']*soft rule broken in 1 of 1 trial\(s\): reported, never fails a trial/);

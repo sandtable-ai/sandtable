@@ -71,7 +71,7 @@ npx sandtable-ai validate ./my-domain [--strict]
 | `--strict` | also fail while drafted items are pending review |
 
 ```text
-✓ freight-carrier-sales: 8 tables, 9 tools, 19 invariants, 50 tasks
+✓ freight-carrier-sales: 8 tables, 9 tools, 20 invariants, 52 tasks
 ```
 
 A `⚠` line is a warning, not an error, and never fails `validate`, not even with `--strict`. It flags a `never_disclose` field that no tool returns and the policy doesn't state, which can never fire, since a value counts only once the agent has been shown it.

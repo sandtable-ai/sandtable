@@ -7,9 +7,25 @@ export interface CallRecord {
   index: number;
   name: string;
   args: Args;
+  /** What the agent saw: false for a call a fault hit, even when its write landed (see FaultApplied.committed). */
   ok: boolean;
   result?: unknown;
   error?: string;
+  /** What a task's fault did to the call, when one hit it. */
+  fault?: FaultApplied;
+}
+
+/** A task's fault on one call (see FaultSpec), as results record it. */
+export interface FaultApplied {
+  error?: "timeout" | "rate_limit" | "server_error";
+  /** The HTTP status the error stands for: 504 for a timeout, 429 for a rate limit, the 5xx of a server error. */
+  status?: number;
+  /** For a rate limit: the seconds it said to wait. */
+  retryAfter?: number;
+  /** The delay before the response. */
+  latencyMs?: number;
+  /** For an after_commit fault: whether the tool ran without an error, so its write landed though the agent saw the fault. */
+  committed?: boolean;
 }
 
 export interface Violation {

@@ -74,7 +74,7 @@ describe("parseDomain", () => {
   };
 
   it("checks a domain built in code as loadDomain checks a file", () => {
-    expect(parseDomain(freight()).tasks).toHaveLength(50);
+    expect(parseDomain(freight()).tasks).toHaveLength(52);
   });
 
   it("throws a DomainError for a schema error or a cross-reference error", () => {

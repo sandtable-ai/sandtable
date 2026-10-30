@@ -14,8 +14,9 @@ const unreviewed = <T extends object>(item: T) => Object.fromEntries(Object.entr
  * agent fixed or broke:
  * - `inputs`: what the agent and the caller are given and the world they act in: the agent's prompt (with the
  *   task's `given.context`), every tool's definition (what the agent sees and what the tool does), the caller's
- *   prompt and opening, the turn limit, the script when `user` is the scripted user, and the seed rows with the
- *   task's `given.rows` merged in. Seed rows and tools are shared, so editing one changes every task's hash.
+ *   prompt and opening, the turn limit, the script when `user` is the scripted user, the seed rows with the
+ *   task's `given.rows` merged in, and the task's `faults` and `events`, when it has them. Seed rows and tools are
+ *   shared, so editing one changes every task's hash.
  * - `grading`: how its trials are graded: the task's `expect` and `critical`, and every invariant (with `soft`),
  *   since a call to any tool can trip one.
  */
@@ -31,6 +32,8 @@ export function taskFingerprints(domain: Domain, task: Task, user: string, promp
       maxTurns: task.max_turns ?? domain.max_turns,
       ...(user === "scripted" ? { script: task.user.script } : {}),
       world: seedFor(domain, task),
+      ...(task.faults ? { faults: task.faults } : {}),
+      ...(task.events ? { events: task.events } : {}),
     }),
     grading: hash({
       expect: task.expect,
@@ -51,8 +54,8 @@ export function taskFingerprints(domain: Domain, task: Task, user: string, promp
  * hashes exactly as in results written before `given` existed, so those runs can still be regraded.
  *
  * Invariants and expectations are left out, so editing how a trial is graded keeps the hash. Seed records,
- * a task's `given.rows` included, and what tools do are left out too: the agent sees them only through tool
- * results, which a regrade replays call by call. A task id missing from the domain hashes as missing.
+ * a task's `given.rows` included, what tools do, and a task's `faults` and `events` are left out too: the agent sees
+ * them only through tool results, which a regrade replays call by call. A task id missing from the domain hashes as missing.
  */
 export function inputsFingerprint(domain: Domain, taskIds: readonly string[], user: string, prompt: AgentPromptOptions = {}): string {
   const tasks = taskIds.map((id) => {

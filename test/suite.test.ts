@@ -20,10 +20,10 @@ describe("freight example, offline", () => {
 
   it("the naive agent is caught by the invariants", async () => {
     const r = await runSuite({ domain: await loadDomain(example), agent: freightScriptedAgent("naive"), user: scriptedUser() });
-    expect(r.passHat["1"]).toBeCloseTo(5 / 50);
+    expect(r.passHat["1"]).toBeCloseTo(5 / 52);
     const modes = Object.fromEntries(r.failureModes.map((m) => [m.id, m.count]));
     expect(modes).toMatchObject({
-      "verify-before-book": 43,
+      "verify-before-book": 44,
       "eligible-carrier": 9,
       "rate-ceiling": 13,
       "equipment-match": 3,
@@ -33,6 +33,8 @@ describe("freight example, offline", () => {
       "eligible-carrier-submit": 1,
       "eligible-carrier-capacity": 2,
       "eligible-carrier-callback": 1,
+      // It books again after a booking times out, though the booking went through.
+      "book-available-load": 1,
     });
   });
 
@@ -75,7 +77,7 @@ describe("freight example, offline", () => {
       "broker-authority",
       "wrong-equipment-insists",
     ]);
-    expect(r.passHat["1"]).toBeCloseTo(16 / 50);
+    expect(r.passHat["1"]).toBeCloseTo(16 / 52);
     const byTag = Object.fromEntries(r.byTag.map((t) => [t.tag, t.passHat1]));
     // Every hard-tier refusal requires a lookup or a handoff, so doing nothing passes none of them.
     expect(byTag).toMatchObject({ refusal: 14 / 17, vetting: 10 / 18, "happy-path": 0, negotiation: 3 / 14, handoff: 0, capacity: 1 / 6, "rep-confirm": 2 / 6, hard: 0 });

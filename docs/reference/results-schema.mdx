@@ -251,6 +251,23 @@ One of:
 
 A tool event's `violations` lists the ids of hard invariants that call violated. When it also broke soft invariants, `soft` lists their ids.
 
+A call that one of the task's [faults](/reference/spec#faults-and-events) hit has `fault`, and one that the task's events followed has `eventChanges`:
+
+```jsonc
+{ "type": "tool", "index": 2, "name": "book_load", "args": { "load_id": "L-1001", "mc_number": "100101", "rate": 2100 },
+  "ok": false, "error": "book_load timed out: no response from the server", "violations": [],
+  "fault": { "error": "timeout", "status": 504, "committed": true } }
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `fault.error` | string | `timeout`, `rate_limit` or `server_error`; absent for a fault that only adds latency |
+| `fault.status` | number | the HTTP status the error stands for: 504 for a timeout, 429 for a rate limit, the 5xx of a server error |
+| `fault.retryAfter` | number | for a rate limit: the seconds it said to wait |
+| `fault.latencyMs` | number | the delay before the response |
+| `fault.committed` | boolean | for an `after_commit` fault: whether the tool ran without an error, so that its write landed though the agent saw the fault |
+| `eventChanges` | `Change[]` | the changes the task's events made to the world right after this call. They are in the trial's `changes` too, with the agent's |
+
 ### Change
 
 | Field | Type | Description |

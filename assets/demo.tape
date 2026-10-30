@@ -1,5 +1,5 @@
 # Renders assets/demo.gif: `sandtable demo`, the offline demo, where a naive and a careful rule-based
-# agent take the same 50 scripted carrier calls. No model calls. Run from the repo root:
+# agent take the same 52 scripted carrier calls. No model calls. Run from the repo root:
 #
 #   npm run build && vhs assets/demo.tape
 #
@@ -8,10 +8,10 @@
 # fits it. The output is paged through `less -S`, which keeps one output line per screen row so the
 # Down counts below match line numbers. The screen shows 22 lines. It opens on the top of the naive
 # agent's task table and scrolls in three steps:
-#   1. the last 20 rows of the naive agent's table, then its pass^1 (line 57 of the output); the
-#      50-row table doesn't fit on two screens, so lines 23 to 35 only pass by in the scroll
-#   2. its top failure modes (from line 80)
-#   3. the same 20 rows of the careful agent's table and its pass^1 100.0% (line 154)
+#   1. the last 20 rows of the naive agent's table, then its pass^1 (line 59 of the output); the
+#      52-row table doesn't fit on two screens, so lines 23 to 37 only pass by in the scroll
+#   2. its top failure modes (from line 83)
+#   3. the same 20 rows of the careful agent's table and its pass^1 100.0% (line 164)
 # The Down counts below follow those line numbers. If the freight example's output changes, check
 # them against `node dist/cli.js demo --no-open | cat -n`.
 #
@@ -49,12 +49,12 @@ Enter
 # 1. The naive agent: most calls fail.
 Sleep 2.5s
 Hide
-Down@1ms 17
+Down@1ms 18
 Sleep 150ms
 Show
 Sleep 66ms
 Hide
-Down@1ms 18
+Down@1ms 19
 Sleep 150ms
 Show
 Sleep 2s
@@ -66,19 +66,19 @@ Sleep 150ms
 Show
 Sleep 66ms
 Hide
-Down@1ms 22
+Down@1ms 23
 Sleep 150ms
 Show
 Sleep 4.5s
 
 # 3. The careful agent on the same calls.
 Hide
-Down@1ms 26
+Down@1ms 30
 Sleep 150ms
 Show
 Sleep 66ms
 Hide
-Down@1ms 27
+Down@1ms 30
 Sleep 150ms
 Show
 Sleep 3.5s

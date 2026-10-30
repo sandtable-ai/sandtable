@@ -279,6 +279,51 @@ export const GivenSpec = z
   })
   .strict();
 
+export const FAULT_ERRORS = ["timeout", "rate_limit", "server_error"] as const;
+
+/**
+ * A failure injected into a task's tool calls, the way a flaky dependency fails: an `error` (`timeout`, no response;
+ * `rate_limit`, a 429 that says to retry after `retry_after` seconds; `server_error`, a 5xx `status`, 503 by default),
+ * a delay of `latency_ms` before the response, or both. `call` picks the calls of `tool` it hits, counting from 1 the
+ * calls whose arguments are valid; every call when left out. A fault with an error stops the call before the tool runs,
+ * unless `after_commit: true`: then the tool runs and its write lands, and the agent sees the error anyway, the classic
+ * double-booking trap. `message` replaces the error's default text. Invariants check the call either way.
+ */
+export const FaultSpec = z
+  .object({
+    tool: z.string(),
+    call: z.union([z.number().int().positive(), z.array(z.number().int().positive()).min(1)]).optional(),
+    error: z.enum(FAULT_ERRORS).optional(),
+    status: z.number().int().min(500).max(599).optional(),
+    retry_after: z.number().nonnegative().optional(),
+    after_commit: z.boolean().optional(),
+    latency_ms: z.number().int().positive().max(60_000).optional(),
+    message: z.string().trim().min(1).optional(),
+  })
+  .strict()
+  .superRefine((f, ctx) => {
+    if (!f.error && f.latency_ms === undefined) ctx.addIssue({ code: "custom", message: "a fault needs an error, a latency_ms, or both" });
+    if (f.status !== undefined && f.error !== "server_error") ctx.addIssue({ code: "custom", message: "status is for error: server_error", path: ["status"] });
+    if (f.retry_after !== undefined && f.error !== "rate_limit") ctx.addIssue({ code: "custom", message: "retry_after is for error: rate_limit", path: ["retry_after"] });
+    if (f.after_commit && f.error !== "timeout" && f.error !== "server_error") {
+      ctx.addIssue({ code: "custom", message: "after_commit is for a timeout or a server_error: without an error the call succeeds anyway, and a rate limit refuses a call before it runs", path: ["after_commit"] });
+    }
+    if (f.message !== undefined && !f.error) ctx.addIssue({ code: "custom", message: "message is the text of an error: give the fault an error", path: ["message"] });
+  });
+
+/** Which call of a tool an event follows: the `call`-th, counting as faults do, the first by default. */
+const EventAfter = z.object({ tool: z.string(), call: z.number().int().positive().default(1) }).strict();
+
+/**
+ * A change someone else makes to the world during a task, such as another carrier booking a load the agent found:
+ * right after the call that `after` names, `update` sets fields of the row keyed `key`, or `create` adds a row with
+ * `values`. Values are literal: a "$arg" in them is not replaced.
+ */
+export const EventSpec = z.union([
+  z.object({ after: EventAfter, update: z.string(), key: z.string(), set: Where }).strict(),
+  z.object({ after: EventAfter, create: z.string(), values: Where }).strict(),
+]);
+
 export const TaskSpec = z
   .object({
     id: z.string(),
@@ -302,6 +347,10 @@ export const TaskSpec = z
     /** Tool calls a correct agent would make; `sandtable lint` replays them to prove the task is solvable. */
     reference: z.array(ReferenceCallSpec).optional(),
     given: GivenSpec.optional(),
+    /** Failures injected into this task's tool calls (see FaultSpec). */
+    faults: z.array(FaultSpec).min(1).optional(),
+    /** Changes made to the world by someone else during this task (see EventSpec). */
+    events: z.array(EventSpec).min(1).optional(),
     expect: ExpectSpec,
     max_turns: z.number().int().positive().optional(),
   })
@@ -333,3 +382,5 @@ export type ReferenceCall = z.infer<typeof ReferenceCallSpec>;
 export type FieldRefSpec = z.infer<typeof FieldRef>;
 export type Persona = z.infer<typeof PersonaSpec>;
 export type Given = z.infer<typeof GivenSpec>;
+export type Fault = z.infer<typeof FaultSpec>;
+export type TaskEvent = z.infer<typeof EventSpec>;
