@@ -11,6 +11,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 ### Fixed
 
 - **Plugin**: the plan hook now resolves the relative paths of `npm run sandtable -- init` from the package root, where npm runs the script, instead of from the shell's folder. In a project with a `sandtable` script, a paid run from a subfolder now gets the plan of a dry run of the same files, and no longer gets the plan of a dry run that read other files. The root is the nearest folder with a `package.json` or a `node_modules` folder, or the one `--prefix` names, as for npm; for a workspace's script (`-w`), the plan isn't known ([#430](https://github.com/sandtable-ai/sandtable/issues/430)).
+### Changed
+
+- **Plugin**: the drafting skill and the plugin guide say that pnpm installs only releases at least a day old by default, so on the day of a release `pnpm add -D sandtable-ai` installs the one before, which is older than the skills describe. The skill has Claude compare `npx sandtable-ai --version` with the latest release, say so when it's older and use what that version's `--help` lists; the guide gives `pnpm add -D sandtable-ai@<version>` and `minimumReleaseAgeExclude` for getting the newest ([#433](https://github.com/sandtable-ai/sandtable/issues/433)).
 
 ## [1.1.3] - 2026-10-27
 
