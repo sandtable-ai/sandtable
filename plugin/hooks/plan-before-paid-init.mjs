@@ -10,7 +10,7 @@
 // response as the paid init, which is the usual way to write it, can't be seen yet. The dry run and its output always
 // are, since they came in an earlier response.
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -81,6 +81,39 @@ function resolvePath(value, dir) {
   return dir === undefined ? undefined : path.resolve(dir, value);
 }
 
+/** Where `init` is in a segment's words: right after the CLI, or after the CLI and a `--`; -1 when it isn't there. */
+const initAt = (all) => all.findIndex((w, i) => w === "init" && (BIN.test(all[i - 1] ?? "") || (all[i - 1] === "--" && BIN.test(all[i - 2] ?? ""))));
+
+/** npm's names for `npm run`. */
+const NPM_RUN = new Set(["run", "run-script", "rum", "urn"]);
+
+/**
+ * The folder an `init` segment runs in, given `dir`, the shell's folder. That is `dir`, except for `npm run sandtable --
+ * init`: npm runs a script from its package root, so its relative paths start there (#430). The root is the folder
+ * `--prefix` or `-C` names, else the nearest folder at or above `dir` with a package.json or a node_modules folder, as
+ * npm looks for it, else `dir`. Undefined when the folder is unknown, as for a workspace's script (`-w`, `--workspace`,
+ * `--workspaces`), which runs in a folder this doesn't follow.
+ */
+function initDir(all, dir) {
+  const at = initAt(all);
+  const npm = all.indexOf("npm");
+  if (npm < 0 || npm > at) return dir;
+  const opts = all.slice(npm + 1, at);
+  if (!opts.some((w) => NPM_RUN.has(w))) return dir;
+  if (opts.some((w) => /^(?:-w|-ws|--workspaces?)(?:=|$)/.test(w))) return undefined;
+  let prefix;
+  for (let i = 0; i < opts.length; i++) {
+    const m = opts[i].match(/^(?:--prefix|-C)(?:=(.*))?$/);
+    if (m) prefix = m[1] ?? opts[++i];
+  }
+  if (prefix !== undefined) return cdTarget(prefix, dir);
+  if (dir === undefined) return undefined;
+  for (let d = dir; ; d = path.dirname(d)) {
+    if (existsSync(path.join(d, "package.json")) || existsSync(path.join(d, "node_modules"))) return d;
+    if (path.dirname(d) === d) return dir;
+  }
+}
+
 /**
  * What an `init` segment runs, as a string two segments share when they make the same model calls: its options after
  * `init`, by long name, with the options that don't change the plan left out. `-o` defaults to `sandtable`, as the
@@ -90,7 +123,7 @@ function resolvePath(value, dir) {
  */
 function initKey(segment, env = {}, dir = undefined) {
   const all = words(segment);
-  const at = all.findIndex((w, i) => w === "init" && (BIN.test(all[i - 1] ?? "") || (all[i - 1] === "--" && BIN.test(all[i - 2] ?? ""))));
+  const at = initAt(all);
   const vars = { ...env };
   for (const w of all.slice(0, Math.max(at, 0))) assign(vars, w, true);
   const opts = { "--out": "sandtable" };
@@ -142,8 +175,8 @@ const changesDir = (command) => segments(command).some((s) => chdir(words(s)));
 /**
  * The keys of a command's `init` segments of one kind, in order. Each counts what the command set before it: the
  * variables it exported or assigned, and the folder it ran in, from `dir` (where the command started; undefined when
- * unknown) and each `cd` before it. A folder change it can't follow, such as `cd $X`, a subshell's `(cd`, or `pushd`,
- * makes the folder unknown from there on.
+ * unknown) and each `cd` before it, or its package root for `npm run` (see initDir). A folder change it can't follow,
+ * such as `cd $X`, a subshell's `(cd`, or `pushd`, makes the folder unknown from there on.
  */
 function initKeys(command, kind, dir) {
   const env = {};
@@ -162,7 +195,7 @@ function initKeys(command, kind, dir) {
       // A bare `NAME=value` keeps NAME exported if it was.
       for (const w of all) assign(env, w, env[w.match(ASSIGNMENT)[1]]?.exported === true);
     }
-    if (initKind(segment) === kind) keys.push(initKey(segment, env, dir));
+    if (initKind(segment) === kind) keys.push(initKey(segment, env, initDir(all, dir)));
   }
   return keys;
 }

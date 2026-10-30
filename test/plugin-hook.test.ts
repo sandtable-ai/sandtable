@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -181,6 +181,42 @@ describe("the plugin's plan-before-paid-init hook", () => {
     const grep = bash("grep -c cd notes.md");
     const after = [assistant(grep), assistant(dry)].map((l) => JSON.stringify({ ...JSON.parse(l), message: { ...JSON.parse(l).message, id: "msg_2" } }));
     expect(shown(PAID, [prompt(dir), ...[...after, result(grep.id, "0"), result(dry.id, PLAN_LINE)].map((l) => withCwd(l, dir))])).toContain(plan);
+  });
+
+  it("resolves an npm run script's paths from its package root, where npm runs it (#430)", () => {
+    const plan = PLAN_LINE.replace("Plan: ", "");
+    const differs = "sandtable: Claude is running a model-backed init that differs from its dry runs, so its plan isn't known. It calls a model and costs money.";
+    const root = mkdtempSync(path.join(os.tmpdir(), "sandtable-hook-npm-"));
+    const sub = path.join(root, "sub");
+    const deep = path.join(sub, "deep");
+    mkdirSync(deep, { recursive: true });
+    writeFileSync(path.join(root, "package.json"), JSON.stringify({ scripts: { sandtable: "sandtable" } }));
+    const withCwd = (line: string, cwd: string) => JSON.stringify({ ...JSON.parse(line), cwd });
+    const prompt = (cwd: string) => withCwd(JSON.stringify({ type: "user", message: { role: "user", content: "Draft the domain." } }), cwd);
+    const dryAt = (start: string, command = DRY) => [prompt(start), ...dryRun(undefined, command).map((l) => withCwd(l, start))];
+    const args = PAID.split(" init ")[1];
+    const npmRun = `npm run sandtable -- init ${args}`;
+    // npx runs in the shell's folder and npm run in the package root: run from sub, they read different files.
+    expect(shown(npmRun, dryAt(root), sub)).toContain(plan);
+    expect(shown(npmRun, dryAt(sub), sub)).toBe(differs);
+    expect(shown(`cd sub && ${npmRun}`, dryAt(root), root)).toContain(plan);
+    // npm run from any folder of the package reads the same files, and so does its dry run.
+    expect(shown(npmRun, dryAt(deep, `npm run sandtable -- init ${args} --dry-run`), sub)).toContain(plan);
+    expect(shown(`npm run-script -s sandtable -- init ${args}`, dryAt(root), deep)).toContain(plan);
+    expect(shown(PAID, dryAt(deep, `npm rum sandtable -- init ${args} --dry-run`), root)).toContain(plan);
+    // --prefix and -C name the package root.
+    expect(shown(`npm run --prefix sub sandtable -- init ${args}`, dryAt(sub), root)).toContain(plan);
+    expect(shown(`npm -C ${sub} run sandtable -- init ${args}`, dryAt(sub), deep)).toContain(plan);
+    expect(shown(`npm run --prefix=sub sandtable -- init ${args}`, dryAt(root), root)).toBe(differs);
+    // As for npm, a node_modules folder marks a package root too.
+    const nm = path.join(root, "vendor");
+    mkdirSync(path.join(nm, "node_modules"), { recursive: true });
+    mkdirSync(path.join(nm, "inner"));
+    expect(shown(npmRun, dryAt(nm), path.join(nm, "inner"))).toContain(plan);
+    // A workspace's script runs in a folder the hook doesn't follow.
+    expect(shown(`npm run -w sub sandtable -- init ${args}`, dryAt(sub), root)).toBe(differs);
+    // npm exec runs in the shell's folder, as npx does.
+    expect(shown(`npm exec sandtable-ai -- init ${args}`, dryAt(sub), sub)).toContain(plan);
   });
 
   it("still says what the call is when the dry run of it printed no plan, or has no output yet", () => {
