@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ### Fixed
 
+- **Plugin**: the install hook now stops the unrelated npm package named `sandtable` from being installed or run in sandtable's place. Asked to "install sandtable", Claude had run `pnpm add -D sandtable`, which installs another project. An install of `sandtable` with npm, pnpm or yarn is held, with the same command for `sandtable-ai` to run instead. Running `sandtable` through npx is held where no sandtable-ai is installed, since npx would fetch the other package ([#441](https://github.com/sandtable-ai/sandtable/issues/441)).
 - **Plugin**: the plan hook now resolves the relative paths of `npm run sandtable -- init` from the package root, where npm runs the script, instead of from the shell's folder. In a project with a `sandtable` script, a paid run from a subfolder now gets the plan of a dry run of the same files, and no longer gets the plan of a dry run that read other files. The root is the nearest folder with a `package.json` or a `node_modules` folder, or the one `--prefix` names, as for npm; for a workspace's script (`-w`), the plan isn't known ([#430](https://github.com/sandtable-ai/sandtable/issues/430)).
 - **Plugin**: the plan hook now catches a model-backed `init` run as `npm run sandtable --silent -- init`, `npm run sandtable -C .. -- init` or with other npm options between the script's name and the `--`. Before, such a run had no dry-run check and no plan message ([#439](https://github.com/sandtable-ai/sandtable/issues/439)).
 
