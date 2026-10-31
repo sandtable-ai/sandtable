@@ -8,7 +8,7 @@ import { version } from "../version.ts";
 import { isPlainObject } from "../world/match.ts";
 import { coerceArgs, type ToolOutcome } from "../world/tools.ts";
 import { mcpBody, type McpCall } from "./mcp.ts";
-import { parseWebhook, webhookAnswer, type WebhookResult } from "./webhook.ts";
+import { parseWebhook, webhookAnswer, type TranscriptLine, type WebhookResult } from "./webhook.ts";
 
 /**
  * Serves the simulated world over HTTP, so an agent that calls its tools itself, against the customer's API, an MCP
@@ -48,6 +48,21 @@ export interface WorldServerOptions {
   port: number;
   /** The address to listen on: 127.0.0.1 unless the agent runs elsewhere. */
   host?: string;
+  /** For conversations another system drives (`sandtable serve`): how sessions open and end without a run. */
+  driven?: DrivenSessions;
+}
+
+/**
+ * How `sandtable serve` opens and ends sessions, which another system's conversations drive. With it, a request that
+ * names no session opens one when none is open; a platform's call id and an MCP connection each get their own; and
+ * `POST /sessions`, `POST /sessions/<id>/end`, an MCP `DELETE`, Vapi's end-of-call-report and Retell's `call_ended`
+ * become routes.
+ */
+export interface DrivenSessions {
+  /** Open a session for a conversation: a trial of `taskId`, or of the default task when undefined. Throws to refuse. */
+  open(taskId: string | undefined): ServedSession;
+  /** The conversation is over: grade it, with what was said when the platform sent it, and return what to answer. */
+  end(session: ServedSession, transcript: TranscriptLine[] | undefined): unknown;
 }
 
 /** A Host header that names this machine: 127.0.0.1, localhost or [::1], with any port. */
@@ -59,7 +74,7 @@ const MAX_BODY = 1_000_000;
 const MAX_DRAIN = 16_000_000;
 
 /** A request the server answers with this status and the message as `{ error }`, and any headers it needs. */
-class HttpError extends Error {
+export class HttpError extends Error {
   readonly status: number;
   readonly headers: Record<string, string>;
   constructor(status: number, message: string, headers: Record<string, string> = {}) {
@@ -145,14 +160,55 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
   const tools = new Map(domain.tools.map((t) => [t.name, t]));
   const routes = domain.tools.flatMap((t) => routeOf(t) ?? []);
   const sessions = new Map<string, ServedSession>();
+  /** Driven sessions by a platform's call id. */
+  const byCall = new Map<string, string>();
+  const driven = opts.driven;
   let next = 1;
   let base = "";
 
-  /** The session a request without `/s/<id>` is for: the one trial that is running. */
+  /** The session a request without `/s/<id>` is for: the one trial that is running, or, driven, a new one. */
   function current(): ServedSession {
     if (sessions.size === 1) return sessions.values().next().value!;
-    if (sessions.size === 0) throw new HttpError(409, "no trial is running right now");
-    throw new HttpError(409, `${sessions.size} trials are running at once, so a URL without a session is ambiguous: use the trial's own URL (/s/<session>/…), or run trials one at a time (--concurrency 1)`);
+    if (sessions.size === 0) {
+      if (driven) return driven.open(undefined);
+      throw new HttpError(409, "no trial is running right now");
+    }
+    throw new HttpError(
+      409,
+      driven
+        ? `${sessions.size} conversations are open at once, so a URL without a session is ambiguous: use the session's own URL (/s/<session>/…), which POST /sessions returns`
+        : `${sessions.size} trials are running at once, so a URL without a session is ambiguous: use the trial's own URL (/s/<session>/…), or run trials one at a time (--concurrency 1)`,
+    );
+  }
+
+  /** A driven session by a platform's call id: the one it opened, or a new one. */
+  function forCall(callId: string): ServedSession {
+    const open = sessions.get(byCall.get(callId) ?? "");
+    if (open) return open;
+    const s = driven!.open(undefined);
+    byCall.set(callId, s.id);
+    return s;
+  }
+
+  /** End a driven session: grade it, stop serving it, and answer with the grade. */
+  function finish(res: ServerResponse, s: ServedSession, transcript: TranscriptLine[] | undefined): void {
+    sessions.delete(s.id);
+    for (const [call, id] of byCall) if (id === s.id) byCall.delete(call);
+    send(res, 200, driven!.end(s, transcript));
+  }
+
+  /** A transcript as `POST /sessions/<id>/end` takes it: `[{ role: "user" | "agent" | "assistant", text, time? }]`. */
+  function transcriptOf(body: unknown): TranscriptLine[] | undefined {
+    if (body === undefined || (isPlainObject(body) && body.transcript === undefined)) return undefined;
+    const lines = isPlainObject(body) ? body.transcript : undefined;
+    if (!Array.isArray(lines)) throw new HttpError(400, "transcript must be a list of { role, text } lines");
+    return lines.map((l, i) => {
+      const text = isPlainObject(l) ? (l.text ?? l.content ?? l.message) : undefined;
+      const role = isPlainObject(l) ? (l.role === "user" ? "user" : l.role === "agent" || l.role === "assistant" || l.role === "bot" ? "agent" : undefined) : undefined;
+      if (!role || typeof text !== "string") throw new HttpError(400, `transcript[${i}] needs a role (user or agent) and a text`);
+      const time = isPlainObject(l) && typeof l.time === "number" ? { time: l.time } : {};
+      return { role, text, ...time };
+    });
   }
 
   /** Call a tool in a session, waiting out a fault's latency. */
@@ -209,20 +265,41 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
       return;
     }
 
+    if (driven && !session && path.startsWith("/sessions")) {
+      const end = /^\/sessions\/([^/]+)\/end\/?$/.exec(path);
+      if (end) {
+        if (method !== "POST") throw new HttpError(405, "POST /sessions/<id>/end, with { transcript } when you have it");
+        const id = decode(end[1]!);
+        const s = sessions.get(id);
+        if (!s) throw new HttpError(404, `no session ${id} is open: it ended, or it never started`);
+        finish(res, s, transcriptOf(await readBody(req)));
+        return;
+      }
+      if (path === "/sessions" || path === "/sessions/") {
+        if (method === "GET") return send(res, 200, [...sessions.values()].map((s) => ({ id: s.id, task: s.task.id, ...s.urls })));
+        if (method !== "POST") throw new HttpError(405, "POST /sessions opens a conversation; GET /sessions lists the open ones");
+        const body = await readBody(req);
+        const task = isPlainObject(body) && typeof body.task === "string" ? body.task : undefined;
+        const s = driven.open(task);
+        return send(res, 201, { id: s.id, task: s.task.id, ...s.urls });
+      }
+    }
+
     if (path === "/mcp") {
+      // Driven, an MCP connection is a conversation: initialize opens a session and names it in Mcp-Session-Id,
+      // later requests carry it, and DELETE ends it.
+      const header = req.headers["mcp-session-id"];
+      const mcpId = driven && !session && typeof header === "string" ? header : undefined;
+      const mcpSession = mcpId === undefined ? undefined : sessions.get(mcpId);
+      if (mcpId !== undefined && !mcpSession) throw new HttpError(404, `no session ${mcpId} is open: initialize again`);
+      if (method === "DELETE" && mcpSession) {
+        finish(res, mcpSession, undefined);
+        return;
+      }
       if (method !== "POST") {
-        res.setHeader("allow", "POST");
+        res.setHeader("allow", driven ? "POST, DELETE" : "POST");
         throw new HttpError(405, "the MCP endpoint takes POST only: it doesn't open an SSE stream");
       }
-      const call: McpCall = async (name, args) => {
-        let s: ServedSession;
-        try {
-          s = target();
-        } catch (err) {
-          return { noTrial: (err as Error).message };
-        }
-        return (await callIn(s, name, args, "mcp")).outcome;
-      };
       let body: unknown;
       try {
         body = await readBody(req);
@@ -234,6 +311,20 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
       if (body === undefined || (Array.isArray(body) && body.length === 0)) {
         return send(res, 400, { jsonrpc: "2.0", id: null, error: { code: -32600, message: "Invalid Request: an empty body or batch" } });
       }
+      let opened: ServedSession | undefined;
+      if (driven && !session && !mcpSession && isPlainObject(body) && body.method === "initialize") {
+        opened = driven.open(undefined);
+        res.setHeader("mcp-session-id", opened.id);
+      }
+      const call: McpCall = async (name, args) => {
+        let s: ServedSession;
+        try {
+          s = mcpSession ?? opened ?? target();
+        } catch (err) {
+          return { noTrial: (err as Error).message };
+        }
+        return (await callIn(s, name, args, "mcp")).outcome;
+      };
       const out = await mcpBody(domain, body, call);
       if (out === undefined) send(res, 202, undefined);
       else send(res, 200, out);
@@ -245,11 +336,18 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
       if (method !== "POST") throw new HttpError(405, "the webhook takes POST");
       const request = parseWebhook(await readBody(req), hook[1] === undefined ? undefined : decode(hook[1]));
       if (request.kind === "invalid") throw new HttpError(400, request.error);
+      // Driven, a platform's call id names the conversation: its first webhook opens a session for it.
+      const keyed = () => (driven && !session && request.callId !== undefined ? forCall(request.callId) : target());
+      if (request.kind === "end" && driven) {
+        // A call with no tool call is still a trial: its end opens and grades one.
+        finish(res, keyed(), request.transcript);
+        return;
+      }
       if (request.kind !== "calls") {
         send(res, 200, {});
         return;
       }
-      const s = target();
+      const s = keyed();
       const results: WebhookResult[] = [];
       for (const call of request.calls) results.push({ call, ...(await callIn(s, call.name, call.args, "webhook")) });
       const answer = webhookAnswer(request.platform, results);
