@@ -205,7 +205,7 @@ The path is a JSON file, or a folder of them, searched recursively, holding:
 | a scenario | a task: its `instructions` are the caller's goal, its `variableValues` the call's `given.context` |
 | a scenario's tool mocks | rows that tool looks up, in that task's `given.rows`, and an expectation that the task calls it. A mock that isn't a record is the tool's `respond` text |
 
-Everything is `review: pending`, with `TODO(review)` notes on what the config can't say. That covers what a tool changes, how to write a scenario's Vapi evaluations as end states sandtable checks without a model, and the caller's lines for `--user scripted`. Tools that Vapi runs itself, such as DTMF or a knowledge-base query, are skipped with a warning. Then draft the rules from the prompt with `init --sop <dir>/policy.md -o <dir>`, review, and `validate --strict`. The repository's [`examples/vapi`](https://github.com/sandtable-ai/sandtable/tree/main/examples/vapi) is a fictional export to try it on.
+Everything is `review: pending`, with `TODO(review)` notes on what the config can't say. That covers what a tool changes, how to write a scenario's Vapi evaluations as end states sandtable checks without a model, and the caller's lines for `--user scripted`. Tools that Vapi runs itself, such as DTMF or a knowledge-base query, are skipped with a warning. Then draft the rules from the prompt with `init --sop <dir>/policy.md -o <dir>`, review, and `validate --strict`. To grade the assistant's own test calls on that world, point its server URL at [`sandtable serve`](/guides/black-box#conversations-another-system-drives). The repository's [`examples/vapi`](https://github.com/sandtable-ai/sandtable/tree/main/examples/vapi) is a fictional export to try it on.
 
 ## Reviewing a draft
 
