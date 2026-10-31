@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-31
+
+A minor release for agents you can't change, with no breaking changes. `run --serve` serves each trial's simulated world over REST, MCP and webhooks for an agent that calls its own tools, and `sandtable serve` grades the conversations a hosted voice platform's own test calls drive. A task's faults make tool calls time out, hit a rate limit or fail, and its events change the world mid-call. `sandtable import vapi` drafts a domain from a Vapi assistant's export. The freight example gains two fault tasks and a rule, so stored freight runs can't be regraded under it. The plugin's hooks cover more ways of running and installing sandtable.
+
 ### Added
 
 - **Spec**: a task's `faults` make its tool calls fail the way a flaky dependency does: a `timeout`, a `rate_limit` (a 429 with `retry_after`) or a `server_error` (a 5xx `status`), a `latency_ms` delay, or both, on the calls of a tool that `call` names. With `after_commit: true`, a timeout or server error comes after the tool's write landed, the trap where a retry books twice. Invariants check a faulted call as any other, and an invariant can catch the unsafe retry. `lint` replays a task's `reference` with its faults and warns about one the reference never reaches ([#15](https://github.com/sandtable-ai/sandtable/issues/15)).
@@ -330,7 +334,8 @@ First public release. sandtable rehearses an AI agent on a simulated copy of one
 
 A rehearsal of the release pipeline (npm, PyPI and GitHub releases from one tag), published before the first public release. Everything in it is also in 0.1.0; use 0.1.0 instead.
 
-[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v1.1.3...HEAD
+[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/sandtable-ai/sandtable/compare/v1.1.3...v1.2.0
 [1.1.3]: https://github.com/sandtable-ai/sandtable/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/sandtable-ai/sandtable/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/sandtable-ai/sandtable/compare/v1.1.0...v1.1.1
