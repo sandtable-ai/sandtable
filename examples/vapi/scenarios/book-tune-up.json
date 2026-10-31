@@ -1,0 +1,7 @@
+{
+  "id": "scn-book-tune-up",
+  "name": "Book a tune-up",
+  "instructions": "You are Riley Chen. You want a tune-up on November 12, 2026, and you'll take that date only. Confirm when asked, then hang up once it's booked.",
+  "toolMocks": [{ "toolName": "book_service", "result": "Booked: tune-up for Riley Chen on 2026-11-12, confirmation PB-77", "enabled": true }],
+  "evaluations": [{ "structuredOutputId": "so-booked-requested-date", "comparator": "=", "value": true, "required": true }]
+}

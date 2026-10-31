@@ -1,7 +1,7 @@
 ---
 title: "CLI reference: every sandtable command and flag"
 sidebarTitle: "CLI"
-description: "Every sandtable command and flag (init, validate, lint, review, run, serve, leaderboard, demo, report and regrade) with provider options, environment variables and exit codes."
+description: "Every sandtable command and flag (init, import, validate, lint, review, run, serve, leaderboard, demo, report and regrade) with provider options, environment variables and exit codes."
 keywords: ["command line", "sandtable run", "flags", "options", "environment variables", "exit codes", "leaderboard", "regrade"]
 ---
 
@@ -12,6 +12,7 @@ npx sandtable-ai <command> [options]
 | Command | What it does |
 |---|---|
 | [`init`](#init) | draft a domain from a customer's artifacts |
+| [`import`](#import) | draft a domain from a voice-agent platform's assistant config, with no model call |
 | [`validate`](#validate) | check a domain for schema and cross-reference errors |
 | [`lint`](#lint) | prove every task is ready, solvable, non-vacuous and graded, without model calls |
 | [`review`](#review) | list drafted items that still need a person to accept them |
@@ -57,6 +58,23 @@ Plan: 10 model calls (1 for the SOP, 9 for transcripts) to claude-sonnet-5-5 on 
 ```
 
 The bound counts each call's prompt (about 4 characters a token, at the cache-write rate) and the most it may write (`max_tokens`, 16,000), so a real draft usually costs a fraction of it. Without `--region` or `AWS_REGION`, a Bedrock plan says the region comes from your AWS config. A missing input exits 2, as a real run would.
+
+## import
+
+Draft a domain from a voice-agent platform's assistant config, with no model call. Review the output before trusting it.
+
+```bash
+npx sandtable-ai import vapi ./vapi-export -o ./sandtable
+```
+
+| Argument / option | Description |
+|---|---|
+| `<platform>` | the platform the config comes from: `vapi` |
+| `<path>` | the exported config: a JSON file, or a directory of them, searched recursively, with the assistant and optionally the tools its `toolIds` name and its simulation scenarios |
+| `-o, --out <dir>` | domain directory to create. Default: `sandtable` |
+| `--force` | overwrite existing files |
+
+It writes `sandtable.yaml`, `policy.md` and `tasks.yaml`, with every tool and task pending review, and prints what it skipped. It stops with exit 2, writing nothing, when the files hold no assistant, more than one, or JSON it can't read, or the assistant has no tool sandtable can model. See [from a voice platform](/guides/init#from-a-voice-platform-import).
 
 ## validate
 

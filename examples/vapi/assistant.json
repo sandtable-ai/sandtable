@@ -1,0 +1,38 @@
+{
+  "id": "asst-pinecrest-0001",
+  "name": "Pinecrest Bike Repair",
+  "firstMessage": "Thanks for calling Pinecrest Bike Repair, this is the service desk. How can I help?",
+  "model": {
+    "provider": "openai",
+    "model": "gpt-4o",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are the phone assistant for Pinecrest Bike Repair, a neighborhood bike shop. Callers are customers asking about a repair or booking service.\n\n- Look a repair up with get_repair before you say anything about it. Callers give their ticket number, such as R-2041.\n- Tell the caller the repair's status and the balance due. Never promise a pickup time the ticket doesn't show.\n- Book service with book_service only after the caller has confirmed the date and the service: a tune-up, a flat fix or a brake service.\n- We don't diagnose over the phone. For questions about what's wrong with a bike, transfer the call to a mechanic.\n- The caller's phone number is {{customer_phone}}."
+      }
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "get_repair",
+          "description": "Look up a repair ticket: its status, the work done and the balance due.",
+          "parameters": {
+            "type": "object",
+            "properties": { "ticket_id": { "type": "string", "description": "The repair ticket, such as R-2041" } },
+            "required": ["ticket_id"]
+          }
+        },
+        "server": { "url": "https://pinecrest-bikes.example/vapi/tools" }
+      },
+      {
+        "type": "transferCall",
+        "destinations": [{ "type": "number", "number": "+15555550100", "description": "A mechanic, for questions about what's wrong with a bike" }]
+      },
+      { "type": "endCall" }
+    ],
+    "toolIds": ["tool-book-service"]
+  },
+  "voice": { "provider": "11labs", "voiceId": "pinecrest-desk" },
+  "transcriber": { "provider": "deepgram", "model": "nova-3" }
+}

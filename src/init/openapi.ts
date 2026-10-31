@@ -364,7 +364,7 @@ function pathParams(path: string): string[] {
  * A tool param for a schema, or undefined when it can't be one. An object's properties and an array's items
  * are mapped too, until `depth` reaches MAX_DEPTH, so a `$ref` cycle ends there.
  */
-function toParam(schema: Json, deref: (x: unknown) => unknown, required: boolean, description?: unknown, depth = 0): DraftParam | undefined {
+export function toParam(schema: Json, deref: (x: unknown) => unknown, required: boolean, description?: unknown, depth = 0): DraftParam | undefined {
   const s = flatten(schema, deref);
   const desc = (description ?? s.description) as string | undefined;
   if (s.type === "object" || (s.type === undefined && s.properties)) {
@@ -497,7 +497,7 @@ export function snake(s: string): string {
     .toLowerCase();
 }
 
-function slug(s: string): string {
+export function slug(s: string): string {
   return snake(s).replace(/_/g, "-") || "domain";
 }
 
@@ -508,7 +508,7 @@ export function singularize(s: string): string {
   return s;
 }
 
-function uniqueName(seen: Set<string>, base: string): string {
+export function uniqueName(seen: Set<string>, base: string): string {
   let name = base.slice(0, 64) || "tool";
   for (let i = 2; seen.has(name); i++) name = `${base.slice(0, 60)}_${i}`;
   seen.add(name);

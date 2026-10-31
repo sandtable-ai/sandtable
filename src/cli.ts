@@ -27,6 +27,7 @@ import { appendRows, appendToDomainList } from "./init/merge.ts";
 import { draftFromOpenApi, openApiProblem } from "./init/openapi.ts";
 import { draftInvariantsFromSop, knownFields, softRuleComments } from "./init/sop.ts";
 import { draftTasksFromTranscripts } from "./init/transcripts.ts";
+import { draftFromVapi, renderVapiDraft, vapiProblem } from "./init/vapi.ts";
 import { draftPlan, planLine } from "./init/plan.ts";
 import { DOMAIN_FILE, isPolicyPlaceholder, POLICY_PLACEHOLDER, renderDraft, TASKS_PLACEHOLDER, writeDraft } from "./init/render.ts";
 import { DomainError, DomainNotFoundError, domainWarnings, loadDomain, pendingReview } from "./spec/load.ts";
@@ -320,6 +321,28 @@ async function readTranscripts(p: string): Promise<{ file: string; path: string;
   return Promise.all(files.map(async (f) => ({ file: path.basename(f), path: f, text: await readUserText(f, how) })));
 }
 
+/** The JSON files `import` reads: the file itself, or every .json file under the directory, in path order. */
+async function readJsonFiles(p: string): Promise<{ file: string; json: unknown }[]> {
+  const how = { from: "import", what: "file or directory" };
+  const info = await stat(p).catch(async (err: unknown) => {
+    throw await userPathError(err, p, how);
+  });
+  const paths = info.isDirectory()
+    ? (await readdir(p, { recursive: true })).filter((f) => /\.json$/i.test(f)).sort().map((f) => path.join(p, f))
+    : [p];
+  if (paths.length === 0) throw new Error(`import: no .json file in ${p}`);
+  return Promise.all(
+    paths.map(async (f) => {
+      const text = await readUserText(f, how);
+      try {
+        return { file: path.relative(info.isDirectory() ? p : path.dirname(p), f), json: JSON.parse(text) as unknown };
+      } catch (err) {
+        throw new Error(`${f} is not JSON: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }),
+  );
+}
+
 /**
  * The `init` command that drafts these transcripts again into the same domain, with the model and provider flags given.
  * It leaves out `--openapi` and `--sop`, whose drafts are already written.
@@ -518,6 +541,32 @@ withProviderFlags(program
       for (const p of paths) console.error(`    ${transcriptsRerun(p, o)}`);
       exitWith(EXIT_ERROR);
     }
+  });
+
+program
+  .command("import")
+  .argument("<platform>", "the platform the config comes from: vapi")
+  .argument("<path>", "the exported config: a JSON file, or a directory of them (searched recursively), with the assistant and optionally its tools and simulation scenarios")
+  .description("draft a domain from a voice-agent platform's assistant config, with no model call (review the output before trusting it)")
+  .option("-o, --out <dir>", "domain directory to create", "sandtable")
+  .option("--force", "overwrite existing files")
+  .action(async (platform: string, input: string, o: { out: string; force?: boolean }) => {
+    if (platform !== "vapi") throw new InvalidArgumentError(`unknown platform "${platform}": import supports vapi`);
+    const files = await readJsonFiles(input);
+    const problem = vapiProblem(files);
+    if (problem) throw new Error(`${input} ${problem}. Nothing was written.`);
+    const draft = draftFromVapi(files);
+    if (draft.tools.length === 0) {
+      throw new Error([`${input}: the assistant has no tool sandtable can model, and a domain needs one: give it a function tool, or a transferCall or endCall tool. Nothing was written.`, ...draft.warnings.map((w) => `  ! ${w}`)].join("\n"));
+    }
+    const rendered = renderVapiDraft(draft);
+    const written = await writeDraft(o.out, { [DOMAIN_FILE]: rendered.domain, "policy.md": draft.policy, "tasks.yaml": rendered.tasks }, o.force);
+    console.log(`Imported ${draft.name} from Vapi: ${draft.tools.length} tools, ${Object.keys(draft.tables).length} tables, ${draft.tasks.length} tasks, all pending review.`);
+    for (const w of draft.warnings) console.log(`  ! ${w}`);
+    for (const f of written) console.log(`  wrote ${f}`);
+    console.log(
+      `\nNext: accept or fix each drafted item, draft the rules from the prompt, and validate:\n  ${NEXT} review ${shellWord(o.out)}\n  ${NEXT} init --sop ${shellWord(path.join(o.out, "policy.md"))} -o ${shellWord(o.out)} --dry-run\n  ${NEXT} validate ${shellWord(o.out)} --strict\nTo grade the assistant's own test calls on this world, point its server URL at ${NEXT} serve ${shellWord(o.out)}.`,
+    );
   });
 
 program

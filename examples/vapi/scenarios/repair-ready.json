@@ -1,0 +1,10 @@
+{
+  "id": "scn-repair-ready",
+  "name": "Repair status for a bike that's ready",
+  "instructions": "You are Morgan Ortega. Your bike is in for repair under ticket R-2041. Ask whether it's ready and what you owe. Hang up once you know both.",
+  "toolMocks": [
+    { "toolName": "get_repair", "result": "{\"ticket_id\":\"R-2041\",\"status\":\"ready\",\"work\":\"new chain and brake pads\",\"balance_due\":85}", "enabled": true }
+  ],
+  "evaluations": [{ "structuredOutputId": "so-told-ready-and-balance", "comparator": "=", "value": true, "required": true }],
+  "targetOverrides": { "variableValues": { "customer_phone": "+15555550142" } }
+}

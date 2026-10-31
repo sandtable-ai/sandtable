@@ -183,6 +183,30 @@ Guardrails:
 Local scrubbing and the copied-value check catch patterns, not every identifying detail: a name the caller never introduces, a misspelled name the model corrected, or an address or account detail written another way still needs a person. Read transcripts before sending them anywhere, and keep the drafted domain's seed rows fictional.
 </Tip>
 
+## From a voice platform: import
+
+An agent already built on a hosted voice platform has its prompt, its tools and often its test scenarios in the platform's config. `sandtable import vapi` drafts a domain from a Vapi assistant's export, deterministically, with no model call:
+
+```bash
+npx sandtable-ai import vapi ./vapi-export -o ./sandtable
+```
+
+The path is a JSON file, or a folder of them, searched recursively, holding:
+- the assistant, as `GET https://api.vapi.ai/assistant/<id>` returns it;
+- the tools its `model.toolIds` name (`GET https://api.vapi.ai/tool/<id>`);
+- its simulation scenarios (`GET https://api.vapi.ai/eval/simulation/scenario/<id>`).
+
+| From the config | In the draft |
+|---|---|
+| the system prompt, and the first message | `policy.md` |
+| a `function` tool | a tool with its JSON-schema params |
+| a `transferCall` tool | `transferCall`, whose `destination` is one of its destinations, and a `transfers` table |
+| an `endCall` tool | `endCall` |
+| a scenario | a task: its `instructions` are the caller's goal, its `variableValues` the call's `given.context` |
+| a scenario's tool mocks | rows that tool looks up, in that task's `given.rows`, and an expectation that the task calls it. A mock that isn't a record is the tool's `respond` text |
+
+Everything is `review: pending`, with `TODO(review)` notes on what the config can't say. That covers what a tool changes, how to write a scenario's Vapi evaluations as end states sandtable checks without a model, and the caller's lines for `--user scripted`. Tools that Vapi runs itself, such as DTMF or a knowledge-base query, are skipped with a warning. Then draft the rules from the prompt with `init --sop <dir>/policy.md -o <dir>`, review, and `validate --strict`. To grade the assistant's own test calls on that world, point its server URL at [`sandtable serve`](/guides/black-box#conversations-another-system-drives). The repository's [`examples/vapi`](https://github.com/sandtable-ai/sandtable/tree/main/examples/vapi) is a fictional export to try it on.
+
 ## Reviewing a draft
 
 Drafted invariants and tasks carry `review: pending` and a `source` (the file and the quote they came from). Tools with review notes are marked the same way.

@@ -59,6 +59,7 @@ npx sandtable-ai run ./my-domain --agent http://localhost:8787/step -k 4 --fail-
 - **From the OpenAPI spec**, `init` drafts the tables and tools, deterministically.
 - **From the SOP**, it drafts invariants with Claude. Each one quotes the sentence it comes from.
 - **From call transcripts**, it drafts tasks, personas and fictional seed rows. Personal data is scrubbed locally first.
+- **From a voice platform**, `import vapi` drafts the policy, the tools and tasks from a Vapi assistant's export and its test scenarios, with no model call.
 - Everything drafted stays `review: pending` until a person accepts it. `lint` then proves each task can be solved and isn't passed by doing nothing, without a model call.
 - **For the customer**, `report <results.json> --audience customer` turns a run into a page their operations lead can sign off on before go-live. It shows each rule with the sentence it comes from, the conversations that checked it, the mistakes the rehearsal caught a careless agent making (`run --without-policy` makes one from a built-in model agent), and what it doesn't cover. Guide: [get a customer's sign-off](https://sandtable.dev/guides/customer-signoff).
 

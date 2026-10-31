@@ -75,6 +75,8 @@ The `init` drafting steps use Claude: `ANTHROPIC_API_KEY`, or `--provider bedroc
 
 ### 1. Draft
 
+If the agent already runs on Vapi and the engineer has its export (the assistant JSON, the tools its `toolIds` name, and simulation scenarios), start with `npx sandtable-ai import vapi <file-or-folder> -o ./sandtable`, which is free. It drafts the policy, the tools and a task per scenario, all pending review. Then use `init --sop ./sandtable/policy.md -o ./sandtable` for the rules, with its dry run first, as below.
+
 Run `--openapi` on its own first: it's free. Then run the `--sop` and `--transcripts` command with `--dry-run` added, and show the engineer its `Plan:` line. Write the plan to them as a message of your own, with the calls and the dollar bound. If they already authorized model steps, run the command without `--dry-run` after that message; otherwise end your turn there and wait for their go-ahead. Never run a paid step without its dry run first.
 
 ```bash
