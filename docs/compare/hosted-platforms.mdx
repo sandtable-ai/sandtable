@@ -31,7 +31,9 @@ sandtable is text-only today. It rehearses the agent's reasoning and tool use (w
 
 **Choose sandtable** to gate the agent's decisions against the customer's rules before you spend on audio-level tests, or alongside them.
 
-Planned: voice transport and timing metrics ([#17](https://github.com/sandtable-ai/sandtable/issues/17), [#43](https://github.com/sandtable-ai/sandtable/issues/43)), serving the world as REST, MCP and webhook tools for hosted voice platforms ([#14](https://github.com/sandtable-ai/sandtable/issues/14)), and importing voice-agent platform configs as draft domains ([#34](https://github.com/sandtable-ai/sandtable/issues/34), [#35](https://github.com/sandtable-ai/sandtable/issues/35)).
+The two combine for an agent built on a hosted voice platform. `sandtable import vapi` drafts a domain from a Vapi assistant's export and its simulation scenarios. `sandtable serve` then answers the assistant's tool calls from the simulated world, and grades each conversation the platform's own test calls drive, on the end state, the rules and the tools called ([agents that call their own tools](/guides/black-box)). The audio path stays the platform's to test.
+
+Planned: voice transport and timing metrics ([#17](https://github.com/sandtable-ai/sandtable/issues/17), [#43](https://github.com/sandtable-ai/sandtable/issues/43)), and importing Retell and ElevenLabs agent exports ([#35](https://github.com/sandtable-ai/sandtable/issues/35)).
 
 ## LLM eval and observability platforms
 
