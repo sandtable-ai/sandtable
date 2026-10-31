@@ -12,7 +12,7 @@
 // the network. The report screenshot runs `sandtable run` offline (rule-based agent, scripted
 // caller, no model calls) and uses the report's own system fonts. Set CHROME to pick a browser.
 
-import { spawn, execFileSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -134,10 +134,12 @@ const targets = {
   async report(browser) {
     const dir = mkdtempSync(path.join(tmpdir(), "sandtable-report-"));
     try {
-      execFileSync(process.execPath, [
+      // The naive agent fails freight's critical tasks, so the run exits 1 for that gate: a complete run all the same.
+      const run = spawnSync(process.execPath, [
         path.join(root, "src/cli.ts"), "run", path.join(root, "examples/freight"),
         "--agent", "scripted:naive", "--user", "scripted", "-o", dir,
       ], { stdio: "ignore" });
+      if (run.status !== 0 && run.status !== 1) throw new Error(`the naive run exited ${run.status ?? run.signal}`);
       // The expired-insurance trial, from its title down to the agent's reply after the tool call
       // that broke the rules. The two goodbye turns after it are cropped off.
       const prepare = `(() => {
