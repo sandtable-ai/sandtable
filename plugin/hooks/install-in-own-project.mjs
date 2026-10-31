@@ -3,7 +3,8 @@
 // project. All three install into the nearest folder above that has a package.json, which can be another project or the
 // engineer's home folder (#401), so in a folder without one the agent runs `npm init -y` first, whichever manager installs
 // (#432). The drafting and results skills ask for it; this holds the agent to it on any model, even when no skill
-// loaded. Anything it can't read, it lets through.
+// loaded. It also stops the unrelated npm package named `sandtable` from being installed or run by npx in its place
+// (#441): sandtable's package is sandtable-ai. Anything it can't read, it lets through.
 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -28,6 +29,10 @@ const MANAGERS = {
 };
 const ENV = /^(?:\S+=\S*\s+)*/;
 const SANDTABLE = /(?:^|\s)sandtable-ai(?:@\S*)?(?=\s|$)/;
+/** The unrelated npm package named `sandtable`, as an install's package word. */
+const WRONG = /(^|\s)sandtable(@\S*)?(?=\s|$)/;
+/** npx's options that take a value, and the ones among them that name a package. */
+const NPX_VALUE = new Set(["-p", "--package", "-c", "--call", "--cache", "--userconfig", "--registry"]);
 // Global installs, and npm's --prefix (-C) and pnpm's --dir (-C), which install into the folder they name, creating its
 // package.json if need be.
 const ELSEWHERE = /(?:^|\s)(?:-g|--global|--location[= ]global|(?:--prefix|--dir|-C)(?:[= ]\S+)?)(?=\s|$)/;
@@ -47,12 +52,68 @@ function cdTarget(arg, dir) {
 /** A path as one shell word: as it is when it needs no quoting, else in single quotes. */
 const shellWord = (p) => (/^[\w@%+=:,./-]+$/.test(p) ? p : `'${p.replace(/'/g, "'\\''")}'`);
 
+/** Whether sandtable-ai is installed in `dir`'s project or a folder above, where npx finds its `sandtable` bin. */
+function installedAbove(dir) {
+  for (let d = dir; ; d = path.dirname(d)) {
+    if (existsSync(path.join(d, "node_modules", "sandtable-ai"))) return true;
+    if (path.dirname(d) === d) return false;
+  }
+}
+
 /**
- * Why this Bash command must not run, or undefined when it may: it installs sandtable-ai into a folder that has no
- * package.json, and no earlier command in it runs `npm init`, `pnpm init` or `yarn init` there. A `cd` the hook can't
- * follow ends the check; a yarn `--cwd` it can't follow skips that install.
+ * Why `npx … sandtable …` must not run, or undefined when it may: its command is `sandtable` with no `-p sandtable-ai`,
+ * and no sandtable-ai is installed where npx looks, so npx would fetch and run the unrelated package named `sandtable`.
+ */
+function npxWrong(run, dir) {
+  const words = run.split(/\s+/);
+  if (words[0] !== "npx") return undefined;
+  const packages = [];
+  let i = 1;
+  for (; i < words.length && words[i].startsWith("-"); i++) {
+    const [name, value] = words[i].split("=", 2);
+    if (!NPX_VALUE.has(name)) continue;
+    const v = value ?? words[++i];
+    if (name === "-p" || name === "--package") packages.push(v ?? "");
+  }
+  const cmd = words[i];
+  if (cmd === undefined || !/^sandtable(?:@\S*)?$/.test(cmd) || packages.length || dir === undefined || installedAbove(dir)) return undefined;
+  return cmd;
+}
+
+const WRONG_PACKAGE = "sandtable plugin: `sandtable` on npm is an unrelated package. sandtable's package is `sandtable-ai`";
+
+/**
+ * Why this Bash command must not run, or undefined when it may:
+ * - it installs the npm package `sandtable`, or runs it with npx, instead of sandtable-ai, anywhere in the command; or
+ * - it installs sandtable-ai into a folder that has no package.json, and no earlier command in it runs `npm init`,
+ *   `pnpm init` or `yarn init` there. A `cd` the hook can't follow ends this check; a yarn `--cwd` it can't follow
+ *   skips that install.
  */
 function denial(command, cwd) {
+  let at = cwd;
+  for (const segment of segments(command)) {
+    const cd = CD.exec(segment);
+    if (cd) {
+      // A cd it can't follow leaves the folder unknown from there on.
+      at = at === undefined ? undefined : cdTarget(cd[1], at);
+      continue;
+    }
+    const run = segment.replace(ENV, "");
+    const manager = Object.keys(MANAGERS).find((m) => MANAGERS[m].install.test(run));
+    if (manager && WRONG.test(run)) {
+      return `${WRONG_PACKAGE}: install it as \`${segment.replace(WRONG, "$1sandtable-ai$2")}\` instead, and run it as \`npx sandtable-ai <command>\`.`;
+    }
+    const cmd = npxWrong(run, at);
+    if (cmd) {
+      const fixed = segment.replace(new RegExp(String.raw`(\s)${cmd.replace(/[.*+?^$()|[\]\\]/g, "\\$&")}(?=\s|$)`), `$1sandtable-ai${cmd.slice("sandtable".length)}`);
+      return `${WRONG_PACKAGE}: run \`${fixed}\` instead, or install it in the project first.`;
+    }
+  }
+  return projectDenial(command, cwd);
+}
+
+/** The project check of denial(): an install of sandtable-ai into a folder with no package.json. */
+function projectDenial(command, cwd) {
   let dir = cwd;
   const initialized = new Set();
   for (const segment of segments(command)) {
@@ -90,7 +151,7 @@ function main() {
     return;
   }
   const command = input?.tool_input?.command;
-  if (input?.tool_name !== "Bash" || typeof command !== "string" || typeof input.cwd !== "string" || !/\bsandtable-ai\b/.test(command)) return;
+  if (input?.tool_name !== "Bash" || typeof command !== "string" || typeof input.cwd !== "string" || !/\bsandtable\b/.test(command)) return;
   const reason = denial(command, input.cwd);
   if (!reason) return;
   process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: reason } }));

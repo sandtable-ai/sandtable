@@ -140,6 +140,29 @@ describe("the plugin's install-in-own-project hook", () => {
     expect(decide(INSTALL, bare, "Read")).toBeUndefined();
   });
 
+  it("stops the unrelated npm package named sandtable from being installed or run by npx, and names sandtable-ai (#441)", () => {
+    const wrong = "sandtable plugin: `sandtable` on npm is an unrelated package. sandtable's package is `sandtable-ai`";
+    // In a project of its own too: the package is wrong wherever it goes.
+    for (const cmd of ["pnpm add -D sandtable", "npm install sandtable", "npm i sandtable@1.0.2", "yarn add sandtable", "npm install -g sandtable", "cd engagement && pnpm add sandtable"]) {
+      expect(decide(cmd, own), cmd).toContain(wrong);
+    }
+    expect(decide("pnpm add -D sandtable", own)).toContain("install it as `pnpm add -D sandtable-ai` instead, and run it as `npx sandtable-ai <command>`.");
+    expect(decide("npm i sandtable@1.0.2", own)).toContain("install it as `npm i sandtable-ai@1.0.2` instead");
+    // npx would fetch the unrelated package when no sandtable-ai is installed where it looks.
+    expect(decide("npx sandtable init --sop sop.md", bare)).toContain("run `npx sandtable-ai init --sop sop.md` instead, or install it in the project first.");
+    expect(decide("npx -y sandtable@latest demo", bare)).toContain("run `npx -y sandtable-ai@latest demo` instead");
+    const installed = path.join(parent, "installed");
+    mkdirSync(path.join(installed, "node_modules", "sandtable-ai"), { recursive: true });
+    mkdirSync(path.join(installed, "sub"));
+    expect(decide("npx sandtable demo", installed)).toBeUndefined();
+    expect(decide("npx sandtable demo", path.join(installed, "sub"))).toBeUndefined();
+    expect(decide("cd installed && npx sandtable demo", parent)).toBeUndefined();
+    // The right package, the -p form, and commands that only mention the name.
+    for (const cmd of ["npx -p sandtable-ai -p @anthropic-ai/bedrock-sdk sandtable init --sop x", "npx --package=sandtable-ai sandtable demo", "npx sandtable-ai demo", "npm view sandtable version", "grep -r sandtable notes.md", "npm uninstall sandtable", "npm install @acme/sandtable"]) {
+      expect(decide(cmd, own), cmd).toBeUndefined();
+    }
+  });
+
   it("is registered for Bash in the plugin's hooks.json, by a path inside the plugin", () => {
     const config = JSON.parse(readFileSync(path.resolve("plugin/hooks/hooks.json"), "utf8")) as { hooks: { PreToolUse: { matcher: string; hooks: { type: string; command: string; args: string[] }[] }[] } };
     const bash = config.hooks.PreToolUse.find((e) => e.matcher === "Bash")!;
