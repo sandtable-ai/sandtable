@@ -38,7 +38,9 @@ afterEach(async () => {
 
 async function start(domain: Domain, t?: Task) {
   const graded: TrialResult[] = [];
-  const served = await serveConversations(domain, { port: 0, label: "test agent", ...(t ? { task: t } : {}), onGraded: (trial) => graded.push(trial) });
+  const served = await serveConversations(domain, { port: 0, label: "test agent", ...(t ? { task: t } : {}), onGraded: (trial) => {
+      graded.push(trial);
+    } });
   stops.push(() => served.server.stop());
   return { ...served, graded, url: served.server.url };
 }
@@ -77,9 +79,11 @@ describe("sandtable serve: conversations a platform drives", () => {
     expect(a.changes.map((c) => `${c.kind} ${c.table}`)).toEqual(expect.arrayContaining(["insert bookings", "update loads"]));
     const r = result()!;
     expect(r).toMatchObject({ agent: "test agent", user: "external", k: 2, tasks: [{ id: "book", passes: 1, graded: 2 }], latency: { agentTurnP50Ms: null, agentTurnP95Ms: null } });
-    // The call is over: its id opens a new conversation.
-    await post(`${url}/webhook`, vapiCall("call-a", "get_load", { load_id: "L-1001" }));
-    expect((await json(`${url}/sessions`)).body).toHaveLength(1);
+    // The call is over: a platform's retry of its webhooks opens no new conversation, and its end isn't graded twice.
+    expect(await post(`${url}/webhook`, vapiCall("call-a", "get_load", { load_id: "L-1001" }))).toMatchObject({ status: 409, body: { error: "call call-a has ended, and its conversation was graded" } });
+    expect(await post(`${url}/webhook`, vapiEnd("call-a", []))).toMatchObject({ status: 200, body: { ignored: "call call-a has ended, and its conversation was graded" } });
+    expect((await json(`${url}/sessions`)).body).toHaveLength(0);
+    expect(graded).toHaveLength(2);
   });
 
   it("grades a call with no tool call when it ends, and orders lines and calls by time when every line has one", async () => {
@@ -131,6 +135,7 @@ describe("sandtable serve: conversations a platform drives", () => {
     // No default task: a request that names no session can't open one.
     expect(await post(`${url}/tools/get_load`, { load_id: "L-1001" })).toMatchObject({ status: 409, body: { error: /no task to rehearse: start sandtable serve with --task/ } });
     expect(await post(`${url}/sessions`, { task: "nope" })).toMatchObject({ status: 404, body: { error: 'unknown task "nope" in freight-carrier-sales' } });
+    for (const body of [[], { task: 5 }, "refuse"]) expect(await post(`${url}/sessions`, body)).toMatchObject({ status: 400, body: { error: 'POST /sessions takes no body, or { "task": "<id>" }' } });
     const s = (await post(`${url}/sessions`, { task: "refuse" })).body;
     expect(s).toMatchObject({ id: expect.stringMatching(/^t\d+$/), task: "refuse", url: `${url}/s/${s.id}`, mcp: `${url}/s/${s.id}/mcp` });
     await post(`${s.url}/bookings`, BOOK);
@@ -139,6 +144,7 @@ describe("sandtable serve: conversations a platform drives", () => {
     expect((await post(`${url}/sessions/t99/end`, {})).status).toBe(404);
     const bad = (await post(`${url}/sessions`, { task: "book" })).body;
     expect(await post(`${url}/sessions/${bad.id}/end`, { transcript: [{ role: "robot", text: "hi" }] })).toMatchObject({ status: 400, body: { error: "transcript[0] needs a role (user or agent) and a text" } });
+    for (const time of ["9:00", -1]) expect(await post(`${url}/sessions/${bad.id}/end`, { transcript: [{ role: "agent", text: "hi", time }] })).toMatchObject({ status: 400, body: { error: "transcript[0].time must be a time in milliseconds since the epoch" } });
     expect(result()!.tasks.map((t) => t.id)).toEqual(["refuse"]);
     expect(graded).toHaveLength(1);
   });
@@ -157,6 +163,24 @@ describe("sandtable serve: conversations a platform drives", () => {
     const end = (await post(`${url}/sessions/${s2.id}/end`, {})).body;
     expect(end.skipped).toBeUndefined();
     expect(end.failed.map((f: { id: string }) => f.id)).toContain("verify-before-book");
+  });
+
+  it("never sends a request that names no session to a conversation a call id or an MCP connection names", async () => {
+    const domain = await domainWith(task());
+    const { url } = await start(domain, domain.tasks[0]);
+    // An MCP client that never sends DELETE leaves its conversation open.
+    const init = await post(`${url}/mcp`, { jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+    const mcp = init.headers.get("mcp-session-id")!;
+    await post(`${url}/webhook`, vapiCall("v-1", "get_load", { load_id: "L-1001" }));
+    await post(`${url}/tools/book_load`, BOOK);
+    const open = (await json(`${url}/sessions`)).body as { id: string }[];
+    expect(open).toHaveLength(3);
+    const rest = open.find((s) => s.id !== mcp && s.id !== "t2")!;
+    // The booking went to a conversation of its own: the MCP one is untouched.
+    const mcpCalls = await post(`${url}/mcp`, { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_load", arguments: { load_id: "L-1001" } } }, { "mcp-session-id": mcp });
+    expect(JSON.parse(mcpCalls.body.result.content[0].text).status).toBe("available");
+    expect((await post(`${url}/tools/get_load`, { load_id: "L-1001" })).body.status).toBe("booked");
+    expect(rest).toBeDefined();
   });
 
   it("refuses an ambiguous URL when several conversations are open", async () => {
@@ -193,6 +217,8 @@ describe("the serve command", () => {
     await post(`${url}/webhook`, vapiCall("c1", "search_loads", { origin: "Dallas", destination: "Atlanta", equipment: "dry_van" }));
     await post(`${url}/webhook`, vapiCall("c1", "book_load", BOOK));
     await post(`${url}/webhook`, vapiEnd("c1", [{ role: "assistant", message: "Booked." }]));
+    // The end is answered once results.json has the grade.
+    expect(JSON.parse(await readFile(path.join(dir, "results.json"), "utf8")).tasks[0].passes).toBe(1);
     // An open conversation at shutdown is not graded.
     await post(`${url}/webhook`, vapiCall("c2", "get_load", { load_id: "L-1001" }));
     for (let i = 0; i < 50; i++) {

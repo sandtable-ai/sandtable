@@ -31,8 +31,8 @@ export interface DrivenOptions {
   /** The agent's name in results.json. */
   label: string;
   onOpen?(session: ServedSession): void;
-  /** A conversation was graded: its trial, and the run as it stands now. */
-  onGraded?(trial: TrialResult, result: SuiteResult): void;
+  /** A conversation was graded: its trial, and the run as it stands now. Its end is answered once this settles. */
+  onGraded?(trial: TrialResult, result: SuiteResult): void | Promise<void>;
 }
 
 /**
@@ -70,14 +70,14 @@ export async function serveConversations(domain: Domain, opts: DrivenOptions): P
         opts.onOpen?.(session);
         return session;
       },
-      end(session, transcript) {
+      async end(session, transcript) {
         const st = open.get(session.id)!;
         open.delete(session.id);
         server.close(session.id);
         const trial = gradeConversation(domain, session.task, st, transcript, trials.filter((t) => t.taskId === session.task.id).length);
         trials.push(trial);
         latest = summary();
-        opts.onGraded?.(trial, latest);
+        await opts.onGraded?.(trial, latest);
         const answer: GradedAnswer = {
           session: session.id,
           task: session.task.id,

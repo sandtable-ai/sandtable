@@ -62,7 +62,7 @@ export interface DrivenSessions {
   /** Open a session for a conversation: a trial of `taskId`, or of the default task when undefined. Throws to refuse. */
   open(taskId: string | undefined): ServedSession;
   /** The conversation is over: grade it, with what was said when the platform sent it, and return what to answer. */
-  end(session: ServedSession, transcript: TranscriptLine[] | undefined): unknown;
+  end(session: ServedSession, transcript: TranscriptLine[] | undefined): unknown | Promise<unknown>;
 }
 
 /** A Host header that names this machine: 127.0.0.1, localhost or [::1], with any port. */
@@ -162,22 +162,30 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
   const sessions = new Map<string, ServedSession>();
   /** Driven sessions by a platform's call id. */
   const byCall = new Map<string, string>();
+  /** The call ids whose conversation ended: a platform's retry of a webhook for one must not open a new one. */
+  const endedCalls = new Set<string>();
+  /**
+   * Driven sessions a platform's call id or an MCP connection names. A request that names no session never goes to one,
+   * so a conversation that never ended, such as an MCP client that doesn't send DELETE, can't catch others' requests.
+   */
+  const keyedIds = new Set<string>();
   const driven = opts.driven;
   let next = 1;
   let base = "";
 
   /** The session a request without `/s/<id>` is for: the one trial that is running, or, driven, a new one. */
   function current(): ServedSession {
-    if (sessions.size === 1) return sessions.values().next().value!;
-    if (sessions.size === 0) {
+    const open = [...sessions.values()].filter((s) => !keyedIds.has(s.id));
+    if (open.length === 1) return open[0]!;
+    if (open.length === 0) {
       if (driven) return driven.open(undefined);
       throw new HttpError(409, "no trial is running right now");
     }
     throw new HttpError(
       409,
       driven
-        ? `${sessions.size} conversations are open at once, so a URL without a session is ambiguous: use the session's own URL (/s/<session>/…), which POST /sessions returns`
-        : `${sessions.size} trials are running at once, so a URL without a session is ambiguous: use the trial's own URL (/s/<session>/…), or run trials one at a time (--concurrency 1)`,
+        ? `${open.length} conversations are open at once, so a URL without a session is ambiguous: use the session's own URL (/s/<session>/…), which POST /sessions returns`
+        : `${open.length} trials are running at once, so a URL without a session is ambiguous: use the trial's own URL (/s/<session>/…), or run trials one at a time (--concurrency 1)`,
     );
   }
 
@@ -185,16 +193,23 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
   function forCall(callId: string): ServedSession {
     const open = sessions.get(byCall.get(callId) ?? "");
     if (open) return open;
+    if (endedCalls.has(callId)) throw new HttpError(409, `call ${callId} has ended, and its conversation was graded`);
     const s = driven!.open(undefined);
     byCall.set(callId, s.id);
+    keyedIds.add(s.id);
     return s;
   }
 
-  /** End a driven session: grade it, stop serving it, and answer with the grade. */
-  function finish(res: ServerResponse, s: ServedSession, transcript: TranscriptLine[] | undefined): void {
+  /** End a driven session: grade it, stop serving it, and answer with the grade once the run's files have it. */
+  async function finish(res: ServerResponse, s: ServedSession, transcript: TranscriptLine[] | undefined): Promise<void> {
     sessions.delete(s.id);
-    for (const [call, id] of byCall) if (id === s.id) byCall.delete(call);
-    send(res, 200, driven!.end(s, transcript));
+    keyedIds.delete(s.id);
+    for (const [call, id] of byCall) {
+      if (id !== s.id) continue;
+      byCall.delete(call);
+      endedCalls.add(call);
+    }
+    send(res, 200, await driven!.end(s, transcript));
   }
 
   /** A transcript as `POST /sessions/<id>/end` takes it: `[{ role: "user" | "agent" | "assistant", text, time? }]`. */
@@ -206,8 +221,9 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
       const text = isPlainObject(l) ? (l.text ?? l.content ?? l.message) : undefined;
       const role = isPlainObject(l) ? (l.role === "user" ? "user" : l.role === "agent" || l.role === "assistant" || l.role === "bot" ? "agent" : undefined) : undefined;
       if (!role || typeof text !== "string") throw new HttpError(400, `transcript[${i}] needs a role (user or agent) and a text`);
-      const time = isPlainObject(l) && typeof l.time === "number" ? { time: l.time } : {};
-      return { role, text, ...time };
+      const t = isPlainObject(l) ? l.time : undefined;
+      if (t !== undefined && (typeof t !== "number" || !Number.isFinite(t) || t < 0)) throw new HttpError(400, `transcript[${i}].time must be a time in milliseconds since the epoch`);
+      return { role, text, ...(t !== undefined ? { time: t } : {}) };
     });
   }
 
@@ -272,15 +288,17 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
         const id = decode(end[1]!);
         const s = sessions.get(id);
         if (!s) throw new HttpError(404, `no session ${id} is open: it ended, or it never started`);
-        finish(res, s, transcriptOf(await readBody(req)));
+        await finish(res, s, transcriptOf(await readBody(req)));
         return;
       }
       if (path === "/sessions" || path === "/sessions/") {
         if (method === "GET") return send(res, 200, [...sessions.values()].map((s) => ({ id: s.id, task: s.task.id, ...s.urls })));
         if (method !== "POST") throw new HttpError(405, "POST /sessions opens a conversation; GET /sessions lists the open ones");
         const body = await readBody(req);
-        const task = isPlainObject(body) && typeof body.task === "string" ? body.task : undefined;
-        const s = driven.open(task);
+        if (body !== undefined && (!isPlainObject(body) || (body.task !== undefined && typeof body.task !== "string"))) {
+          throw new HttpError(400, 'POST /sessions takes no body, or { "task": "<id>" }');
+        }
+        const s = driven.open(isPlainObject(body) ? (body.task as string | undefined) : undefined);
         return send(res, 201, { id: s.id, task: s.task.id, ...s.urls });
       }
     }
@@ -293,7 +311,7 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
       const mcpSession = mcpId === undefined ? undefined : sessions.get(mcpId);
       if (mcpId !== undefined && !mcpSession) throw new HttpError(404, `no session ${mcpId} is open: initialize again`);
       if (method === "DELETE" && mcpSession) {
-        finish(res, mcpSession, undefined);
+        await finish(res, mcpSession, undefined);
         return;
       }
       if (method !== "POST") {
@@ -314,6 +332,7 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
       let opened: ServedSession | undefined;
       if (driven && !session && !mcpSession && isPlainObject(body) && body.method === "initialize") {
         opened = driven.open(undefined);
+        keyedIds.add(opened.id);
         res.setHeader("mcp-session-id", opened.id);
       }
       const call: McpCall = async (name, args) => {
@@ -339,8 +358,13 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
       // Driven, a platform's call id names the conversation: its first webhook opens a session for it.
       const keyed = () => (driven && !session && request.callId !== undefined ? forCall(request.callId) : target());
       if (request.kind === "end" && driven) {
+        // A platform's retry of an end it already sent is answered, not graded again.
+        if (!session && request.callId !== undefined && endedCalls.has(request.callId)) {
+          send(res, 200, { ignored: `call ${request.callId} has ended, and its conversation was graded` });
+          return;
+        }
         // A call with no tool call is still a trial: its end opens and grades one.
-        finish(res, keyed(), request.transcript);
+        await finish(res, keyed(), request.transcript);
         return;
       }
       if (request.kind !== "calls") {

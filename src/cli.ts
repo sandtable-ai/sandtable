@@ -697,8 +697,9 @@ program
         const mark = STATUS_MARK[trialStatus(trial)];
         const failed = trial.checks.filter((c) => !c.passed).map((c) => c.id);
         console.log(`  ${mark} ${trial.taskId} trial ${trial.trial + 1}${failed.length ? `: ${failed.join(", ")}` : ""}${trial.error ? ` (${trial.error})` : ""}`);
-        // One write at a time, in order, so the files always hold the latest grade.
+        // One write at a time, in order, so the files always hold the latest grade; the end is answered after it.
         writing = writing.then(() => save(result, out, o.html).then(() => undefined)).catch((err: unknown) => console.error(`  ! could not write ${out}: ${err instanceof Error ? err.message : String(err)}`));
+        return writing;
       },
     }).catch((err: NodeJS.ErrnoException) => {
       throw new Error(err.code === "EADDRINUSE" ? `--port ${o.port} is in use: pick another, or --port 0 for any free port` : err.message);
@@ -707,6 +708,9 @@ program
     console.log(`Serving ${domain.name} at ${url} for conversations another system drives, until you stop it (Ctrl-C).`);
     console.log(`  Each conversation is a trial of ${task ? task.id : "the task it names (POST /sessions with { \"task\": \"<id>\" })"}: REST ${url}/tools/<name>, MCP ${url}/mcp, webhooks ${url}/webhook.`);
     console.log(`  A conversation ends with POST ${url}/sessions/<id>/end, a Vapi end-of-call report, Retell's call_ended or an MCP DELETE, and is graded then.`);
+    if (!["127.0.0.1", "localhost", "::1"].includes(o.host)) {
+      console.log(`  ! It listens on ${o.host}, with no authentication: anything that can reach this machine on port ${new URL(url).port} can call it.`);
+    }
     console.log(`  Results: ${path.join(out, "results.json")}, rewritten after each graded conversation.\n`);
     await new Promise<void>((resolve) => {
       process.once("SIGINT", resolve);

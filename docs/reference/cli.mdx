@@ -276,7 +276,7 @@ npx sandtable-ai serve ./my-domain --task book-at-posted-rate
 | `<domain>` | domain directory (with `sandtable.yaml`) or the file itself |
 | `-t, --task <id>` | the task each conversation rehearses, unless it names one with `POST /sessions` and `{ "task": "<id>" }`. Without it, the domain's only task, if it has one |
 | `--port <n>` | port to listen on; `0` for any free one. Default: `4010` |
-| `--host <addr>` | address to listen on. Default: `127.0.0.1`, which keeps it on this machine; a tunnel to it reaches a hosted platform |
+| `--host <addr>` | address to listen on. Default: `127.0.0.1`, which keeps it on this machine and refuses requests that name another host; a tunnel to it reaches a hosted platform. Any other address is open to anything that can reach the machine, with no authentication, and `serve` says so |
 | `--label <name>` | the agent's name in `results.json`. Default: `external agent` |
 | `-o, --out <dir>` | output directory for `results.json` and `report.html`, rewritten after each graded conversation. Default: `.sandtable/runs/<timestamp>-<domain>-serve` |
 | `--no-html` | skip the HTML report |
