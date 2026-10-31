@@ -4,6 +4,9 @@ import type { Domain, Fault, Task, TaskEvent } from "../spec/schema.ts";
 import { WorldError, type Change, type World } from "../world/store.ts";
 import { coerceArgs, executeTool, type ToolOutcome } from "../world/tools.ts";
 
+/** How a call reached the world when it came over the world server (`run --serve`, `sandtable serve`). */
+export type CallVia = "rest" | "mcp" | "webhook";
+
 export interface ToolEvent {
   index: number;
   name: string;
@@ -14,6 +17,8 @@ export interface ToolEvent {
   fault?: FaultApplied;
   /** The changes the task's events made to the world right after this call, when one followed it. */
   eventChanges?: Change[];
+  /** For a call that came over the world server: its REST route, MCP or a webhook. */
+  via?: CallVia;
 }
 
 /**
@@ -34,14 +39,23 @@ export function createToolRunner(domain: Domain, world: World, onCall?: (e: Tool
   const faultsHit = new Set<number>();
   const eventsFired = new Set<number>();
 
-  function call(name: string, rawArgs: unknown): ToolOutcome {
+  function call(name: string, rawArgs: unknown, via?: CallVia): ToolOutcome {
     const index = calls.length;
     const tool = toolsByName.get(name);
     const finish = (rec: CallRecord, found: Violation[] = [], eventChanges: Change[] = []): ToolOutcome => {
       calls.push(rec);
       for (const v of found) (v.soft ? soft : violations).push(v);
       const outcome = { ok: rec.ok, result: rec.result, error: rec.error };
-      onCall?.({ index, name, args: rawArgs, outcome, violations: found, ...(rec.fault ? { fault: rec.fault } : {}), ...(eventChanges.length ? { eventChanges } : {}) });
+      onCall?.({
+        index,
+        name,
+        args: rawArgs,
+        outcome,
+        violations: found,
+        ...(rec.fault ? { fault: rec.fault } : {}),
+        ...(eventChanges.length ? { eventChanges } : {}),
+        ...(via ? { via } : {}),
+      });
       return outcome;
     };
     if (!tool) return finish({ index, name, args: {}, ok: false, error: `unknown tool "${name}"` });
@@ -85,6 +99,17 @@ export function createToolRunner(domain: Domain, world: World, onCall?: (e: Tool
 }
 
 export type ToolRunner = ReturnType<typeof createToolRunner>;
+
+/**
+ * Call a tool as a live agent does: wait out the latency of a fault that hit the call, then return what the agent sees,
+ * with that fault. Replays (lint, regrade) call the runner directly, without the wait.
+ */
+export async function callLive(runner: ToolRunner, name: string, args: unknown, via?: CallVia): Promise<{ outcome: ToolOutcome; fault?: FaultApplied }> {
+  const outcome = runner.call(name, args, via);
+  const fault = runner.calls.at(-1)?.fault;
+  if (fault?.latencyMs) await new Promise((resolve) => setTimeout(resolve, fault.latencyMs));
+  return { outcome, ...(fault ? { fault } : {}) };
+}
 
 /** Whether a fault hits the `n`-th call of its tool. */
 const hits = (f: Fault, n: number) => f.call === undefined || (Array.isArray(f.call) ? f.call.includes(n) : f.call === n);

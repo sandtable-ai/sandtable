@@ -42,6 +42,7 @@ export function renderDraft(d: OpenApiDraft, source: string): string {
     ...(t.checks.length ? { checks: t.checks } : {}),
     ops: t.ops,
     ...(t.returns !== undefined ? { returns: t.returns } : {}),
+    ...(t.http ? { http: t.http } : {}),
     ...(t.notes.length ? { review: "pending" } : {}),
   }));
   const doc = new YAML.Document({
@@ -66,6 +67,7 @@ export function renderDraft(d: OpenApiDraft, source: string): string {
     // Short maps read better inline: params, checks and operator conditions.
     for (const [name, p] of Object.entries(tool.params)) flowParam(doc, ["tools", i, "params", name], p);
     tool.checks.forEach((_, j) => flow(doc.getIn(["tools", i, "checks", j], true)));
+    if (tool.http) flow(doc.getIn(["tools", i, "http"], true));
     tool.ops.forEach((op, j) => {
       for (const field of Object.keys((op.where ?? {}) as object)) flow(doc.getIn(["tools", i, "ops", j, "where", field], true));
     });

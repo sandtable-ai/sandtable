@@ -266,7 +266,8 @@ function show(ti, i) {
       const out = e.ok ? json(e.result) : "ERROR " + e.error;
       const f = e.fault ? ' · <span class="softv">fault: ' + esc(fault(e.fault)) + "</span>" : "";
       const then = e.eventChanges ? "\\n⟳ then, by the task's events: " + e.eventChanges.map((c) => c.kind + " " + c.table + " " + c.key + " " + json(c.after)).join("; ") : "";
-      return '<div class="ev tool"><small><b>tool</b> #' + e.index + v + f + "</small>" + esc(e.name) + "(" + esc(json(e.args)) + ")\\n→ " + esc(out) + esc(then) + "</div>";
+      const via = e.via ? " · via " + (e.via === "mcp" ? "MCP" : e.via) : "";
+      return '<div class="ev tool"><small><b>tool</b> #' + e.index + via + v + f + "</small>" + esc(e.name) + "(" + esc(json(e.args)) + ")\\n→ " + esc(out) + esc(then) + "</div>";
     }
     const lat = e.type === "agent" && e.latencyMs !== undefined ? " · " + ms(e.latencyMs) : "";
     const note = e.type === "user" && noteAt[++turn] ? ' · <span class="softv">caller note: ' + esc(noteAt[turn].why) + "</span>" : "";

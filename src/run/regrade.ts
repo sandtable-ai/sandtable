@@ -35,7 +35,7 @@ export function regradeTrial(domain: Domain, trial: TrialResult, prompt: AgentPr
       events.push(e);
       continue;
     }
-    if (outcomeOf(runner.call(e.name, e.args)) !== outcomeOf(e)) {
+    if (outcomeOf(runner.call(e.name, e.args, e.via)) !== outcomeOf(e)) {
       throw new RegradeError(`${trial.taskId} trial ${trial.trial + 1}: tool call ${e.index + 1} (${e.name}) now returns something other than what the agent saw`);
     }
   }

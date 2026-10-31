@@ -104,6 +104,17 @@ export const ToolSpec = z
     ops: z.array(OpSpec).min(1),
     /** Index of the op whose result is returned to the agent. */
     returns: z.number().int().nonnegative().default(0),
+    /**
+     * The tool's route in the customer's API, for `run --serve` and `sandtable serve`: a request to `method path` calls
+     * the tool, with arguments from the path's `{param}` placeholders, the query string and the JSON body.
+     */
+    http: z
+      .object({
+        method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
+        path: z.string().regex(/^\/[^?#\s]*$/, "a path starts with / and has no query string, such as /loads/{load_id}"),
+      })
+      .strict()
+      .optional(),
     review: Review,
   })
   .strict();

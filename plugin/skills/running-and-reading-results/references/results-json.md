@@ -94,11 +94,12 @@ SuiteResult
       events[]                 the transcript, in order:
                                  { type: "user", text }
                                  { type: "agent", text, latencyMs }
-                                 { type: "tool", index, name, args, ok, result? | error?, violations[], soft?, fault?, eventChanges? }
+                                 { type: "tool", index, name, args, ok, result? | error?, violations[], soft?, fault?, eventChanges?, via? }
                                fault: { error?: "timeout" | "rate_limit" | "server_error", status?, retryAfter?,
                                latencyMs?, committed? }, set when one of the task's faults hit the call: the error is
                                injected, not the agent's doing. committed: true means its write landed anyway.
                                eventChanges: Change[], what the task's events changed right after the call
+                               via: "rest" | "mcp" | "webhook", for a call that came over run --serve's world server
       changes[]                { table, key, kind: "insert" | "update", before?, after? }: the world diff
 ```
 

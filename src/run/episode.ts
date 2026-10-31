@@ -3,11 +3,12 @@ import { checkTranscript, invariantTool, type CallRecord, type FaultApplied, typ
 import type { Domain, Task } from "../spec/schema.ts";
 import { agentSystemPrompt, taskContext, type AgentPromptOptions } from "../sim/prompts.ts";
 import type { AgentAdapter, CallTool, UserSimulator } from "../sim/types.ts";
+import type { WorldServer } from "../serve/server.ts";
 import { diffSnapshots, worldFor, type Change, type Snapshot, type World } from "../world/store.ts";
 import { toolSchema } from "../world/tools.ts";
 import type { Attribution } from "./attribution.ts";
 import { callerNotes, type CallerNote } from "./caller-notes.ts";
-import { createToolRunner, type ToolEvent, type ToolRunner } from "./tool-runner.ts";
+import { callLive, createToolRunner, type CallVia, type ToolEvent, type ToolRunner } from "./tool-runner.ts";
 import { costOf, recordInto, type Usage } from "./usage.ts";
 
 export type TrajectoryEvent =
@@ -29,6 +30,8 @@ export type TrajectoryEvent =
       fault?: FaultApplied;
       /** The changes the task's `events` made to the world right after this call; present only when one followed it. */
       eventChanges?: Change[];
+      /** For a call that came over the world server (`run --serve`): `rest`, `mcp` or `webhook`. */
+      via?: CallVia;
     };
 
 export type EndReason = "user_stop" | "max_turns" | "error";
@@ -88,6 +91,8 @@ export async function runEpisode(input: {
   runId?: string;
   /** How the agent is prompted: with the domain's policy (the default) or without it. */
   prompt?: AgentPromptOptions;
+  /** A world server (`run --serve`) to serve this trial's world on while it runs. */
+  server?: WorldServer;
 }): Promise<TrialResult> {
   const { domain, task, agent, user, trial, prompt } = input;
   const started = performance.now();
@@ -97,13 +102,7 @@ export async function runEpisode(input: {
   const agentMessages: string[] = [];
   const usage: Usage = { agent: {}, user: {}, costUsd: 0 };
   const runner = createToolRunner(domain, world, (e) => events.push(toolEvent(e)), task);
-  const callTool: CallTool = async (name, rawArgs) => {
-    const outcome = runner.call(name, rawArgs);
-    // A fault's latency delays the response; replays (lint, regrade) skip it.
-    const delay = runner.calls.at(-1)?.fault?.latencyMs;
-    if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
-    return outcome;
-  };
+  const callTool: CallTool = async (name, rawArgs) => (await callLive(runner, name, rawArgs)).outcome;
 
   const persona = domain.personas.find((p) => p.id === task.persona);
   const context = taskContext(task);
@@ -112,6 +111,8 @@ export async function runEpisode(input: {
   let turns = 0;
   let error: string | undefined;
 
+  // Served for the whole trial, so its calls over HTTP go through the same runner as in-process ones.
+  const served = input.server?.open(task, runner);
   try {
     const session = await agent.createSession({
       domain,
@@ -120,6 +121,7 @@ export async function runEpisode(input: {
       sessionId: `${input.runId ? `${input.runId}/` : ""}${task.id}#${trial}`,
       ...(context ? { context } : {}),
       recordUsage: (model, u) => recordInto(usage.agent, model, u),
+      ...(served ? { world: served.urls } : {}),
     });
     const sim = await user.createSession({ domain, task, persona, recordUsage: (model, u) => recordInto(usage.user, model, u) });
     let turn = await sim.next(null);
@@ -149,6 +151,8 @@ export async function runEpisode(input: {
   } catch (err) {
     endReason = "error";
     error = err instanceof Error ? err.message : String(err);
+  } finally {
+    if (served) input.server!.close(served.id);
   }
 
   usage.costUsd = costOf(usage.agent, usage.user);
@@ -180,6 +184,7 @@ export function toolEvent(e: ToolEvent): TrajectoryEvent {
     ...(soft.length ? { soft } : {}),
     ...(e.fault ? { fault: e.fault } : {}),
     ...(e.eventChanges ? { eventChanges: e.eventChanges } : {}),
+    ...(e.via ? { via: e.via } : {}),
   };
 }
 

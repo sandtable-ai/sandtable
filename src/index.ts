@@ -33,6 +33,9 @@ export { compareRuns, baselineSnapshot, type Comparison, type TaskDelta, type Ta
 export { lintDomain, type LintReport, type TaskLint, type RuleLint } from "./grade/lint.ts";
 export { passHatK, passAtK, wilsonInterval } from "./grade/passk.ts";
 
+// Serving the simulated world over HTTP, for an agent that calls its tools itself.
+export { startWorldServer, type WorldServer, type WorldServerOptions, type ServedSession } from "./serve/server.ts";
+
 // Reports.
 export { renderTerminal } from "./report/terminal.ts";
 export { renderHtml } from "./report/html.ts";

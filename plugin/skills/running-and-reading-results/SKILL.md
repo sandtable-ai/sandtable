@@ -1,6 +1,6 @@
 ---
 name: running-and-reading-results
-description: Runs a sandtable domain against an agent (Claude, any OpenAI-compatible or Bedrock model, an HTTP endpoint, a JS/TS module or the noop baseline), chooses k and reads pass^k, then reads results.json and report.html to find failure modes, attributes each failing trial to the agent under test, the simulated user, the task spec or the harness, and proposes fixes. Use when an engineer wants to rehearse or regression-test an agent with sandtable, compare models, gate CI (--fail-under on pass^k, critical release-blocker tasks, --fail-on-regression against a baseline, exit 1 for a failed gate and 2 for an error), or understand why trials failed or a score changed.
+description: Runs a sandtable domain against an agent (Claude, any OpenAI-compatible or Bedrock model, an HTTP endpoint, a JS/TS module, an agent that calls its own tools over REST, MCP or a webhook with run --serve, or the noop baseline), chooses k and reads pass^k, then reads results.json and report.html to find failure modes, attributes each failing trial to the agent under test, the simulated user, the task spec or the harness, and proposes fixes. Use when an engineer wants to rehearse or regression-test an agent with sandtable, compare models, gate CI (--fail-under on pass^k, critical release-blocker tasks, --fail-on-regression against a baseline, exit 1 for a failed gate and 2 for an error), or understand why trials failed or a score changed.
 ---
 
 # Running sandtable and reading results
@@ -24,6 +24,8 @@ Run the CLI as `npx sandtable-ai <command>` (inside the sandtable repository: `n
 | `http://…` or `https://…/step` | the engineer's agent as a service, speaking the step protocol (sandtable `docs/reference/http-protocol.mdx`) |
 | `./my-agent.ts` or `./my-agent.js` | a module that default-exports an `AgentAdapter` (`.ts` needs Node ≥ 22.18) |
 | `noop` | never calls a tool, declines everything: the do-nothing floor |
+
+An agent that calls its tools itself, against the customer's API, an MCP server or a voice platform's webhook, instead of returning tool calls to sandtable, still needs an HTTP step endpoint or a module for the conversation. Add `--serve` to `run`: each trial's world is served at `http://127.0.0.1:4010` (REST at `/tools/<name>` and each tool's `http` route, MCP at `/mcp`, webhooks at `/webhook`), trials run one at a time so that fixed URL means the running trial, and the HTTP agent gets its trial's own URLs as `world` on each request. Those calls are graded like any other; in results, they have `via`.
 
 | `--user` | What it is |
 |---|---|

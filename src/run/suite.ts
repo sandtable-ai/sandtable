@@ -10,6 +10,7 @@ import { attributeTrial, attributionCounts, type AttributionCounts } from "./att
 import type { BaselineSnapshot } from "./compare.ts";
 import { coverageOf, type Coverage } from "./coverage.ts";
 import { runEpisode, type TrialResult } from "./episode.ts";
+import type { WorldServer } from "../serve/server.ts";
 import { inputsFingerprint, taskFingerprints } from "./inputs.ts";
 import { percentile, sumUsage, type Usage } from "./usage.ts";
 import { version } from "../version.ts";
@@ -172,6 +173,11 @@ export interface SuiteOptions {
    * built-in model agents do. The result's `agent` name gets ` (without policy)`, and it records `withoutPolicy`.
    */
   withoutPolicy?: boolean;
+  /**
+   * Serve each trial's world on this server while the trial runs (`run --serve`, startWorldServer): the agent gets the
+   * trial's URLs as `ctx.world`, and its calls over REST, MCP or a webhook are graded like in-process ones.
+   */
+  server?: WorldServer;
 }
 
 export async function runSuite(opts: SuiteOptions): Promise<SuiteResult> {
@@ -189,7 +195,7 @@ export async function runSuite(opts: SuiteOptions): Promise<SuiteResult> {
 
   const jobs = tasks.flatMap((task) => Array.from({ length: k }, (_, trial) => ({ task, trial })));
   const results = await pool(jobs, opts.concurrency ?? 4, async ({ task, trial }) => {
-    const r = await runEpisode({ domain, task, agent, user, trial, runId, prompt });
+    const r = await runEpisode({ domain, task, agent, user, trial, runId, prompt, ...(opts.server ? { server: opts.server } : {}) });
     opts.onTrial?.(r);
     return r;
   });
