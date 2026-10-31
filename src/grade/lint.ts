@@ -131,10 +131,12 @@ function lintTask(domain: Domain, task: Task, changeable: Set<string>, writers: 
   }
 
   let ready = true;
+  // The task's events change tables too, as someone else would during the call.
+  const touched = new Set((task.events ?? []).map((e) => ("update" in e ? e.update : e.create)));
   task.expect.state.forEach((a, i) => {
     if (a.count === 0) return;
     const present = a.key !== undefined ? seed.get(a.table, a.key) !== undefined : seed.list(a.table).some((r) => matches(r, a.where ?? {}));
-    if (!present && !changeable.has(a.table)) {
+    if (!present && !changeable.has(a.table) && !touched.has(a.table)) {
       ready = false;
       errors.push(`expect.state[${i}] needs a row in ${a.table} that is not seeded and no tool can create or change`);
     }

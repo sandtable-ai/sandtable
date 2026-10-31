@@ -368,7 +368,7 @@ An event changes the world right after the call that `after` names, counted as f
 - `update` sets fields of the row keyed `key`.
 - `create` adds a row with `values`.
 
-Values are literal: a `"$arg"` in them is not replaced. `validate` fails on an unknown tool or table, an update of a row the task doesn't start with (after its `given.rows`) unless an earlier event creates it, and a create of a key that exists already.
+Values are literal: a `"$arg"` in them is not replaced. `validate` fails on an unknown tool or table, an update of a row the task doesn't start with (after its `given.rows`) unless an earlier event after the same call creates it, and a create of a key that exists already. Events fire in the order the agent's calls come, so a row created after another call may not exist yet.
 
 `lint` replays a task's `reference` with its faults and events, and warns about a fault or an event that the reference never reaches, so a reference call meant to fail needs `expect_error`. In `results.json`, a tool call a fault hit has a [`fault`](/reference/results-schema#trajectory-events) field, and a call an event followed has `eventChanges`. Editing a task's faults or events changes its `inputs` hash for `run --baseline`. `regrade` replays them, and stops at a call that now returns something else.
 

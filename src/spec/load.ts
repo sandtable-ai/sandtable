@@ -243,13 +243,16 @@ export function validateDomain(d: Domain): string[] {
 }
 
 /**
- * What's wrong with a task's `events`: an unknown tool or table, an update of a row the task doesn't start with and no
- * earlier event creates, or a create of a key that already exists.
+ * What's wrong with a task's `events`: an unknown tool or table, an update of a row that may not exist when it fires, or
+ * a create of a key that already exists. Events fire in the order the agent's calls come, which validate can't know, so
+ * an update can count only on a row the task starts with, or one an earlier event after the same call creates.
  */
 function eventProblems(d: Domain, task: Task, where: string, tables: Set<string>, tool: (name: string, where: string) => void): string[] {
   const problems: string[] = [];
   const seed = seedFor(d, task);
-  const keys = new Map(Object.entries(seed.tables).map(([name, t]) => [name, new Set(t.rows.map((r) => String(r[t.key])))]));
+  const seeded = new Map(Object.entries(seed.tables).map(([name, t]) => [name, new Set(t.rows.map((r) => String(r[t.key])))]));
+  /** Keys created by events, by table, with the call they follow. */
+  const created = new Map<string, Map<string, string>>();
   task.events!.forEach((e, i) => {
     const at = `${where}.events[${i}]`;
     tool(e.after.tool, at);
@@ -258,14 +261,20 @@ function eventProblems(d: Domain, task: Task, where: string, tables: Set<string>
       problems.push(`${at}: unknown table "${table}"`);
       return;
     }
+    const after = `${e.after.tool} call ${e.after.call}`;
+    const made = created.get(table) ?? new Map<string, string>();
+    created.set(table, made);
     if ("update" in e) {
-      if (!keys.get(table)!.has(e.key)) problems.push(`${at}: ${table} ${e.key} is not in the task's world, and no earlier event creates it`);
+      if (seeded.get(table)!.has(e.key)) return;
+      const by = made.get(e.key);
+      if (by === undefined) problems.push(`${at}: ${table} ${e.key} is not in the task's world, and no earlier event creates it`);
+      else if (by !== after) problems.push(`${at}: ${table} ${e.key} is created by an event after ${by}, which may not have fired yet after ${after}: update it in an event after the same call, or seed it with given.rows`);
       return;
     }
     const key = e.values[seed.tables[table]!.key];
     if (key === undefined) return;
-    if (keys.get(table)!.has(String(key))) problems.push(`${at}: ${table} ${String(key)} already exists`);
-    keys.get(table)!.add(String(key));
+    if (seeded.get(table)!.has(String(key)) || made.has(String(key))) problems.push(`${at}: ${table} ${String(key)} already exists`);
+    else made.set(String(key), after);
   });
   return problems;
 }

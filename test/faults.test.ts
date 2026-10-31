@@ -68,6 +68,10 @@ describe("faults: the spec", () => {
     expect(why({ tool: "book_load", error: "timeout", call: 0 })).toBeDefined();
     expect(why({ tool: "book_load", latency_ms: 60_001 })).toBeDefined();
     expect(TaskSpec.safeParse({ id: "t", user, expect: {}, faults: [] }).success).toBe(false);
+    // A wrong call number or an event that is both an update and a create says what the key takes.
+    expect(why({ tool: "book_load", error: "timeout", call: 1.5 })).toBe("call is a call number, 1 or more, or a list of them");
+    const event = (e: unknown) => TaskSpec.safeParse({ id: "t", user, expect: {}, events: [e] }).error?.issues.map((i) => i.message).join("; ");
+    expect(event({ after: { tool: "get_load" }, update: "loads", key: "L-1", set: {}, create: "loads", values: {} })).toBe("an event has after, and either update with key and set, or create with values");
   });
 
   it("validate names an unknown tool or table, an update of a row the task doesn't have, and a created key that exists", async () => {
@@ -80,11 +84,18 @@ describe("faults: the spec", () => {
     expect(ev({ after: { tool: "search_loads", call: 1 }, update: "lods", key: "L-1001", set: {} })).toEqual([expect.stringMatching(/events\[0\]: unknown table "lods"/)]);
     expect(ev({ after: { tool: "search_loads", call: 1 }, update: "loads", key: "L-9999", set: {} })).toEqual([expect.stringMatching(/events\[0\]: loads L-9999 is not in the task's world/)]);
     expect(ev({ after: { tool: "search_loads", call: 1 }, create: "loads", values: { load_id: "L-1001" } })).toEqual([expect.stringMatching(/events\[0\]: loads L-1001 already exists/)]);
-    // A row the task's given.rows add, or an earlier event creates, can be updated.
+    // A row the task's given.rows add, or an earlier event after the same call creates, can be updated.
     const created = { after: { tool: "search_loads", call: 1 }, create: "loads", values: { load_id: "L-1099", status: "available" } } as TaskEvent;
     const update = { after: { tool: "get_load", call: 1 }, update: "loads", key: "L-1099", set: { status: "booked" } } as TaskEvent;
-    expect(problems(task({ events: [created, update] }))).toEqual([]);
+    expect(problems(task({ events: [created, update] }))).toEqual([expect.stringMatching(/events\[1\]: loads L-1099 is created by an event after search_loads call 1, which may not have fired yet after get_load call 1/)]);
     expect(problems(task({ given: { rows: { loads: [{ load_id: "L-1099", status: "available" }] } }, events: [update] }))).toEqual([]);
+    // Events fire in the order the calls come, not in spec order: an update can't count on a row created after another call.
+    const later = { ...update, after: { tool: "search_loads", call: 2 } };
+    expect(problems(task({ events: [created, later] }))).toEqual([expect.stringMatching(/events\[1\]: loads L-1099 is created by an event after search_loads call 1, which may not have fired yet after search_loads call 2/)]);
+    const same = { ...update, after: { tool: "search_loads", call: 1 } };
+    expect(problems(task({ events: [created, same] }))).toEqual([]);
+    expect(problems(task({ events: [created, { ...created }] }))).toEqual([expect.stringMatching(/events\[1\]: loads L-1099 already exists/)]);
+    expect(problems(task({ events: [update] }))).toEqual([expect.stringMatching(/events\[0\]: loads L-1099 is not in the task's world/)]);
   });
 });
 
@@ -254,6 +265,21 @@ describe("faults: runs, lint and regrade", () => {
     expect(html).toContain("function fault(f)");
     expect(html).toContain('"fault":{"error":"timeout","status":504,"latencyMs":30,"committed":true}');
     expect(html).toContain("then, by the task's events: ");
+  });
+});
+
+describe("lint and events", () => {
+  it("counts a row an event creates as reachable for the task's expectations", async () => {
+    const d = await loadDomain(example);
+    const fresh = { ...d, world: { tables: { ...d.world.tables, notices: { key: "notice_id", rows: [] } } } };
+    const t = task({
+      id: "notice",
+      events: [{ after: { tool: "get_load", call: 1 }, create: "notices", values: { notice_id: "N-1", text: "L-1001 is covered" } }],
+      reference: [{ tool: "get_load", args: { load_id: "L-1001" } }],
+      expect: { state: [{ table: "notices", key: "N-1" }], called: [], not_called: [], reply_includes: [] },
+    });
+    const report = lintDomain({ ...fresh, tasks: [t] });
+    expect(report.tasks[0]).toMatchObject({ ready: true, solvable: true, errors: [] });
   });
 });
 

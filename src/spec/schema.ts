@@ -292,7 +292,7 @@ export const FAULT_ERRORS = ["timeout", "rate_limit", "server_error"] as const;
 export const FaultSpec = z
   .object({
     tool: z.string(),
-    call: z.union([z.number().int().positive(), z.array(z.number().int().positive()).min(1)]).optional(),
+    call: z.union([z.number().int().positive(), z.array(z.number().int().positive()).min(1)], { error: "call is a call number, 1 or more, or a list of them" }).optional(),
     error: z.enum(FAULT_ERRORS).optional(),
     status: z.number().int().min(500).max(599).optional(),
     retry_after: z.number().nonnegative().optional(),
@@ -319,10 +319,10 @@ const EventAfter = z.object({ tool: z.string(), call: z.number().int().positive(
  * right after the call that `after` names, `update` sets fields of the row keyed `key`, or `create` adds a row with
  * `values`. Values are literal: a "$arg" in them is not replaced.
  */
-export const EventSpec = z.union([
-  z.object({ after: EventAfter, update: z.string(), key: z.string(), set: Where }).strict(),
-  z.object({ after: EventAfter, create: z.string(), values: Where }).strict(),
-]);
+export const EventSpec = z.union(
+  [z.object({ after: EventAfter, update: z.string(), key: z.string(), set: Where }).strict(), z.object({ after: EventAfter, create: z.string(), values: Where }).strict()],
+  { error: "an event has after, and either update with key and set, or create with values" },
+);
 
 export const TaskSpec = z
   .object({

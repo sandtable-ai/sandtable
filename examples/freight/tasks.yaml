@@ -1209,7 +1209,7 @@
   user:
     instructions: |
       You are Dana, dispatcher at Blue Mesa Trucking, MC 100101, dry van. You want L-1001 (Dallas to Atlanta) at its posted rate and won't negotiate.
-      If the agent says their system had a problem, wait while they check. Once you know whether the load is booked for you, say thanks and end the call.
+      If the agent says something went wrong with the booking, let them look into it. Once you know whether the load is booked for you, say thanks and end the call.
     script:
       - Hi, Dana with Blue Mesa Trucking, MC 100101. I want L-1001, Dallas to Atlanta, at the posted rate.
       - Yes, book it.
