@@ -1,8 +1,8 @@
 ---
 title: "Rehearse an agent that calls its own tools: REST, MCP and webhooks"
 sidebarTitle: "Agents that call their own tools"
-description: "Serve the simulated world over REST, MCP and webhooks while sandtable drives the conversation, so an agent written against the customer's API, an MCP server or a platform's webhook is rehearsed and graded unchanged."
-keywords: ["black-box agent", "REST", "MCP", "Model Context Protocol", "webhook", "Vapi", "Retell", "run --serve", "world server", "tool server"]
+description: "Serve the simulated world over REST, MCP and webhooks, so an agent written against the customer's API, an MCP server or a platform's webhook is rehearsed and graded unchanged, whether sandtable or a hosted platform drives the conversation."
+keywords: ["black-box agent", "REST", "MCP", "Model Context Protocol", "webhook", "Vapi", "Retell", "run --serve", "sandtable serve", "world server", "tool server", "hosted voice platform"]
 ---
 
 Most adapters let sandtable run the agent's tool calls: a model agent's calls go through sandtable, an [HTTP agent](/reference/http-protocol) returns `tool_calls`, and a [module agent](/guides/bring-your-agent#your-agent-as-a-js-or-ts-module) calls `callTool`. An agent you can't change calls its tools itself: it sends requests to the customer's API, connects to an MCP server, or, on a hosted voice platform, has the platform call a webhook. `run --serve` serves the simulated world on all three while sandtable drives the conversation. Each trial's calls are checked against the invariants, hit by the task's [faults](/reference/spec#faults-and-events), and graded, exactly like calls sandtable makes for the agent.
@@ -78,6 +78,25 @@ Hosted voice platforms call tools through a webhook. `POST /webhook` answers the
 | The arguments alone, at `POST /webhook/<tool>` (Retell's "args only" payload, or a tool with its own URL) | the result, or `{ "error": "…" }` |
 
 A tool error comes with status 200, as the platforms expect, so the agent's model reads it. A fault answers the whole request with its status, as a real outage would: Vapi then tells its model that no result came back. Other Vapi server messages, such as status updates and the end-of-call report, get an empty 200. sandtable doesn't check webhook signatures.
+
+## Conversations another system drives
+
+An agent on a hosted voice platform, such as Vapi or Retell, talks to the platform's callers, and the platform's own simulated callers can drive test calls. sandtable can't drive those conversations, but it can serve their tools and grade them: `sandtable serve` keeps the simulated world up until you stop it, and grades each conversation when it ends.
+
+```bash
+npx sandtable-ai serve ./my-domain --task book-at-posted-rate --port 4010
+```
+
+Set the platform's server or webhook URL to sandtable's, through a tunnel such as ngrok or cloudflared, since the platform calls from the internet. Then run its test calls:
+
+- Each conversation is a session with its own world: a trial of the task. A platform's call id opens one (Vapi's `message.call.id`, Retell's `call.call_id`), so concurrent calls don't share records.
+- It is graded when it ends: on Vapi's end-of-call report or Retell's `call_ended` event, which carry the transcript.
+- Other systems open a session with `POST /sessions` (`{ "task": "<id>" }` picks the task, else `--task`), use its URLs, and end it with `POST /sessions/<id>/end`, with the transcript as `{ "transcript": [{ "role": "user" | "agent", "text" }] }` when they have it. An MCP connection is a session too: `initialize` opens it and returns its id as `Mcp-Session-Id`, and `DELETE /mcp` ends it.
+- A request that names no session goes to the one conversation open without a call id or an MCP session, or opens one. A conversation a platform's call id or an MCP connection opened is reached only through them, so one that never ends, such as an MCP client that never sends `DELETE`, catches no other requests. It stays open until you end it with `POST /sessions/<id>/end`, or stop the server.
+- Once a call has ended, a platform's retry of its end report is answered and not graded again, and a late tool call for it gets a 409.
+- `results.json` and `report.html` in `-o` are rewritten after each graded conversation, before its end is answered, with `user: "external"` and the agent named `--label`. Ctrl-C prints the summary.
+
+A conversation is graded on the end state, the invariants and the required and forbidden tools, as any trial is, and on what the agent said when the transcript comes with it. Each tool call goes before the agent line that came after it in time, when every line carries a time (Vapi's do), comparing the platform's clock with this machine's, so a skewed clock can move a call across a line; otherwise, as for Retell, whose transcript has no times, all tool calls go before the agent's first line. Without a transcript, a task that checks what the agent said (`reply_includes`) can't be graded on it, so the trial is skipped, unless the agent broke a rule; `never_disclose` rules can't fire either. Agent turn latency is unknown, so the report shows `n/a`.
 
 ## What is graded
 

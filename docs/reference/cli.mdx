@@ -1,7 +1,7 @@
 ---
 title: "CLI reference: every sandtable command and flag"
 sidebarTitle: "CLI"
-description: "Every sandtable command and flag (init, validate, lint, review, run, leaderboard, demo, report and regrade) with provider options, environment variables and exit codes."
+description: "Every sandtable command and flag (init, validate, lint, review, run, serve, leaderboard, demo, report and regrade) with provider options, environment variables and exit codes."
 keywords: ["command line", "sandtable run", "flags", "options", "environment variables", "exit codes", "leaderboard", "regrade"]
 ---
 
@@ -16,6 +16,7 @@ npx sandtable-ai <command> [options]
 | [`lint`](#lint) | prove every task is ready, solvable, non-vacuous and graded, without model calls |
 | [`review`](#review) | list drafted items that still need a person to accept them |
 | [`run`](#run) | run every task k times against an agent and grade the results |
+| [`serve`](#serve) | serve the simulated world for conversations another system drives, such as a hosted voice platform's test calls, and grade each one when it ends |
 | [`leaderboard`](#leaderboard) | rank several agents on one domain under the same simulated users, next to a do-nothing baseline |
 | [`demo`](#demo) | rehearse the bundled freight example |
 | [`report`](#report) | re-render the HTML report for a past run |
@@ -261,6 +262,31 @@ npx sandtable-ai run ./my-domain --agent claude:claude-haiku-5-5 --without-polic
 ```
 
 Its `results.json` names the agent `claude:claude-sonnet-5-5 (without policy)` and records [`withoutPolicy`](/reference/results-schema), so it can't pass for a run of the real agent: its `inputs` hash differs, `--baseline` and `compare` list the agent change and every task as `changed`, and `regrade` grades it with the prompt it ran with. An HTTP, module, scripted or `noop` agent brings its own prompt or has none, so `--without-policy` refuses it with exit 2 before anything runs. An earlier version of your own agent makes a careless agent too. [`lint`](#lint) finds the rules no task puts in play from the spec alone, before any run.
+
+## serve
+
+Serve the simulated world for conversations another system drives, such as a hosted voice platform's own simulated callers, and grade each one when it ends.
+
+```bash
+npx sandtable-ai serve ./my-domain --task book-at-posted-rate
+```
+
+| Argument / option | Description |
+|---|---|
+| `<domain>` | domain directory (with `sandtable.yaml`) or the file itself |
+| `-t, --task <id>` | the task each conversation rehearses, unless it names one with `POST /sessions` and `{ "task": "<id>" }`. Without it, the domain's only task, if it has one |
+| `--port <n>` | port to listen on; `0` for any free one. Default: `4010` |
+| `--host <addr>` | address to listen on. Default: `127.0.0.1`, which keeps it on this machine and refuses requests that name another host; a tunnel to it reaches a hosted platform. Any other address is open to anything that can reach the machine, with no authentication, and `serve` says so |
+| `--label <name>` | the agent's name in `results.json`. Default: `external agent` |
+| `-o, --out <dir>` | output directory for `results.json` and `report.html`, rewritten after each graded conversation. Default: `.sandtable/runs/<timestamp>-<domain>-serve` |
+| `--no-html` | skip the HTML report |
+
+It serves the same routes as [`run --serve`](#run): REST, MCP at `/mcp` and webhooks at `/webhook`. Each conversation is a session and a trial of its task:
+
+- A conversation opens with `POST /sessions`, with the first webhook that names a platform's call id (Vapi's `message.call.id`, Retell's `call.call_id`), with an MCP `initialize` (the session's id comes back as `Mcp-Session-Id`), or with the first request that names none while none is open.
+- It ends, and is graded, with `POST /sessions/<id>/end` (optionally with `{ "transcript": [{ "role": "user" | "agent", "text", "time"? }] }`), Vapi's end-of-call report, Retell's `call_ended` event, or an MCP `DELETE`.
+
+The terminal says when each conversation opens and how it was graded. Stop it with Ctrl-C: it prints the summary of the graded conversations and exits 0. Conversations still open then are named and not graded. [Grade calls another system drives](/guides/black-box#conversations-another-system-drives) has the details.
 
 ## leaderboard
 

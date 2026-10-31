@@ -104,7 +104,7 @@ models:
 | `./my-agent.ts` | Your agent is a JS/TS function: default-export an `AgentAdapter`. |
 | `noop` | The do-nothing baseline: shows how much of a suite rewards refusing. |
 
-Whatever the adapter, every tool call goes to the simulated world: it is checked against the invariants and changes only the mock records. Details: [run against your agent](https://sandtable.dev/guides/bring-your-agent). An agent that calls its tools itself, against the customer's API, an MCP server or a voice platform's webhook, works too: `run --serve` serves each trial's world over REST, MCP and webhooks ([agents that call their own tools](https://sandtable.dev/guides/black-box)). The package is also a library: `runSuite`, `regradeSuite`, `compareRuns` and the adapters are in the [library API reference](https://sandtable.dev/reference/library).
+Whatever the adapter, every tool call goes to the simulated world: it is checked against the invariants and changes only the mock records. Details: [run against your agent](https://sandtable.dev/guides/bring-your-agent). An agent that calls its tools itself, against the customer's API, an MCP server or a voice platform's webhook, works too: `run --serve` serves each trial's world over REST, MCP and webhooks, and `sandtable serve` grades the conversations a hosted voice platform's own test calls drive ([agents that call their own tools](https://sandtable.dev/guides/black-box)). The package is also a library: `runSuite`, `regradeSuite`, `compareRuns` and the adapters are in the [library API reference](https://sandtable.dev/reference/library).
 
 Worked examples for agent frameworks, each a one-file adapter checked offline in CI ([guide](https://sandtable.dev/guides/frameworks)):
 

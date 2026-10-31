@@ -9,10 +9,11 @@ export interface WebhookCall {
   args: unknown;
 }
 
-/** One line of a transcript a platform sends when a call ends. */
+/** One line of a transcript a platform sends when a call ends, with when it was said (epoch ms) when the platform says. */
 export interface TranscriptLine {
   role: "user" | "agent";
   text: string;
+  time?: number;
 }
 
 /**
@@ -20,14 +21,14 @@ export interface TranscriptLine {
  * - `calls`: run tools. Vapi's `tool-calls` message, Retell's custom function (`{ name, args, call }`), or a generic
  *   `{ name | tool, arguments | args | parameters }`. At `/webhook/<tool>`, the body is that tool's arguments, alone or
  *   in Retell's wrapper.
- * - `end`: the call is over (Vapi's `end-of-call-report`), with what was said.
- * - `ignore`: another Vapi server message, such as a status update, which needs no answer.
+ * - `end`: the call is over (Vapi's `end-of-call-report`, Retell's `call_ended` event), with what was said.
+ * - `ignore`: another Vapi server message or Retell event, such as a status update, which needs no answer.
  * `callId` is the platform's id for the conversation, when the payload has one.
  */
 export type WebhookRequest =
   | { kind: "calls"; platform: "vapi" | "retell" | "generic"; callId?: string; calls: WebhookCall[] }
-  | { kind: "end"; platform: "vapi"; callId?: string; transcript: TranscriptLine[] }
-  | { kind: "ignore"; platform: "vapi"; callId?: string }
+  | { kind: "end"; platform: "vapi" | "retell"; callId?: string; transcript: TranscriptLine[] }
+  | { kind: "ignore"; platform: "vapi" | "retell"; callId?: string }
   | { kind: "invalid"; error: string };
 
 const str = (v: unknown) => (typeof v === "string" && v !== "" ? v : undefined);
@@ -74,14 +75,24 @@ export function parseWebhook(body: unknown, pathTool?: string): WebhookRequest {
       const artifact = isPlainObject(message.artifact) ? message.artifact : {};
       const transcript: TranscriptLine[] = [];
       for (const m of Array.isArray(artifact.messages) ? artifact.messages : []) {
-        if (!isPlainObject(m)) continue;
-        const text = str(m.message) ?? str(m.content);
-        const role = m.role === "user" ? "user" : m.role === "assistant" || m.role === "bot" ? "agent" : undefined;
-        if (role && text) transcript.push({ role, text });
+        const line = transcriptLine(m, m && (m as Record<string, unknown>).message);
+        if (line) transcript.push(line);
       }
       return { kind: "end", platform: "vapi", ...id, transcript };
     }
     return { kind: "ignore", platform: "vapi", ...id };
+  }
+  // Retell's call events: call_ended carries the transcript; call_started and call_analyzed need nothing.
+  if (typeof body.event === "string" && isPlainObject(body.call)) {
+    const callId = str(body.call.call_id);
+    const id = callId ? { callId } : {};
+    if (body.event !== "call_ended") return { kind: "ignore", platform: "retell", ...id };
+    const transcript: TranscriptLine[] = [];
+    for (const m of Array.isArray(body.call.transcript_object) ? body.call.transcript_object : []) {
+      const line = transcriptLine(m, m && (m as Record<string, unknown>).content);
+      if (line) transcript.push(line);
+    }
+    return { kind: "end", platform: "retell", ...id, transcript };
   }
   const name = str(body.name) ?? str(body.tool);
   if (!name) {
@@ -93,6 +104,14 @@ export function parseWebhook(body: unknown, pathTool?: string): WebhookRequest {
   const retell = isPlainObject(body.args) && isPlainObject(body.call);
   const callId = retell ? str((body.call as Record<string, unknown>).call_id) : undefined;
   return { kind: "calls", platform: retell ? "retell" : "generic", ...(callId ? { callId } : {}), calls: [{ name, args: argsOf(body.arguments ?? body.args ?? body.parameters) }] };
+}
+
+/** A platform's transcript entry as a line: a user's or the agent's words, and when, if it says; undefined for tool entries. */
+function transcriptLine(m: unknown, text: unknown): TranscriptLine | undefined {
+  if (!isPlainObject(m) || typeof text !== "string" || !text) return undefined;
+  const role = m.role === "user" ? "user" : m.role === "assistant" || m.role === "bot" || m.role === "agent" ? "agent" : undefined;
+  if (!role) return undefined;
+  return { role, text, ...(typeof m.time === "number" && Number.isFinite(m.time) ? { time: m.time } : {}) };
 }
 
 /** A tool's answer to a webhook call. */

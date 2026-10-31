@@ -12,6 +12,7 @@ import { renderCustomerHtml } from "./report/customer.ts";
 import { everyTrialFailed, runSuite, trialStatus, type SuiteResult } from "./run/suite.ts";
 import { runGates } from "./run/gates.ts";
 import { startWorldServer } from "./serve/server.ts";
+import { serveConversations } from "./serve/driven.ts";
 import { changedVerdicts, RegradeError, regradeSuite } from "./run/regrade.ts";
 import { baselineSnapshot, checkBaseline, compareRuns, regressions, type Comparison } from "./run/compare.ts";
 import { readResults, readUserFile, readUserText, userPathError } from "./run/read.ts";
@@ -667,6 +668,66 @@ withProviderFlags(program
     // Skipped trials, a critical task (a release blocker, with or without --fail-under), --fail-under and --floor.
     failGates(result, { failUnder: o.failUnder });
     if (o.failOnRegression && result.baseline) failIfRegressed(compareRuns(result.baseline, result));
+  });
+
+program
+  .command("serve")
+  .argument("<domain>", "domain directory (with sandtable.yaml) or file")
+  .description("serve the simulated world for conversations another system drives, such as a hosted voice platform's test calls, and grade each one when it ends")
+  .option("-t, --task <id>", "the task each conversation rehearses, unless it names one (POST /sessions with { \"task\": \"<id>\" }); the only task when the domain has one")
+  .option("--port <n>", "port to listen on (0 for any free one)", port, 4010)
+  .option("--host <addr>", "address to listen on: 127.0.0.1 keeps it on this machine; a tunnel to it reaches a hosted platform", "127.0.0.1")
+  .option("--label <name>", "the agent's name in results.json", "external agent")
+  .option("-o, --out <dir>", "output directory for results.json and report.html, rewritten after each graded conversation")
+  .option("--no-html", "skip the HTML report")
+  .action(async (domainPath: string, o: { task?: string; port: number; host: string; label: string; out?: string; html: boolean }) => {
+    const domain = await loadDomain(await resolveDomain(domainPath));
+    if (domain.tasks.length === 0) throw new Error(`${domain.name} has no tasks yet: add some to tasks.yaml`);
+    const task = o.task === undefined ? (domain.tasks.length === 1 ? domain.tasks[0] : undefined) : domain.tasks.find((t) => t.id === o.task);
+    if (o.task !== undefined && !task) throw new Error(`unknown task id: ${o.task}`);
+    const out = o.out ?? defaultOut(`${domain.name}-serve`);
+    let writing = Promise.resolve();
+    const served = await serveConversations(domain, {
+      port: o.port,
+      host: o.host,
+      label: o.label,
+      ...(task ? { task } : {}),
+      onOpen: (s) => console.log(`  + ${s.id} opened: a trial of ${s.task.id}`),
+      onGraded: (trial, result) => {
+        const mark = STATUS_MARK[trialStatus(trial)];
+        const failed = trial.checks.filter((c) => !c.passed).map((c) => c.id);
+        console.log(`  ${mark} ${trial.taskId} trial ${trial.trial + 1}${failed.length ? `: ${failed.join(", ")}` : ""}${trial.error ? ` (${trial.error})` : ""}`);
+        // One write at a time, in order, so the files always hold the latest grade; the end is answered after it.
+        writing = writing.then(() => save(result, out, o.html).then(() => undefined)).catch((err: unknown) => console.error(`  ! could not write ${out}: ${err instanceof Error ? err.message : String(err)}`));
+        return writing;
+      },
+    }).catch((err: NodeJS.ErrnoException) => {
+      throw new Error(err.code === "EADDRINUSE" ? `--port ${o.port} is in use: pick another, or --port 0 for any free port` : err.message);
+    });
+    const url = served.server.url;
+    console.log(`Serving ${domain.name} at ${url} for conversations another system drives, until you stop it (Ctrl-C).`);
+    console.log(`  Each conversation is a trial of ${task ? task.id : "the task it names (POST /sessions with { \"task\": \"<id>\" })"}: REST ${url}/tools/<name>, MCP ${url}/mcp, webhooks ${url}/webhook.`);
+    console.log(`  A conversation ends with POST ${url}/sessions/<id>/end, a Vapi end-of-call report, Retell's call_ended or an MCP DELETE, and is graded then.`);
+    if (!["127.0.0.1", "localhost", "::1"].includes(o.host)) {
+      console.log(`  ! It listens on ${o.host}, with no authentication: anything that can reach this machine on port ${new URL(url).port} can call it.`);
+    }
+    console.log(`  Results: ${path.join(out, "results.json")}, rewritten after each graded conversation.\n`);
+    await new Promise<void>((resolve) => {
+      process.once("SIGINT", resolve);
+      process.once("SIGTERM", resolve);
+    });
+    const left = served.openSessions();
+    await served.server.stop();
+    await writing;
+    console.log("");
+    if (left.length) console.log(`  ${left.length} conversation(s) still open were not graded: ${left.map((s) => s.id).join(", ")}`);
+    const result = served.result();
+    if (!result) {
+      console.log("  No conversation was graded, so nothing was written.");
+      return;
+    }
+    console.log(renderTerminal(result));
+    console.log(`\n  results: ${path.join(out, "results.json")}${o.html ? `\n  report:  ${path.join(out, "report.html")}` : ""}`);
   });
 
 withProviderFlags(program
