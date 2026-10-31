@@ -3,7 +3,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { mkdir, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Command, InvalidArgumentError } from "commander";
+import { Command, InvalidArgumentError, Option } from "commander";
 import { freightScriptedAgent } from "./demo/freight-agents.ts";
 import { DEMO_USER_MODEL, demoLiveSides } from "./demo/live.ts";
 import { draftUsageLines, formatPercent, renderCompare, renderTerminal } from "./report/terminal.ts";
@@ -11,6 +11,7 @@ import { renderHtml } from "./report/html.ts";
 import { renderCustomerHtml } from "./report/customer.ts";
 import { everyTrialFailed, runSuite, trialStatus, type SuiteResult } from "./run/suite.ts";
 import { runGates } from "./run/gates.ts";
+import { startWorldServer } from "./serve/server.ts";
 import { changedVerdicts, RegradeError, regradeSuite } from "./run/regrade.ts";
 import { baselineSnapshot, checkBaseline, compareRuns, regressions, type Comparison } from "./run/compare.ts";
 import { readResults, readUserFile, readUserText, userPathError } from "./run/read.ts";
@@ -82,6 +83,12 @@ async function resolveDomain(p: string): Promise<string> {
 const int = (v: string) => {
   const n = Number.parseInt(v, 10);
   if (!Number.isInteger(n) || n < 1) throw new InvalidArgumentError("must be a positive integer");
+  return n;
+};
+/** A TCP port, 0 for any free one. */
+const port = (v: string) => {
+  const n = Number(v);
+  if (!/^\d+$/.test(v) || n > 65535) throw new InvalidArgumentError("must be a port number, 0-65535 (0 picks a free one)");
   return n;
 };
 const percent = (v: string) => {
@@ -595,7 +602,15 @@ withProviderFlags(program
   .option("--fail-on-regression", "with --baseline: exit 1 if a task that passed every trial in the baseline fails one now (CI gate)")
   .option("--open", "open the HTML report in the browser when the run finishes")
   .option("--prices <file>", PRICES_HELP)
-  .action(async (domainPath: string, o: { agent: string; user: string; withoutPolicy?: boolean; openaiBaseUrl?: string; trials: number; tasks?: TaskList; tag?: string[]; concurrency: number; out?: string; html: boolean; failUnder?: number; floor?: Record<string, number>; baseline?: string; failOnRegression?: boolean; open?: boolean; prices?: string } & ProviderFlags, command: Command) => {
+  .addOption(
+    new Option(
+      "--serve [port]",
+      "serve each trial's simulated world over HTTP while it runs, for an agent that calls its tools itself: REST at /tools/<name> and each tool's http route, MCP at /mcp, webhooks at /webhook (port default 4010, 0 for any free one; trials run one at a time unless you pass -c)",
+    )
+      .preset(4010)
+      .argParser(port),
+  )
+  .action(async (domainPath: string, o: { agent: string; user: string; withoutPolicy?: boolean; openaiBaseUrl?: string; trials: number; tasks?: TaskList; tag?: string[]; concurrency: number; out?: string; html: boolean; failUnder?: number; floor?: Record<string, number>; baseline?: string; failOnRegression?: boolean; open?: boolean; prices?: string; serve?: number } & ProviderFlags, command: Command) => {
     if (o.failOnRegression && o.baseline === undefined) command.error("error: --fail-on-regression needs --baseline <results>: the run it compares with");
     warnEmptyTasks(o.tasks);
     if (o.withoutPolicy && !BUILT_IN_MODEL_AGENT.test(o.agent)) {
@@ -616,6 +631,15 @@ withProviderFlags(program
     const agent = await resolveAgent(o.agent, providerOpts(o), o.openaiBaseUrl);
     const user = resolveUser(o.user, providerOpts(o), o.openaiBaseUrl);
     await failIfUnreachable([{ role: "agent", spec: o.agent }, { role: "simulated user", spec: o.user }], providerOpts(o));
+    // An agent configured with the server's fixed URL needs one trial at a time, so that URL means one trial.
+    const concurrency = o.serve !== undefined && command.getOptionValueSource("concurrency") === "default" ? 1 : o.concurrency;
+    const server = o.serve === undefined ? undefined : await startWorldServer(domain, { port: o.serve }).catch((err: NodeJS.ErrnoException) => {
+      throw new Error(err.code === "EADDRINUSE" ? `--serve: port ${o.serve} is in use: pick another, or --serve 0 for any free port` : `--serve: ${err.message}`);
+    });
+    if (server) {
+      console.log(`Serving each trial's world at ${server.url} while it runs: REST ${server.url}/tools/<name>, MCP ${server.url}/mcp, webhooks ${server.url}/webhook.`);
+      console.log(`  ${concurrency === 1 ? "Trials run one at a time, so these URLs mean the trial that is running." : `${concurrency} trials run at once: each must use its own URLs, ${server.url}/s/<session>/…, which an agent gets in each request.`}\n`);
+    }
     let done = 0;
     const total = tasks.length * o.trials;
     const result = await runSuite({
@@ -623,14 +647,15 @@ withProviderFlags(program
       agent,
       user,
       k: o.trials,
-      concurrency: o.concurrency,
+      concurrency,
       taskIds,
       ...(o.withoutPolicy ? { withoutPolicy: true } : {}),
+      ...(server ? { server } : {}),
       onTrial: (r) => {
         done++;
         if (process.stderr.isTTY) process.stderr.write(`\r  ${done}/${total} trials  ${STATUS_MARK[trialStatus(r)]} ${r.taskId}`.padEnd(70));
       },
-    });
+    }).finally(() => server?.stop());
     if (process.stderr.isTTY) process.stderr.write("\r".padEnd(72) + "\r");
     if (baseline) result.baseline = baselineSnapshot(baseline);
     if (o.floor) result.floors = o.floor;

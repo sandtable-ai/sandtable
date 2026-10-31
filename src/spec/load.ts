@@ -137,6 +137,8 @@ export function validateDomain(d: Domain): string[] {
   }
 
   const seenTools = new Set<string>();
+  // Each `http` route by method and path, with its placeholders named alike, to find two tools on one route.
+  const routes = new Map<string, string>();
   for (const t of d.tools) {
     if (seenTools.has(t.name)) problems.push(`tools: duplicate tool "${t.name}"`);
     seenTools.add(t.name);
@@ -166,6 +168,7 @@ export function validateDomain(d: Domain): string[] {
     t.checks.forEach((c, i) => unresolved(c, `tools.${t.name}.checks[${i}]`));
     t.ops.forEach((op, i) => unresolved(op, `tools.${t.name}.ops[${i}]`));
     if (t.returns >= t.ops.length) problems.push(`tools.${t.name}: returns=${t.returns} but only ${t.ops.length} op(s)`);
+    if (t.http) problems.push(...httpProblems(t, routes));
   }
 
   const ids = new Set<string>();
@@ -239,6 +242,30 @@ export function validateDomain(d: Domain): string[] {
       });
     }
   }
+  return problems;
+}
+
+/** The routes the world server keeps for itself: a tool's `http` route can't be one of them. */
+const RESERVED_ROUTE = /^\/(?:tools|mcp|webhook|sessions|s)(?:\/|$)/;
+
+/**
+ * What's wrong with a tool's `http` route: a placeholder that isn't one of its scalar params, a route the world server
+ * keeps for itself, or a route another tool has (compared with the placeholders' names left out).
+ */
+function httpProblems(t: Tool, routes: Map<string, string>): string[] {
+  const problems: string[] = [];
+  const where = `tools.${t.name}.http`;
+  const { method, path: route } = t.http!;
+  for (const [, name] of route.matchAll(/\{([^}]*)\}/g)) {
+    const p = t.params[name!];
+    if (!p) problems.push(`${where}: {${name}} is not a param of ${t.name}`);
+    else if (p.type === "object" || p.type === "array") problems.push(`${where}: {${name}} is ${p.type === "object" ? "an object" : "an array"}: a path placeholder needs a scalar param`);
+  }
+  if (RESERVED_ROUTE.test(route)) problems.push(`${where}: ${route} is one of the world server's own routes (/tools, /mcp, /webhook, /sessions, /s): choose another path`);
+  const shape = `${method} ${route.replace(/\{[^}]*\}/g, "{}").replace(/\/+$/, "")}`;
+  const other = routes.get(shape);
+  if (other) problems.push(`${where}: ${method} ${route} is tools.${other}'s route too`);
+  else routes.set(shape, t.name);
   return problems;
 }
 

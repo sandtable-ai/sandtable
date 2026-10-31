@@ -30,6 +30,8 @@ export interface DraftTool {
   checks: { table: string; key: string; error: string }[];
   ops: Json[];
   returns?: number;
+  /** The operation's route, with each path placeholder named as the tool's param, for `run --serve`. */
+  http?: { method: string; path: string };
   /** Review notes rendered as comments above the tool. */
   notes: string[];
 }
@@ -199,6 +201,12 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
       if (loc === "query") filters[name] = param.type === "string" && !param.enum ? { $contains: ref(name) } : ref(name);
     }
 
+    // The world server keeps these routes for itself, so a tool on one of them gets no http route.
+    if (/^\/(?:tools|mcp|webhook|sessions|s)(?:\/|$)/.test(o.path)) {
+      warnings.push(`${where}: the world server uses this path for itself, so ${tool.name} gets no http route (call it at /tools/${tool.name})`);
+    } else {
+      tool.http = { method: o.method.toUpperCase(), path: o.path.replace(/\{([^}]+)\}/g, (_, name: string) => `{${paramOf.get(name) ?? name}}`) };
+    }
     const keyRef = o.itemKey ? ref(o.itemKey) : undefined;
     const values = Object.fromEntries([...o.parents, ...bodyFields].map((f) => [f, ref(f)]));
     if (o.action) {

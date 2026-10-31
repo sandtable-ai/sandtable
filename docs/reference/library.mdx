@@ -39,7 +39,7 @@ For an agent that runs its own tool loop, or a test of a tool's behavior.
 
 ## Agents and simulated users
 
-An agent is an `AgentAdapter`: a `name`, and `createSession(ctx)` that returns a session whose `reply(userMessage, callTool)` returns the agent's reply. `ctx` carries the domain, the default system prompt (`system`), the tools as `ToolSchema[]`, a `sessionId`, the task's `context`, and `recordUsage` to report tokens. A simulated user is a `UserSimulator`, whose session's `next(agentMessage)` returns `{ text, stop }`. These types, with `CallTool`, `AgentContext`, `AgentSession`, `UserContext`, `UserSession` and `UserTurn`, are exported. [Bring your agent](/guides/bring-your-agent) shows complete adapters.
+An agent is an `AgentAdapter`: a `name`, and `createSession(ctx)` that returns a session whose `reply(userMessage, callTool)` returns the agent's reply. `ctx` carries the domain, the default system prompt (`system`), the tools as `ToolSchema[]`, a `sessionId`, the task's `context`, `recordUsage` to report tokens, and, when the run serves the world, `world`: the trial's `WorldUrls` (`url`, `mcp`, `webhook`), for an agent that calls its tools itself. A simulated user is a `UserSimulator`, whose session's `next(agentMessage)` returns `{ text, stop }`. These types, with `CallTool`, `AgentContext`, `AgentSession`, `UserContext`, `UserSession` and `UserTurn`, are exported. [Bring your agent](/guides/bring-your-agent) shows complete adapters.
 
 | Export | What it does |
 |---|---|
@@ -56,7 +56,8 @@ An agent is an `AgentAdapter`: a `name`, and `createSession(ctx)` that returns a
 
 | Export | What it does |
 |---|---|
-| `runSuite(opts): Promise<SuiteResult>` | Runs every task, or `taskIds`, `k` times with `agent` and `user`, `concurrency` at a time, grades each trial and returns what `results.json` holds. `onTrial` is called as each trial ends. `withoutPolicy: true` gives the agent `ctx.system` without the domain's policy, as `run --without-policy` does; it means something only for an agent that takes `ctx.system` as its prompt. |
+| `runSuite(opts): Promise<SuiteResult>` | Runs every task, or `taskIds`, `k` times with `agent` and `user`, `concurrency` at a time, grades each trial and returns what `results.json` holds. `onTrial` is called as each trial ends. `withoutPolicy: true` gives the agent `ctx.system` without the domain's policy, as `run --without-policy` does; it means something only for an agent that takes `ctx.system` as its prompt. `server` serves each trial's world on a world server while it runs, as `run --serve` does. |
+| `startWorldServer(domain, { port, host? }): Promise<WorldServer>` | Starts the [world server](/guides/black-box) on `host` (default `127.0.0.1`) and `port` (`0` for a free one), for `runSuite({ server })`. `WorldServer` has the base `url`, `open(task, runner)`, which serves one trial's world and returns its `ServedSession` (`id`, `task`, `runner`, `urls`), `close(id)` and `stop()`. `runSuite` opens and closes a session per trial. |
 | `regradeSuite(domain, stored): SuiteResult` | Grades a stored run's trials again under the domain's current rules, without calling a model, as `sandtable regrade` does. Throws `RegradeError` when the agent or the caller would now be given different prompts. |
 | `RegradeError` | The error `regradeSuite` throws for a run it can't regrade. |
 | `baselineSnapshot(result)` | The per-task results of a run, as `run --baseline` stores them in `results.json`. |
@@ -85,8 +86,9 @@ Every type the package exports, by what it describes. Like the values above, the
 |---|---|
 | A domain | `Domain`, `Tool`, `Op`, `Invariant`, `Task`, `StateAssert`, `CallExpect`, `ReferenceCall`, `FieldRefSpec`, `Persona`, `Given`, `Fault`, `TaskEvent`, `PendingItem` |
 | The world and its tools | `Change`, `Snapshot`, `ToolOutcome`, `ToolSchema` |
-| Agents and simulated users | `AgentAdapter`, `AgentContext`, `AgentSession`, `CallTool`, `UserSimulator`, `UserContext`, `UserSession`, `UserTurn`, `ClaudeOptions`, `ClaudeAgentOptions`, `OpenAICompatOptions`, `OpenAICompatAgentOptions`, `BedrockConverseOptions` |
+| Agents and simulated users | `AgentAdapter`, `AgentContext`, `AgentSession`, `CallTool`, `WorldUrls`, `UserSimulator`, `UserContext`, `UserSession`, `UserTurn`, `ClaudeOptions`, `ClaudeAgentOptions`, `OpenAICompatOptions`, `OpenAICompatAgentOptions`, `BedrockConverseOptions` |
 | A run and its results | `SuiteOptions`, `SuiteResult`, `TaskSummary`, `TrialResult`, `TrajectoryEvent`, `EndReason`, `CheckResult`, `CheckKind`, `CallRecord`, `Violation`, `FaultApplied`, `SoftCheck`, `SoftScore`, `FailureMode`, `Verdict`, `CallerNote`, `Attribution`, `AttributionCounts`, `Owner`, `Coverage`, `RuleCoverage`, `CoverageCell`, `ToolCoverage`, `TokenUsage`, `UsageByModel`, `Usage`, `UsageRecorder` |
+| Serving the world | `WorldServer`, `WorldServerOptions`, `ServedSession` |
 | Reports | `CustomerReportOptions` |
 | Comparing runs, and lint | `BaselineSnapshot`, `Comparison`, `TaskDelta`, `TaskChange`, `LintReport`, `TaskLint`, `RuleLint` |
 

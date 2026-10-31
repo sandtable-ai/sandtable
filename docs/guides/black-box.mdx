@@ -1,0 +1,84 @@
+---
+title: "Rehearse an agent that calls its own tools: REST, MCP and webhooks"
+sidebarTitle: "Agents that call their own tools"
+description: "Serve the simulated world over REST, MCP and webhooks while sandtable drives the conversation, so an agent written against the customer's API, an MCP server or a platform's webhook is rehearsed and graded unchanged."
+keywords: ["black-box agent", "REST", "MCP", "Model Context Protocol", "webhook", "Vapi", "Retell", "run --serve", "world server", "tool server"]
+---
+
+Most adapters let sandtable run the agent's tool calls: a model agent's calls go through sandtable, an [HTTP agent](/reference/http-protocol) returns `tool_calls`, and a [module agent](/guides/bring-your-agent#your-agent-as-a-js-or-ts-module) calls `callTool`. An agent you can't change calls its tools itself: it sends requests to the customer's API, connects to an MCP server, or, on a hosted voice platform, has the platform call a webhook. `run --serve` serves the simulated world on all three while sandtable drives the conversation. Each trial's calls are checked against the invariants, hit by the task's [faults](/reference/spec#faults-and-events), and graded, exactly like calls sandtable makes for the agent.
+
+```bash
+npx sandtable-ai run ./my-domain --agent http://localhost:8787/step --user scripted --serve
+```
+
+```text
+Serving each trial's world at http://127.0.0.1:4010 while it runs: REST http://127.0.0.1:4010/tools/<name>, MCP http://127.0.0.1:4010/mcp, webhooks http://127.0.0.1:4010/webhook.
+  Trials run one at a time, so these URLs mean the trial that is running.
+```
+
+Point the agent's tool configuration at that address instead of the customer's systems: its API base URL, its MCP server, or its webhook. sandtable still needs to talk to the agent, so it must answer the conversation over the [HTTP step protocol](/reference/http-protocol) or as a [module](/guides/bring-your-agent#your-agent-as-a-js-or-ts-module). An agent that calls its tools itself answers every step with a `reply` and never sends `tool_calls`.
+
+## Which trial a request is for
+
+Each trial's world is a session with its own URLs, under `/s/<session>/`:
+
+- An HTTP agent receives them as [`world`](/reference/http-protocol#request) on every request of the trial: `url` (the REST base), `mcp` and `webhook`.
+- A module agent receives them as `ctx.world` in `createSession`.
+
+The base URL's routes, such as `http://127.0.0.1:4010/mcp`, go to the trial that is running. That is what an agent configured once with a fixed URL needs, and it is unambiguous because `--serve` runs trials one at a time. With `-c 4`, four trials run at once: a request to the base URL then gets a 409 that says so, and the agent must use the URLs it was given for its trial. A session's URLs answer 404 once its trial ends.
+
+`--serve 5000` picks the port; `--serve 0` picks a free one. The server listens on `127.0.0.1` only, has no authentication and serves simulated records, so don't expose it beyond your machine.
+
+## REST
+
+Every tool is served at `POST /tools/<name>`, with its arguments as a JSON object. A tool with an [`http` route](/reference/spec#tools) is also served there, so an agent written against the customer's API calls the same paths it would in production:
+
+```yaml
+- name: get_load
+  http: { method: GET, path: "/loads/{load_id}" }
+```
+
+```bash
+curl http://127.0.0.1:4010/loads/L-1001
+curl http://127.0.0.1:4010/loads?origin=Dallas&destination=Atlanta
+curl -X POST http://127.0.0.1:4010/bookings -H 'content-type: application/json' -d '{"load_id":"L-1001","mc_number":"100101","rate":2100}'
+```
+
+Arguments come from the path's placeholders, the query string (a name given twice is a list) and a JSON body, and are validated and coerced as for any call. `init --openapi` drafts an `http` route for each operation it turns into a tool. The answers are what a real API sends:
+
+| Status | When | Body |
+|---|---|---|
+| 200 | the call succeeded | the tool's result |
+| 400 | invalid arguments | `{ "error": "missing required argument \"rate\"" }` |
+| 404 | a row that doesn't exist (`… not found`), or an unknown route or tool | `{ "error": "…" }` |
+| 409 | any other tool error, such as a broken precondition | `{ "error": "Load L-1001 is not available" }` |
+| 504, 429, 5xx | a task's [fault](/reference/spec#faults-and-events): a timeout, a rate limit with `Retry-After`, a server error, after its latency | `{ "error": "…" }` |
+
+`GET /` describes what is served: the domain, the open sessions, the routes, and the MCP and webhook URLs.
+
+## MCP
+
+`/mcp` is an MCP server over Streamable HTTP, with plain JSON responses: `initialize`, `tools/list`, `tools/call` and `ping`. `tools/list` returns the domain's tools with their JSON schemas. A tool error, or a fault, comes back as a result with `isError: true` and the error as text. Configure the agent's MCP client with the URL:
+
+```json
+{ "mcpServers": { "tms": { "type": "http", "url": "http://127.0.0.1:4010/mcp" } } }
+```
+
+The endpoint doesn't open an SSE stream, so `GET /mcp` answers 405, and it doesn't issue MCP session ids: the URL says which trial a call is for.
+
+## Webhooks
+
+Hosted voice platforms call tools through a webhook. `POST /webhook` answers the tool-call payloads they send:
+
+| Payload | Answer |
+|---|---|
+| Vapi's `tool-calls` message: `{ "message": { "type": "tool-calls", "toolCallList": [{ "id", "function": { "name", "arguments" } }] } }` | `{ "results": [{ "toolCallId", "result" }] }`, with the result as a string, or `{ "toolCallId", "error" }` |
+| Retell's custom function: `{ "name", "args", "call" }` | the result, or `{ "error": "…" }` |
+| A generic call: `{ "name", "arguments" }` | the result, or `{ "error": "…" }` |
+| The arguments alone, at `POST /webhook/<tool>` (Retell's "args only" payload, or a tool with its own URL) | the result, or `{ "error": "…" }` |
+
+A tool error comes with status 200, as the platforms expect, so the agent's model reads it. A fault answers the whole request with its status, as a real outage would: Vapi then tells its model that no result came back. Other Vapi server messages, such as status updates and the end-of-call report, get an empty 200. sandtable doesn't check webhook signatures.
+
+## What is graded
+
+Everything, as for any run: the end state, the invariants, the required and forbidden tools, and what the agent said. In `results.json`, a call that came over the server has [`via`](/reference/results-schema#trajectoryevent) (`rest`, `mcp` or `webhook`), and the report shows it. An agent may mix them, and may still call `callTool` too: every call lands in the same trial's log, in order.

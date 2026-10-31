@@ -21,6 +21,21 @@ export interface AgentContext {
   context?: Record<string, unknown>;
   /** Report model usage so runs can show tokens and cost. Optional for custom adapters. */
   recordUsage?: UsageRecorder;
+  /**
+   * Where this trial's simulated world is served, when the run serves it (`run --serve`): an agent that calls its tools
+   * itself, over REST, MCP or a webhook, uses these instead of `callTool`. Absent otherwise.
+   */
+  world?: WorldUrls;
+}
+
+/** Where one trial's simulated world is served over HTTP. */
+export interface WorldUrls {
+  /** The REST base: `POST <url>/tools/<name>`, and each tool's `http` route under it. */
+  url: string;
+  /** The MCP endpoint (Streamable HTTP). */
+  mcp: string;
+  /** The webhook for a hosted platform's tool calls. */
+  webhook: string;
 }
 
 /**

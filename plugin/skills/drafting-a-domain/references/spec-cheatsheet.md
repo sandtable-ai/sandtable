@@ -65,7 +65,10 @@ tools:
         key: $load_id
         set: { status: booked }
     returns: 0                         # which op's result the agent sees (default 0)
+    http: { method: POST, path: /bookings }   # optional: its route in the customer's API, served by run --serve
 ```
+
+`http` (drafted by `init --openapi`) lets an agent written against the real API call the tool at its own route when `run --serve` serves the world: `{param}` placeholders name scalar params, and the query string and JSON body supply the rest. Every tool is also served at `POST /tools/<name>`.
 
 | Op | Effect | Returns |
 |---|---|---|

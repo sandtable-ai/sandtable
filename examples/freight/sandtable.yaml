@@ -77,6 +77,7 @@ world:
 tools:
   - name: verify_carrier
     description: Look up a carrier by MC number. Returns its name, authority type and status, insurance status, safety rating, equipment type and the do-not-use flag.
+    http: { method: GET, path: "/carriers/{mc_number}" }   # its route in source/openapi.yaml, for run --serve
     params:
       mc_number: { type: string, description: "Motor carrier (MC) number, digits only" }
     ops:
@@ -85,6 +86,7 @@ tools:
 
   - name: search_loads
     description: Search available loads by origin city, optionally filtered by destination city, equipment type and a pickup date window.
+    http: { method: GET, path: /loads }
     params:
       origin: { type: string, description: "Origin city, e.g. Dallas" }
       destination: { type: string, required: false, description: "Destination city, e.g. Atlanta" }
@@ -102,6 +104,7 @@ tools:
 
   - name: get_load
     description: Get one load by ID (e.g. L-1001), including status, equipment, pickup date, posted rate, max rate and booking mode.
+    http: { method: GET, path: "/loads/{load_id}" }
     params:
       load_id: { type: string }
     ops:
@@ -124,6 +127,7 @@ tools:
 
   - name: book_load
     description: Book a load for a vetted carrier at the agreed all-in rate in USD. Only call after the caller has explicitly agreed. Rep-confirm loads go through submit_offer instead.
+    http: { method: POST, path: /bookings }
     params:
       load_id: { type: string }
       mc_number: { type: string }
@@ -191,6 +195,7 @@ tools:
 
   - name: transfer_to_human
     description: Transfer the caller to a human carrier rep. Use for payment, quick pay, claims or detention questions, identity problems, or when the caller asks for a person.
+    http: { method: POST, path: /escalations }
     params:
       reason: { type: string }
       mc_number: { type: string, required: false }

@@ -94,7 +94,7 @@
       },
       {
         "group": "Guides",
-        "pages": ["guides/init", "guides/bring-your-agent", "guides/frameworks", "guides/claude-code-plugin", "guides/ci", "guides/customer-signoff", "guides/write-tasks"]
+        "pages": ["guides/init", "guides/bring-your-agent", "guides/black-box", "guides/frameworks", "guides/claude-code-plugin", "guides/ci", "guides/customer-signoff", "guides/write-tasks"]
       },
       {
         "group": "Reference",

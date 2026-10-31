@@ -20,6 +20,8 @@ The agent under test is whatever answers the simulated user. Whichever adapter y
 
 The model adapters (`claude`, `bedrock:`, `openai:`) all receive the same default system prompt (the domain description and policy) and the same tools, so their scores compare. Your own agent receives that prompt too and may ignore it. A task can also give the agent [call context](/reference/spec#per-task-world-and-context), such as a caller ID: it follows the policy in the default prompt, and an agent with its own prompt reads it as `context`.
 
+If your agent calls its tools itself, against the customer's API, an MCP server or a voice platform's webhook, `run --serve` serves the simulated world for it: see [agents that call their own tools](/guides/black-box).
+
 If your agent is built with a framework, such as the Vercel AI SDK, the OpenAI Agents SDK, the Claude Agent SDK, Pipecat or LiveKit Agents, start from a worked example: see [Rehearse an agent built with a framework](/guides/frameworks).
 
 <Tabs>

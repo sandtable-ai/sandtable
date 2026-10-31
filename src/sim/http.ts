@@ -3,12 +3,13 @@ import type { AgentAdapter } from "./types.ts";
 /**
  * Rehearse any agent that speaks this small HTTP protocol (one POST per step):
  *
- *   request:  { session_id, system, tools, context?, message? , tool_results? }
+ *   request:  { session_id, system, tools, context?, world?, message? , tool_results? }
  *   response: { reply: string }                       // done with this turn
  *          or { tool_calls: [{ id, name, arguments }] } // sandtable executes them and POSTs tool_results back
  *
  * The agent keeps its own conversation state keyed by session_id. Tool calls run against
- * sandtable's simulated world, so nothing touches the customer's real systems.
+ * sandtable's simulated world, so nothing touches the customer's real systems. With `run --serve`, `world` holds the
+ * trial's URLs, for an agent that calls its tools itself and only ever replies.
  */
 export function httpAgent(url: string, opts: { headers?: Record<string, string>; maxSteps?: number } = {}): AgentAdapter {
   const maxSteps = opts.maxSteps ?? 16;
@@ -21,7 +22,14 @@ export function httpAgent(url: string, opts: { headers?: Record<string, string>;
           res = await fetch(url, {
             method: "POST",
             headers: { "content-type": "application/json", ...opts.headers },
-            body: JSON.stringify({ session_id: ctx.sessionId, system: ctx.system, tools: ctx.tools, ...(ctx.context ? { context: ctx.context } : {}), ...body }),
+            body: JSON.stringify({
+              session_id: ctx.sessionId,
+              system: ctx.system,
+              tools: ctx.tools,
+              ...(ctx.context ? { context: ctx.context } : {}),
+              ...(ctx.world ? { world: ctx.world } : {}),
+              ...body,
+            }),
           });
         } catch (err) {
           // fetch says only "fetch failed"; the reason (ECONNREFUSED, ENOTFOUND, ...) is in err.cause.

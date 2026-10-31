@@ -35,6 +35,7 @@ const EXPORTS = [
   "renderTerminal",
   "runSuite",
   "scriptedUser",
+  "startWorldServer",
   "toolSchema",
   "trialStatus",
   "validateDomain",

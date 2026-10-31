@@ -88,6 +88,7 @@ A tool is what the agent sees (name, description, JSON-schema params) plus what 
       key: $load_id
       set: { status: booked }
   returns: 0                            # which op's result the agent gets back (default 0)
+  http: { method: POST, path: /bookings }   # optional: its route in the customer's API, for run --serve
 ```
 
 | Op | Effect | Returns |
@@ -97,6 +98,8 @@ A tool is what the agent sees (name, description, JSON-schema params) plus what 
 | `create: <table>, values` | insert a row | the new row |
 | `update: <table>, key, set` | merge fields into a row; error if missing | the updated row |
 | `respond: <value>` | no state change | the value (templated) |
+
+`http` is the tool's route in the customer's API, such as `{ method: GET, path: "/loads/{load_id}" }`. When the run [serves the world](/guides/black-box), a request to that route calls the tool, with arguments from the path's `{param}` placeholders, the query string and a JSON body, so an agent written against the real API works unchanged. Each placeholder must be a scalar param of the tool, two tools can't share a route, and the server's own routes (`/tools`, `/mcp`, `/webhook`, `/sessions`, `/s`) can't be used. `init --openapi` drafts it from each operation. A tool without one is still served at `POST /tools/<name>`.
 
 Arguments are validated before anything runs. Unknown argument names, missing required ones and wrong types come back to the agent as tool errors, with the path of the argument, such as `argument "items[1].qty" must be an integer`. Representations are coerced leniently: `"2,100"` becomes `2100` for a number param, `100101` becomes `"100101"` for a string param, and an object or list sent as a JSON string is parsed. Without `nullable: true`, `null` and `""` mean the argument was left out. Some models leave out an argument they mean to be `null`; for a required nullable param, the tool error then says `(it may be null)`, so the agent can send `null`.
 
@@ -370,7 +373,7 @@ An event changes the world right after the call that `after` names, counted as f
 
 Values are literal: a `"$arg"` in them is not replaced. `validate` fails on an unknown tool or table, an update of a row the task doesn't start with (after its `given.rows`) unless an earlier event after the same call creates it, and a create of a key that exists already. Events fire in the order the agent's calls come, so a row created after another call may not exist yet.
 
-`lint` replays a task's `reference` with its faults and events, and warns about a fault or an event that the reference never reaches, so a reference call meant to fail needs `expect_error`. In `results.json`, a tool call a fault hit has a [`fault`](/reference/results-schema#trajectory-events) field, and a call an event followed has `eventChanges`. Editing a task's faults or events changes its `inputs` hash for `run --baseline`. `regrade` replays them, and stops at a call that now returns something else.
+`lint` replays a task's `reference` with its faults and events, and warns about a fault or an event that the reference never reaches, so a reference call meant to fail needs `expect_error`. In `results.json`, a tool call a fault hit has a [`fault`](/reference/results-schema#trajectoryevent) field, and a call an event followed has `eventChanges`. Editing a task's faults or events changes its `inputs` hash for `run --baseline`. `regrade` replays them, and stops at a call that now returns something else.
 
 ## Related
 
