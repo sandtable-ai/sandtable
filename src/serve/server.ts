@@ -53,12 +53,23 @@ export interface WorldServerOptions {
 /** The largest request body read, in bytes. */
 const MAX_BODY = 1_000_000;
 
-/** A request the server answers with this status and the message as `{ error }`. */
+/** A request the server answers with this status and the message as `{ error }`, and any headers it needs. */
 class HttpError extends Error {
   readonly status: number;
-  constructor(status: number, message: string) {
+  readonly headers: Record<string, string>;
+  constructor(status: number, message: string, headers: Record<string, string> = {}) {
     super(message);
     this.status = status;
+    this.headers = headers;
+  }
+}
+
+/** A percent-encoded path part, decoded; malformed encoding is the client's error. */
+function decode(part: string): string {
+  try {
+    return decodeURIComponent(part);
+  } catch {
+    throw new HttpError(400, `malformed percent-encoding in the path: ${part}`);
   }
 }
 
@@ -91,7 +102,8 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
   let size = 0;
   for await (const chunk of req) {
     size += (chunk as Buffer).length;
-    if (size > MAX_BODY) throw new HttpError(413, `the request body is over ${MAX_BODY} bytes`);
+    // The rest of the body is never read, so the connection can't carry another request: the answer closes it.
+    if (size > MAX_BODY) throw new HttpError(413, `the request body is over ${MAX_BODY} bytes`, { connection: "close" });
     chunks.push(chunk as Buffer);
   }
   const text = Buffer.concat(chunks).toString("utf8").trim();
@@ -149,12 +161,18 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
   }
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    // A web page could reach this server through the browser: refuse a request from another origin, as MCP's transport
+    // asks a local server to. Agents, curl and platforms' webhooks send no Origin.
+    const origin = req.headers.origin;
+    if (origin !== undefined && origin !== `http://${req.headers.host}`) {
+      throw new HttpError(403, `requests from a web page (Origin: ${origin}) are refused: the world server is for agents, not browsers`);
+    }
     const url = new URL(req.url ?? "/", "http://localhost");
     let path = url.pathname;
     let session: ServedSession | undefined;
     const scoped = /^\/s\/([^/]+)(\/.*)?$/.exec(path);
     if (scoped) {
-      const id = decodeURIComponent(scoped[1]!);
+      const id = decode(scoped[1]!);
       session = sessions.get(id);
       if (!session) throw new HttpError(404, `no session ${id} is open: its trial ended, or it never started`);
       path = scoped[2] ?? "/";
@@ -191,7 +209,18 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
         }
         return (await callIn(s, name, args, "mcp")).outcome;
       };
-      const out = await mcpBody(domain, await readBody(req), call);
+      let body: unknown;
+      try {
+        body = await readBody(req);
+      } catch (err) {
+        // JSON-RPC's own error for a body that isn't JSON, in a JSON-RPC body.
+        if (err instanceof HttpError && err.status === 400) return send(res, 400, { jsonrpc: "2.0", id: null, error: { code: -32700, message: `Parse error: ${err.message}` } });
+        throw err;
+      }
+      if (body === undefined || (Array.isArray(body) && body.length === 0)) {
+        return send(res, 400, { jsonrpc: "2.0", id: null, error: { code: -32600, message: "Invalid Request: an empty body or batch" } });
+      }
+      const out = await mcpBody(domain, body, call);
       if (out === undefined) send(res, 202, undefined);
       else send(res, 200, out);
       return;
@@ -200,7 +229,7 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
     const hook = /^\/webhook(?:\/([^/]+))?\/?$/.exec(path);
     if (hook) {
       if (method !== "POST") throw new HttpError(405, "the webhook takes POST");
-      const request = parseWebhook(await readBody(req), hook[1] === undefined ? undefined : decodeURIComponent(hook[1]));
+      const request = parseWebhook(await readBody(req), hook[1] === undefined ? undefined : decode(hook[1]));
       if (request.kind === "invalid") throw new HttpError(400, request.error);
       if (request.kind !== "calls") {
         send(res, 200, {});
@@ -216,7 +245,7 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
 
     const named = /^\/tools\/([^/]+)\/?$/.exec(path);
     if (named) {
-      const name = decodeURIComponent(named[1]!);
+      const name = decode(named[1]!);
       const tool = tools.get(name);
       if (!tool) throw new HttpError(404, `unknown tool "${name}"`);
       if (method !== "POST") throw new HttpError(405, `POST /tools/${name} with the arguments as a JSON object`);
@@ -230,7 +259,7 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
       if (!m || route.method !== method) continue;
       const body = await readBody(req);
       if (body !== undefined && !isPlainObject(body)) throw new HttpError(400, "the request body must be a JSON object");
-      const fromPath = Object.fromEntries(route.names.map((name, i) => [name, decodeURIComponent(m[i + 1]!)]));
+      const fromPath = Object.fromEntries(route.names.map((name, i) => [name, decode(m[i + 1]!)]));
       const args = { ...queryArgs(url), ...body, ...fromPath };
       restAnswer(res, route.tool, args, await callIn(target(), route.tool.name, args, "rest"));
       return;
@@ -243,7 +272,7 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
   const server = createServer((req, res) => {
     handle(req, res).catch((err: unknown) => {
       if (res.headersSent) return res.end();
-      if (err instanceof HttpError) return send(res, err.status, { error: err.message });
+      if (err instanceof HttpError) return send(res, err.status, { error: err.message }, err.headers);
       send(res, 500, { error: err instanceof Error ? err.message : String(err) });
     });
   });

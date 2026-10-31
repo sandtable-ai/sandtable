@@ -25,7 +25,11 @@ export function taskFingerprints(domain: Domain, task: Task, user: string, promp
   return {
     inputs: hash({
       agent: agentSystemPrompt(domain, task, prompt),
-      tools: domain.tools.map(unreviewed),
+      // A tool's http route says where an agent can call it over HTTP, not what the agent is given.
+      tools: domain.tools.map((t) => {
+        const { http: _, ...rest } = unreviewed(t);
+        return rest;
+      }),
       kickoff: USER_KICKOFF,
       caller: userSystemPrompt(domain, task, persona),
       opening: task.user.opening,

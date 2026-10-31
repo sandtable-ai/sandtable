@@ -6,6 +6,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { runEpisode } from "../src/run/episode.ts";
+import { taskFingerprints } from "../src/run/inputs.ts";
 import { runSuite, type SuiteResult } from "../src/run/suite.ts";
 import { createToolRunner } from "../src/run/tool-runner.ts";
 import { startWorldServer, type WorldServer } from "../src/serve/server.ts";
@@ -136,6 +137,47 @@ describe("the world server's REST routes", () => {
     expect(info).toMatchObject({ server: "sandtable", domain: "freight-carrier-sales", mcp: `${server.url}/mcp`, webhook: `${server.url}/webhook`, sessions: [{ id: session.id, task: "book", ...session.urls }] });
     expect(info.rest.routes).toContain(`GET ${server.url}/loads/{load_id}`);
     expect((await json(`${session.urls.url}/`)).body).toMatchObject({ session: session.id, task: "book", mcp: session.urls.mcp });
+  });
+});
+
+describe("the world server's guards", () => {
+  it("answers malformed percent-encoding with 400, not 500", async () => {
+    const { server, session } = await served();
+    expect(await post(`${server.url}/tools/%E0%A4%A`, {})).toMatchObject({ status: 400, body: { error: "malformed percent-encoding in the path: %E0%A4%A" } });
+    expect((await json(`${session.urls.url}/loads/%E0%A4%A`)).status).toBe(400);
+    expect((await post(`${session.urls.url}/webhook/%E0%A4%A`, {})).status).toBe(400);
+    expect((await post(`${server.url}/s/%E0%A4%A/mcp`, {})).status).toBe(400);
+  });
+
+  it("refuses a request from a web page on another origin, as MCP's transport asks", async () => {
+    const { server, session } = await served();
+    const from = (origin: string) => json(`${session.urls.url}/loads/L-1001`, { headers: { origin } });
+    expect(await from("https://evil.example")).toMatchObject({ status: 403, body: { error: /requests from a web page \(Origin: https:\/\/evil\.example\) are refused/ } });
+    expect((await from("null")).status).toBe(403);
+    expect((await from(server.url)).status).toBe(200);
+    expect((await json(`${session.urls.url}/loads/L-1001`)).status).toBe(200);
+  });
+
+  it("closes the connection after a 413, so the next request on a pooled connection doesn't hang", async () => {
+    const { session } = await served();
+    const big = await fetch(`${session.urls.url}/tools/get_load`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ load_id: "x".repeat(1_200_000) }) });
+    expect(big.status).toBe(413);
+    expect(big.headers.get("connection")).toBe("close");
+    await big.text();
+    const next = await fetch(`${session.urls.url}/loads/L-1001`, { signal: AbortSignal.timeout(3000) });
+    expect(next.status).toBe(200);
+  });
+
+  it("answers an MCP body that isn't JSON, or an empty batch, with a JSON-RPC error", async () => {
+    const { session } = await served();
+    expect(await json(session.urls.mcp, { method: "POST", body: "{oops" })).toMatchObject({ status: 400, body: { jsonrpc: "2.0", id: null, error: { code: -32700 } } });
+    expect(await post(session.urls.mcp, [])).toMatchObject({ status: 400, body: { jsonrpc: "2.0", id: null, error: { code: -32600 } } });
+  });
+
+  it("leaves a tool's http route out of the task's inputs hash: it changes where the agent calls, not what it is given", async () => {
+    const domain = await domainWith(task());
+    const bare = { ...domain, tools: domain.tools.map(({ http: _, ...t }) => t) };
+    expect(taskFingerprints(domain, domain.tasks[0]!, "scripted")).toEqual(taskFingerprints(bare, domain.tasks[0]!, "scripted"));
   });
 });
 
