@@ -8,6 +8,8 @@ A fictional bike shop's phone assistant, as Vapi's API returns it, for `sandtabl
 | `tools/book_service.json` | the tool `toolIds` names (`GET https://api.vapi.ai/tool/<id>`) |
 | `scenarios/*.json` | two simulation scenarios (`GET https://api.vapi.ai/eval/simulation/scenario/<id>`), with tool mocks |
 
+From a clone of the repository:
+
 ```bash
 npx sandtable-ai import vapi examples/vapi -o pinecrest
 npx sandtable-ai validate pinecrest

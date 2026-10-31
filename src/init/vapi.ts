@@ -21,6 +21,8 @@ export interface VapiFile {
 
 export interface VapiTool {
   name: string;
+  /** Its name in the Vapi config, which scenarios' tool mocks use, when it isn't a valid tool name. */
+  vapiName?: string;
   description: string;
   params: Record<string, DraftParam>;
   ops: Json[];
@@ -49,6 +51,8 @@ export interface VapiDraft {
 }
 
 const TOOL_NAME = /^[a-zA-Z0-9_-]{1,64}$/;
+/** A tool argument's name, as model APIs accept it. */
+const PARAM_NAME = /^[a-zA-Z0-9_.-]{1,64}$/;
 /** Tool types Vapi runs itself, with no server, that a draft can't model. */
 const SKIPPED_TYPES = new Set(["dtmf", "voicemail", "query", "sms", "handoff", "code", "bash", "computer", "textEditor", "output", "mcp", "apiRequest"]);
 
@@ -139,14 +143,23 @@ export function draftFromVapi(files: VapiFile[]): VapiDraft {
   for (const { file, json } of scenarios) {
     const name = str(json.name) ?? `scenario ${tasks.length + 1}`;
     const task: VapiTask = { id: uniqueId(taskIds, slug(name)), description: name, source: file, instructions: String(json.instructions).trim(), called: [], notes: [] };
-    const variables = isPlainObject(json.targetOverrides) && isPlainObject(json.targetOverrides.variableValues) ? json.targetOverrides.variableValues : undefined;
+    const overrides = isPlainObject(json.targetOverrides) ? json.targetOverrides.variableValues : undefined;
+    const variables = isPlainObject(overrides) ? overrides : isPlainObject(json.variableValues) ? json.variableValues : undefined;
     if (variables && Object.keys(variables).length) task.context = variables;
     for (const mock of Array.isArray(json.toolMocks) ? json.toolMocks : []) {
-      if (!isPlainObject(mock) || mock.enabled === false) continue;
+      if (!isPlainObject(mock)) continue;
       const toolName = str(mock.toolName);
-      const tool = tools.find((t) => t.name === toolName);
+      if (mock.enabled === false) {
+        task.notes.push(`Its scenario's mock of ${toolName ?? "a tool"} is disabled, so it was left out.`);
+        continue;
+      }
+      const tool = tools.find((t) => t.name === toolName || t.vapiName === toolName);
       if (!tool) {
         warnings.push(`${file}: a tool mock for ${toolName ?? "a tool with no toolName"}, which the assistant doesn't have; skipped`);
+        continue;
+      }
+      if (mock.result === undefined || mock.result === null) {
+        warnings.push(`${file}: the tool mock for ${toolName} has no result; skipped`);
         continue;
       }
       if (!task.called.includes(tool.name)) task.called.push(tool.name);
@@ -158,7 +171,7 @@ export function draftFromVapi(files: VapiFile[]): VapiDraft {
         if (!known) {
           mocked.set(tool.name, { respond: text });
           tool.ops = [{ respond: text }];
-          tool.notes = [`It answers with the text a scenario mocked (${file}). Replace it with ops on a table if the answer depends on the arguments.`];
+          tool.notes = [`It answers with the text a scenario mocked (${file}). Replace it with ops on a table if the answer depends on the arguments.`, ...paramNotes(tool)];
         } else if (!("respond" in known) || known.respond !== text) {
           task.notes.push(`Its mock of ${tool.name} answers with other text than the one the tool's respond op has; model the difference with a table and given.rows.`);
         }
@@ -175,6 +188,7 @@ export function draftFromVapi(files: VapiFile[]): VapiDraft {
         tool.ops = [param ? { get: table, key: `$${param}` } : { list: table }];
         tool.notes = [
           `Drafted from the tool mocks of the scenarios: it ${param ? `looks up a ${table} row by ${param}` : `lists the ${table} rows`}, and each task's given.rows holds what its scenario mocked. Add the writes it makes, if any.`,
+          ...paramNotes(tool),
         ];
       }
       const { table, key } = shape;
@@ -185,7 +199,8 @@ export function draftFromVapi(files: VapiFile[]): VapiDraft {
     for (const ev of Array.isArray(json.evaluations) ? json.evaluations : []) {
       if (!isPlainObject(ev)) continue;
       const output = str(ev.structuredOutputId) ?? (isPlainObject(ev.structuredOutput) ? (str(ev.structuredOutput.name) ?? "an inline structured output") : "a structured output");
-      task.notes.push(`Vapi graded it with ${output} ${String(ev.comparator ?? "=")} ${JSON.stringify(ev.value)}: write that as expect.state, called or not_called, which sandtable grades without a model.`);
+      const test = ev.value === undefined ? "" : ` ${String(ev.comparator ?? "=")} ${JSON.stringify(ev.value)}`;
+      task.notes.push(`Vapi graded it with ${output}${test}: write that as expect.state, called or not_called, which sandtable grades without a model.`);
     }
     if (!task.called.length) task.notes.push("Nothing is graded yet: add the end state (expect.state) or the tools a correct call uses (expect.called).");
     else task.notes.push(`The scenario mocked ${task.called.join(", ")}, so the task expects a successful call of each: check that, and add the end state.`);
@@ -221,15 +236,29 @@ function toolFrom(json: Json, file: string, names: Set<string>, warnings: string
     const required = new Set(Array.isArray(schema.required) ? schema.required.map(String) : []);
     const notes: string[] = [];
     for (const [p, s] of Object.entries(isPlainObject(schema.properties) ? schema.properties : {})) {
-      const param = toParam(isPlainObject(s) ? s : {}, (x) => x, required.has(p));
-      if (param) params[p] = param;
-      else notes.push(`Parameter "${p}" has a schema the draft can't map, so it was left out: add it by hand.`);
+      const raw = isPlainObject(s) ? s : {};
+      // A schema of several types, or a reference the config doesn't hold, isn't a type the draft can pick.
+      const param = ["anyOf", "oneOf", "allOf", "$ref"].some((k) => k in raw) ? undefined : toParam(raw, (x) => x, required.has(p));
+      if (!param) {
+        notes.push(`Parameter "${p}" has a schema the draft can't map, so it was left out: add it by hand.`);
+        continue;
+      }
+      params[p] = param;
+      if (raw.type === undefined && raw.enum === undefined && raw.properties === undefined) notes.push(`Parameter "${p}" has no type in the Vapi config, so it was drafted as a string: check it.`);
+      if (!PARAM_NAME.test(p)) notes.push(`Parameter "${p}" has a name model APIs reject (they take ${PARAM_NAME.source}): rename it here and in the agent's tool.`);
     }
     const server = isPlainObject(json.server) ? str(json.server.url) : undefined;
     notes.unshift(
       `No scenario mocks it, so what it returns is unknown: model what it reads and changes with get, list, create or update ops on a table${server ? ` (Vapi calls ${server} for it)` : ""}.`,
     );
-    return { name, description: str(fn.description) ?? `${name} (no description in the Vapi config: write one for the model)`, params, ops: [{ respond: { status: "ok" } }], notes };
+    return {
+      name,
+      ...(name !== raw ? { vapiName: raw } : {}),
+      description: str(fn.description) ?? `${name} (no description in the Vapi config: write one for the model)`,
+      params,
+      ops: [{ respond: { status: "ok" } }],
+      notes,
+    };
   }
   if (type === "transferCall") {
     const destinations = (Array.isArray(json.destinations) ? json.destinations : []).filter(isPlainObject);
@@ -246,9 +275,12 @@ function toolFrom(json: Json, file: string, names: Set<string>, warnings: string
   if (type === "endCall") {
     return { name: uniqueName(names, "endCall"), description: "End the call.", params: {}, ops: [{ respond: { status: "ended" } }], notes: [] };
   }
-  warnings.push(`${file}: a ${type} tool${SKIPPED_TYPES.has(type) ? ", which Vapi runs itself," : ""} has no sandtable counterpart; skipped`);
+  warnings.push(`${file}: ${/^[aeiou]/i.test(type) ? "an" : "a"} ${type} tool${SKIPPED_TYPES.has(type) ? ", which Vapi runs itself," : ""} has no sandtable counterpart; skipped`);
   return undefined;
 }
+
+/** A tool's notes about its params, which outlast the note about what it does. */
+const paramNotes = (tool: VapiTool) => tool.notes.filter((n) => n.startsWith("Parameter "));
 
 /** A mock's result as rows: a JSON object, or a list of them, given as JSON text or as the value itself. */
 function mockRows(result: unknown): Json[] | undefined {

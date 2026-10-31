@@ -157,6 +157,37 @@ describe("import vapi: mapping", () => {
     expect((r as { stderr: string }).stderr).toContain("a dtmf tool, which Vapi runs itself, has no sandtable counterpart; skipped");
   });
 
+  it("matches a mock to a renamed tool, skips a mock with no result, and notes params it can't type or name", () => {
+    const tools = [
+      fn("Get Slots!", { day: { type: "string" }, either: { anyOf: [{ type: "string" }, { type: "number" }] }, ref: { $ref: "#/x" }, loose: {}, "Mixed Case": { type: "string" } }, ["day"]),
+      { type: "apiRequest" },
+    ];
+    const { draft, domain } = domainOf(
+      files(
+        ["a.json", assistant({}, { tools })],
+        ["s.json", { name: "Slots", instructions: "Ask.", variableValues: { tier: "gold" }, toolMocks: [{ toolName: "Get Slots!", result: { day: "Mon", open: 3 } }, { toolName: "Get Slots!" }, { toolName: "Get Slots!", result: "x", enabled: false }], evaluations: [{ structuredOutputId: "so-a" }] }],
+      ),
+    );
+    const slots = domain.tools.find((t) => t.name === "get_slots")!;
+    expect(slots.ops).toEqual([{ get: "get_slots_results", key: "$day" }]);
+    expect(Object.keys(slots.params)).toEqual(["day", "loose", "Mixed Case"]);
+    const notes = draft.tools[0]!.notes;
+    expect(notes[0]).toMatch(/^Drafted from the tool mocks/);
+    expect(notes).toEqual(
+      expect.arrayContaining([
+        'Parameter "either" has a schema the draft can\'t map, so it was left out: add it by hand.',
+        'Parameter "ref" has a schema the draft can\'t map, so it was left out: add it by hand.',
+        'Parameter "loose" has no type in the Vapi config, so it was drafted as a string: check it.',
+        'Parameter "Mixed Case" has a name model APIs reject (they take ^[a-zA-Z0-9_.-]{1,64}$): rename it here and in the agent\'s tool.',
+      ]),
+    );
+    expect(draft.warnings).toContain("s.json: the tool mock for Get Slots! has no result; skipped");
+    expect(draft.warnings).toContain("a.json: an apiRequest tool, which Vapi runs itself, has no sandtable counterpart; skipped");
+    expect(domain.tasks[0]!.given).toMatchObject({ rows: { get_slots_results: [{ day: "Mon", open: 3 }] }, context: { tier: "gold" } });
+    expect(draft.tasks[0]!.notes).toContain("Its scenario's mock of Get Slots! is disabled, so it was left out.");
+    expect(draft.tasks[0]!.notes).toContain("Vapi graded it with so-a: write that as expect.state, called or not_called, which sandtable grades without a model.");
+  });
+
   it("says why it can't import", () => {
     expect(vapiProblem(files(["t.json", fn("x")]))).toMatch(/has no Vapi assistant/);
     expect(vapiProblem(files(["a.json", assistant()]))).toBeUndefined();
