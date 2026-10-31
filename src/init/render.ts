@@ -79,7 +79,7 @@ export function renderDraft(d: OpenApiDraft, source: string): string {
 }
 
 /** A drafted param as YAML: `required` only where it isn't the default, and never on an array's items. */
-function paramYaml(p: DraftParam, isItems = false): Record<string, unknown> {
+export function paramYaml(p: DraftParam, isItems = false): Record<string, unknown> {
   const { required, properties, items, ...rest } = p;
   return {
     ...rest,
@@ -90,13 +90,13 @@ function paramYaml(p: DraftParam, isItems = false): Record<string, unknown> {
 }
 
 /** A scalar param reads best inline; an object or array param stays a block, with its scalars inline. */
-function flowParam(doc: YAML.Document, at: (string | number)[], p: DraftParam) {
+export function flowParam(doc: YAML.Document, at: (string | number)[], p: DraftParam) {
   if (p.properties) for (const [name, c] of Object.entries(p.properties)) flowParam(doc, [...at, "properties", name], c);
   else if (p.items) flowParam(doc, [...at, "items"], p.items);
   else flow(doc.getIn(at, true));
 }
 
-function flow(node: unknown) {
+export function flow(node: unknown) {
   if (YAML.isMap(node) || YAML.isSeq(node)) node.flow = true;
 }
 

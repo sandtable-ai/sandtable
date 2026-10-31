@@ -1,0 +1,18 @@
+{
+  "id": "tool-book-service",
+  "type": "function",
+  "function": {
+    "name": "book_service",
+    "description": "Book a service appointment for the caller's bike.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "customer_name": { "type": "string" },
+        "service": { "type": "string", "enum": ["tune_up", "flat_fix", "brake_service"] },
+        "date": { "type": "string", "description": "The appointment date, YYYY-MM-DD" }
+      },
+      "required": ["customer_name", "service", "date"]
+    }
+  },
+  "server": { "url": "https://pinecrest-bikes.example/vapi/tools" }
+}
