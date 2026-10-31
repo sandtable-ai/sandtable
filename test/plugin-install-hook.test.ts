@@ -148,6 +148,7 @@ describe("the plugin's install-in-own-project hook", () => {
     }
     expect(decide("pnpm add -D sandtable", own)).toContain("install it as `pnpm add -D sandtable-ai` instead, and run it as `npx sandtable-ai <command>`.");
     expect(decide("npm i sandtable@1.0.2", own)).toContain("install it as `npm i sandtable-ai@1.0.2` instead");
+    expect(decide("npm i sandtable-ai sandtable", own)).toContain("install it as `npm i sandtable-ai` instead");
     // npx would fetch the unrelated package when no sandtable-ai is installed where it looks.
     expect(decide("npx sandtable init --sop sop.md", bare)).toContain("run `npx sandtable-ai init --sop sop.md` instead, or install it in the project first.");
     expect(decide("npx -y sandtable@latest demo", bare)).toContain("run `npx -y sandtable-ai@latest demo` instead");
@@ -157,6 +158,8 @@ describe("the plugin's install-in-own-project hook", () => {
     expect(decide("npx sandtable demo", installed)).toBeUndefined();
     expect(decide("npx sandtable demo", path.join(installed, "sub"))).toBeUndefined();
     expect(decide("cd installed && npx sandtable demo", parent)).toBeUndefined();
+    // npx that may not fetch runs only what is installed.
+    for (const cmd of ["npx --no-install sandtable demo", "npx --no sandtable demo", "npx --yes=false sandtable demo"]) expect(decide(cmd, bare), cmd).toBeUndefined();
     // The right package, the -p form, and commands that only mention the name.
     for (const cmd of ["npx -p sandtable-ai -p @anthropic-ai/bedrock-sdk sandtable init --sop x", "npx --package=sandtable-ai sandtable demo", "npx sandtable-ai demo", "npm view sandtable version", "grep -r sandtable notes.md", "npm uninstall sandtable", "npm install @acme/sandtable"]) {
       expect(decide(cmd, own), cmd).toBeUndefined();

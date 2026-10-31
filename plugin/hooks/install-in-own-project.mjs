@@ -71,6 +71,8 @@ function npxWrong(run, dir) {
   let i = 1;
   for (; i < words.length && words[i].startsWith("-"); i++) {
     const [name, value] = words[i].split("=", 2);
+    // npx then runs only what is installed, and fetches nothing.
+    if (name === "--no-install" || name === "--no" || words[i] === "--yes=false") return undefined;
     if (!NPX_VALUE.has(name)) continue;
     const v = value ?? words[++i];
     if (name === "-p" || name === "--package") packages.push(v ?? "");
@@ -101,7 +103,9 @@ function denial(command, cwd) {
     const run = segment.replace(ENV, "");
     const manager = Object.keys(MANAGERS).find((m) => MANAGERS[m].install.test(run));
     if (manager && WRONG.test(run)) {
-      return `${WRONG_PACKAGE}: install it as \`${segment.replace(WRONG, "$1sandtable-ai$2")}\` instead, and run it as \`npx sandtable-ai <command>\`.`;
+      // The same install with sandtable-ai, or without the wrong package when it installs sandtable-ai already.
+      const fixed = SANDTABLE.test(run) ? segment.replace(WRONG, "") : segment.replace(WRONG, "$1sandtable-ai$2");
+      return `${WRONG_PACKAGE}: install it as \`${fixed}\` instead, and run it as \`npx sandtable-ai <command>\`.`;
     }
     const cmd = npxWrong(run, at);
     if (cmd) {
