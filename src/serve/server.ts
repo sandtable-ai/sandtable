@@ -55,6 +55,8 @@ const LOOPBACK = /^(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/i;
 
 /** The largest request body read, in bytes. */
 const MAX_BODY = 1_000_000;
+/** The most of a larger body read, and dropped, before the 413: past it, the connection is dropped instead. */
+const MAX_DRAIN = 16_000_000;
 
 /** A request the server answers with this status and the message as `{ error }`, and any headers it needs. */
 class HttpError extends Error {
@@ -105,10 +107,15 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
   let size = 0;
   for await (const chunk of req) {
     size += (chunk as Buffer).length;
-    // The rest of the body is never read, so the connection can't carry another request: the answer closes it.
-    if (size > MAX_BODY) throw new HttpError(413, `the request body is over ${MAX_BODY} bytes`, { connection: "close" });
-    chunks.push(chunk as Buffer);
+    if (size > MAX_DRAIN) {
+      // Far too large to read to the end: drop the connection.
+      req.destroy();
+      break;
+    }
+    // Read to the end without keeping it, so the client finishes sending and reads the answer.
+    if (size <= MAX_BODY) chunks.push(chunk as Buffer);
   }
+  if (size > MAX_BODY) throw new HttpError(413, `the request body is over ${MAX_BODY} bytes`, { connection: "close" });
   const text = Buffer.concat(chunks).toString("utf8").trim();
   if (!text) return undefined;
   try {
