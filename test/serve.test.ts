@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { createServer } from "node:http";
+import { createServer, request } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -156,6 +156,19 @@ describe("the world server's guards", () => {
     expect((await from("null")).status).toBe(403);
     expect((await from(server.url)).status).toBe(200);
     expect((await json(`${session.urls.url}/loads/L-1001`)).status).toBe(200);
+    // DNS rebinding: another name that resolves to this machine, with an Origin that matches it.
+    const port = new URL(server.url).port;
+    const asked = (host: string) =>
+      new Promise<number>((resolve, reject) => {
+        const req = request({ host: "127.0.0.1", port, path: `/s/${session.id}/loads/L-1001`, headers: { host, origin: `http://${host}` } }, (res) => {
+          res.resume();
+          resolve(res.statusCode!);
+        });
+        req.on("error", reject).end();
+      });
+    expect(await asked(`evil.example:${port}`)).toBe(403);
+    expect(await asked(`localhost:${port}`)).toBe(200);
+    expect(await asked(`127.0.0.1:${port}`)).toBe(200);
   });
 
   it("closes the connection after a 413, so the next request on a pooled connection doesn't hang", async () => {

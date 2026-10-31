@@ -50,6 +50,9 @@ export interface WorldServerOptions {
   host?: string;
 }
 
+/** A Host header that names this machine: 127.0.0.1, localhost or [::1], with any port. */
+const LOOPBACK = /^(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/i;
+
 /** The largest request body read, in bytes. */
 const MAX_BODY = 1_000_000;
 
@@ -167,6 +170,10 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
     if (origin !== undefined && origin !== `http://${req.headers.host}`) {
       throw new HttpError(403, `requests from a web page (Origin: ${origin}) are refused: the world server is for agents, not browsers`);
     }
+    // Listening on this machine only, a request must name it too: another name that resolves here is DNS rebinding.
+    if (loopback && !LOOPBACK.test(req.headers.host ?? "")) {
+      throw new HttpError(403, `requests for another host (Host: ${req.headers.host ?? "none"}) are refused: the world server listens on this machine only`);
+    }
     const url = new URL(req.url ?? "/", "http://localhost");
     let path = url.pathname;
     let session: ServedSession | undefined;
@@ -277,6 +284,7 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
     });
   });
   const host = opts.host ?? "127.0.0.1";
+  const loopback = ["127.0.0.1", "localhost", "::1"].includes(host);
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
     server.listen(opts.port, host, () => {

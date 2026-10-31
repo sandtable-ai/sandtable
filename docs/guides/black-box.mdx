@@ -27,7 +27,7 @@ Each trial's world is a session with its own URLs, under `/s/<session>/`:
 
 The base URL's routes, such as `http://127.0.0.1:4010/mcp`, go to the trial that is running. That is what an agent configured once with a fixed URL needs, and it is unambiguous because `--serve` runs trials one at a time. With `-c 4`, four trials run at once: a request to the base URL then gets a 409 that says so, and the agent must use the URLs it was given for its trial. A session's URLs answer 404 once its trial ends.
 
-`--serve 5000` picks the port; `--serve 0` picks a free one. The server listens on `127.0.0.1` only, has no authentication and serves simulated records, so don't expose it beyond your machine. It refuses a request that a web page sends from another origin (an `Origin` header that isn't its own), as MCP's transport asks a local server to; agents, curl and platforms' webhooks send none.
+`--serve 5000` picks the port; `--serve 0` picks a free one. The server listens on `127.0.0.1` only, has no authentication and serves simulated records, so don't expose it beyond your machine. It refuses a request that a web page sends from another origin (an `Origin` header that isn't its own), and one whose `Host` isn't this machine (`127.0.0.1`, `localhost` or `[::1]`), as MCP's transport asks a local server to; agents, curl and platforms' webhooks send no `Origin`.
 
 ## REST
 
