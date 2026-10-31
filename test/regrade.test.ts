@@ -160,9 +160,9 @@ describe("regrade", () => {
     expect(above).toContain("negotiate-within-ceiling");
 
     const { stdout } = await promisify(execFile)(process.execPath, [cli, "regrade", path.join(dir, "results.json"), "--domain", domainDir, "--no-html"]);
-    expect(stdout).toContain(`regraded 50 trial(s) without calling a model: ${above.length} verdict(s) changed`);
+    expect(stdout).toContain(`regraded ${run.tasks.length} trial(s) without calling a model: ${above.length} verdict(s) changed`);
     for (const id of above) expect(stdout).toContain(`✓ → ✗  ${id} trial 1`);
-    expect(stdout).toContain(`pass^1 100.0% → ${((1 - above.length / 50) * 100).toFixed(1)}%`);
+    expect(stdout).toContain(`pass^1 100.0% → ${((1 - above.length / run.tasks.length) * 100).toFixed(1)}%`);
     const regraded = JSON.parse(await readFile(path.join(dir, "results.json"), "utf8")) as SuiteResult;
     expect(regraded.failureModes[0]).toMatchObject({ id: "rate-ceiling", tasks: above });
     expect(regraded.runId).toBe(run.runId);

@@ -257,6 +257,10 @@ tasks:
     given:                             # optional: this task's changes to the world it starts in
       rows: { carriers: [{ mc_number: "100101", insurance_status: expired }] }
       context: { caller_id: "+1-555-0148" }
+    faults:                            # optional: failures injected into this task's tool calls, see below
+      - { tool: book_load, call: 1, error: timeout, after_commit: true }
+    events:                            # optional: changes someone else makes to the world mid-call, see below
+      - { after: { tool: search_loads, call: 1 }, update: loads, key: L-1001, set: { status: booked } }
     expect:
       state:
         - { table: bookings, count: 0 }                                # exactly N rows (with optional where)
@@ -320,6 +324,53 @@ A critical refusal guards against the harmful action, not against doing nothing:
 ```
 
 `lint` checks the task against its patched seed and replays its `reference` there. `regrade` replays stored trials against it too. Editing a task's `context` changes what its agent was given, so `regrade` refuses runs made before the edit; editing its `rows` doesn't, and a call that now returns something else stops the regrade.
+
+### Faults and events
+
+Production failures come from flaky dependencies and from a world that changes while the call goes on. `faults` make a task's tool calls fail the way a real API does, and `events` change the world between calls, so a task can check that the agent handles both safely: that it doesn't book twice after a timeout, or tell a caller there's nothing when a search was only throttled.
+
+```yaml
+  - id: booking-times-out-after-it-lands
+    faults:
+      - tool: book_load
+        call: 1                # which calls of the tool, counting from 1: a number or a list; every call when left out
+        error: timeout         # timeout | rate_limit | server_error
+        after_commit: true     # the write lands, then the response is lost
+      - { tool: search_loads, call: [1, 2], error: rate_limit, retry_after: 2 }
+      - { tool: get_load, error: server_error, status: 502, message: "TMS gateway error" }
+      - { tool: verify_carrier, latency_ms: 1500 }
+    events:
+      - after: { tool: search_loads, call: 1 }   # right after the first search_loads call
+        update: loads
+        key: L-1007
+        set: { status: booked }
+      - after: { tool: get_load }                # call defaults to 1
+        create: loads
+        values: { load_id: L-1099, origin: "Dallas, TX", destination: "Atlanta, GA", status: available }
+```
+
+A fault takes:
+
+- `tool`, and `call` to pick its calls. Calls are counted per tool, leaving out calls with invalid arguments, which never reach the API. When two faults hit the same call, the first one in the list applies.
+- `error`, what the agent sees instead of the tool's result, as a tool error:
+  - `timeout`: no response, as `book_load timed out: no response from the server`.
+  - `rate_limit`: a 429 that says to wait `retry_after` seconds, 1 by default, as `429 Too Many Requests: rate limit exceeded, retry after 2 seconds`.
+  - `server_error`: a 5xx `status`, 503 by default, as `503 Service Unavailable: the server could not handle the request`.
+
+  `message` replaces that text.
+- `after_commit: true`, for a timeout or a server error: the tool runs, so its write lands, and then the agent gets the error anyway. Without it, a fault with an error stops the call before the tool runs, and nothing changes.
+- `latency_ms`, a delay before the response, up to 60000, alone or with an error. Live runs wait it out; `lint` and `regrade` don't.
+
+Invariants check a call a fault hits, as they check any call: the agent attempted it. The call counts as failed for `called`, a `before` invariant's `first` call and `never_disclose`'s `unless`, even when its write landed, since the agent never saw it succeed: check what landed with `expect.state`. A fault is not an error of the trial, so a trial with one is graded, never skipped.
+
+An event changes the world right after the call that `after` names, counted as for faults, whether that call succeeded or not:
+
+- `update` sets fields of the row keyed `key`.
+- `create` adds a row with `values`.
+
+Values are literal: a `"$arg"` in them is not replaced. `validate` fails on an unknown tool or table, an update of a row the task doesn't start with (after its `given.rows`) unless an earlier event after the same call creates it, and a create of a key that exists already. Events fire in the order the agent's calls come, so a row created after another call may not exist yet.
+
+`lint` replays a task's `reference` with its faults and events, and warns about a fault or an event that the reference never reaches, so a reference call meant to fail needs `expect_error`. In `results.json`, a tool call a fault hit has a [`fault`](/reference/results-schema#trajectory-events) field, and a call an event followed has `eventChanges`. Editing a task's faults or events changes its `inputs` hash for `run --baseline`. `regrade` replays them, and stops at a call that now returns something else.
 
 ## Related
 

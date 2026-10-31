@@ -138,7 +138,7 @@ describe("compareRuns", () => {
     const c = compareRuns(baselineSnapshot(careful), naive);
     const failing = naive.tasks.filter((t) => t.passes === 0).map((t) => t.id);
     expect(c.tasks.filter((d) => d.change === "broken").map((d) => d.id)).toEqual(failing);
-    expect(c.tasks.filter((d) => d.change === "same")).toHaveLength(50 - failing.length);
+    expect(c.tasks.filter((d) => d.change === "same")).toHaveLength(domain.tasks.length - failing.length);
     expect(c.sameTasks).toBe(true);
     expect(c.passHat).toEqual([{ j: 1, before: careful.passHat["1"], after: naive.passHat["1"] }]);
     expect(c.differences).toEqual(["agent scripted:careful → scripted:naive"]);
@@ -213,9 +213,9 @@ describe("terminal comparison", () => {
     expect(block[1]).toBe(`  run ${careful.runId} · started ${careful.startedAt}`);
     expect(block[2]).toBe("  ! agent scripted:careful → scripted:naive");
     expect(block[4]).toMatch(/^ {2}✗ broken {2}book-at-posted-rate +1\/1 → 0\/1$/);
-    expect(block.filter((l) => l.startsWith("  ✗ broken"))).toHaveLength(45);
+    expect(block.filter((l) => l.startsWith("  ✗ broken"))).toHaveLength(47);
     expect(block).toContain("  = 5 unchanged");
-    expect(block.at(-1)).toBe("  pass^1 100.0% → 10.0%  (−90.0 pts)");
+    expect(block.at(-1)).toBe("  pass^1 100.0% → 9.6%  (−90.4 pts)");
     for (const line of block) expect(line.length, line).toBeLessThanOrEqual(80);
     // Without a baseline, the summary ends as before.
     expect(plain(renderTerminal(naive))).not.toContain("Compared with");

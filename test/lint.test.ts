@@ -17,8 +17,8 @@ describe("sandtable lint", () => {
     expect(byId["walk-away-above-ceiling"]).toMatchObject({ expectsWrite: false, noopPasses: true, solvable: null });
     // Every write task carries a reference that replays cleanly, and a do-nothing agent fails it.
     const writes = report.tasks.filter((t) => t.expectsWrite);
-    expect(report.tasks).toHaveLength(50);
-    expect(writes).toHaveLength(32);
+    expect(report.tasks).toHaveLength(52);
+    expect(writes).toHaveLength(34);
     expect(writes.every((t) => t.solvable === true && !t.noopPasses)).toBe(true);
   });
 

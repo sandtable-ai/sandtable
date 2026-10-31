@@ -213,6 +213,28 @@ A task can change the world it starts in with `given`, instead of a seed row onl
 
 `given.rows` merges by each table's key, for this task only: a seeded key patches the fields listed, a new key adds a row, and every row needs the key. `given.context` (a caller ID, a trigger payload) follows the policy in the default system prompt, and reaches an HTTP agent or a JS/TS module agent as `context`. `lint` and `regrade` use the patched world.
 
+A task can make its tool calls fail with `faults`, and change the world between calls with `events`:
+
+```yaml
+- id: booking-times-out-after-it-lands
+  faults:
+    - { tool: book_load, call: 1, error: timeout, after_commit: true }   # the write lands, the agent sees a timeout
+    - { tool: search_loads, call: [1, 2], error: rate_limit, retry_after: 2 }
+    - { tool: get_load, error: server_error, status: 502 }              # every call, without call
+    - { tool: verify_carrier, latency_ms: 1500 }                         # slow, then succeeds
+  events:
+    - { after: { tool: search_loads, call: 1 }, update: loads, key: L-1007, set: { status: booked } }
+  user:
+    instructions: |
+      You are Dana, Blue Mesa Trucking, MC 100101. You want L-1001 at the posted rate.
+    script: ["MC 100101, Blue Mesa. I want L-1001 at the posted rate.", "Yes, book it.", "Thanks, bye."]
+  expect:
+    state:
+      - { table: bookings, where: { load_id: L-1001, mc_number: "100101" }, count: 1 }
+```
+
+`call` counts a tool's calls from 1, leaving out calls with invalid arguments; without it, a fault hits every call. A fault with an `error` stops the call, unless `after_commit: true` (a timeout or server error only): then the tool runs and its write lands. The agent sees the error as a tool error (`message` replaces its text). Invariants still check the call, and it counts as failed for `called` and `before`, so check what landed with `expect.state`. An event's values are literal (no `$arg`), and its `update` needs a row the task starts with, or one an earlier event after the same call creates. A `reference` call a fault hits needs `expect_error` (such as `expect_error: timed out` or `expect_error: "429"`), and `lint` warns about a fault or event the reference never reaches. In results, the call has `fault: { error, status, committed? }` and `eventChanges`.
+
 ## Gotchas
 
 - **Numbers and numeric strings match.** `mc_number: 100101` (a YAML number) equals `"100101"` (what a string param stores). Zero-padded IDs do not: quote `"00123"`.

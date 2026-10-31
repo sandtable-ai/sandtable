@@ -131,10 +131,12 @@ function lintTask(domain: Domain, task: Task, changeable: Set<string>, writers: 
   }
 
   let ready = true;
+  // The task's events change tables too, as someone else would during the call.
+  const touched = new Set((task.events ?? []).map((e) => ("update" in e ? e.update : e.create)));
   task.expect.state.forEach((a, i) => {
     if (a.count === 0) return;
     const present = a.key !== undefined ? seed.get(a.table, a.key) !== undefined : seed.list(a.table).some((r) => matches(r, a.where ?? {}));
-    if (!present && !changeable.has(a.table)) {
+    if (!present && !changeable.has(a.table) && !touched.has(a.table)) {
       ready = false;
       errors.push(`expect.state[${i}] needs a row in ${a.table} that is not seeded and no tool can create or change`);
     }
@@ -149,7 +151,7 @@ function lintTask(domain: Domain, task: Task, changeable: Set<string>, writers: 
   let replayed: readonly CallRecord[] = [];
   if (task.reference) {
     const world = worldFor(domain, task);
-    const runner = createToolRunner(domain, world);
+    const runner = createToolRunner(domain, world, undefined, task);
     worlds.push(world);
     replayed = runner.calls;
     task.reference.forEach((c, i) => {
@@ -173,6 +175,13 @@ function lintTask(domain: Domain, task: Task, changeable: Set<string>, writers: 
     const failing = graded.checks.filter((c) => !c.passed && c.kind !== "reply");
     for (const c of failing) errors.push(`reference does not pass: ${c.id}: ${c.detail}`);
     solvable = failing.length === 0 && !errors.some((e) => e.startsWith("reference["));
+    // A fault or an event the reference never reaches is untested: a correct agent may never meet it either.
+    task.faults?.forEach((f, i) => {
+      if (!runner.faultsHit.has(i)) warnings.push(`faults[${i}] (${f.tool}${f.call === undefined ? "" : `, call ${[f.call].flat().join(", ")}`}) never hits the reference's calls: check its call number`);
+    });
+    task.events?.forEach((e, i) => {
+      if (!runner.eventsFired.has(i)) warnings.push(`events[${i}] (after ${e.after.tool}, call ${e.after.call}) never fires in the reference's calls: check its call number`);
+    });
   } else if (expectsWrite) {
     warnings.push("no reference: add the tool calls a correct agent would make to prove the task is solvable");
   }

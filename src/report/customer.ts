@@ -204,7 +204,7 @@ function conversation(tr: TrialResult, r: SuiteResult): string {
   const said = (e: TrajectoryEvent) => {
     if (e.type === "tool") {
       const broken = [...e.violations, ...(e.soft ?? [])].map((id) => rules.get(id) ?? id);
-      const outcome = e.ok ? "done" : `refused: ${e.error ?? "error"}`;
+      const outcome = e.ok ? "done" : e.fault?.error ? `failed, as the test arranged: ${e.error ?? "error"}${e.fault.committed ? " (the change was made)" : ""}` : `refused: ${e.error ?? "error"}`;
       return `<div class="act">Agent action: ${esc(e.name)}(${esc(args(e.args))}) → ${esc(outcome)}${broken.length ? ` <span class="badt">broke: ${broken.map(esc).join("; ")}</span>` : ""}</div>`;
     }
     return `<div class="turn"><span>${e.type === "user" ? "Caller" : "Agent"}</span>${esc(e.text)}</div>`;

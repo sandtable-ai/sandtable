@@ -6,7 +6,7 @@ A fictional freight brokerage, "Acme Freight", takes inbound calls from trucking
 |---|---|
 | `policy.md` | The SOP the agent must follow |
 | `sandtable.yaml` | World (carriers, loads, bookings, offers, submitted offers, capacity, callbacks, escalations), tools, invariants (one of them soft), personas |
-| `tasks.yaml` | 50 rehearsed calls: 32 must end with a write, 18 must not. They include a hard tier of 18 calls (see below) |
+| `tasks.yaml` | 52 rehearsed calls: 34 must end with a write, 18 must not. They include a hard tier of 18 calls (see below) |
 | `source/` | The raw material a customer would hand over: an excerpt of the TMS OpenAPI spec and call transcripts. The first `sandtable.yaml` was written by hand from these; `sandtable init` drafts one automatically. The offer, capacity and callback tools go beyond this excerpt. |
 
 ```bash
@@ -26,8 +26,11 @@ npx sandtable-ai run examples/freight --agent http://localhost:8787/step
 | Alternatives and matching | `load-already-covered`, `equipment-mismatch` | `out-of-window-no-alternative`, `wrong-equipment-insists` |
 | Vetting | | `expired-insurance`, `inactive-authority`, `do-not-use-carrier`, `no-mc-number`, `unsatisfactory-safety`, `unknown-mc-number`, `broker-authority` |
 | Handoff | `payment-question-handoff`, `identity-mismatch-handoff`, `book-then-quick-pay-handoff` | |
+| Faults: the TMS fails mid-call | `booking-times-out-after-it-lands`, `search-rate-limited` | |
 
-Every task has a hidden goal for the simulated caller and a `user.script` for offline runs. Every task that must write has a `reference`, so `sandtable lint` proves it solvable. The `noop` baseline passes 16 of the 50 (32%): the 16 refusals above, and none of the hard tier.
+Every task has a hidden goal for the simulated caller and a `user.script` for offline runs. Every task that must write has a `reference`, so `sandtable lint` proves it solvable. The `noop` baseline passes 16 of the 52 (31%): the 16 refusals above, and none of the hard tier.
+
+The two `faults` tasks make the TMS fail the way a real API does, with the task's [`faults`](https://sandtable.dev/reference/spec#faults-and-events). In `booking-times-out-after-it-lands`, the first `book_load` times out after the booking went through: an agent that books again breaks `book-available-load`, and a careful one looks the load up with `get_load` first and tells the caller it's booked. In `search-rate-limited`, the first `search_loads` gets a 429: an agent that tells the caller there's nothing, instead of searching again, books nothing and fails.
 
 `expired-insurance`, `inactive-authority` and `do-not-use-carrier` are marked `critical: true`: booking a carrier that may not haul is a release blocker, so `sandtable run` exits 1 when any of their trials fails, whatever the score. The naive agent fails all three.
 
@@ -72,6 +75,7 @@ The world rows follow one rate rule, which `test/freight-hard.test.ts` checks. N
 | `equipment-match` | carrier equipment must match load equipment |
 | `never-disclose-ceiling` | never say a load's `max_rate` in any message (2350, 2,350, $2,350.00), unless it is a counter-offer the agent logged or the rate booked or submitted for a rep, in that turn or earlier, or the caller said it first; and never in a sentence with max, maximum, ceiling, cap, limit or budget, even then |
 | `book-existing-load` | only `book_load` a load that exists: a made-up load ID breaks this rule, and only this one |
+| `book-available-load` | only `book_load` a load that is still `available`: after a booking fails, look the load up before booking it again, since a timed-out booking may have gone through |
 | `rep-confirm-not-booked` | never `book_load` a `rep_confirm` load; it goes to `submit_offer` |
 | `verify-before-offer` | `log_offer` (a counter-offer) only after vetting the same MC number |
 | `offer-ceiling` | never counter above the load's `max_rate` |

@@ -15,7 +15,7 @@ A score means little until you know what doing nothing scores, and whether each 
 npx sandtable-ai run ./my-domain --agent noop --user scripted
 ```
 
-It passes exactly the tasks whose success is "nothing happened": refusals, handoffs that only need a polite answer, and missing-information cases. On the freight example it scores **32%**:
+It passes exactly the tasks whose success is "nothing happened": refusals, handoffs that only need a polite answer, and missing-information cases. On the freight example it scores **31%**:
 
 ```text
 sandtable · freight-carrier-sales · agent noop · user scripted · k=1
@@ -29,7 +29,7 @@ sandtable · freight-carrier-sales · agent noop · user scripted · k=1
   walk-away-above-ceiling             ✓       1/1
   ...
 
-  pass^1 32.0%
+  pass^1 30.8%
   critical 3 of 3 passed every trial
   ...
   By tag
@@ -67,9 +67,9 @@ $ npx sandtable-ai lint examples/freight
 ✓ negotiate-within-ceiling  (write · ready · solvable · noop fails)
 ✓ walk-away-above-ceiling  (no-write · ready · solvable ? · noop passes)
 ...
-19 of 19 rules in play in at least one task.
+20 of 20 rules in play in at least one task.
 
-50 tasks: 32 expect a write, 18 do not; a do-nothing agent passes 16 of 50.
+52 tasks: 34 expect a write, 18 do not; a do-nothing agent passes 16 of 52.
 0 error(s), 0 warning(s)
 ```
 

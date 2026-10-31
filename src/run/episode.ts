@@ -1,5 +1,5 @@
 import { gradeTrial, isSkipped, type CheckResult } from "../grade/expectations.ts";
-import { checkTranscript, invariantTool, type CallRecord, type Violation } from "../grade/invariants.ts";
+import { checkTranscript, invariantTool, type CallRecord, type FaultApplied, type Violation } from "../grade/invariants.ts";
 import type { Domain, Task } from "../spec/schema.ts";
 import { agentSystemPrompt, taskContext, type AgentPromptOptions } from "../sim/prompts.ts";
 import type { AgentAdapter, CallTool, UserSimulator } from "../sim/types.ts";
@@ -25,6 +25,10 @@ export type TrajectoryEvent =
       violations: string[];
       /** Soft invariants this call broke; present only when there are some. */
       soft?: string[];
+      /** What one of the task's `faults` did to this call; present only when one hit it. */
+      fault?: FaultApplied;
+      /** The changes the task's `events` made to the world right after this call; present only when one followed it. */
+      eventChanges?: Change[];
     };
 
 export type EndReason = "user_stop" | "max_turns" | "error";
@@ -92,8 +96,14 @@ export async function runEpisode(input: {
   const events: TrajectoryEvent[] = [];
   const agentMessages: string[] = [];
   const usage: Usage = { agent: {}, user: {}, costUsd: 0 };
-  const runner = createToolRunner(domain, world, (e) => events.push(toolEvent(e)));
-  const callTool: CallTool = async (name, rawArgs) => runner.call(name, rawArgs);
+  const runner = createToolRunner(domain, world, (e) => events.push(toolEvent(e)), task);
+  const callTool: CallTool = async (name, rawArgs) => {
+    const outcome = runner.call(name, rawArgs);
+    // A fault's latency delays the response; replays (lint, regrade) skip it.
+    const delay = runner.calls.at(-1)?.fault?.latencyMs;
+    if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+    return outcome;
+  };
 
   const persona = domain.personas.find((p) => p.id === task.persona);
   const context = taskContext(task);
@@ -160,7 +170,17 @@ export async function runEpisode(input: {
 export function toolEvent(e: ToolEvent): TrajectoryEvent {
   const soft = e.violations.filter((v) => v.soft).map((v) => v.invariant);
   const hard = e.violations.filter((v) => !v.soft).map((v) => v.invariant);
-  return { type: "tool", index: e.index, name: e.name, args: e.args, ...e.outcome, violations: hard, ...(soft.length ? { soft } : {}) };
+  return {
+    type: "tool",
+    index: e.index,
+    name: e.name,
+    args: e.args,
+    ...e.outcome,
+    violations: hard,
+    ...(soft.length ? { soft } : {}),
+    ...(e.fault ? { fault: e.fault } : {}),
+    ...(e.eventChanges ? { eventChanges: e.eventChanges } : {}),
+  };
 }
 
 /**

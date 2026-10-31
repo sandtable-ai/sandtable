@@ -55,7 +55,7 @@ In about five minutes: an offline demo with no API key, the same example with Cl
     npx sandtable-ai demo
     ```
 
-    Two rule-based agents replay 50 scripted carrier calls against a fictional freight brokerage. The **naive** agent books whatever it is asked to and scores pass^1 10.0% (5 of 50), with its rule breaks grouped under "Top failure modes". The **careful** agent verifies carriers, respects the rate ceiling and hands off when it should, and scores 100%.
+    Two rule-based agents replay 52 scripted carrier calls against a fictional freight brokerage. The **naive** agent books whatever it is asked to and scores pass^1 9.6% (5 of 52), with its rule breaks grouped under "Top failure modes". The **careful** agent verifies carriers, respects the rate ceiling and hands off when it should, and scores 100%.
 
     Each run writes `results.json` and `report.html` under `.sandtable/runs/` and opens the first report in your browser. Pass `--no-open` to skip that.
   </Step>
@@ -171,7 +171,7 @@ In about five minutes: an offline demo with no API key, the same example with Cl
     npx sandtable-ai run examples/freight --agent http://localhost:8787/step --user scripted
     ```
 
-    It scores pass^1 36.0% (18 of 50). It never books a load, so it passes only tasks where the right outcome is to book nothing. The [noop baseline](/concepts/baselines), an agent that never calls a tool, scores 32.0% (16 of 50) for the same reason. The toy agent passes two more tasks than noop, `double-brokering-on-yes` and `broker-claims-carrier`: in both, the agent must look the carrier up with `verify_carrier` and then book nothing, and the toy agent does look it up. The noop score is the floor of a suite, and the first number to know about it.
+    It scores pass^1 34.6% (18 of 52). It never books a load, so it passes only tasks where the right outcome is to book nothing. The [noop baseline](/concepts/baselines), an agent that never calls a tool, scores 30.8% (16 of 52) for the same reason. The toy agent passes two more tasks than noop, `double-brokering-on-yes` and `broker-claims-carrier`: in both, the agent must look the carrier up with `verify_carrier` and then book nothing, and the toy agent does look it up. The noop score is the floor of a suite, and the first number to know about it.
 
     `examples/freight` works from any directory: when there is no such folder where you run the command, sandtable uses the copy bundled with the package and prints its path.
   </Step>

@@ -46,7 +46,7 @@ describe("leaderboard", () => {
     expect(careful).toMatchObject({ passHat1: 1, passHatK: 1, trials: domain.tasks.length * 2, costUsd: null });
     const naive = lb.rows.find((r) => r.label === "Naive rules")!;
     expect(naive.violations["verify-before-book"]).toBeGreaterThan(0);
-    expect(lb.rows.find((r) => r.baseline)!.passHatK).toBeCloseTo(16 / 50);
+    expect(lb.rows.find((r) => r.baseline)!.passHatK).toBeCloseTo(16 / 52);
     expect(lb.rows.at(-1)!.error).toMatch(/unknown agent nope/);
 
     const md = await readFile(path.join(dir, "LEADERBOARD.md"), "utf8");
@@ -510,7 +510,7 @@ describe("leaderboard", () => {
       const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
       const crashed = path.join(dir, "flaky", "crashed");
       // A full board whose model has no stored results crashes partway: its good trials are only in crashed/.
-      expect((await board(dir, flaky(5), 2))[0]).toMatch(/^failed: 20 of 100 trial\(s\) skipped after an error: throttled; the crashed run is in .*crashed$/);
+      expect((await board(dir, flaky(5), 2))[0]).toMatch(/^failed: 20 of 104 trial\(s\) skipped after an error: throttled; the crashed run is in .*crashed$/);
       const full = await files(crashed);
       expect(await board(dir, flaky(Infinity), 1, quick)).toEqual([
         `ran: kept the earlier crashed run in ${crashed}, whose results are of another run (they are for k=2, not k=1): delete it before publishing this folder`,
@@ -549,7 +549,7 @@ describe("leaderboard", () => {
       const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
       const crashed = path.join(dir, "flaky", "crashed");
       await board(dir, flaky(5), 2);
-      expect(await board(dir, flaky(1), 2)).toEqual([`failed: 100 of 100 trial(s) skipped after an error: throttled; the crashed run is in ${crashed}`]);
+      expect(await board(dir, flaky(1), 2)).toEqual([`failed: 104 of 104 trial(s) skipped after an error: throttled; the crashed run is in ${crashed}`]);
       expect((await results(crashed)).tasks.flatMap((t) => t.trials).every((t) => t.endReason === "error")).toBe(true);
       expect(await board(dir, flaky(Infinity), 2)).toEqual([`ran: removed the earlier crashed run in ${crashed}`]);
       await expect(stat(crashed)).rejects.toThrow();
@@ -562,7 +562,7 @@ describe("leaderboard", () => {
       await writeFile(path.join(crashed, "results.json"), '{"domain": "freight-carrier-sa');
       const corrupt = await files(crashed);
       const unread = `kept the earlier crashed run in ${crashed}, whose results.json can't be read`;
-      expect(await board(dir, flaky(5), 2)).toEqual([`failed: 20 of 100 trial(s) skipped after an error: throttled; the crashed run is in ${crashed2}; ${unread}`]);
+      expect(await board(dir, flaky(5), 2)).toEqual([`failed: 20 of 104 trial(s) skipped after an error: throttled; the crashed run is in ${crashed2}; ${unread}`]);
       expect(await files(crashed)).toEqual(corrupt);
       expect(await board(dir, flaky(Infinity), 2)).toEqual([`ran: removed the earlier crashed run in ${crashed2}; ${unread}: delete it before publishing this folder`]);
       expect(await files(crashed)).toEqual(corrupt);

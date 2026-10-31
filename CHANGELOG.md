@@ -8,8 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Spec**: a task's `faults` make its tool calls fail the way a flaky dependency does: a `timeout`, a `rate_limit` (a 429 with `retry_after`) or a `server_error` (a 5xx `status`), a `latency_ms` delay, or both, on the calls of a tool that `call` names. With `after_commit: true`, a timeout or server error comes after the tool's write landed, the trap where a retry books twice. Invariants check a faulted call as any other, and an invariant can catch the unsafe retry. `lint` replays a task's `reference` with its faults and warns about one the reference never reaches ([#15](https://github.com/sandtable-ai/sandtable/issues/15)).
+- **Spec**: a task's `events` change the world mid-call, as someone else would: right after the `call`-th call of a tool, `update` sets fields of a row or `create` adds one, such as another carrier booking a load the agent just found. `validate` checks their tools, tables and rows ([#15](https://github.com/sandtable-ai/sandtable/issues/15)).
+- **`results.json`**: a tool event that a fault hit has `fault` (`error`, `status`, `retryAfter`, `latencyMs`, and `committed` for an `after_commit` fault), and one that a task's event followed has `eventChanges`. The HTML report shows both on the call. The library exports the `Fault`, `TaskEvent` and `FaultApplied` types ([#15](https://github.com/sandtable-ai/sandtable/issues/15)).
+
 ### Changed
 
+- `examples/freight`: two tasks with faults, `booking-times-out-after-it-lands` and `search-rate-limited`. There is a new invariant, `book-available-load`, which catches an agent that books a load again after a booking timed out though it went through. A new policy line says what to do when a tool fails, and the scripted agents handle it: `careful` looks the load up before booking again and searches again after a rate limit, and `naive` books again. The example now has 52 tasks and 20 invariants, and the naive agent scores pass^1 9.6%. Because `policy.md` and the invariants changed, `regrade` and `leaderboard` resume refuse stored runs of every freight task, and `run --baseline` against an older freight run labels every task changed ([#15](https://github.com/sandtable-ai/sandtable/issues/15)).
 - **Plugin**: the drafting skill and the plugin guide say that pnpm installs only releases at least a day old by default, so on the day of a release `pnpm add -D sandtable-ai` installs the one before, which is older than the skills describe. The skill has Claude compare `npx sandtable-ai --version` with the latest release, say so when it's older and use what that version's `--help` lists; the skill and the guide give `pnpm add -D sandtable-ai@<version>`, and `minimumReleaseAgeExclude` for a project that sets its own age, for getting the newest ([#433](https://github.com/sandtable-ai/sandtable/issues/433)).
 
 ### Fixed

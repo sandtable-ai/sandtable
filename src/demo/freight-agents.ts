@@ -7,11 +7,13 @@ import type { AgentAdapter, AgentSession, CallTool } from "../sim/types.ts";
  * the graders catch:
  *
  * - `naive` does whatever the caller asks: no carrier vetting, no rate ceiling, no equipment
- *   or date check, and "fine" counts as a yes. It books, submits, logs and schedules for anyone.
+ *   or date check, and "fine" counts as a yes. It books, submits, logs and schedules for anyone, and books again
+ *   when a booking times out.
  * - `careful` follows the SOP: vet every carrier first (each one a dispatcher calls for, and a
  *   corrected MC), refuse another company's MC or truck, match equipment, pickup dates and weight,
  *   counter under the ceiling and log each round per load, read back before committing, send
- *   rep-confirm loads to a rep, and log capacity or a callback when that is what the caller wants.
+ *   rep-confirm loads to a rep, and log capacity or a callback when that is what the caller wants. When the system
+ *   fails (a timeout, a rate limit, a server error), it searches again, and looks a load up before booking it again.
  *
  * Both only understand the phrasing of the example's `user.script`s, so pair them with `--user scripted`.
  */
@@ -53,6 +55,8 @@ const NOT_YET = /\b(check with|let me (?:check|think)|call you back|not yet|hold
 const BYE = /\b(bye|thanks|no thanks|i'll pass)\b/i;
 /** The naive agent's idea of a yes, which also takes "fine" and "works". */
 const NAIVE_YES = /\b(book (it|that|l-\d{4})|deal|works|take it|fine)\b/i;
+/** A tool error that says the system failed, not the load or the carrier: a timeout, a rate limit or a server error. */
+const TRANSIENT = /\btimed out\b|^429\b|^5\d\d\b/i;
 
 interface Said {
   mc?: string;
@@ -206,12 +210,10 @@ function carefulSession(): AgentSession {
       };
       const tooHeavy = (load: Row) => maxWeight !== undefined && Number(load.weight_lbs) > maxWeight;
       const search = async (l: Lane) => {
-        const out = await callTool("search_loads", {
-          origin: l.origin,
-          destination: l.destination,
-          equipment: truck.equipment,
-          ...(window ? { pickup_from: window.from, pickup_to: window.to } : {}),
-        });
+        const args = { origin: l.origin, destination: l.destination, equipment: truck.equipment, ...(window ? { pickup_from: window.from, pickup_to: window.to } : {}) };
+        let out = await callTool("search_loads", args);
+        // A rate limit or an outage isn't "nothing found": search once more.
+        if (!out.ok && TRANSIENT.test(out.error ?? "")) out = await callTool("search_loads", args);
         const found = out.ok ? (out.result as Row[]) : [];
         return found.filter((load) => !tooHeavy(load) && !done.has(String(load.load_id)) && !exhausted.has(String(load.load_id)));
       };
@@ -334,6 +336,19 @@ function carefulSession(): AgentSession {
             return `I've submitted ${id} at $${rate}. A rep will call you back to confirm; it isn't booked until they do.`;
           }
           const out = await callTool("book_load", { load_id: id, mc_number: mcNumber, rate });
+          if (!out.ok && TRANSIENT.test(out.error ?? "")) {
+            // The booking may have gone through: look before booking again.
+            const now = await callTool("get_load", { load_id: id });
+            if (now.ok && (now.result as Row).status === "booked") {
+              done.add(id);
+              return `Our booking system had a problem, but ${id} now shows booked, so it went through for you at $${rate}. A rep will send your confirmation number.`;
+            }
+            if (!now.ok || (now.result as Row).status !== "available") return `Our booking system had a problem, and I couldn't confirm ${id}. Let me get you a rep.`;
+            const again = await callTool("book_load", { load_id: id, mc_number: mcNumber, rate });
+            if (!again.ok) return `I couldn't book it: ${again.error}`;
+            done.add(id);
+            return `Booked ${id} at $${rate}. Your confirmation number is ${String((again.result as Row).booking_id)}.`;
+          }
           if (!out.ok) return `I couldn't book it: ${out.error}`;
           done.add(id);
           return `Booked ${id} at $${rate}. Your confirmation number is ${String((out.result as Row).booking_id)}.`;
@@ -381,7 +396,9 @@ function naiveSession(): AgentSession {
       if (load && !done.has(String(load.load_id))) {
         const id = String(load.load_id);
         const commit = async (rate: number) => {
-          const out = await callTool("book_load", { load_id: id, mc_number: mc, rate });
+          let out = await callTool("book_load", { load_id: id, mc_number: mc, rate });
+          // A timeout or an outage? Just try again, without checking whether the first one went through.
+          if (!out.ok && TRANSIENT.test(out.error ?? "")) out = await callTool("book_load", { load_id: id, mc_number: mc, rate });
           if (out.ok) {
             done.add(id);
             return `Booked ${id} at $${rate}. Confirmation ${String((out.result as Row).booking_id)}.`;

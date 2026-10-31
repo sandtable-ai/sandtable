@@ -24,7 +24,7 @@ The package is an ES module. Its TypeScript types ship with it. The exports belo
 | `DomainError` | The error `loadDomain` and `parseDomain` throw for an invalid domain. |
 | `DOMAIN_FILE` | `"sandtable.yaml"`. |
 
-The spec's shapes are TypeScript types: `Domain`, `Tool`, `Op`, `Invariant`, `Task`, `StateAssert`, `CallExpect`, `ReferenceCall`, `FieldRefSpec`, `Persona` and `Given`. [The spec reference](/reference/spec) describes every key.
+The spec's shapes are TypeScript types: `Domain`, `Tool`, `Op`, `Invariant`, `Task`, `StateAssert`, `CallExpect`, `ReferenceCall`, `FieldRefSpec`, `Persona`, `Given`, `Fault` and `TaskEvent`. [The spec reference](/reference/spec) describes every key.
 
 ## The world and its tools
 
@@ -83,10 +83,10 @@ Every type the package exports, by what it describes. Like the values above, the
 
 | Describes | Types |
 |---|---|
-| A domain | `Domain`, `Tool`, `Op`, `Invariant`, `Task`, `StateAssert`, `CallExpect`, `ReferenceCall`, `FieldRefSpec`, `Persona`, `Given`, `PendingItem` |
+| A domain | `Domain`, `Tool`, `Op`, `Invariant`, `Task`, `StateAssert`, `CallExpect`, `ReferenceCall`, `FieldRefSpec`, `Persona`, `Given`, `Fault`, `TaskEvent`, `PendingItem` |
 | The world and its tools | `Change`, `Snapshot`, `ToolOutcome`, `ToolSchema` |
 | Agents and simulated users | `AgentAdapter`, `AgentContext`, `AgentSession`, `CallTool`, `UserSimulator`, `UserContext`, `UserSession`, `UserTurn`, `ClaudeOptions`, `ClaudeAgentOptions`, `OpenAICompatOptions`, `OpenAICompatAgentOptions`, `BedrockConverseOptions` |
-| A run and its results | `SuiteOptions`, `SuiteResult`, `TaskSummary`, `TrialResult`, `TrajectoryEvent`, `EndReason`, `CheckResult`, `CheckKind`, `CallRecord`, `Violation`, `SoftCheck`, `SoftScore`, `FailureMode`, `Verdict`, `CallerNote`, `Attribution`, `AttributionCounts`, `Owner`, `Coverage`, `RuleCoverage`, `CoverageCell`, `ToolCoverage`, `TokenUsage`, `UsageByModel`, `Usage`, `UsageRecorder` |
+| A run and its results | `SuiteOptions`, `SuiteResult`, `TaskSummary`, `TrialResult`, `TrajectoryEvent`, `EndReason`, `CheckResult`, `CheckKind`, `CallRecord`, `Violation`, `FaultApplied`, `SoftCheck`, `SoftScore`, `FailureMode`, `Verdict`, `CallerNote`, `Attribution`, `AttributionCounts`, `Owner`, `Coverage`, `RuleCoverage`, `CoverageCell`, `ToolCoverage`, `TokenUsage`, `UsageByModel`, `Usage`, `UsageRecorder` |
 | Reports | `CustomerReportOptions` |
 | Comparing runs, and lint | `BaselineSnapshot`, `Comparison`, `TaskDelta`, `TaskChange`, `LintReport`, `TaskLint`, `RuleLint` |
 
