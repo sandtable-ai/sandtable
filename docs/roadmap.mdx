@@ -61,9 +61,16 @@ sandtable is stable since 1.0: the contracts change only in a major release, as 
 - `run --tag` runs only the tasks with those tags ([#21](https://github.com/sandtable-ai/sandtable/issues/21)), and a repeated `--tasks` adds its tasks ([#403](https://github.com/sandtable-ai/sandtable/issues/403))
 - The Claude Code plugin keeps `npm install` of sandtable in the working folder's own project ([#412](https://github.com/sandtable-ai/sandtable/issues/412))
 
-## Next (milestone black-box)
+## In 1.2
 
-- Black-box and platform on-ramps: serve the world as REST, MCP and webhook tools for hosted agent platforms ([#14](https://github.com/sandtable-ai/sandtable/issues/14)), import voice-agent platform configs as draft domains ([#34](https://github.com/sandtable-ai/sandtable/issues/34)), fault profiles ([#15](https://github.com/sandtable-ai/sandtable/issues/15))
+- [Agents that call their own tools](/guides/black-box): `run --serve` serves each trial's world over REST, MCP and webhooks while sandtable drives the conversation, and `sandtable serve` grades the conversations a hosted voice platform's own test calls drive ([#14](https://github.com/sandtable-ai/sandtable/issues/14), [#443](https://github.com/sandtable-ai/sandtable/issues/443), [#444](https://github.com/sandtable-ai/sandtable/issues/444))
+- [Faults and events](/reference/spec#faults-and-events): a task's tool calls can time out, hit a rate limit or a server error, or time out after their write landed, and the world can change mid-call; the freight example catches an agent that books twice after a timeout ([#15](https://github.com/sandtable-ai/sandtable/issues/15))
+- `sandtable import vapi` drafts a domain from a Vapi assistant's export and its simulation scenarios ([#34](https://github.com/sandtable-ai/sandtable/issues/34))
+- The Claude Code plugin's hooks cover `npm run sandtable` from a subfolder and with npm's options, and stop the unrelated npm package named `sandtable` from being installed in sandtable's place ([#430](https://github.com/sandtable-ai/sandtable/issues/430), [#439](https://github.com/sandtable-ai/sandtable/issues/439), [#441](https://github.com/sandtable-ai/sandtable/issues/441))
+
+## Next
+
+Nothing is planned yet: the issues under Later are the candidates.
 
 ## Later
 

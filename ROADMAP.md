@@ -51,8 +51,14 @@ Issues and milestones on GitHub are the source of truth; this page is the overvi
 - [x] `run --tag` runs only the tasks with those tags (#21), and a repeated `--tasks` adds its tasks (#403)
 - [x] The Claude Code plugin keeps `npm install` of sandtable in the working folder's own project (#412)
 
-## Next (milestone black-box)
-- [ ] Black-box and platform on-ramps: serve the world as REST, MCP and webhook tools for hosted agent platforms (#14), import voice-agent platform configs as draft domains (#34), fault profiles (#15)
+## In 1.2
+- [x] Agents that call their own tools: `run --serve` serves each trial's world over REST, MCP and webhooks while sandtable drives the conversation, and `sandtable serve` grades the conversations a hosted voice platform's own test calls drive (#14, #443, #444)
+- [x] Faults and events: a task's tool calls can time out, hit a rate limit or a server error, or time out after their write landed, and the world can change mid-call; the freight example catches an agent that books twice after a timeout (#15)
+- [x] `sandtable import vapi` drafts a domain from a Vapi assistant's export and its simulation scenarios (#34)
+- [x] The Claude Code plugin's hooks cover `npm run sandtable` from a subfolder and with npm's options, and stop the unrelated npm package named `sandtable` from being installed in sandtable's place (#430, #439, #441)
+
+## Next
+Nothing is planned yet: the issues under Later are the candidates.
 
 ## Later
 PR comments with pass^k deltas (#13), importing Retell and ElevenLabs agent exports (#35), LLM-judged checks (#16), voice transport and timing metrics (#17, #43), exports to other harness formats (#18), negotiation invariants (#36), simulation clock (#38), outcome grading (#39), business metrics (#40), persona × condition matrix (#41), multi-session tasks (#42), Python agents in-process (#44).

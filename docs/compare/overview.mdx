@@ -46,7 +46,7 @@ Newer projects build worlds for agents:
 - **[mockworld](https://github.com/swarmproof/mockworld)** (Apache-2.0) runs fake services such as a payment provider, an inbox or a CRM as local MCP servers, with seeded, deterministic state and faults.
 - **[mockd](https://github.com/getmockd/mockd)** (Apache-2.0) is a multi-protocol mock server with stateful CRUD, chaos injection and an MCP server that lets AI assistants create mocks.
 
-`sandtable` keeps state minimal and declarative because its job is grading: the world is the thing being asserted on, with rules checked before each call and simulated callers driving the conversation. A black-box mode that serves the world over REST and MCP is planned ([#14](https://github.com/sandtable-ai/sandtable/issues/14)).
+`sandtable` keeps state minimal and declarative because its job is grading: the world is the thing being asserted on, with rules checked before each call and simulated callers driving the conversation. It serves that world over REST, MCP and webhooks too, for an agent that calls its own tools ([agents that call their own tools](/guides/black-box)), and a task's [faults](/reference/spec#faults-and-events) make those calls time out, hit a rate limit or fail.
 
 ## Runtime guardrails
 
