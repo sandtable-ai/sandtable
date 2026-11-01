@@ -1,0 +1,35 @@
+{
+  "llm_id": "llm_pinecrest0001",
+  "version": 0,
+  "is_published": true,
+  "start_speaker": "agent",
+  "begin_message": "Thanks for calling Pinecrest Bike Repair, this is the service desk. How can I help?",
+  "general_prompt": "You are the phone assistant for Pinecrest Bike Repair, a neighborhood bike shop. Callers are customers asking about a repair.\n\n- Look a repair up with get_repair before you say anything about it. Callers give their ticket number, such as R-2041.\n- Tell the caller the repair's status and the balance due. Never promise a pickup time the ticket doesn't show.\n- We don't diagnose over the phone. For questions about what's wrong with a bike, transfer the call to a mechanic with transfer_to_mechanic.\n- The shop is open {{shop_hours}}. The caller's phone number is {{customer_phone}}.\n- End the call with end_call once the caller has what they need.",
+  "general_tools": [
+    {
+      "type": "custom",
+      "name": "get_repair",
+      "description": "Look up a repair ticket: its status, the work done and the balance due.",
+      "url": "https://pinecrest-bikes.example/retell/get_repair",
+      "method": "POST",
+      "parameters": {
+        "type": "object",
+        "properties": { "ticket_id": { "type": "string", "description": "The repair ticket, such as R-2041" } },
+        "required": ["ticket_id"]
+      },
+      "speak_during_execution": true,
+      "speak_after_execution": true,
+      "timeout_ms": 120000
+    },
+    {
+      "type": "transfer_call",
+      "name": "transfer_to_mechanic",
+      "description": "Transfer the call to a mechanic, for questions about what's wrong with a bike.",
+      "transfer_destination": { "type": "predefined", "number": "+15555550100" },
+      "transfer_option": { "type": "cold_transfer", "show_transferee_as_caller": false }
+    },
+    { "type": "end_call", "name": "end_call", "description": "End the call once the caller has what they need." }
+  ],
+  "default_dynamic_variables": { "shop_hours": "Tuesday to Saturday, 9am to 6pm" },
+  "last_modification_timestamp": 1793500000000
+}

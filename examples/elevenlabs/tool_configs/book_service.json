@@ -1,0 +1,35 @@
+{
+    "type": "webhook",
+    "name": "book_service",
+    "description": "Book a service appointment for the caller's bike.",
+    "api_schema": {
+        "url": "https://pinecrest-bikes.example/api/bookings",
+        "method": "POST",
+        "request_body_schema": {
+            "type": "object",
+            "description": "The booking",
+            "properties": {
+                "customer_name": {
+                    "type": "string",
+                    "description": "The caller's full name"
+                },
+                "service": {
+                    "type": "string",
+                    "description": "The service to book",
+                    "enum": ["tune_up", "flat_fix", "brake_service"]
+                },
+                "date": {
+                    "type": "string",
+                    "description": "The appointment date, YYYY-MM-DD"
+                },
+                "customer_phone": {
+                    "type": "string",
+                    "dynamic_variable": "customer_phone"
+                }
+            },
+            "required": ["customer_name", "service", "date"]
+        },
+        "content_type": "application/json"
+    },
+    "response_timeout_secs": 20
+}

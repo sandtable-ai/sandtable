@@ -1,0 +1,70 @@
+{
+    "name": "Pinecrest Bike Repair",
+    "conversation_config": {
+        "asr": {
+            "quality": "high",
+            "provider": "elevenlabs",
+            "user_input_audio_format": "pcm_16000"
+        },
+        "turn": {
+            "turn_timeout": 7
+        },
+        "tts": {
+            "model_id": "eleven_flash_v2",
+            "voice_id": "pinecrest-desk"
+        },
+        "conversation": {
+            "max_duration_seconds": 600
+        },
+        "agent": {
+            "first_message": "Thanks for calling Pinecrest Bike Repair, this is the service desk. How can I help?",
+            "language": "en",
+            "dynamic_variables": {
+                "dynamic_variable_placeholders": {
+                    "customer_phone": "+15555550199"
+                }
+            },
+            "prompt": {
+                "prompt": "You are the phone assistant for Pinecrest Bike Repair, a neighborhood bike shop. Callers are customers asking about a repair or booking service.\n\n- Look a repair up with get_repair before you say anything about it. Callers give their ticket number, such as R-2041.\n- Tell the caller the repair's status and the balance due. Never promise a pickup time the ticket doesn't show.\n- Book service with book_service only after the caller has confirmed the date and the service: a tune-up, a flat fix or a brake service.\n- The caller's phone number is {{customer_phone}}.\n- End the call with end_call once the caller has what they need.",
+                "llm": "gpt-4.1",
+                "temperature": 0,
+                "max_tokens": -1,
+                "tool_ids": [
+                    "tool_pinecrest_getrepair",
+                    "tool_pinecrest_bookservice"
+                ],
+                "built_in_tools": {
+                    "end_call": {
+                        "type": "system",
+                        "name": "end_call",
+                        "description": "",
+                        "params": {
+                            "system_tool_type": "end_call"
+                        }
+                    },
+                    "language_detection": null,
+                    "transfer_to_agent": null,
+                    "transfer_to_number": null,
+                    "skip_turn": null,
+                    "play_keypad_touch_tone": null,
+                    "voicemail_detection": null
+                }
+            }
+        }
+    },
+    "platform_settings": {
+        "testing": {
+            "attached_tests": [
+                {
+                    "test_id": "test_pinecrest_tuneup"
+                },
+                {
+                    "test_id": "test_pinecrest_lookup"
+                }
+            ]
+        }
+    },
+    "tags": [
+        "pinecrest"
+    ]
+}

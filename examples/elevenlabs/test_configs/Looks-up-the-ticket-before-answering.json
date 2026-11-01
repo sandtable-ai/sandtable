@@ -1,0 +1,29 @@
+{
+    "id": "test_pinecrest_lookup",
+    "name": "Looks up the ticket before answering",
+    "type": "tool",
+    "chat_history": [
+        {
+            "role": "user",
+            "time_in_call_secs": 1,
+            "message": "Hi, is my bike ready? The ticket is R-2041."
+        }
+    ],
+    "dynamic_variables": {},
+    "tool_call_parameters": {
+        "referenced_tool": {
+            "id": "tool_pinecrest_getrepair",
+            "type": "webhook"
+        },
+        "parameters": [
+            {
+                "path": "ticket_id",
+                "eval": {
+                    "type": "exact",
+                    "expected_value": "R-2041"
+                }
+            }
+        ],
+        "verify_absence": false
+    }
+}

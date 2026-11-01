@@ -269,9 +269,10 @@ const RESERVED_ROUTE = /^\/(?:tools|mcp|webhook|sessions|s)(?:\/|$)/;
 
 /**
  * What's wrong with a tool's `http` route: a placeholder that isn't one of its scalar params, a route the world server
- * keeps for itself, or a route another tool has (compared with the placeholders' names left out).
+ * keeps for itself, or a route another tool has (compared with the placeholders' names left out). `sandtable import`
+ * runs the same checks on the routes it drafts.
  */
-function httpProblems(t: Tool, routes: Map<string, string>): string[] {
+export function httpProblems(t: { name: string; params: Record<string, { type: string }>; http?: { method: string; path: string } }, routes: Map<string, string>): string[] {
   const problems: string[] = [];
   const where = `tools.${t.name}.http`;
   const { method, path: route } = t.http!;

@@ -1,0 +1,11 @@
+{
+  "agent_id": "agent_pinecrest0001",
+  "version": 0,
+  "is_published": true,
+  "agent_name": "Pinecrest Bike Repair",
+  "response_engine": { "type": "retell-llm", "llm_id": "llm_pinecrest0001", "version": 0 },
+  "voice_id": "pinecrest-desk",
+  "language": "en-US",
+  "webhook_url": "https://pinecrest-bikes.example/retell/events",
+  "last_modification_timestamp": 1793500000000
+}

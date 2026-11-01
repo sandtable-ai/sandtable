@@ -185,13 +185,21 @@ Local scrubbing and the copied-value check catch patterns, not every identifying
 
 ## From a voice platform: import
 
-An agent already built on a hosted voice platform has its prompt, its tools and often its test scenarios in the platform's config. `sandtable import vapi` drafts a domain from a Vapi assistant's export, deterministically, with no model call:
+An agent already built on a hosted voice platform has its prompt, its tools and often its tests in the platform's config. `sandtable import` drafts a domain from a Vapi, Retell or ElevenLabs agent's export, deterministically, with no model call:
 
 ```bash
 npx sandtable-ai import vapi ./vapi-export -o ./sandtable
+npx sandtable-ai import retell ./retell-export -o ./sandtable
+npx sandtable-ai import elevenlabs ./my-elevenlabs-project -o ./sandtable
 ```
 
-The path is a JSON file, or a folder of them, searched recursively, holding:
+The path is a JSON file, or a folder of them, searched recursively. When it holds several agents, `import` lists them and stops: pick one with `--agent <name or id>`.
+
+Everything is `review: pending`, with `TODO(review)` notes on what the config can't say. That covers what a tool changes, how to write the platform's LLM-judged checks as end states sandtable checks without a model, and the caller's lines for `--user scripted`. Tools that the platform runs itself, such as DTMF or a knowledge-base query, are skipped with a warning. Then draft the rules from the prompt with `init --sop <dir>/policy.md -o <dir>`, review, and `validate --strict`. To grade the agent's own test calls on that world, point its tools at [`sandtable serve`](/guides/black-box#conversations-another-system-drives), as each platform's section says.
+
+### Vapi
+
+The path holds:
 - the assistant, as `GET https://api.vapi.ai/assistant/<id>` returns it;
 - the tools its `model.toolIds` name (`GET https://api.vapi.ai/tool/<id>`);
 - its simulation scenarios (`GET https://api.vapi.ai/eval/simulation/scenario/<id>`).
@@ -205,7 +213,41 @@ The path is a JSON file, or a folder of them, searched recursively, holding:
 | a scenario | a task: its `instructions` are the caller's goal, its `variableValues` the call's `given.context` |
 | a scenario's tool mocks | rows that tool looks up, in that task's `given.rows`, and an expectation that the task calls it. A mock that isn't a record is the tool's `respond` text |
 
-Everything is `review: pending`, with `TODO(review)` notes on what the config can't say. That covers what a tool changes, how to write a scenario's Vapi evaluations as end states sandtable checks without a model, and the caller's lines for `--user scripted`. Tools that Vapi runs itself, such as DTMF or a knowledge-base query, are skipped with a warning. Then draft the rules from the prompt with `init --sop <dir>/policy.md -o <dir>`, review, and `validate --strict`. To grade the assistant's own test calls on that world, point its server URL at [`sandtable serve`](/guides/black-box#conversations-another-system-drives). The repository's [`examples/vapi`](https://github.com/sandtable-ai/sandtable/tree/main/examples/vapi) is a fictional export to try it on.
+A scenario's evaluations become notes. To grade the assistant's own test calls, point its server URL at `sandtable serve`. The repository's [`examples/vapi`](https://github.com/sandtable-ai/sandtable/tree/main/examples/vapi) is a fictional export to try it on.
+
+### Retell
+
+The path holds:
+- the agent, as `GET https://api.retellai.com/get-agent/<agent_id>` returns it, or a dashboard export that embeds its engine;
+- the Retell LLM or conversation flow its `response_engine` names (`GET https://api.retellai.com/get-retell-llm/<llm_id>`, `GET https://api.retellai.com/get-conversation-flow/<id>`). One of them alone, with no agent file, is enough;
+- its test cases (`GET https://api.retellai.com/get-test-case-definition/<id>`), one per file, as a list, or as the list response.
+
+| From the config | In the draft |
+|---|---|
+| the LLM's `general_prompt` and each state's prompt, or the flow's `global_prompt` and each conversation node's instruction, and the `begin_message` | `policy.md` |
+| a `custom` function | a tool with its JSON-schema params. A property with a `const` is a fixed value, not a param |
+| a `transfer_call` tool or node | a transfer tool, whose `destination` is its number, and a `transfers` table |
+| an `end_call` tool, or an `end` node | an end-call tool |
+| a test case | a task: its `user_prompt` is the caller's goal, its `dynamic_variables` (else the LLM's or flow's defaults) the call's `given.context` |
+| a test case's tool mocks | as Vapi's are. A mock that matches some arguments (`partial_match`) expects a call with them |
+
+A test case's metrics, which Retell's LLM judge grades, become notes. A state's edges are transition tools inside Retell, not your API, so they are skipped, and so are tools Retell runs itself, such as `press_digit` or `send_sms`, and a custom LLM's agent, whose prompt isn't in the export. To grade the agent's own test calls, run `sandtable serve` and set each custom function's URL to the world server's `/webhook/<tool>`: it takes Retell's request with or without "Payload: args only". A function that uses GET or DELETE gets a warning, since Retell sends it none of the model's arguments. The repository's [`examples/retell`](https://github.com/sandtable-ai/sandtable/tree/main/examples/retell) is a fictional export to try it on.
+
+### ElevenLabs
+
+The path is a project the [ElevenLabs CLI](https://elevenlabs.io/docs/eleven-agents/operate/cli) pulled: `agents.json`, `tools.json` and `tests.json`, with `agent_configs/`, `tool_configs/` and `test_configs/`. Loose files work too: the agent (`GET https://api.elevenlabs.io/v1/convai/agents/<agent_id>`), its tools (`GET https://api.elevenlabs.io/v1/convai/tools/<tool_id>`, or a tool config alone) and its tests (`GET https://api.elevenlabs.io/v1/convai/agent-testing/<test_id>`). A branch's config is skipped, with a warning, unless `--agent` names the branch.
+
+| From the config | In the draft |
+|---|---|
+| `conversation_config.agent.prompt.prompt`, each subagent workflow node's `additional_prompt`, and the `first_message` | `policy.md` |
+| a `webhook` tool | a tool with the params the model fills, from the path, query and body schemas, and its URL's path as its `http` route, such as `GET /api/repairs/{ticket_id}`. A param from a dynamic variable, a constant or the system is left out |
+| a `client` tool | a tool with its params, and no route: the caller's app runs it |
+| the `end_call` and `transfer_to_number` system tools | an end-call tool, and a transfer tool whose `destination` is one of its numbers |
+| a simulation test | a task: its `simulation_scenario` is the caller's goal, its `dynamic_variables` (else the agent's placeholders) the call's `given.context`, and `simulation_max_turns` its `max_turns`. Its tool mocks work as Vapi's do |
+| a tool test | a task that replays the user's lines in its `chat_history` and expects the call it checks, with each `exact` value as an argument, or no call with `verify_absence` |
+| a next-reply (`llm`) test | a task that replays the user's lines |
+
+The tools come from `prompt.tool_ids`, the subagent nodes' `additional_tool_ids`, the deprecated inline `prompt.tools` and `prompt.built_in_tools`. A tool id that no file has gets a warning, with the command to fetch it. When the agent lists `attached_tests`, only those tests are imported. Success conditions, LLM evaluations and regex checks become notes. To grade the agent's own test calls, run `sandtable serve` and point each webhook tool's URL at it, keeping the path: the world server serves each tool's `http` route. A route the world server keeps for itself, or one another tool has, is left out with a warning. The repository's [`examples/elevenlabs`](https://github.com/sandtable-ai/sandtable/tree/main/examples/elevenlabs) is a fictional project to try it on.
 
 ## Reviewing a draft
 

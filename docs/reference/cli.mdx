@@ -61,20 +61,23 @@ The bound counts each call's prompt (about 4 characters a token, at the cache-wr
 
 ## import
 
-Draft a domain from a voice-agent platform's assistant config, with no model call. Review the output before trusting it.
+Draft a domain from a voice-agent platform's agent config, with no model call. Review the output before trusting it.
 
 ```bash
 npx sandtable-ai import vapi ./vapi-export -o ./sandtable
+npx sandtable-ai import retell ./retell-export -o ./sandtable
+npx sandtable-ai import elevenlabs ./my-elevenlabs-project --agent "Support Desk" -o ./sandtable
 ```
 
 | Argument / option | Description |
 |---|---|
-| `<platform>` | the platform the config comes from: `vapi` |
-| `<path>` | the exported config: a JSON file, or a directory of them, searched recursively, with the assistant and optionally the tools its `toolIds` name and its simulation scenarios |
+| `<platform>` | the platform the config comes from: `vapi`, `retell` or `elevenlabs` |
+| `<path>` | the exported config: a JSON file, or a directory of them, searched recursively. It holds the agent and, optionally, its tools and tests: for Vapi, the assistant, the tools its `toolIds` name and its simulation scenarios; for Retell, the agent, its Retell LLM or conversation flow, and its test cases; for ElevenLabs, a project the ElevenLabs CLI pulled, or the API's agent, tool and test responses |
 | `-o, --out <dir>` | domain directory to create. Default: `sandtable` |
+| `--agent <name or id>` | the agent to import, by name or id, when the export holds several. For ElevenLabs, a branch too, by its name, its id or `<agent>.<branch>`; for Retell without an agent file, a Retell LLM or conversation flow by its id |
 | `--force` | overwrite existing files |
 
-It writes `sandtable.yaml`, `policy.md` and `tasks.yaml`, with every tool and task pending review, and prints what it skipped. It stops with exit 2, writing nothing, when the files hold no assistant, more than one, or JSON it can't read, or the assistant has no tool sandtable can model. See [from a voice platform](/guides/init#from-a-voice-platform-import).
+It writes `sandtable.yaml`, `policy.md` and `tasks.yaml`, with every tool and task pending review, and prints what it skipped. It stops with exit 2, writing nothing, when the files hold no agent, several and no `--agent` (it lists them), an agent `--agent` doesn't match, a Retell agent on a custom LLM or whose LLM or flow isn't in the export, or JSON it can't read, or the agent has no tool sandtable can model. See [from a voice platform](/guides/init#from-a-voice-platform-import).
 
 ## validate
 

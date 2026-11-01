@@ -75,7 +75,13 @@ The `init` drafting steps use Claude: `ANTHROPIC_API_KEY`, or `--provider bedroc
 
 ### 1. Draft
 
-If the agent already runs on Vapi and the engineer has its export (the assistant JSON, the tools its `toolIds` name, and simulation scenarios), start with `npx sandtable-ai import vapi <file-or-folder> -o ./sandtable`, which is free. It drafts the policy, the tools and a task per scenario, all pending review. Then use `init --sop ./sandtable/policy.md -o ./sandtable` for the rules, with its dry run first, as below.
+If the agent already runs on a voice platform and the engineer has its export, start with `import`, which is free. It drafts the policy, the tools and a task per test, all pending review:
+
+- Vapi (the assistant JSON, the tools its `toolIds` name, and simulation scenarios): `npx sandtable-ai import vapi <file-or-folder> -o ./sandtable`.
+- Retell (the agent, its Retell LLM or conversation flow, and test cases): `npx sandtable-ai import retell <file-or-folder> -o ./sandtable`.
+- ElevenLabs (a project folder the ElevenLabs CLI pulled, or the API's agent, tool and test JSON): `npx sandtable-ai import elevenlabs <folder> -o ./sandtable`.
+
+When the export holds several agents, `import` lists them and stops: add `--agent <name or id>` with the one the engineer means. Then use `init --sop ./sandtable/policy.md -o ./sandtable` for the rules, with its dry run first, as below.
 
 Run `--openapi` on its own first: it's free. Then run the `--sop` and `--transcripts` command with `--dry-run` added, and show the engineer its `Plan:` line. Write the plan to them as a message of your own, with the calls and the dollar bound. If they already authorized model steps, run the command without `--dry-run` after that message; otherwise end your turn there and wait for their go-ahead. Never run a paid step without its dry run first.
 

@@ -1,0 +1,10 @@
+{
+    "agents": [
+        {
+            "config": "agent_configs/Pinecrest-Bike-Repair.json",
+            "id": "agent_pinecrest0001",
+            "branch_id": "agtbrch_pinecrest0001",
+            "version_id": "agtvrsn_pinecrest0001"
+        }
+    ]
+}
