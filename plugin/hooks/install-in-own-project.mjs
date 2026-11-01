@@ -34,21 +34,26 @@ const SANDTABLE = /(?:^|\s)sandtable-ai(?:@\S*)?(?=\s|$)/;
 const WRONG = /(^|\s)sandtable(@\S*)?(?=\s|$)/;
 /**
  * The commands that run a package's bin, fetching the package when it isn't installed: npx and npm's names for it, pnpm
- * dlx, yarn dlx and bunx. `words` is how many words the runner's name takes, `values` its options that take a value
- * (`-p` and `--package` name a package), and `local` whether it runs an installed `sandtable` bin, such as
- * sandtable-ai's, instead of fetching: npx and bunx look in node_modules first, while pnpm dlx and yarn dlx always
- * fetch. `named` is how the runner's fix names sandtable-ai: as the command, or with `-p` before the `sandtable` bin
- * for the runners whose docs say to name a package whose bin has another name that way.
+ * dlx, yarn dlx and bunx, by their command and, for a package manager's, its subcommand. `values` are the runner's
+ * options that take a value (`-p` and `--package` name a package), and `noFetch` the options that make it run only what
+ * is installed: npx's `--no-install` is npm exec's `--no`, which npm exec itself doesn't take. `local` is whether it
+ * runs an installed `sandtable` bin, such as sandtable-ai's, instead of fetching: npx and bunx look in node_modules
+ * first, while pnpm dlx and yarn dlx always fetch. `named` is how the runner's fix names sandtable-ai: as the command,
+ * or with `-p` before the `sandtable` bin for the runners whose docs say to name a package whose bin has another name
+ * that way.
  */
 const NPM_VALUES = ["-p", "--package", "-c", "--call", "--cache", "--userconfig", "--registry", "-w", "--workspace"];
+const NO = ["--no", "--no=true", "--yes=false"];
 const RUNNERS = [
-  { name: /^npx$/, words: 1, values: NPM_VALUES, local: true, named: "command" },
-  { name: /^npm\s+(?:exec|x)$/, words: 2, values: NPM_VALUES, local: true, named: "command" },
-  { name: /^pnpm\s+dlx$/, words: 2, values: ["--package", "--allow-build", "--reporter"], local: false, named: "command" },
-  { name: /^yarn\s+dlx$/, words: 2, values: ["-p", "--package"], local: false, named: "package" },
-  { name: /^bunx$/, words: 1, values: ["-p", "--package"], local: true, named: "package" },
-  { name: /^bun\s+x$/, words: 2, values: ["-p", "--package"], local: true, named: "package" },
+  { command: "npx", values: NPM_VALUES, noFetch: ["--no-install", ...NO], local: true, named: "command" },
+  { command: "npm", sub: /^(?:exec|x)$/, values: NPM_VALUES, noFetch: NO, local: true, named: "command" },
+  { command: "pnpm", sub: /^dlx$/, values: ["--package", "--allow-build", "--reporter"], noFetch: [], local: false, named: "command" },
+  { command: "yarn", sub: /^dlx$/, values: ["-p", "--package"], noFetch: [], local: false, named: "package" },
+  { command: "bunx", values: ["-p", "--package"], noFetch: ["--no-install"], local: true, named: "package" },
+  { command: "bun", sub: /^x$/, values: ["-p", "--package"], noFetch: ["--no-install"], local: true, named: "package" },
 ];
+/** A package manager's own options that take a value, which can come before its subcommand: `pnpm -C web dlx …`. */
+const MANAGER_VALUES = { npm: ["-C", "--prefix", "-w", "--workspace", "--userconfig", "--cache", "--registry"], pnpm: ["-C", "--dir", "--prefix", "-F", "--filter", "--reporter"], yarn: ["--cwd"], bun: ["--cwd", "-c", "--config"] };
 /** The unrelated package's name as a whole word, with any version. */
 const WRONG_NAME = /^sandtable(?:@\S*)?$/;
 // Global installs, and npm's --prefix (-C) and pnpm's --dir (-C), which install into the folder they name, creating its
@@ -86,18 +91,21 @@ function installedAbove(dir) {
  */
 function runnerFix(segment, run, dir) {
   const words = run.split(/\s+/);
-  const runner = RUNNERS.find((r) => r.name.test(words.slice(0, r.words).join(" ")));
+  // The manager's options before its subcommand, each with its value when it takes one.
+  let at = 1;
+  while (at < words.length && words[at].startsWith("-")) at += !words[at].includes("=") && (MANAGER_VALUES[words[0]] ?? []).includes(words[at]) ? 2 : 1;
+  const runner = RUNNERS.find((r) => r.command === words[0] && (!r.sub || r.sub.test(words[at] ?? "")));
   if (!runner) return undefined;
   const packages = [];
-  let i = runner.words;
+  let i = runner.sub ? at + 1 : 1;
   for (; i < words.length && words[i].startsWith("-"); i++) {
     if (words[i] === "--") {
       i++;
       break;
     }
     const [name, value] = words[i].split("=", 2);
-    // npx then runs only what is installed, and fetches nothing. `--no=false` is `--yes`.
-    if (runner.local && (name === "--no-install" || words[i] === "--no" || words[i] === "--no=true" || words[i] === "--yes=false")) return undefined;
+    // The runner then runs only what is installed, and fetches nothing. `--no=false` is `--yes`.
+    if (runner.noFetch.includes(words[i])) return undefined;
     if (!runner.values.includes(name)) continue;
     const v = value ?? words[++i];
     if (name === "-p" || name === "--package") packages.push(v ?? "");
@@ -105,6 +113,10 @@ function runnerFix(segment, run, dir) {
   const cmd = words[i];
   const swap = (word, to) => segment.replace(new RegExp(String.raw`(\s|=)${word.replace(/[.*+?^$()|[\]\\]/g, "\\$&")}(?=\s|$)`), `$1${to}`);
   const wrong = packages.find((p) => WRONG_NAME.test(p));
+  // With sandtable-ai named too, the fix leaves the wrong package out rather than naming sandtable-ai twice.
+  if (wrong && packages.some((p) => /^sandtable-ai(?:@\S*)?$/.test(p))) {
+    return segment.replace(new RegExp(String.raw`\s(?:-p|--package)(?:=|\s+)${wrong.replace(/[.*+?^$()|[\]\\]/g, "\\$&")}(?=\s|$)`), "");
+  }
   if (wrong) return swap(wrong, `sandtable-ai${wrong.slice("sandtable".length)}`);
   if (packages.length || cmd === undefined || !WRONG_NAME.test(cmd)) return undefined;
   if (runner.local && cmd === "sandtable" && (dir === undefined || installedAbove(dir))) return undefined;

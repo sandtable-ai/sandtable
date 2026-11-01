@@ -181,6 +181,15 @@ describe("the plugin's install-in-own-project hook", () => {
       ["yarn dlx sandtable demo", "yarn dlx -p sandtable-ai sandtable demo"],
       ["bunx sandtable demo", "bunx -p sandtable-ai sandtable demo"],
       ["bun x sandtable@1.2.0 demo", "bun x -p sandtable-ai@1.2.0 sandtable demo"],
+      // npm exec has no --no-install of its own: npm takes it as an unknown config and fetches anyway.
+      ["npm exec --no-install sandtable -- demo", "npm exec --no-install sandtable-ai -- demo"],
+      // The manager's own options can come before its subcommand.
+      ["pnpm -C web dlx sandtable demo", "pnpm -C web dlx sandtable-ai demo"],
+      ["pnpm --silent dlx sandtable demo", "pnpm --silent dlx sandtable-ai demo"],
+      ["npm -w pkg exec sandtable -- demo", "npm -w pkg exec sandtable-ai -- demo"],
+      ["yarn --cwd x dlx sandtable demo", "yarn --cwd x dlx -p sandtable-ai sandtable demo"],
+      // With sandtable-ai named too, the fix leaves the wrong package out.
+      ["npx -p sandtable-ai -p sandtable sandtable demo", "npx -p sandtable-ai sandtable demo"],
     ];
     for (const [command, fix] of cases) {
       expect(decide(command, bare), command).toContain(`run \`${fix}\` instead, or install it in the project first.`);
@@ -191,7 +200,7 @@ describe("the plugin's install-in-own-project hook", () => {
     for (const cmd of ["npx sandtable demo", "npm exec sandtable -- demo", "bunx sandtable demo", "npx --no=false sandtable demo"]) expect(decide(cmd, installed), cmd).toBeUndefined();
     for (const cmd of ["npx sandtable@1.2.0 demo", "npx -p sandtable sandtable demo", "pnpm dlx sandtable demo", "yarn dlx sandtable demo"]) expect(decide(cmd, installed), cmd).toContain("unrelated package");
     // Runners that may not fetch, and the ones that run only what is installed.
-    for (const cmd of ["npm exec --no sandtable -- demo", "npx --no=true sandtable demo", "pnpm exec sandtable demo", "yarn sandtable demo", "npx -p cowsay sandtable demo"]) expect(decide(cmd, bare), cmd).toBeUndefined();
+    for (const cmd of ["npm exec --no sandtable -- demo", "npx --no=true sandtable demo", "npx --no-install sandtable demo", "bunx --no-install sandtable demo", "pnpm exec sandtable demo", "pnpm -C web exec sandtable demo", "yarn sandtable demo", "npx -p cowsay sandtable demo"]) expect(decide(cmd, bare), cmd).toBeUndefined();
   });
 
   it("is registered for Bash in the plugin's hooks.json, by a path inside the plugin", () => {

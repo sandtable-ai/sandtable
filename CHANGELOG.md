@@ -35,7 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ### Fixed
 
-- **Plugin**: the install hook now also stops `npm exec sandtable`, `npx -p sandtable`, `npx sandtable@<version>` (which names the unrelated package even where sandtable-ai is installed), `npx --no=false sandtable`, `pnpm dlx sandtable`, `yarn dlx sandtable` and `bunx sandtable` from fetching and running the unrelated npm package named `sandtable`, and names the sandtable-ai command to run instead, such as `pnpm dlx sandtable-ai demo` or `bunx -p sandtable-ai sandtable demo` ([#456](https://github.com/sandtable-ai/sandtable/issues/456)).
+- **Plugin**: the install hook now also stops `npm exec sandtable`, `npx -p sandtable`, `npx sandtable@<version>` (which names the unrelated package even where sandtable-ai is installed), `npx --no=false sandtable`, `pnpm dlx sandtable`, `yarn dlx sandtable` and `bunx sandtable` from fetching and running the unrelated npm package named `sandtable`, and names the sandtable-ai command to run instead, such as `pnpm dlx sandtable-ai demo` or `bunx -p sandtable-ai sandtable demo`. It reads a package manager's options before its subcommand (`pnpm -C web dlx`), and takes only the options each runner has for not fetching: `npm exec --no-install`, which npm doesn't know, still fetches ([#456](https://github.com/sandtable-ai/sandtable/issues/456)).
 
 ## [1.2.0] - 2026-10-31
 
