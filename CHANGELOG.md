@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 ### Fixed
 
 - **`validate`**: a `never` rule whose `when` names an argument its tool doesn't have, such as a misspelled `lod_id`, is now an error, as it is for the other rules' arguments. Before, it validated and never fired ([#462](https://github.com/sandtable-ai/sandtable/issues/462)).
+- **Plugin**: the plan hook now resolves the relative paths of `pnpm run sandtable init` and `pnpm sandtable init` from the package root, where pnpm runs a script, as it has for `npm run` since 1.2.0. The root is the nearest folder with a pnpm manifest (`package.json`, `package.yaml` or `package.json5`), or the one `-C`, `--dir` or `--prefix` names. `pnpm exec`, `pnpm dlx`, and `pnpm sandtable` in a project with no `sandtable` script run in the shell's folder; for a workspace run (`-r`, `--filter`, `-w`), the plan isn't known ([#437](https://github.com/sandtable-ai/sandtable/issues/437)).
 
 ## [1.2.0] - 2026-10-31
 

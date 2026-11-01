@@ -85,32 +85,48 @@ function resolvePath(value, dir) {
 /** Where `init` is in a segment's words: after the CLI, its options as INIT allows them, and a `--`; -1 when it isn't there. */
 const initAt = (all) => all.findIndex((w, i) => w === "init" && cliBefore(all, all[i - 1] === "--" ? i - 1 : i));
 
-/** Whether the words just before `end` are the CLI and then only options, each with at most one value. */
-function cliBefore(all, end) {
+/** Where the CLI is when the words just before `end` are the CLI and then only options, each with at most one value; -1 when they aren't. */
+function cliAt(all, end) {
   for (let j = end - 1; j >= 0; j--) {
     if (!BIN.test(all[j])) continue;
     let k = j + 1;
     while (k < end && all[k].startsWith("-")) k += k + 1 < end && !all[k + 1].startsWith("-") ? 2 : 1;
-    if (k === end) return true;
+    if (k === end) return j;
   }
-  return false;
+  return -1;
 }
 
-/** npm's names for `npm run`. */
+const cliBefore = (all, end) => cliAt(all, end) >= 0;
+
+/** npm's names for `npm run`, and pnpm's. */
 const NPM_RUN = new Set(["run", "run-script", "rum", "urn"]);
+const PNPM_RUN = new Set(["run", "run-script"]);
+/** The files pnpm reads a package from. */
+const MANIFESTS = ["package.json", "package.yaml", "package.json5"];
 
 /**
- * The folder an `init` segment runs in, given `dir`, the shell's folder. That is `dir`, except for `npm run sandtable --
- * init`: npm runs a script from its package root, so its relative paths start there (#430). The root is the folder
- * `--prefix` or `-C` names, else the nearest folder at or above `dir` with a package.json or a node_modules folder, as
- * npm looks for it, else `dir`. Undefined when the folder is unknown, as for a workspace's script (`-w`, `--workspace`,
- * `--workspaces`), which runs in a folder this doesn't follow.
+ * The folder an `init` segment runs in, given `dir`, the shell's folder. That is `dir`, except for a package script,
+ * which npm and pnpm run from the package's root, so its relative paths start there (#430, #437): `npm run sandtable --
+ * init` (see npmRoot), and `pnpm run sandtable init` or `pnpm sandtable init` (see pnpmRoot). Undefined when the folder
+ * is unknown.
  */
 function initDir(all, dir) {
   const at = initAt(all);
   const npm = all.indexOf("npm");
-  if (npm < 0 || npm > at) return dir;
-  const opts = all.slice(npm + 1, at);
+  if (npm >= 0 && npm < at) return npmRoot(all.slice(npm + 1, at), dir);
+  const pnpm = all.indexOf("pnpm");
+  const cli = cliAt(all, all[at - 1] === "--" ? at - 1 : at);
+  if (pnpm >= 0 && pnpm < cli) return pnpmRoot(all.slice(pnpm + 1, cli), all[cli], dir);
+  return dir;
+}
+
+/**
+ * The folder of `npm <opts> init`, where `opts` are the words between npm and init. For `npm run`, the root is the
+ * folder `--prefix` or `-C` names, else the nearest folder at or above `dir` with a package.json or a node_modules
+ * folder, as npm looks for it, else `dir`. Undefined for a workspace's script (`-w`, `--workspace`, `--workspaces`),
+ * which runs in a folder this doesn't follow. `npm exec` runs in `dir`.
+ */
+function npmRoot(opts, dir) {
   if (!opts.some((w) => NPM_RUN.has(w))) return dir;
   if (opts.some((w) => /^(?:-w|-ws|--workspaces?)(?:=|$)/.test(w))) return undefined;
   let prefix;
@@ -119,10 +135,48 @@ function initDir(all, dir) {
     if (m) prefix = m[1] ?? opts[++i];
   }
   if (prefix !== undefined) return cdTarget(prefix, dir);
+  return nearest(dir, ["package.json", "node_modules"]) ?? dir;
+}
+
+/**
+ * The folder of `pnpm <opts> <cli> init`, where `opts` are the words between pnpm and the CLI: pnpm passes everything
+ * after a script's name to the script. pnpm 11 runs a script, with `run` or without it, in the package's root: the
+ * folder `-C`, `--dir` or `--prefix` names, else the nearest folder at or above `dir` with a manifest. Without `run`,
+ * `pnpm sandtable` runs the root's `sandtable` script if it has one, else the installed bin in the shell's folder, as
+ * `pnpm exec` does; `pnpm dlx` runs in the shell's folder too. Undefined when it runs in a folder this doesn't follow:
+ * for `-r`, `--filter` or `-w`, or when it can't tell whether the root has the script.
+ */
+function pnpmRoot(opts, cli, dir) {
+  if (opts.includes("dlx")) return dir;
+  if (opts.some((w) => /^(?:-r|--recursive|-F|--filter(?:-prod)?|-w|--workspace-root)(?:=|$)/.test(w))) return undefined;
+  let folder = dir;
+  let named = false;
+  for (let i = 0; i < opts.length; i++) {
+    const m = opts[i].match(/^(?:--dir|--prefix|-C)(?:=(.*))?$/);
+    if (m) [folder, named] = [cdTarget(m[1] ?? opts[++i], dir), true];
+  }
+  if (folder === undefined) return undefined;
+  if (opts.includes("exec")) return folder;
+  // A folder pnpm is given is the root itself: pnpm doesn't look above it.
+  const root = named ? folder : (nearest(folder, MANIFESTS) ?? folder);
+  if (opts.some((w) => PNPM_RUN.has(w))) return root;
+  const manifest = MANIFESTS.find((m) => existsSync(path.join(root, m)));
+  if (!manifest) return folder;
+  if (manifest !== "package.json") return undefined;
+  try {
+    const scripts = JSON.parse(readFileSync(path.join(root, manifest), "utf8")).scripts;
+    return scripts && Object.hasOwn(scripts, cli) ? root : folder;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The nearest folder at or above `dir` that has one of `names`, or undefined. */
+function nearest(dir, names) {
   if (dir === undefined) return undefined;
   for (let d = dir; ; d = path.dirname(d)) {
-    if (existsSync(path.join(d, "package.json")) || existsSync(path.join(d, "node_modules"))) return d;
-    if (path.dirname(d) === d) return dir;
+    if (names.some((n) => existsSync(path.join(d, n)))) return d;
+    if (path.dirname(d) === d) return undefined;
   }
 }
 
@@ -187,8 +241,8 @@ const changesDir = (command) => segments(command).some((s) => chdir(words(s)));
 /**
  * The keys of a command's `init` segments of one kind, in order. Each counts what the command set before it: the
  * variables it exported or assigned, and the folder it ran in, from `dir` (where the command started; undefined when
- * unknown) and each `cd` before it, or its package root for `npm run` (see initDir). A folder change it can't follow,
- * such as `cd $X`, a subshell's `(cd`, or `pushd`, makes the folder unknown from there on.
+ * unknown) and each `cd` before it, or its package root for a package script (see initDir). A folder change it can't
+ * follow, such as `cd $X`, a subshell's `(cd`, or `pushd`, makes the folder unknown from there on.
  */
 function initKeys(command, kind, dir) {
   const env = {};
