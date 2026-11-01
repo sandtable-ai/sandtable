@@ -2,7 +2,7 @@
 title: "Rehearse an agent that calls its own tools: REST, MCP and webhooks"
 sidebarTitle: "Agents that call their own tools"
 description: "Serve the simulated world over REST, MCP and webhooks, so an agent written against the customer's API, an MCP server or a platform's webhook is rehearsed and graded unchanged, whether sandtable or a hosted platform drives the conversation."
-keywords: ["black-box agent", "REST", "MCP", "Model Context Protocol", "webhook", "Vapi", "Retell", "run --serve", "sandtable serve", "world server", "tool server", "hosted voice platform"]
+keywords: ["black-box agent", "REST", "MCP", "Model Context Protocol", "webhook", "Vapi", "Retell", "ElevenLabs", "run --serve", "sandtable serve", "world server", "tool server", "hosted voice platform"]
 ---
 
 Most adapters let sandtable run the agent's tool calls: a model agent's calls go through sandtable, an [HTTP agent](/reference/http-protocol) returns `tool_calls`, and a [module agent](/guides/bring-your-agent#your-agent-as-a-js-or-ts-module) calls `callTool`. An agent you can't change calls its tools itself: it sends requests to the customer's API, connects to an MCP server, or, on a hosted voice platform, has the platform call a webhook. `run --serve` serves the simulated world on all three while sandtable drives the conversation. Each trial's calls are checked against the invariants, hit by the task's [faults](/reference/spec#faults-and-events), and graded, exactly like calls sandtable makes for the agent.

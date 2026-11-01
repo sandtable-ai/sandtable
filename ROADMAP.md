@@ -57,11 +57,17 @@ Issues and milestones on GitHub are the source of truth; this page is the overvi
 - [x] `sandtable import vapi` drafts a domain from a Vapi assistant's export and its simulation scenarios (#34)
 - [x] The Claude Code plugin's hooks cover `npm run sandtable` from a subfolder and with npm's options, and stop the unrelated npm package named `sandtable` from being installed in sandtable's place (#430, #439, #441)
 
+## In 1.3
+- [x] Negotiation rules across calls: `max_count` (at most N calls of a tool, per load, say) and `monotonic` (an argument that only moves one way, such as counter-offers that never go down); the freight example counts its counter-offers per load instead of trusting the round number the agent writes (#36)
+- [x] A simulation clock: `clock` freezes "now" or follows the real time, and `$today+2d`, `$now-90m` give seed rows, tools and checks dates relative to it, so a domain stays valid for an agent that knows the real date (#38)
+- [x] `sandtable import retell` and `sandtable import elevenlabs` draft a domain from those platforms' agent exports and tests, and `sandtable serve` grades ElevenLabs test calls, keeping calls at the same time apart (#35, #459)
+- [x] The Claude Code plugin's hooks cover `pnpm run sandtable`, and stop `npm exec`, `pnpm dlx`, `yarn dlx` and `bunx` from running the unrelated `sandtable` package; `validate` catches a `never` rule whose `when` names an argument the tool doesn't have (#437, #456, #462)
+
 ## Next
-Nothing is planned yet: the issues under Later are the candidates.
+Proposed for 1.4 (milestone v1.4): LLM-judged checks scored apart from pass/fail, which the criteria in imported platform tests can feed (#16); dates in the places the clock leaves literal (#465) and relative dates from `init --transcripts` (#466); and an idle timeout for served conversations whose end never arrives (#467).
 
 ## Later
-PR comments with pass^k deltas (#13), importing Retell and ElevenLabs agent exports (#35), LLM-judged checks (#16), voice transport and timing metrics (#17, #43), exports to other harness formats (#18), negotiation invariants (#36), simulation clock (#38), outcome grading (#39), business metrics (#40), persona × condition matrix (#41), multi-session tasks (#42), Python agents in-process (#44).
+PR comments with pass^k deltas (#13), voice transport and timing metrics (#17, #43), exports to other harness formats (#18), outcome grading (#39), business metrics (#40), persona × condition matrix (#41), multi-session tasks (#42), Python agents in-process (#44), stale-task flags (#33).
 
 ## Good first issues
 `$regex` in where clauses (#20).
