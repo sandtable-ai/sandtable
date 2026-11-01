@@ -38,7 +38,9 @@ SuiteResult
                                report --probe), and `agent` ends in " (without policy)". Absent otherwise
   coverage                     { rules[], tools[] }: what the run checked (absent before 1.1 until regraded).
                                rules[] = { id, description, kind, tool?, field?, soft?, source?, checked, broken,
-                               tasks[]: { task, planned, checked, broken } }: checked = trials that called the tool
+                               tasks[]: { task, planned, checked, broken } }: kind = the invariant's key in the spec
+                               (before, require, limit, match, never, max_count, monotonic, never_disclose);
+                               checked = trials that called the tool
                                the rule guards (never_disclose: that showed the agent a protected value), planned =
                                the task's reference or called/not_called involves it. tools[] = { name, trials,
                                calls, tasks[] }. A rule with checked 0 or a tool with calls 0 is a gap. Checked is not

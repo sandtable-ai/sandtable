@@ -184,7 +184,7 @@ function test(actual: unknown, cond: unknown): boolean {
 }
 
 /** Compare numbers numerically and everything else as strings. Returns NaN when not comparable. */
-function compare(a: unknown, b: unknown): number {
+export function compare(a: unknown, b: unknown): number {
   if (a === undefined || a === null || b === undefined || b === null) return Number.NaN;
   if (typeof a === "number" && typeof b === "number") return a - b;
   return String(a).localeCompare(String(b));

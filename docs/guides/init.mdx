@@ -101,7 +101,7 @@ npx sandtable-ai init --openapi api.yaml --sop policy.md -o sandtable   # draft,
 npx sandtable-ai init --sop policy.md -o sandtable                       # add invariants to an existing domain
 ```
 
-Claude reads the SOP alongside the domain's tools, params, tables and known fields, and proposes invariants in the six existing [kinds](/reference/spec#invariants), using structured outputs. Nothing it proposes is trusted as-is:
+Claude reads the SOP alongside the domain's tools, params, tables and known fields, and proposes invariants in the eight existing [kinds](/reference/spec#invariants), using structured outputs. Nothing it proposes is trusted as-is:
 
 - Every invariant must **quote** the SOP. A quote that does not appear verbatim gets a warning.
 - Proposals that reference an unknown tool, param, table or field, or that are incomplete, are **dropped**, and the reason is printed.

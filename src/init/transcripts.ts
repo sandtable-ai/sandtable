@@ -5,7 +5,7 @@ import { validateDomain } from "../spec/load.ts";
 import { PersonaSpec, TaskSpec, type Domain, type Persona, type Task } from "../spec/schema.ts";
 import type { UsageByModel } from "../run/usage.ts";
 import { createClient, recordDraftUsage, requestBase, type ClaudeOptions } from "../sim/claude.ts";
-import { cutOff, cutOffHint } from "./cut-off.ts";
+import { cutOff, cutOffHint, lenient } from "./cut-off.ts";
 import { copiedValueNotes, type Place } from "./copied.ts";
 import { ConditionSpec, describeTools, whereOf } from "./sop.ts";
 import { equal } from "../world/match.ts";
@@ -263,7 +263,7 @@ export async function draftTasksFromTranscripts(input: {
     try {
       response = await client.beta.messages.parse({
         ...base,
-        output_config: { ...base.output_config, format: betaZodOutputFormat(schema) },
+        output_config: { ...base.output_config, format: lenient(betaZodOutputFormat(schema)) },
         system: SYSTEM,
         messages: [{ role: "user", content: `${describe(domain)}\n\n<transcript file="${t.file}">\n${scrubbed.text}\n</transcript>` }],
       });

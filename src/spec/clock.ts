@@ -139,6 +139,7 @@ function mapDomain(domain: Domain, visit: Visit): Domain {
       const at = `invariants.${inv.id}`;
       if ("require" in inv) return { ...inv, require: { ...inv.require, where: walk(inv.require.where, "value", `${at}.require.where`, visit) } };
       if ("never" in inv && inv.never.when) return { ...inv, never: { ...inv.never, when: walk(inv.never.when, "value", `${at}.never.when`, visit) } };
+      if ("max_count" in inv && inv.max_count.when) return { ...inv, max_count: { ...inv.max_count, when: walk(inv.max_count.when, "value", `${at}.max_count.when`, visit) } };
       return inv;
     }),
   };

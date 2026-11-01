@@ -13,7 +13,7 @@ import { scriptedUser } from "../src/sim/scripted.ts";
 import type { AgentAdapter, AgentContext } from "../src/sim/types.ts";
 import { dateOf, describeClock, interpolateDates, localMinute, resolveDates, resolveTrial, trialClock } from "../src/spec/clock.ts";
 import { loadDomain, parseDomain, validateDomain } from "../src/spec/load.ts";
-import { DomainSpec, TaskSpec, type Domain } from "../src/spec/schema.ts";
+import { DomainSpec, InvariantSpec, TaskSpec, type Domain } from "../src/spec/schema.ts";
 import { worldFor } from "../src/world/store.ts";
 import { executeTool } from "../src/world/tools.ts";
 
@@ -243,6 +243,10 @@ describe("resolveDates", () => {
 
   it("resolves invariants' where and when", () => {
     expect(d.invariants.map((i) => ("never" in i ? i.never.when : "require" in i ? i.require.where : undefined))).toEqual([{ pickup_date: { $lt: "2026-11-02" } }, { pickup_date: { $gte: "2026-11-02" } }]);
+    // A max_count's when too.
+    const counted = { ...domain, invariants: [InvariantSpec.parse({ id: "one-booking-this-week", description: "x", max_count: { tool: "book_load", max: 1, when: { pickup_date: { $lte: "$today+7d" } } } })] };
+    const resolved = resolveDates(counted, counted.tasks[0]!, CLOCK).domain.invariants[0]!;
+    expect("max_count" in resolved && resolved.max_count.when).toEqual({ pickup_date: { $lte: "2026-11-09" } });
   });
 
   it("resolves a task's events, expectations and reference, and interpolates the caller's instructions, opening and script", () => {

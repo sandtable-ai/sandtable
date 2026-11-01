@@ -1,5 +1,6 @@
 import { DEFAULT_MODEL, providerOf, requestBase, type ClaudeOptions, type Provider } from "../sim/claude.ts";
 import { costOf } from "../run/usage.ts";
+import { SOP_MAX_TOKENS } from "./cut-off.ts";
 import { SOP_SYSTEM_PROMPT } from "./sop.ts";
 import { TRANSCRIPTS_SYSTEM_PROMPT } from "./transcripts.ts";
 
@@ -18,7 +19,7 @@ export interface DraftPlan {
   region?: string;
   /** Input tokens across every call, estimated from the prompt sizes. */
   inputTokens: number;
-  /** The most output every call together may write: max_tokens per call. */
+  /** The most output every call together may write: each call's max_tokens. */
   outputTokens: number;
   /** The upper bound in USD at list prices; null when the model has no known price. */
   costUsd: number | null;
@@ -48,7 +49,8 @@ export function draftPlan(input: { domainChars: number; sopChars?: number; trans
   const transcriptInput = input.transcriptChars.reduce((n, chars) => n + tokens(TRANSCRIPTS_SYSTEM_PROMPT.length + input.domainChars + chars) + SCHEMA_TOKENS, 0);
   const calls = sopCalls + transcriptCalls;
   const inputTokens = sopInput + transcriptInput;
-  const outputTokens = calls * base.max_tokens;
+  // An SOP's call may write more than a transcript's: see SOP_MAX_TOKENS.
+  const outputTokens = sopCalls * SOP_MAX_TOKENS + transcriptCalls * base.max_tokens;
   const costUsd = costOf({ [base.model]: { calls, input: 0, output: outputTokens, cacheRead: 0, cacheWrite: inputTokens } });
   return {
     sopCalls,

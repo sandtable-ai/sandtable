@@ -135,6 +135,8 @@ Each one quotes the SOP in `source.quote`. For each:
    - `limit`: `lte` means "at most", `gte` "at least". Is the bound the right field of the right record?
    - `match`: are both sides keyed by the right arguments?
    - `never`: does `when` narrow it to exactly the forbidden case? Without `when`, the tool may never be called at all.
+   - `max_count`: is `max` the number in the quote, and is `per_arg` what it counts per ("per load" is `load_id`)? Without `per_arg`, every call of the tool counts together.
+   - `monotonic`: does `direction` say which way the value may move (`up` for "never lower an offer"), and does the quote forbid repeating it (`strict: true`)?
    - `never_disclose`: should a legitimately agreed value be allowed through `unless`?
 4. **The data supports it.** Every field it reads must be in the seed rows, or the rule silently never fires.
 5. **It guards a decision, not a step.** "Check the customer's tier with `get_tier_benefits` before a return" drafted as `before: { first: get_tier_benefits, then: approve_return, same: [] }` fails an agent that read the tier from the account it already looked up and applied the right rule. When the agent can reach the right decision without the step, make the rule `soft: true` (reported, never failing), or check the decision itself with a `require` on the fields that make it right. Do the same when `same` can't tie the two calls together because the tools share no argument: the rule then only proves that some lookup happened.

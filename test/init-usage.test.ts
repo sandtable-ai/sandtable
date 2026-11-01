@@ -83,12 +83,35 @@ describe("a drafting reply cut off at max_tokens", () => {
     const domain = await loadDomain(path.resolve("examples/freight"));
     const draft = (model: string, content?: { type: string }[]) => draftInvariantsFromSop({ domain, sop: "Look the carrier up first.", sopFile: "sop.md", claude: { client: thinkingOnly(model, content), model } });
     await expect(draft("claude-haiku-5-5")).rejects.toThrow(
-      "the reply hit the 16000-token output limit while thinking, before it wrote anything, so it drafted no invariants, and the call was still paid for. Try a larger model, such as -m claude-sonnet-5-5.",
+      "the reply hit the 32000-token output limit while thinking, before it wrote anything, so it drafted no invariants, and the call was still paid for. Try a larger model, such as -m claude-sonnet-5-5.",
     );
     await expect(draft("claude-sonnet-5-5")).rejects.toThrow("Try a larger model, such as -m claude-opus-5-5, the default.");
     await expect(draft("claude-opus-5-5", [{ type: "thinking" }, { type: "text" }])).rejects.toThrow(
-      "the reply hit the 16000-token output limit before it finished, so it drafted no invariants, and the call was still paid for. Try a shorter SOP.",
+      "the reply hit the 32000-token output limit before it finished, so it drafted no invariants, and the call was still paid for. Try a shorter SOP.",
     );
+  });
+
+  it("says so for a reply cut off in the middle of its JSON, which the SDK's own parse would throw on, and counts it", async () => {
+    const domain = await loadDomain(path.resolve("examples/freight"));
+    const requests: { body: Record<string, unknown>; options?: { timeout?: number } }[] = [];
+    // As the SDK's parse does: the request's format parses the reply's text.
+    const client = {
+      beta: {
+        messages: {
+          parse: async (body: { output_config: { format: { parse: (t: string) => unknown } } } & Record<string, unknown>, options?: { timeout?: number }) => {
+            requests.push({ body, options });
+            const text = '{"rules":[{"id":"r1","rule":"Verify the carr';
+            return { stop_reason: "max_tokens", parsed_output: body.output_config.format.parse(text), content: [{ type: "thinking" }, { type: "text", text }], model: "claude-sonnet-5-5", usage: { ...usage, output_tokens: 32000 } };
+          },
+        },
+      },
+    } as unknown as Anthropic;
+    await expect(draftInvariantsFromSop({ domain, sop: "Look the carrier up first.", sopFile: "sop.md", claude: { client, model: "claude-sonnet-5-5" } })).rejects.toThrow(
+      "the reply hit the 32000-token output limit before it finished, so it drafted no invariants, and the call was still paid for.",
+    );
+    // An SOP's call may write 32,000 tokens, which the SDK allows without streaming only with a timeout of its own.
+    expect(requests[0]!.body.max_tokens).toBe(32000);
+    expect(requests[0]!.options?.timeout).toBe(15 * 60_000);
   });
 
   it("keeps the old message for a reply with no answer that wasn't cut off", async () => {
