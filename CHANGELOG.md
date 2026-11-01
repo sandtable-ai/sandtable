@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-11-01
+
+A patch release that restores 1.2's validation, as the stability policy promises for a minor release. 1.3.0 rejected two kinds of domain that 1.2 accepted: a `never` rule whose `when` names an argument the tool doesn't have, and date text such as `$today+2d` in a domain with no clock. Both validate again, with a warning, until 2.0.
+
 ### Deprecated
 
 - **`validate`**: two kinds of mistake that 1.3.0 rejected are warnings again until 2.0, as the stability policy asks of a minor release. 1.3.0 failed domains that 1.2 accepted, which could break a CI job that ran `validate` or `run` (both mistakes were in 1.3.0's notes, with no **Breaking:** mark).
@@ -371,7 +375,8 @@ First public release. sandtable rehearses an AI agent on a simulated copy of one
 
 A rehearsal of the release pipeline (npm, PyPI and GitHub releases from one tag), published before the first public release. Everything in it is also in 0.1.0; use 0.1.0 instead.
 
-[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/sandtable-ai/sandtable/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/sandtable-ai/sandtable/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/sandtable-ai/sandtable/compare/v1.1.3...v1.2.0
 [1.1.3]: https://github.com/sandtable-ai/sandtable/compare/v1.1.2...v1.1.3
