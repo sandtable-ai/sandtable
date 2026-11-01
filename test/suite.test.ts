@@ -206,6 +206,10 @@ describe("domain validation", () => {
     const never = (id: string, when: Record<string, unknown>) => ({ id, description: id, never: { tool: "book_load", when } });
     const broken = { ...d, invariants: [never("typo", { lod_id: "L-1012" }), never("ok", { load_id: "L-1012", rate: { $gt: 3000 } })] };
     expect(validateDomain(broken)).toEqual(['invariants.typo.never.when: tool "book_load" has no param "lod_id"']);
+    // An operator where a field belongs gets the operator's message alone.
+    const op = validateDomain({ ...d, invariants: [never("op", { $or: [] })] });
+    expect(op).toHaveLength(1);
+    expect(op[0]).not.toContain("has no param");
   });
 
   it("checks the tool, arguments and operators of every argument matcher in called and not_called", async () => {
