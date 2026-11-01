@@ -30,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 - **`validate`**: a `never` rule whose `when` names an argument its tool doesn't have, such as a misspelled `lod_id`, is now an error, as it is for the other rules' arguments. Before, it validated and never fired ([#462](https://github.com/sandtable-ai/sandtable/issues/462)).
 - **Plugin**: the plan hook now resolves the relative paths of `pnpm run sandtable init` and `pnpm sandtable init` from the package root, where pnpm runs a script, as it has for `npm run` since 1.2.0. The root is the nearest folder with a pnpm manifest (`package.json`, `package.yaml` or `package.json5`), or the one `-C`, `--dir` or `--prefix` names. `pnpm exec`, `pnpm dlx`, and `pnpm sandtable` in a project with no `sandtable` script run in the shell's folder; for a workspace run (`-r`, `--filter`, `-w`), the plan isn't known ([#437](https://github.com/sandtable-ai/sandtable/issues/437)).
 - `init --sop` and `init --transcripts`: a reply cut off at the output limit in the middle of its JSON now says it hit the limit and was still paid for, and its tokens count in the step's usage. Before, it failed with a JSON parse error and its usage wasn't counted ([#36](https://github.com/sandtable-ai/sandtable/issues/36)).
+- **`init --openapi`** and **`import vapi`**: a boolean param's `enum`, and enum values that aren't strings or numbers, are left out of the draft. Before, they made a draft that `validate` rejected ([#35](https://github.com/sandtable-ai/sandtable/issues/35)).
 
 ## [1.2.0] - 2026-10-31
 

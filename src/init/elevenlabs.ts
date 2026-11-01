@@ -213,7 +213,12 @@ export function draftFromElevenLabs(files: PlatformFile[], pick?: string): Platf
     else if (!used.includes(ref)) used.push(ref);
   };
   for (const id of Array.isArray(prompt.tool_ids) ? prompt.tool_ids : []) byId(id, "conversation_config.agent.prompt.tool_ids");
-  for (const t of (Array.isArray(prompt.tools) ? prompt.tools : []).filter(isPlainObject)) used.push({ file: agent.file, config: t, ...(str(t.id) ? { id: str(t.id) } : {}), mocks: [] });
+  for (const t of (Array.isArray(prompt.tools) ? prompt.tools : []).filter(isPlainObject)) {
+    // The same tool by id in tool_ids and in the deprecated inline list is one tool.
+    const id = str(t.id);
+    if (id !== undefined && used.some((u) => u.id === id)) continue;
+    used.push({ file: agent.file, config: t, ...(id !== undefined ? { id } : {}), mocks: [] });
+  }
   for (const [id, n] of nodes) for (const tid of Array.isArray(n.additional_tool_ids) ? n.additional_tool_ids : []) byId(tid, `workflow node "${str(n.label) ?? id}"'s additional_tool_ids`);
   for (const [name, t] of Object.entries(isPlainObject(prompt.built_in_tools) ? prompt.built_in_tools : {})) {
     if (isPlainObject(t)) used.push({ file: agent.file, config: { type: "system", name, ...t }, mocks: [] });
@@ -286,7 +291,13 @@ export function draftFromElevenLabs(files: PlatformFile[], pick?: string): Platf
           if (mock.is_error === true) task.notes.push(`Its test mocks ${tool.name} to fail (${JSON.stringify(mock.mock_result ?? "")}): model that failure with a fault or a check, which this draft leaves out.`);
           else if (builtins.has(tool.name)) addCall(task.called, tool.name);
           else if (typeof mock.mock_result !== "string") warnings.push(`${file}: a mock of ${tool.name} has no mock_result; skipped`);
-          else mocks.add(task, tool, mock.mock_result, file);
+          else {
+            mocks.add(task, tool, mock.mock_result, file);
+            const when = mock.parameter_conditions;
+            if (when !== undefined && when !== null && !(Array.isArray(when) && when.length === 0) && !(isPlainObject(when) && Object.keys(when).length === 0)) {
+              task.notes.push(`Its test answers ${tool.name} with this mock only for some arguments (${JSON.stringify(when)}), and the draft gives it for any: model that with a table keyed by those arguments.`);
+            }
+          }
         }
       }
       const conditions = [...(Array.isArray(test.success_conditions) ? test.success_conditions : []), test.success_condition].map(str).filter((x): x is string => x !== undefined);

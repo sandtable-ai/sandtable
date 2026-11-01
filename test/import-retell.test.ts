@@ -11,7 +11,7 @@ import { lintDomain } from "../src/grade/lint.ts";
 import { runSuite } from "../src/run/suite.ts";
 import { noopAgent } from "../src/sim/noop.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
-import { loadDomain, parseDomain, pendingReview } from "../src/spec/load.ts";
+import { loadDomain, parseDomain, pendingReview, validateDomain } from "../src/spec/load.ts";
 
 // sandtable import retell (#35): a draft domain from a Retell agent, its Retell LLM or conversation flow, and its test cases.
 
@@ -304,5 +304,34 @@ describe("import retell: test cases", () => {
     expect(draft.tasks[1]!.notes[0]).toBe("Nothing is graded yet: add the end state (expect.state) or the tools a correct call uses (expect.called).");
     // Only the task with nothing to grade fails lint.
     expect(lintDomain(domain).tasks.filter((t) => t.errors.length).map((t) => t.id)).toEqual(["quiet"]);
+  });
+});
+
+describe("import retell: drafts validate from awkward configs (review of #469)", () => {
+  it("names built-in tools as tools may be named, drops a boolean's enum, keeps one row per mocked record, and reads a bare test case as a test", () => {
+    const f = files(
+      ["agent.json", agent()],
+      [
+        "llm.json",
+        llm({
+          general_tools: [
+            { type: "end_call", name: "End Call!" },
+            { type: "transfer_call", name: "transfer to sales", transfer_destination: { type: "predefined", number: "+15550100" } },
+            custom("lookup", { id: { type: "string", description: "The ticket" }, urgent: { type: "boolean", enum: [true, false], description: "Rush it" }, tone: { type: "string", enum: ["calm", true, "brisk"], description: "How" } }, ["id"]),
+          ],
+        }),
+      ],
+      ["tests/repeat.json", testCase("repeat", { tool_mocks: [{ tool_name: "lookup", input_match_rule: { type: "any" }, output: JSON.stringify({ id: "7", status: "ready" }) }, { tool_name: "lookup", input_match_rule: { type: "any" }, output: JSON.stringify({ id: "7", status: "ready" }) }] })],
+      // A test case trimmed by hand, without its id or metrics, is still a test, not a second agent.
+      ["tests/bare.json", { name: "bare", response_engine: { type: "retell-llm", llm_id: "llm_1" }, user_prompt: "You are bare." }],
+    );
+    const { draft, domain } = domainOf(f);
+    expect(draft.tools.map((t) => t.name)).toEqual(["end_call", "transfer_to_sales", "lookup"]);
+    const lookup = domain.tools.find((t) => t.name === "lookup")!;
+    expect(lookup.params.urgent).not.toHaveProperty("enum");
+    expect(lookup.params.tone!.enum).toEqual(["calm", "brisk"]);
+    expect(domain.tasks.map((t) => t.id)).toEqual(["repeat", "bare"]);
+    expect(domain.tasks[0]!.given!.rows!.lookup_results).toEqual([{ id: "7", status: "ready" }]);
+    expect(validateDomain(domain)).toEqual([]);
   });
 });

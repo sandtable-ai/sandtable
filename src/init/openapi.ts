@@ -385,15 +385,16 @@ export function toParam(schema: Json, deref: (x: unknown) => unknown, required: 
     if (!items) return undefined;
     return { type: "array", required, ...(desc ? { description: String(desc).trim() } : {}), items };
   }
-  // A nullable enum lists null among its values: an agent can't pass it, so the param's enum leaves it out.
-  const values = Array.isArray(s.enum) ? (s.enum.filter((v) => v !== null) as (string | number)[]) : undefined;
+  // A nullable enum lists null among its values: an agent can't pass it, so the param's enum leaves it out. A spec enum
+  // holds strings and numbers only, so a boolean's `[true, false]`, which says nothing its type doesn't, goes too.
+  const values = Array.isArray(s.enum) ? s.enum.filter((v): v is string | number => typeof v === "string" || typeof v === "number") : undefined;
   let type = s.type as string | undefined;
   if (!type && values) type = typeof values[0] === "number" ? "number" : "string";
   if (!type) type = "string";
   if (!["string", "number", "integer", "boolean"].includes(type)) return undefined;
   const param: DraftParam = { type: type as DraftParam["type"], required };
   if (desc) param.description = String(desc).trim();
-  if (values?.length) param.enum = values;
+  if (values?.length && type !== "boolean") param.enum = values;
   if (!required && ["string", "number", "boolean"].includes(typeof s.default)) param.default = s.default as string | number | boolean;
   return param;
 }

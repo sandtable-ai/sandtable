@@ -11,7 +11,7 @@ import { lintDomain } from "../src/grade/lint.ts";
 import { runSuite } from "../src/run/suite.ts";
 import { noopAgent } from "../src/sim/noop.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
-import { loadDomain, parseDomain } from "../src/spec/load.ts";
+import { loadDomain, parseDomain, validateDomain } from "../src/spec/load.ts";
 
 // sandtable import elevenlabs (#35): a draft domain from an ElevenLabs agent, its tools and its tests, as the
 // ElevenLabs CLI pulls them into a project or as the API returns them.
@@ -438,5 +438,37 @@ describe("import elevenlabs: tests", () => {
     );
     expect(d.tasks.map((t) => t.id)).toEqual(["one"]);
     expect(d.warnings).toEqual(["s2.json: a test the agent doesn't list in platform_settings.testing.attached_tests; skipped"]);
+  });
+});
+
+describe("import elevenlabs: drafts validate from awkward configs (review of #469)", () => {
+  it("drafts a tool in both tool_ids and the inline list once, one transfer target once, no route with a space, and notes a mock's conditions", () => {
+    const item = webhook("get thing", { url: "https://desk.example/items/{item_id}", path_params_schema: { item_id: { type: "string", description: "The item" } } });
+    const transfer = { transfer_destination: { type: "phone", phone_number: "+15555550103" }, condition: "Billing" };
+    const { draft, domain } = domainOf(
+      files(
+        ["agent.json", { agent_id: "agent_9", ...elAgent({ tool_ids: ["t1", "t3"], tools: [{ id: "t1", ...item }], built_in_tools: { end_call: { ...END_CALL, name: "End Call!" }, transfer_to_number: { type: "system", name: "transfer_to_number", params: { system_tool_type: "transfer_to_number", transfers: [transfer, { ...transfer, condition: "Payments" }] } } } }) }],
+        ["t1.json", { id: "t1", tool_config: item }],
+        ["t3.json", { id: "t3", tool_config: webhook("spaced", { url: "https://desk.example/my path/x", method: "POST" }) }],
+        [
+          "s.json",
+          {
+            id: "s1",
+            type: "simulation",
+            name: "Lost item",
+            simulation_scenario: "You lost item 7.",
+            tool_mock_config: { mocking_strategy: "none" },
+            tool_mock_overrides: { t1: [{ mock_result: '{"item_id":"7","status":"lost"}', parameter_conditions: [{ path: "item_id", value: "7" }] }] },
+          },
+        ],
+      ),
+    );
+    // The built-in end call's name is made a valid tool name, as a custom tool's is.
+    expect(draft.tools.map((t) => [t.name, t.platformName])).toEqual([["get_thing", "get thing"], ["spaced", undefined], ["end_call", "End Call!"], ["transfer_to_number", undefined]]);
+    expect(domain.tools.find((t) => t.name === "transfer_to_number")!.params.destination!.enum).toEqual(["+15555550103"]);
+    expect(domain.tools.find((t) => t.name === "spaced")!.http).toBeUndefined();
+    expect(domain.tools.find((t) => t.name === "get_thing")!.http).toEqual({ method: "GET", path: "/items/{item_id}" });
+    expect(draft.tasks[0]!.notes.join("\n")).toContain('Its test answers get_thing with this mock only for some arguments ([{"path":"item_id","value":"7"}])');
+    expect(validateDomain(domain)).toEqual([]);
   });
 });

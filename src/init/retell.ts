@@ -49,8 +49,9 @@ interface Engine extends Item {
   id?: string;
 }
 
-const isTestCase = (x: Json) => (typeof x.user_prompt === "string" && Array.isArray(x.metrics)) || typeof x.test_case_definition_id === "string";
-const isAgent = (x: Json) => typeof x.agent_id === "string" || isPlainObject(x.response_engine);
+const isTestCase = (x: Json) => (typeof x.user_prompt === "string" && (Array.isArray(x.metrics) || isPlainObject(x.response_engine))) || typeof x.test_case_definition_id === "string";
+// A test case names its response engine too, and has a user_prompt, which an agent never does.
+const isAgent = (x: Json) => typeof x.agent_id === "string" || (isPlainObject(x.response_engine) && typeof x.user_prompt !== "string");
 const isFlow = (x: Json) => typeof x.conversation_flow_id === "string" || (Array.isArray(x.nodes) && x.start_node_id !== undefined);
 const isLlm = (x: Json) => typeof x.llm_id === "string" || typeof x.general_prompt === "string" || Array.isArray(x.general_tools) || Array.isArray(x.states);
 

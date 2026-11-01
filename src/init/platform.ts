@@ -106,9 +106,15 @@ export function schemaParams(schema: unknown, platform: string, notes: string[])
   return params;
 }
 
+/** A built-in tool's name as a valid tool name, and the platform's when it differs, for the mocks that use it. */
+function builtinName(names: Set<string>, raw: string): Pick<PlatformTool, "name" | "platformName"> {
+  const name = uniqueName(names, TOOL_NAME.test(raw) ? raw : snake(raw));
+  return { name, ...(name !== raw ? { platformName: raw } : {}) };
+}
+
 /** A tool that ends the call. */
 export function endCallTool(names: Set<string>, name: string, description = "End the call."): PlatformTool {
-  return { name: uniqueName(names, name), description, params: {}, ops: [{ respond: { status: "ended" } }], notes: [] };
+  return { ...builtinName(names, name), description, params: {}, ops: [{ respond: { status: "ended" } }], notes: [] };
 }
 
 /** Where a transfer goes: `target` is the value the agent passes, when the config names one. */
@@ -120,10 +126,10 @@ export interface TransferDestination {
 
 /** A tool that transfers the call: each transfer is a row of the `transfers` table, which the caller adds. */
 export function transferTool(names: Set<string>, name: string, destinations: TransferDestination[], platform: string, description = "Transfer the call to a person."): PlatformTool {
-  const targets = destinations.map((d) => d.target).filter((x): x is string => x !== undefined);
+  const targets = [...new Set(destinations.map((d) => d.target).filter((x): x is string => x !== undefined))];
   const where = destinations.map((d) => `${d.label}${d.description ? ` (${d.description})` : ""}`).join("; ");
   return {
-    name: uniqueName(names, name),
+    ...builtinName(names, name),
     description: `${description}${where ? ` Destinations: ${where}.` : ""}`,
     params: { destination: { type: "string", required: true, ...(targets.length ? { enum: targets } : {}), description: "Where to transfer the call" } },
     ops: [{ create: "transfers", values: { destination: "$destination" } }, { respond: { status: "transferred", destination: "$destination" } }],
@@ -199,7 +205,12 @@ export class Mocks {
     const { table, key } = shape;
     task.rows ??= {};
     const list = (task.rows[table] ??= []);
-    rows.forEach((row) => list.push(row[key] === undefined ? { [key]: `${task.id}-${list.length + 1}`, ...row } : row));
+    for (const row of rows) {
+      const keyed = row[key] === undefined ? { [key]: `${task.id}-${list.length + 1}`, ...row } : row;
+      // Mocking the same record twice, as for a repeated lookup, is one row.
+      if (list.some((r) => String(r[key]) === String(keyed[key]))) continue;
+      list.push(keyed);
+    }
   }
 }
 
@@ -271,6 +282,8 @@ export function expectedCall(tool: PlatformTool, args: Json, notes: string[], le
  * then holds it.
  */
 export function routeProblem(tool: PlatformTool, http: { method: string; path: string }, routes: Map<string, string>): string | undefined {
+  // The spec's own pattern for a path, which validate checks before httpProblems runs.
+  if (!/^\/[^?#\s]*$/.test(http.path)) return `the path ${JSON.stringify(http.path)} has a space or a character a route can't`;
   const prefix = `tools.${tool.name}.http: `;
   const problems = httpProblems({ name: tool.name, params: tool.params, http }, routes);
   return problems.length ? problems.map((p) => (p.startsWith(prefix) ? p.slice(prefix.length) : p)).join("; ") : undefined;
