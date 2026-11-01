@@ -201,6 +201,13 @@ describe("domain validation", () => {
     ]);
   });
 
+  it("reports a never rule whose when names an argument its tool doesn't have, which would never fire (#462)", async () => {
+    const d = await loadDomain(example);
+    const never = (id: string, when: Record<string, unknown>) => ({ id, description: id, never: { tool: "book_load", when } });
+    const broken = { ...d, invariants: [never("typo", { lod_id: "L-1012" }), never("ok", { load_id: "L-1012", rate: { $gt: 3000 } })] };
+    expect(validateDomain(broken)).toEqual(['invariants.typo.never.when: tool "book_load" has no param "lod_id"']);
+  });
+
   it("checks the tool, arguments and operators of every argument matcher in called and not_called", async () => {
     const d = await loadDomain(example);
     const expectations: Task["expect"] = {

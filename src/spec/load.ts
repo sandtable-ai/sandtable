@@ -213,6 +213,7 @@ export function validateDomain(d: Domain): string[] {
       }
     } else {
       tool(inv.never.tool, where);
+      for (const a of Object.keys(inv.never.when ?? {})) argPath(inv.never.tool, a, `${where}.never.when`);
       operators(inv.never.when, `${where}.never.when`);
     }
   }
