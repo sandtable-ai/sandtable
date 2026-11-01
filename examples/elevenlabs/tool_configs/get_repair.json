@@ -1,0 +1,16 @@
+{
+    "type": "webhook",
+    "name": "get_repair",
+    "description": "Look up a repair ticket: its status, the work done and the balance due.",
+    "api_schema": {
+        "url": "https://pinecrest-bikes.example/api/repairs/{ticket_id}",
+        "method": "GET",
+        "path_params_schema": {
+            "ticket_id": {
+                "type": "string",
+                "description": "The repair ticket, such as R-2041"
+            }
+        }
+    },
+    "response_timeout_secs": 20
+}

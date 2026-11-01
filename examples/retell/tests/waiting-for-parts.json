@@ -1,0 +1,20 @@
+{
+  "test_case_definition_id": "tcd_pinecrest_parts",
+  "type": "simulation",
+  "name": "Bike waiting for parts",
+  "response_engine": { "type": "retell-llm", "llm_id": "llm_pinecrest0001" },
+  "user_prompt": "You are Riley Chen. Your bike is in for repair under ticket R-2057. Ask when it will be ready. Then ask why your rear brake squeals, and ask to talk to a mechanic about it.",
+  "metrics": ["The agent says the bike is waiting for parts", "The agent transfers the call to a mechanic for the brake question"],
+  "dynamic_variables": {},
+  "tool_mocks": [
+    {
+      "tool_name": "get_repair",
+      "input_match_rule": { "type": "any" },
+      "output": "{\"ticket_id\":\"R-2057\",\"status\":\"waiting_for_parts\",\"work\":\"new rear derailleur\",\"balance_due\":140}"
+    },
+    { "tool_name": "transfer_to_mechanic", "input_match_rule": { "type": "any" }, "output": "", "result": true }
+  ],
+  "llm_model": "gpt-4.1",
+  "creation_timestamp": 1793500000000,
+  "user_modified_timestamp": 1793500000000
+}

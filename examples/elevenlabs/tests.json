@@ -1,0 +1,14 @@
+{
+    "tests": [
+        {
+            "config": "test_configs/Book-a-tune-up.json",
+            "type": "simulation",
+            "id": "test_pinecrest_tuneup"
+        },
+        {
+            "config": "test_configs/Looks-up-the-ticket-before-answering.json",
+            "type": "tool",
+            "id": "test_pinecrest_lookup"
+        }
+    ]
+}

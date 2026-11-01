@@ -1,0 +1,14 @@
+{
+    "tools": [
+        {
+            "type": "webhook",
+            "config": "tool_configs/get_repair.json",
+            "id": "tool_pinecrest_getrepair"
+        },
+        {
+            "type": "webhook",
+            "config": "tool_configs/book_service.json",
+            "id": "tool_pinecrest_bookservice"
+        }
+    ]
+}

@@ -1,0 +1,19 @@
+{
+  "test_case_definition_id": "tcd_pinecrest_ready",
+  "type": "simulation",
+  "name": "Repair status for a bike that's ready",
+  "response_engine": { "type": "retell-llm", "llm_id": "llm_pinecrest0001" },
+  "user_prompt": "You are Morgan Ortega. Your bike is in for repair under ticket R-2041. Ask whether it's ready and what you owe. Hang up once you know both.",
+  "metrics": ["The agent tells the caller the bike is ready and that $85 is due", "The agent doesn't promise a pickup time"],
+  "dynamic_variables": { "customer_phone": "+15555550142" },
+  "tool_mocks": [
+    {
+      "tool_name": "get_repair",
+      "input_match_rule": { "type": "partial_match", "args": { "ticket_id": "R-2041" } },
+      "output": "{\"ticket_id\":\"R-2041\",\"status\":\"ready\",\"work\":\"new chain and brake pads\",\"balance_due\":85}"
+    }
+  ],
+  "llm_model": "gpt-4.1",
+  "creation_timestamp": 1793500000000,
+  "user_modified_timestamp": 1793500000000
+}

@@ -28,6 +28,9 @@ import { draftFromOpenApi, openApiProblem } from "./init/openapi.ts";
 import { draftInvariantsFromSop, knownFields, softRuleComments } from "./init/sop.ts";
 import { draftTasksFromTranscripts } from "./init/transcripts.ts";
 import { draftFromVapi, renderVapiDraft, vapiProblem } from "./init/vapi.ts";
+import { draftFromRetell, renderRetellDraft, retellProblem } from "./init/retell.ts";
+import { draftFromElevenLabs, elevenLabsProblem, renderElevenLabsDraft } from "./init/elevenlabs.ts";
+import type { PlatformDraft, PlatformFile } from "./init/platform.ts";
 import { draftPlan, planLine } from "./init/plan.ts";
 import { DOMAIN_FILE, isPolicyPlaceholder, POLICY_PLACEHOLDER, renderDraft, TASKS_PLACEHOLDER, writeDraft } from "./init/render.ts";
 import { DomainError, DomainNotFoundError, domainWarnings, loadDomain, pendingReview } from "./spec/load.ts";
@@ -543,29 +546,67 @@ withProviderFlags(program
     }
   });
 
+/** The platforms `import` drafts from: how each reads an export, what a draft without tools needs, and how to serve it. */
+const IMPORTERS: Record<
+  string,
+  {
+    label: string;
+    problem: (files: PlatformFile[], agent?: string) => string | undefined;
+    draft: (files: PlatformFile[], agent?: string) => PlatformDraft;
+    render: (d: PlatformDraft) => { domain: string; tasks: string };
+    noTools: string;
+    serve: (out: string) => string;
+  }
+> = {
+  vapi: {
+    label: "Vapi",
+    problem: vapiProblem,
+    draft: draftFromVapi,
+    render: renderVapiDraft,
+    noTools: "the assistant has no tool sandtable can model, and a domain needs one: give it a function tool, or a transferCall or endCall tool",
+    serve: (out) => `To grade the assistant's own test calls on this world, point its server URL at ${NEXT} serve ${shellWord(out)}.`,
+  },
+  retell: {
+    label: "Retell",
+    problem: retellProblem,
+    draft: draftFromRetell,
+    render: renderRetellDraft,
+    noTools: "the agent has no tool sandtable can model, and a domain needs one: give it a custom function, or an end_call or transfer_call tool",
+    serve: (out) => `To grade the agent's own test calls on this world, run ${NEXT} serve ${shellWord(out)} and set each custom function's URL to its /webhook/<tool> route there.`,
+  },
+  elevenlabs: {
+    label: "ElevenLabs",
+    problem: elevenLabsProblem,
+    draft: draftFromElevenLabs,
+    render: renderElevenLabsDraft,
+    noTools: "the agent has no tool sandtable can model, and a domain needs one: give it a webhook or client tool, or the end_call or transfer_to_number system tool",
+    serve: (out) => `To grade the agent's own test calls on this world, run ${NEXT} serve ${shellWord(out)} and point each webhook tool's base URL at it: it serves each tool's http route.`,
+  },
+};
+
 program
   .command("import")
-  .argument("<platform>", "the platform the config comes from: vapi")
-  .argument("<path>", "the exported config: a JSON file, or a directory of them (searched recursively), with the assistant and optionally its tools and simulation scenarios")
-  .description("draft a domain from a voice-agent platform's assistant config, with no model call (review the output before trusting it)")
+  .argument("<platform>", "the platform the config comes from: vapi, retell or elevenlabs")
+  .argument("<path>", "the exported config: a JSON file, or a directory of them (searched recursively), with the agent and optionally its tools and tests")
+  .description("draft a domain from a voice-agent platform's agent config, with no model call (review the output before trusting it)")
   .option("-o, --out <dir>", "domain directory to create", "sandtable")
+  .option("--agent <name or id>", "the agent to import, when the export holds several")
   .option("--force", "overwrite existing files")
-  .action(async (platform: string, input: string, o: { out: string; force?: boolean }) => {
-    if (platform !== "vapi") throw new InvalidArgumentError(`unknown platform "${platform}": import supports vapi`);
+  .action(async (platform: string, input: string, o: { out: string; agent?: string; force?: boolean }) => {
+    const importer = Object.hasOwn(IMPORTERS, platform) ? IMPORTERS[platform]! : undefined;
+    if (!importer) throw new InvalidArgumentError(`unknown platform "${platform}": import supports vapi, retell and elevenlabs`);
     const files = await readJsonFiles(input);
-    const problem = vapiProblem(files);
+    const problem = importer.problem(files, o.agent);
     if (problem) throw new Error(`${input} ${problem}. Nothing was written.`);
-    const draft = draftFromVapi(files);
-    if (draft.tools.length === 0) {
-      throw new Error([`${input}: the assistant has no tool sandtable can model, and a domain needs one: give it a function tool, or a transferCall or endCall tool. Nothing was written.`, ...draft.warnings.map((w) => `  ! ${w}`)].join("\n"));
-    }
-    const rendered = renderVapiDraft(draft);
+    const draft = importer.draft(files, o.agent);
+    if (draft.tools.length === 0) throw new Error([`${input}: ${importer.noTools}. Nothing was written.`, ...draft.warnings.map((w) => `  ! ${w}`)].join("\n"));
+    const rendered = importer.render(draft);
     const written = await writeDraft(o.out, { [DOMAIN_FILE]: rendered.domain, "policy.md": draft.policy, "tasks.yaml": rendered.tasks }, o.force);
-    console.log(`Imported ${draft.name} from Vapi: ${draft.tools.length} tools, ${Object.keys(draft.tables).length} tables, ${draft.tasks.length} tasks, all pending review.`);
+    console.log(`Imported ${draft.name} from ${importer.label}: ${draft.tools.length} tools, ${Object.keys(draft.tables).length} tables, ${draft.tasks.length} tasks, all pending review.`);
     for (const w of draft.warnings) console.log(`  ! ${w}`);
     for (const f of written) console.log(`  wrote ${f}`);
     console.log(
-      `\nNext: accept or fix each drafted item, draft the rules from the prompt, and validate:\n  ${NEXT} review ${shellWord(o.out)}\n  ${NEXT} init --sop ${shellWord(path.join(o.out, "policy.md"))} -o ${shellWord(o.out)} --dry-run\n  ${NEXT} validate ${shellWord(o.out)} --strict\nTo grade the assistant's own test calls on this world, point its server URL at ${NEXT} serve ${shellWord(o.out)}.`,
+      `\nNext: accept or fix each drafted item, draft the rules from the prompt, and validate:\n  ${NEXT} review ${shellWord(o.out)}\n  ${NEXT} init --sop ${shellWord(path.join(o.out, "policy.md"))} -o ${shellWord(o.out)} --dry-run\n  ${NEXT} validate ${shellWord(o.out)} --strict\n${importer.serve(o.out)}`,
     );
   });
 

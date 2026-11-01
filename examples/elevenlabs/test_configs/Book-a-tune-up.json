@@ -1,0 +1,29 @@
+{
+    "id": "test_pinecrest_tuneup",
+    "name": "Book a tune-up",
+    "type": "simulation",
+    "chat_history": [],
+    "dynamic_variables": {
+        "customer_phone": "+15555550142"
+    },
+    "simulation_scenario": "You are Riley Chen. You want a tune-up on November 12, 2026, and you'll take that date only. Confirm when asked, then hang up once it's booked.",
+    "simulation_max_turns": 8,
+    "success_conditions": [
+        "The agent books a tune-up for November 12, 2026, after the caller confirms it",
+        "The agent gives the caller the confirmation number"
+    ],
+    "tool_mock_config": {
+        "mocking_strategy": "selected",
+        "fallback_strategy": "raise_error",
+        "mocked_tool_ids": ["tool_pinecrest_bookservice"]
+    },
+    "tool_mock_overrides": {
+        "tool_pinecrest_bookservice": [
+            {
+                "mock_result": "Booked: tune-up for Riley Chen on 2026-11-12, confirmation PB-77",
+                "parameter_conditions": [],
+                "is_error": false
+            }
+        ]
+    }
+}

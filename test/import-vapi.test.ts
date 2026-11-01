@@ -81,7 +81,7 @@ describe("import vapi: the bundled example", () => {
   it.skipIf(!process.features.typescript)("refuses an unknown platform, an export with no assistant or two, and a file that isn't JSON, writing nothing", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-import-bad-"));
     const fail = (...args: string[]) => run(process.execPath, [cli, ...args]).catch((e: { code: number; stderr: string }) => e);
-    expect(await fail("import", "retell", example, "-o", path.join(dir, "x"))).toMatchObject({ code: 2, stderr: expect.stringContaining('unknown platform "retell": import supports vapi') });
+    expect(await fail("import", "bland", example, "-o", path.join(dir, "x"))).toMatchObject({ code: 2, stderr: expect.stringContaining('unknown platform "bland": import supports vapi') });
     await writeFile(path.join(dir, "tool.json"), JSON.stringify(fn("x")));
     expect(await fail("import", "vapi", path.join(dir, "tool.json"), "-o", path.join(dir, "out"))).toMatchObject({ code: 2, stderr: expect.stringContaining("has no Vapi assistant") });
     await writeFile(path.join(dir, "two.json"), JSON.stringify([assistant({ name: "A" }), assistant({ name: "B" })]));
