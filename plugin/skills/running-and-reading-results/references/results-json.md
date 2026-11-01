@@ -74,6 +74,9 @@ SuiteResult
                                critical, every invariant). `--baseline` calls a task whose hash changed `changed`
     trials[]                   sorted by trial number
       taskId, trial            trial counts from 0
+      clock?                   with a clock in the domain or task: the minute the trial's dates ($today+2d) resolved
+                               at, such as "2026-11-02T09:00", no time zone; for clock: now, when it started. regrade
+                               resolves them at it again
       passed                   false for a skipped trial too
       skipped?                 true when it ended in an error before the agent broke a hard invariant or called a
                                not_called tool: not graded, left out of the scores. Otherwise an error fails it

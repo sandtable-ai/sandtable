@@ -3,13 +3,14 @@ import type { AgentAdapter } from "./types.ts";
 /**
  * Rehearse any agent that speaks this small HTTP protocol (one POST per step):
  *
- *   request:  { session_id, system, tools, context?, world?, message? , tool_results? }
+ *   request:  { session_id, system, tools, context?, now?, world?, message? , tool_results? }
  *   response: { reply: string }                       // done with this turn
  *          or { tool_calls: [{ id, name, arguments }] } // sandtable executes them and POSTs tool_results back
  *
  * The agent keeps its own conversation state keyed by session_id. Tool calls run against
  * sandtable's simulated world, so nothing touches the customer's real systems. With `run --serve`, `world` holds the
- * trial's URLs, for an agent that calls its tools itself and only ever replies.
+ * trial's URLs, for an agent that calls its tools itself and only ever replies. With a clock, `now` is the trial's
+ * (`2026-11-02T09:00`).
  */
 export function httpAgent(url: string, opts: { headers?: Record<string, string>; maxSteps?: number } = {}): AgentAdapter {
   const maxSteps = opts.maxSteps ?? 16;
@@ -27,6 +28,7 @@ export function httpAgent(url: string, opts: { headers?: Record<string, string>;
               system: ctx.system,
               tools: ctx.tools,
               ...(ctx.context ? { context: ctx.context } : {}),
+              ...(ctx.now ? { now: ctx.now } : {}),
               ...(ctx.world ? { world: ctx.world } : {}),
               ...body,
             }),

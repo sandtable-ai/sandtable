@@ -101,6 +101,10 @@ Set the platform's server or webhook URL to sandtable's, through a tunnel such a
 
 A conversation is graded on the end state, the invariants and the required and forbidden tools, as any trial is, and on what the agent said when the transcript comes with it. Each tool call goes before the agent line that came after it in time, when every line carries a time (Vapi's do), comparing the platform's clock with this machine's, so a skewed clock can move a call across a line; ElevenLabs' lines carry their second in the call, which counts from the call's start time; otherwise, as for Retell, whose transcript has no times, all tool calls go before the agent's first line. Without a transcript, a task that checks what the agent said (`reply_includes`) can't be graded on it, so the trial is skipped, unless the agent broke a rule; `never_disclose` rules can't fire either. Agent turn latency is unknown, so the report shows `n/a`.
 
+## An agent with its own clock
+
+An agent on a hosted platform, or one that reads the system time, knows the real date. To it, a seeded `pickup_date: "2026-11-04"` soon lies in the past, whatever the policy says today is. Give such a domain `clock: now`, and seed its dates relative to it, such as `pickup_date: $today+2d`: each trial, and each conversation `sandtable serve` grades, starts at the minute it begins, and its dates move with it. The agent can read that minute as `now` in every [HTTP step](/reference/http-protocol#request) and as `ctx.now`. Each trial records its `clock` in `results.json`, so `regrade` gives the same verdicts on any day. [Clock and relative dates](/reference/spec#clock-and-relative-dates) has the details.
+
 ## What is graded
 
 Everything, as for any run: the end state, the invariants, the required and forbidden tools, and what the agent said. In `results.json`, a call that came over the server has [`via`](/reference/results-schema#trajectoryevent) (`rest`, `mcp` or `webhook`), and the report shows it. An agent may mix them, and may still call `callTool` too: every call lands in the same trial's log, in order.

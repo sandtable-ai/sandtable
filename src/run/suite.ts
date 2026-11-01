@@ -178,6 +178,11 @@ export interface SuiteOptions {
    * trial's URLs as `ctx.world`, and its calls over REST, MCP or a webhook are graded like in-process ones.
    */
   server?: WorldServer;
+  /**
+   * The current time, read as each trial starts, for a domain or task with `clock: now`: the system clock unless given,
+   * such as a fixed time in a test. Each trial records the minute it read as `clock`.
+   */
+  now?: () => Date;
 }
 
 export async function runSuite(opts: SuiteOptions): Promise<SuiteResult> {
@@ -195,7 +200,7 @@ export async function runSuite(opts: SuiteOptions): Promise<SuiteResult> {
 
   const jobs = tasks.flatMap((task) => Array.from({ length: k }, (_, trial) => ({ task, trial })));
   const results = await pool(jobs, opts.concurrency ?? 4, async ({ task, trial }) => {
-    const r = await runEpisode({ domain, task, agent, user, trial, runId, prompt, ...(opts.server ? { server: opts.server } : {}) });
+    const r = await runEpisode({ domain, task, agent, user, trial, runId, prompt, ...(opts.server ? { server: opts.server } : {}), ...(opts.now ? { now: opts.now } : {}) });
     opts.onTrial?.(r);
     return r;
   });

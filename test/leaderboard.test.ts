@@ -173,7 +173,7 @@ describe("leaderboard", () => {
     await expect(run("scripted:naive")).rejects.toThrow(`  - Candidate, in ${folder} (2 task(s) at k=1): they are for agent scripted:careful, not scripted:naive\n`);
     const edited = { ...domain, policy: `${domain.policy}\n\nA new rule.` };
     await expect(run("scripted:careful", edited)).rejects.toThrow(
-      `(2 task(s) at k=1): the agent or the caller would be given something else now: the policy, a tool's schema, or a task's caller prompt, opening, script or turn limit changed since it ran\n`,
+      `(2 task(s) at k=1): the agent or the caller would be given something else now: the policy, a tool's schema, the clock, or a task's caller prompt, opening, script or turn limit changed since it ran\n`,
     );
     expect(JSON.parse(await readFile(path.join(folder, "run.json"), "utf8"))).toMatchObject({ agent: "scripted:careful" });
 

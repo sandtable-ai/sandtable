@@ -21,6 +21,7 @@ npx sandtable-ai run ./my-domain --agent http://localhost:8787/step
   "system": "...",                             // sandtable's default prompt; ignore it if your agent has its own
   "tools": [{ "name": "...", "description": "...", "input_schema": { } }],
   "context": { "caller_id": "+1-555-0148" },   // only when the task sets given.context
+  "now": "2026-11-02T09:00",                   // only when the domain or task has a clock
   "world": { "url": "http://127.0.0.1:4010/s/t1", "mcp": "…/mcp", "webhook": "…/webhook" },   // only with run --serve
   "message": "I need $1,600 on that one.",     // a new user turn, or:
   "tool_results": [{ "id": "c1", "ok": true, "result": { } }]  // results of your previous tool_calls
@@ -30,9 +31,10 @@ npx sandtable-ai run ./my-domain --agent http://localhost:8787/step
 | Field | Type | Description |
 |---|---|---|
 | `session_id` | string | `<run-id>/<task-id>#<trial>`, with trials numbered from 0. The same for every step of one trial, and never reused by another run |
-| `system` | string | the default system prompt: the domain description and the policy |
+| `system` | string | the default system prompt: the domain description, the time when there is a clock, and the policy |
 | `tools` | array | the domain's tools: `name`, `description` and a JSON-schema `input_schema` (`type: "object"`, `properties`, `required`, `additionalProperties: false`) |
 | `context` | object | present only when the task sets [`given.context`](/reference/spec#per-task-world-and-context): what the system that connected the call knows, such as a caller ID or a trigger payload. The same on every step of the trial. `system` states it too, after the policy |
+| `now` | string | present only when the domain or the task has a [`clock`](/reference/spec#clock-and-relative-dates): the trial's "now", a date and time to the minute with no time zone, such as `2026-11-02T09:00`. The same on every step of the trial, and what the trial's dates such as `$today+2d` were resolved at. `system` states it too, as `It is now Monday, November 2, 2026, 9:00 AM.` An agent with its own prompt or its own clock should take the date from here |
 | `world` | object | present only with [`run --serve`](/guides/black-box): this trial's simulated world over HTTP, as `url` (the REST base), `mcp` and `webhook`. The same on every step of the trial. An agent that calls its tools there itself can answer every step with a `reply` and never send `tool_calls` |
 | `message` | string | present when the user has spoken: the start of a new turn |
 | `tool_results` | array | present when sandtable has run the tool calls from your previous response |
