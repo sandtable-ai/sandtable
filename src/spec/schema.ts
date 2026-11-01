@@ -209,8 +209,9 @@ const NeverInvariant = z
 
 /**
  * At most `max` calls of `tool`, counted per value of `per_arg` when given, and only the calls whose arguments match
- * `when`. A call breaks it when the earlier successful calls that count, plus this one, are more than `max`. The agent
- * never saw a call the API rejected or a fault hit succeed, so its retry is not one more. `max: 0` is a `never`.
+ * `when`. A call breaks it when the earlier calls that count, plus this one, are more than `max`. A call counts when it
+ * took effect: it succeeded, or its write landed though a fault made the agent see an error (`after_commit`). A call the
+ * API rejected, or one a fault stopped before it ran, didn't, so its retry is not one more. `max: 0` is a `never`.
  */
 const MaxCountInvariant = z
   .object({

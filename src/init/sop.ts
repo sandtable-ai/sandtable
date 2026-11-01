@@ -78,16 +78,19 @@ function outputSchema(tools: string[], tables: string[]) {
         "require: conditions on the record's fields; never: conditions on the call's arguments (empty = never call it at all); max_count: conditions on the call's arguments that pick the calls to count (empty = count every call)",
       ),
     arg: z.string().nullable().describe("limit: the numeric argument being bounded; monotonic: the argument that only moves one way; otherwise null"),
-    bound: z.enum(["lte", "gte"]).nullable().describe("limit: lte = at most, gte = at least; otherwise null"),
+    bound: z
+      .enum(["lte", "gte"])
+      .nullable()
+      .describe("limit: lte = at most, gte = at least; monotonic: gte = each value at least the previous one (it only goes up), lte = at most the previous one (it only goes down); otherwise null"),
     bound_value: z.number().nullable().describe("limit: constant bound, or null when the bound is a record field"),
     bound_ref: FieldRef.nullable().describe("limit: record field holding the bound; otherwise null"),
-    // Not nullable: structured outputs allow at most 16 union-typed parameters in a schema, and null is a union.
+    // Not nullable: structured outputs allow at most 16 union-typed parameters in a schema, and null is a union. Few
+    // fields, too: Bedrock refuses a schema whose compiled grammar is too large, which a direction enum for monotonic
+    // made it, so monotonic reuses bound, and strict is left to hand-written rules.
     per_arg: z
       .string()
       .describe("max_count and monotonic: the argument whose each value is counted or compared on its own, e.g. load_id for \"per load\"; otherwise an empty string (also for all calls of the tool together)"),
     max: z.number().describe("max_count: the most calls allowed, a whole number of 1 or more; otherwise 0"),
-    direction: z.enum(["up", "down", "none"]).describe("monotonic: up = each value at least the previous one, down = at most the previous one; otherwise none"),
-    strict: z.boolean().describe("monotonic: true when a value may not repeat the previous one either; otherwise false"),
     left: FieldRef.nullable().describe("match: first record field; otherwise null"),
     right: FieldRef.nullable().describe("match: second record field that must equal the first; otherwise null"),
     protected_field: z
@@ -131,7 +134,9 @@ The agent acts only through the tools listed below. Each tool call is checked ag
 - match: two record fields referenced by the call must be equal (e.g. carrier equipment must match load equipment).
 - never: \`tool\` must never be called, or never with arguments satisfying all \`conditions\`. This is also how "a call like this must include Y" is checked: a condition on what makes the call one of those, and \`exists: false\` on Y, the argument the agent would have left out (e.g. never \`create_refund\` with \`method\` in [check, gift_card] and \`mailing_address\` exists false: a mailed refund needs the address).
 - max_count: \`tool\` may be called at most \`max\` times (1 or more; for none at all, use never), counted separately for each value of \`per_arg\` when given, and only the calls whose arguments satisfy all \`conditions\` when there are any (e.g. at most 3 counter-offers per load: per_arg load_id, max 3). Failed calls don't count.
-- monotonic: across the calls of \`tool\`, for the same value of \`per_arg\` when given, the argument \`arg\` only moves one way: \`direction\` up (each value at least the previous one, e.g. never lower an offer) or down (at most the previous one); \`strict\` true when it may not repeat either.
+- monotonic: across the calls of \`tool\`, for the same value of \`per_arg\` when given, the argument \`arg\` only moves one way: \`bound\` gte when it only goes up (each value at least the previous one, e.g. never lower an offer), lte when it only goes down.
+
+A rule on how many times the agent may do something ("at most 3 counter-offers per load") is max_count on the tool that does it, not a limit on a round or counter argument the agent fills in itself.
 
 Conditions compare a field (a record's for require, the call's argument for never and max_count) using op eq, ne, gt, gte, lt or lte with one value; in or nin with a list of values (the field equals one of them, or none of them); or exists with true or false (the field is present, or absent).
 - never_disclose: the agent must never say any value of \`protected_field\` (an internal number or text), except a value equal to \`unless_arg\` of a successful \`unless_tool\` call. \`tool\` is ignored for this kind (repeat any tool).
@@ -279,8 +284,8 @@ export function proposalToInvariant(p: Proposal, sopFile: string): Invariant | s
       raw = { ...base, max_count: { tool: p.tool, ...(p.per_arg ? { per_arg: p.per_arg } : {}), max: p.max, ...(p.conditions.length ? { when: where } : {}) } };
       break;
     case "monotonic":
-      if (!p.arg || !p.direction || p.direction === "none") return "monotonic needs arg and direction";
-      raw = { ...base, monotonic: { tool: p.tool, arg: p.arg, ...(p.per_arg ? { per_arg: p.per_arg } : {}), direction: p.direction, ...(p.strict ? { strict: true } : {}) } };
+      if (!p.arg || !p.bound) return "monotonic needs arg and bound";
+      raw = { ...base, monotonic: { tool: p.tool, arg: p.arg, ...(p.per_arg ? { per_arg: p.per_arg } : {}), direction: p.bound === "gte" ? "up" : "down" } };
       break;
     case "never_disclose":
       if (!p.protected_field) return "never_disclose needs protected_field";

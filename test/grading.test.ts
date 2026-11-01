@@ -125,10 +125,16 @@ describe("max_count", () => {
     expect(details(once, callback(), history)).toEqual([]);
   });
 
-  it("doesn't count a call the API rejected or a fault hit, so a retry is not another call", () => {
+  it("doesn't count a call the API rejected or a fault stopped, so a retry is not another call", () => {
     const history = [logged("L-1012", 900), logged("L-1012", 925, false), { ...logged("L-1012", 925, false), fault: { error: "timeout" as const, status: 504 } }, logged("L-1012", 925)];
     expect(details(perLoad, offer("L-1012", 975), history)).toEqual([]);
     expect(details(perLoad, offer("L-1012", 1000), [...history, logged("L-1012", 975)])).toEqual(["log_offer was called 4 times for load_id=L-1012; at most 3 are allowed"]);
+  });
+
+  it("counts a call whose write landed though a fault made the agent see an error, as the world does", () => {
+    const landed = { ...logged("L-1012", 925, false), fault: { error: "timeout" as const, status: 504, committed: true } };
+    const history = [logged("L-1012", 900), landed, logged("L-1012", 925)];
+    expect(details(perLoad, offer("L-1012", 975), history)).toEqual(["log_offer was called 4 times for load_id=L-1012; at most 3 are allowed"]);
   });
 
   it("counts a retry after a timeout as the same counter-offer in a run", () => {
@@ -140,6 +146,15 @@ describe("max_count", () => {
     expect(runner.violations).toEqual([]);
     runner.call("log_offer", offer("L-1012", 1000).args);
     expect(runner.violations.map((v) => [v.invariant, v.callIndex])).toEqual([["three-per-load", 4]]);
+  });
+
+  it("counts a retry after an after_commit timeout as one more counter-offer in a run, since the first one landed", () => {
+    const t = TaskSpec.parse({ id: "t", user: { instructions: "x" }, expect: { state: [] }, faults: [{ tool: "log_offer", call: 2, error: "timeout", after_commit: true }] });
+    const d = { ...domain, invariants: [perLoad], tasks: [t] };
+    const runner = createToolRunner(d, worldFor(d, t), undefined, t);
+    const outcomes = [900, 925, 925, 975].map((counter) => runner.call("log_offer", offer("L-1012", counter).args).ok);
+    expect(outcomes).toEqual([true, false, true, true]);
+    expect(runner.violations.map((v) => [v.invariant, v.callIndex])).toEqual([["three-per-load", 3]]);
   });
 });
 
@@ -173,10 +188,13 @@ describe("monotonic", () => {
     expect(details(asks(true), offer("L-1012", 925, 1300), history)).toEqual([]);
   });
 
-  it("compares with the last successful call: a rejected or faulted one doesn't count", () => {
+  it("compares with the last call that took effect: a rejected one, or one a fault stopped, doesn't count", () => {
     const history = [logged("L-1012", 925), logged("L-1012", 1000, false), { ...logged("L-1012", 1100, false), fault: { error: "timeout" as const, status: 504 } }];
     expect(details(up(), offer("L-1012", 950), history)).toEqual([]);
     expect(details(up(), offer("L-1012", 900), history)).toEqual(["log_offer counter_offer=900 is below the previous 925 for load_id=L-1012"]);
+    // A write that landed under an after_commit fault is the value to beat.
+    const landed = { ...logged("L-1012", 1100, false), fault: { error: "timeout" as const, status: 504, committed: true } };
+    expect(details(up(), offer("L-1012", 950), [...history, landed])).toEqual(["log_offer counter_offer=950 is below the previous 1100 for load_id=L-1012"]);
   });
 
   it("doesn't check a call missing the arg, and compares with the last call that had it", () => {

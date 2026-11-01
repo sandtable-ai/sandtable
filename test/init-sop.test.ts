@@ -25,7 +25,7 @@ async function draftedDomainDir() {
   return { dir, fields };
 }
 
-const none = { first_tool: null, same_args: [], table: null, key_arg: null, conditions: [], arg: null, bound: null, bound_value: null, bound_ref: null, per_arg: "", max: 0, direction: "none", strict: false, left: null, right: null, protected_field: null, unless_tool: null, unless_arg: null };
+const none = { first_tool: null, same_args: [], table: null, key_arg: null, conditions: [], arg: null, bound: null, bound_value: null, bound_ref: null, per_arg: "", max: 0, left: null, right: null, protected_field: null, unless_tool: null, unless_arg: null };
 const proposals = [
   { ...none, rule_id: "r1", id: "verify-before-book", description: "Vet before booking", quote: "look it up with `verify_carrier` before you discuss booking", kind: "before", tool: "create_booking", first_tool: "get_carrier", same_args: ["mc_number"] },
   { ...none, rule_id: "r2", id: "eligible-carrier", description: "Only eligible carriers", quote: "Do **not** book a carrier if any of these is true", kind: "require", tool: "create_booking", table: "carriers", key_arg: "mc_number", conditions: [{ field: "insurance_status", op: "eq", value: "valid" }, { field: "safety_rating", op: "ne", value: "unsatisfactory" }] },
@@ -175,25 +175,28 @@ describe("init from an SOP", () => {
     ];
     const drafted = [
       { ...none, rule_id: "r1", id: "three-rounds-max", description: "At most three counter-offers per load.", quote: rules[0]!.quote, kind: "max_count", tool: "log_offer", per_arg: "load_id", max: 3 },
-      { ...none, rule_id: "r2", id: "counters-only-go-up", description: "Counter-offers on a load only go up.", quote: rules[1]!.quote, kind: "monotonic", tool: "log_offer", arg: "counter_offer", per_arg: "load_id", direction: "up" },
+      { ...none, rule_id: "r2", id: "counters-only-go-up", description: "Counter-offers on a load only go up.", quote: rules[1]!.quote, kind: "monotonic", tool: "log_offer", arg: "counter_offer", per_arg: "load_id", bound: "gte" },
       { ...none, rule_id: "r3", id: "two-payment-handoffs", description: "x", quote: rules[2]!.quote, kind: "max_count", tool: "transfer_to_human", per_arg: "mc_number", max: 2, conditions: [{ field: "reason", op: "eq", value: "payment" }] },
       { ...none, rule_id: "r4", id: "no-handoffs", description: "x", quote: rules[3]!.quote, kind: "max_count", tool: "transfer_to_human", max: 0 },
       { ...none, rule_id: "r4", id: "no-direction", description: "x", quote: rules[3]!.quote, kind: "monotonic", tool: "log_offer", arg: "counter_offer" },
+      { ...none, rule_id: "r2", id: "asks-only-come-down", description: "x", quote: rules[1]!.quote, kind: "monotonic", tool: "log_offer", arg: "carrier_ask", per_arg: "load_id", bound: "lte" },
     ];
     const { client, requests } = fakeClient({ rules, invariants: drafted, soft_rules: [] });
     const res = await draftInvariantsFromSop({ domain, sop, sopFile: "sop.md", claude: { client } });
 
-    expect(res.invariants.map((i) => i.id)).toEqual(["three-rounds-max", "counters-only-go-up", "two-payment-handoffs"]);
+    expect(res.invariants.map((i) => i.id)).toEqual(["three-rounds-max", "counters-only-go-up", "two-payment-handoffs", "asks-only-come-down"]);
+    expect(res.invariants[3]).toMatchObject({ monotonic: { arg: "carrier_ask", direction: "down" } });
     expect(res.invariants[0]).toMatchObject({ max_count: { tool: "log_offer", per_arg: "load_id", max: 3 } });
     expect(res.invariants[1]).toMatchObject({ monotonic: { tool: "log_offer", arg: "counter_offer", per_arg: "load_id", direction: "up" } });
     expect(res.invariants[1]).not.toHaveProperty("monotonic.strict");
     expect(res.invariants[2]).toMatchObject({ max_count: { tool: "transfer_to_human", per_arg: "mc_number", max: 2, when: { reason: "payment" } } });
     const w = res.warnings.join("\n");
     expect(w).toContain("dropped no-handoffs: max is 1 or more: for a tool that may not be called at all, use never: { tool: transfer_to_human }");
-    expect(w).toContain("dropped no-direction: monotonic needs arg and direction");
+    expect(w).toContain("dropped no-direction: monotonic needs arg and bound");
     const system = (requests[0] as { system: string }).system;
     expect(system).toMatch(/- max_count: /);
     expect(system).toMatch(/- monotonic: /);
+    expect(system).toContain("is max_count on the tool that does it, not a limit on a round or counter argument");
 
     const checked = { ...domain, invariants: res.invariants };
     const offer = (counter_offer: number) => ({ load_id: "L-1012", mc_number: "100707", round: 1, carrier_ask: 1300, counter_offer });

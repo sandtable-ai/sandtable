@@ -101,7 +101,7 @@ function evaluate(
     const { tool, per_arg, max, when } = inv.max_count;
     if (call.name !== tool) return;
     if (when && !matches(call.args, when)) return;
-    const counts = (h: CallRecord) => h.ok && h.name === tool && (!when || matches(h.args, when)) && (per_arg === undefined || equal(h.args[per_arg], call.args[per_arg]));
+    const counts = (h: CallRecord) => landed(h) && h.name === tool && (!when || matches(h.args, when)) && (per_arg === undefined || equal(h.args[per_arg], call.args[per_arg]));
     const n = history.filter(counts).length + 1;
     if (n <= max) return;
     return `${tool} was called ${n} times${when ? " with matching arguments" : ""}${scope(per_arg, call.args)}; at most ${max} ${max === 1 ? "is" : "are"} allowed`;
@@ -111,7 +111,7 @@ function evaluate(
     if (call.name !== tool) return;
     const value = call.args[arg];
     if (value === undefined || value === null) return;
-    const prev = history.findLast((h) => h.ok && h.name === tool && h.args[arg] !== undefined && h.args[arg] !== null && (per_arg === undefined || equal(h.args[per_arg], call.args[per_arg])));
+    const prev = history.findLast((h) => landed(h) && h.name === tool && h.args[arg] !== undefined && h.args[arg] !== null && (per_arg === undefined || equal(h.args[per_arg], call.args[per_arg])));
     if (!prev) return;
     const was = prev.args[arg];
     const d = compare(value, was);
@@ -148,6 +148,12 @@ export function invariantTool(inv: Invariant): string | undefined {
   if ("monotonic" in inv) return inv.monotonic.tool;
   return undefined;
 }
+
+/**
+ * Whether a call took effect, as max_count and monotonic count calls: it succeeded, or a fault made the agent see an
+ * error after its write landed (after_commit). A call the API rejected, or one a fault stopped before it ran, didn't.
+ */
+const landed = (h: CallRecord) => h.ok || h.fault?.committed === true;
 
 /** Which calls a max_count or monotonic rule grouped by `per_arg`, as its violations name them: " for load_id=L-1012". */
 function scope(perArg: string | undefined, args: Args): string {
