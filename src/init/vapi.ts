@@ -133,7 +133,8 @@ export function draftFromVapi(files: VapiFile[], agent?: string): PlatformDraft 
         task.notes.push(`Its scenario's mock of ${toolName ?? "a tool"} is disabled, so it was left out.`);
         continue;
       }
-      const tool = tools.find((t) => t.name === toolName || t.platformName === toolName);
+      // A mock that names no tool is for none: undefined would match every tool with no platform name.
+      const tool = toolName === undefined ? undefined : tools.find((t) => t.name === toolName || t.platformName === toolName);
       if (!tool) {
         warnings.push(`${file}: a tool mock for ${toolName ?? "a tool with no toolName"}, which the assistant doesn't have; skipped`);
         continue;
@@ -167,7 +168,11 @@ export function draftFromVapi(files: VapiFile[], agent?: string): PlatformDraft 
 
 /** A Vapi tool as a sandtable tool, or undefined for a type the draft can't model. */
 function toolFrom(json: Json, file: string, names: Set<string>, warnings: string[]): PlatformTool | undefined {
-  const type = String(json.type);
+  const type = str(json.type);
+  if (!type) {
+    warnings.push(`${file}: a tool with no type; skipped`);
+    return undefined;
+  }
   if (type === "function") {
     const fn = isPlainObject(json.function) ? json.function : {};
     const raw = str(fn.name);

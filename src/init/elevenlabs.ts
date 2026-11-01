@@ -345,7 +345,7 @@ function expectToolCall(test: Json, task: PlatformTask, toolFor: (id: string) =>
   if (!id) return undefined;
   const tool = toolFor(id);
   if (!tool) {
-    warnings.push(`${file}: the test's tool_call_parameters name the tool ${id}, which the agent doesn't have; skipped`);
+    warnings.push(`${file}: the test's tool_call_parameters name the tool ${id}, which the agent doesn't have, so its check is left out of the task`);
     return undefined;
   }
   if (check.verify_absence === true) {
@@ -398,7 +398,11 @@ const systemKind = (config: Json) => (config.type === "system" ? ((isPlainObject
 /** An ElevenLabs tool as a sandtable tool, or undefined for a type the draft can't model. */
 function toolFrom(ref: ToolRef, names: Set<string>, warnings: string[], routes: Map<string, string>): { tool: PlatformTool; builtin?: "end" | "transfer" } | undefined {
   const { file, config } = ref;
-  const type = String(config.type);
+  const type = str(config.type);
+  if (!type) {
+    warnings.push(`${file}: a tool with no type; skipped`);
+    return undefined;
+  }
   const raw = str(config.name);
   const kind = systemKind(config);
   if (kind) {

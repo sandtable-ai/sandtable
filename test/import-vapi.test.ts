@@ -188,6 +188,19 @@ describe("import vapi: mapping", () => {
     expect(draft.tasks[0]!.notes).toContain("Vapi graded it with so-a: write that as expect.state, called or not_called, which sandtable grades without a model.");
   });
 
+  it("drops a mock that names no tool rather than giving it to the first tool, and warns about a tool with no type (#472)", () => {
+    const { draft, domain } = domainOf(
+      files(
+        ["a.json", assistant({}, { tools: [fn("lookup", { id: { type: "string" } }, ["id"]), { function: { name: "untyped" } }] })],
+        ["s.json", { name: "Nameless", instructions: "Ask.", toolMocks: [{ result: { id: "7" } }] }],
+      ),
+    );
+    expect(domain.tasks[0]!.expect.called).toEqual([]);
+    expect(domain.tasks[0]!.given?.rows).toBeUndefined();
+    expect(draft.warnings).toContain("s.json: a tool mock for a tool with no toolName, which the assistant doesn't have; skipped");
+    expect(draft.warnings).toContain("a.json: a tool with no type; skipped");
+  });
+
   it("says why it can't import", () => {
     expect(vapiProblem(files(["t.json", fn("x")]))).toMatch(/has no Vapi assistant/);
     expect(vapiProblem(files(["a.json", assistant()]))).toBeUndefined();
