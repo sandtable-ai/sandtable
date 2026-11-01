@@ -244,7 +244,8 @@ describe("the plugin's plan-before-paid-init hook", () => {
     expect(shown(`pnpm --dir ${root} run sandtable init ${args}`, dryAt(root), deep)).toContain(plan);
     expect(shown(`pnpm -C .. run sandtable init ${args}`, dryAt(root), sub)).toContain(plan);
     expect(shown(`pnpm --prefix=sub run sandtable init ${args}`, dryAt(root), root)).toBe(differs);
-    // A manifest of pnpm's other kinds marks a root, and a node_modules folder alone doesn't, as it does for npm.
+    // A manifest of pnpm's other kinds marks a root. Under a folder with only node_modules, pnpm fails for want of a
+    // manifest, so no init runs and the hook's answer doesn't matter; it reads past that folder, unlike npm.
     const yaml = path.join(root, "yaml");
     mkdirSync(path.join(yaml, "inner"), { recursive: true });
     writeFileSync(path.join(yaml, "package.yaml"), "scripts:\n  sandtable: sandtable\n");
@@ -253,7 +254,8 @@ describe("the plugin's plan-before-paid-init hook", () => {
     mkdirSync(path.join(vendor, "node_modules"), { recursive: true });
     mkdirSync(path.join(vendor, "inner"));
     expect(shown(`pnpm run sandtable init ${args}`, dryAt(root), path.join(vendor, "inner"))).toContain(plan);
-    // Without run, a root with no sandtable script runs the installed bin in the shell's folder, as pnpm exec does.
+    // Without run, a root with no sandtable script runs the installed bin in the shell's folder, as pnpm exec does. pnpm
+    // finds the bin only where node_modules/.bin is, so from a subfolder it fails and no init runs.
     const bin = path.join(root, "bin");
     mkdirSync(path.join(bin, "sub"), { recursive: true });
     writeFileSync(path.join(bin, "package.json"), JSON.stringify({ scripts: { test: "vitest" } }));
