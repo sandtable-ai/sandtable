@@ -222,6 +222,55 @@ describe("the plugin's plan-before-paid-init hook", () => {
     expect(shown(`npm exec sandtable-ai -- init ${args}`, dryAt(sub), sub)).toContain(plan);
   });
 
+  it("resolves a pnpm script's paths from its package root, where pnpm runs it (#437)", () => {
+    const plan = PLAN_LINE.replace("Plan: ", "");
+    const differs = "sandtable: Claude is running a model-backed init that differs from its dry runs, so its plan isn't known. It calls a model and costs money.";
+    const root = mkdtempSync(path.join(os.tmpdir(), "sandtable-hook-pnpm-"));
+    const sub = path.join(root, "sub");
+    const deep = path.join(sub, "deep");
+    mkdirSync(deep, { recursive: true });
+    writeFileSync(path.join(root, "package.json"), JSON.stringify({ scripts: { sandtable: "sandtable" } }));
+    const withCwd = (line: string, cwd: string) => JSON.stringify({ ...JSON.parse(line), cwd });
+    const prompt = (cwd: string) => withCwd(JSON.stringify({ type: "user", message: { role: "user", content: "Draft the domain." } }), cwd);
+    const dryAt = (start: string, command = DRY) => [prompt(start), ...dryRun(undefined, command).map((l) => withCwd(l, start))];
+    const args = PAID.split(" init ")[1];
+    // pnpm runs a script from its package root, with run or without it, and passes the words after its name to it.
+    expect(shown(`pnpm run sandtable init ${args}`, dryAt(root), sub)).toContain(plan);
+    expect(shown(`pnpm run sandtable init ${args}`, dryAt(sub), sub)).toBe(differs);
+    expect(shown(`pnpm sandtable init ${args}`, dryAt(root), deep)).toContain(plan);
+    expect(shown(`pnpm run-script --silent sandtable init ${args}`, dryAt(deep, `pnpm sandtable init ${args} --dry-run`), sub)).toContain(plan);
+    expect(shown(`npm run sandtable -- init ${args}`, dryAt(deep, `pnpm run sandtable init ${args} --dry-run`), sub)).toContain(plan);
+    // -C, --dir and --prefix name the root itself.
+    expect(shown(`pnpm --dir ${root} run sandtable init ${args}`, dryAt(root), deep)).toContain(plan);
+    expect(shown(`pnpm -C .. run sandtable init ${args}`, dryAt(root), sub)).toContain(plan);
+    expect(shown(`pnpm --prefix=sub run sandtable init ${args}`, dryAt(root), root)).toBe(differs);
+    // A manifest of pnpm's other kinds marks a root, and a node_modules folder alone doesn't, as it does for npm.
+    const yaml = path.join(root, "yaml");
+    mkdirSync(path.join(yaml, "inner"), { recursive: true });
+    writeFileSync(path.join(yaml, "package.yaml"), "scripts:\n  sandtable: sandtable\n");
+    expect(shown(`pnpm run sandtable init ${args}`, dryAt(yaml), path.join(yaml, "inner"))).toContain(plan);
+    const vendor = path.join(root, "vendor");
+    mkdirSync(path.join(vendor, "node_modules"), { recursive: true });
+    mkdirSync(path.join(vendor, "inner"));
+    expect(shown(`pnpm run sandtable init ${args}`, dryAt(root), path.join(vendor, "inner"))).toContain(plan);
+    // Without run, a root with no sandtable script runs the installed bin in the shell's folder, as pnpm exec does.
+    const bin = path.join(root, "bin");
+    mkdirSync(path.join(bin, "sub"), { recursive: true });
+    writeFileSync(path.join(bin, "package.json"), JSON.stringify({ scripts: { test: "vitest" } }));
+    expect(shown(`pnpm sandtable init ${args}`, dryAt(path.join(bin, "sub")), path.join(bin, "sub"))).toContain(plan);
+    expect(shown(`pnpm sandtable init ${args}`, dryAt(bin), path.join(bin, "sub"))).toBe(differs);
+    // Whether a package.yaml has the script isn't read, so its plan isn't known.
+    expect(shown(`pnpm sandtable init ${args}`, dryAt(yaml), path.join(yaml, "inner"))).toBe(differs);
+    // pnpm exec and pnpm dlx run in the shell's folder.
+    expect(shown(`pnpm exec sandtable init ${args}`, dryAt(sub), sub)).toContain(plan);
+    expect(shown(`pnpm dlx sandtable-ai init ${args}`, dryAt(deep), deep)).toContain(plan);
+    expect(shown(`pnpm -C ${sub} exec sandtable init ${args}`, dryAt(sub), root)).toContain(plan);
+    // Workspace runs go to folders the hook doesn't follow.
+    for (const opt of ["-r", "--recursive", "--filter app", "-F app", "-w"]) {
+      expect(shown(`pnpm ${opt} run sandtable init ${args}`, dryAt(root), root)).toBe(differs);
+    }
+  });
+
   it("still says what the call is when the dry run of it printed no plan, or has no output yet", () => {
     const none = "sandtable: Claude is running a model-backed init, which calls a model and costs money. Its dry run printed no plan.";
     expect(shown(PAID, dryRun("error: --sop: no such file ./discovery/sop.md"))).toBe(none);
