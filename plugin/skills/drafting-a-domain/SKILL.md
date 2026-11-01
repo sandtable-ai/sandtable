@@ -48,7 +48,7 @@ Before a model-backed `init`, show the engineer what it will spend, even when th
 
 ```bash
 npx sandtable-ai init --sop ./discovery/sop.md --transcripts ./discovery/calls -o ./sandtable -m claude-sonnet-5-5 --dry-run
-# Plan: 10 model calls (1 for the SOP, 9 for transcripts) to claude-sonnet-5-5 on the Anthropic API; at most about $1.70 at list prices
+# Plan: 10 model calls (1 for the SOP, 9 for transcripts) to claude-sonnet-5-5 on the Anthropic API; at most about $1.86 at list prices
 ```
 
 After the dry run, write its plan to the engineer as a message of its own: the calls, the model, the provider and the dollar bound. Then:
@@ -57,7 +57,7 @@ After the dry run, write its plan to the engineer as a message of its own: the c
 
 The `Plan:` line in the command's output doesn't count: the engineer reads your reply, not the tool output. Never run the paid `init` straight after the dry run's output without your own plan message in between.
 
-The calls are 1 for the SOP and 1 per `.txt` or `.md` transcript. The model is `claude-opus-5-5` at effort `high` unless `-m` names another. The bound assumes every call writes its 16,000-token maximum, so a real draft usually costs a fraction of it, and `init` prints the actual tokens and cost after each step.
+The calls are 1 for the SOP and 1 per `.txt` or `.md` transcript. The model is `claude-opus-5-5` at effort `high` unless `-m` names another. The bound assumes every call writes its maximum, 32,000 tokens for the SOP and 16,000 for each transcript, so a real draft usually costs a fraction of it, and `init` prints the actual tokens and cost after each step.
 
 For a first draft of many transcripts, suggest Sonnet, half the price per token: `npx sandtable-ai init --transcripts ./discovery/calls -o ./sandtable -m claude-sonnet-5-5`.
 

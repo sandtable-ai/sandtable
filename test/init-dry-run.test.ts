@@ -27,7 +27,7 @@ async function scrubbed(...args: string[]): Promise<{ code: number; stdout: stri
 describe("the drafting plan", () => {
   it("counts the calls, resolves the model as a run does, and bounds the cost at list prices", () => {
     const p = draftPlan({ domainChars: 4000, sopChars: 8000, transcriptChars: [2000, 2000], claude: { model: "claude-sonnet-5-5", provider: "bedrock", region: "eu-west-1" } });
-    expect(p).toMatchObject({ sopCalls: 1, transcriptCalls: 2, model: "claude-sonnet-5-5", resolved: "eu.anthropic.claude-sonnet-5-5", region: "eu-west-1", outputTokens: 3 * 16000 });
+    expect(p).toMatchObject({ sopCalls: 1, transcriptCalls: 2, model: "claude-sonnet-5-5", resolved: "eu.anthropic.claude-sonnet-5-5", region: "eu-west-1", outputTokens: 32000 + 2 * 16000 });
     // Input at the cache-write rate and output at the output rate, both with Bedrock's 1.1× geo-profile premium.
     expect(p.costUsd).toBeCloseTo(((p.inputTokens * 2.5 + p.outputTokens * 10) * 1.1) / 1e6, 6);
     expect(planLine(p)).toBe(`Plan: 3 model calls (1 for the SOP, 2 for transcripts) to claude-sonnet-5-5 on Bedrock (eu-west-1, eu.anthropic.claude-sonnet-5-5); at most about $${p.costUsd!.toFixed(2)} at list prices`);

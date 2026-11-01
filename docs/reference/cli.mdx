@@ -42,7 +42,7 @@ npx sandtable-ai init --openapi api.yaml --sop policy.md --transcripts calls/ -o
 | `--sop <file>` | SOP or policy document: drafts invariants with Claude, each quoting its source |
 | `--transcripts <path>` | call or chat transcripts (a file, or a directory of `.txt`/`.md` files): drafts personas and tasks with Claude |
 | `-o, --out <dir>` | domain directory: `--openapi` creates it, and `--sop` and `--transcripts` add to it. Without `--openapi`, a domain must already be there, or `init` exits 2 and says to draft one with `--openapi` first. Default: `sandtable` |
-| `-m, --model <id>` | Claude model for the drafting steps. A small model such as `claude-haiku-5-5` can spend a call's whole output limit, 16,000 tokens, thinking and write no draft; `init` then says the reply was cut off, which is still billed, and names a larger model to try. Default: `claude-opus-5-5` |
+| `-m, --model <id>` | Claude model for the drafting steps. A small model such as `claude-haiku-5-5` can spend a call's whole output limit (32,000 tokens for the SOP, 16,000 for a transcript) thinking and write no draft; `init` then says the reply was cut off, which is still billed, and names a larger model to try. Default: `claude-opus-5-5` |
 | `--force` | overwrite existing files when drafting from `--openapi` |
 | `--dry-run` | print the plan for `--sop` and `--transcripts` (model calls, model, provider, a cost bound) and the files `--openapi` would write, then stop: no model call, nothing written, no credentials needed |
 | `--provider`, `--region`, `--aws-profile` | where Claude runs; see [provider options](#provider-options) |
@@ -54,10 +54,10 @@ When a transcript's call fails after the client's retries, `init` still writes w
 `--dry-run` prints the same plan line and stops, so you can see what a draft will spend before it spends anything. It needs no API key, AWS credentials or Bedrock package: it reads the inputs, resolves the model and provider from the flags, and calls nothing. With `--openapi` in the same command it lists the files it would write, and writes none:
 
 ```text
-Plan: 10 model calls (1 for the SOP, 9 for transcripts) to claude-sonnet-5-5 on Bedrock (eu-west-1, eu.anthropic.claude-sonnet-5-5); at most about $1.90 at list prices
+Plan: 10 model calls (1 for the SOP, 9 for transcripts) to claude-sonnet-5-5 on Bedrock (eu-west-1, eu.anthropic.claude-sonnet-5-5); at most about $2.08 at list prices
 ```
 
-The bound counts each call's prompt (about 4 characters a token, at the cache-write rate) and the most it may write (`max_tokens`, 16,000), so a real draft usually costs a fraction of it. Without `--region` or `AWS_REGION`, a Bedrock plan says the region comes from your AWS config. A missing input exits 2, as a real run would.
+The bound counts each call's prompt (about 4 characters a token, at the cache-write rate) and the most it may write (`max_tokens`: 32,000 for the SOP, whose reply lists every rule, and 16,000 for each transcript), so a real draft usually costs a fraction of it. Without `--region` or `AWS_REGION`, a Bedrock plan says the region comes from your AWS config. A missing input exits 2, as a real run would.
 
 ## import
 

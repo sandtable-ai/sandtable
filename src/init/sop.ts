@@ -4,7 +4,7 @@ import { validateDomain } from "../spec/load.ts";
 import { InvariantSpec, type Domain, type Invariant } from "../spec/schema.ts";
 import type { UsageByModel } from "../run/usage.ts";
 import { createClient, recordDraftUsage, requestBase, type ClaudeOptions } from "../sim/claude.ts";
-import { cutOff, cutOffHint } from "./cut-off.ts";
+import { cutOff, cutOffHint, lenient, SOP_MAX_TOKENS, SOP_TIMEOUT_MS } from "./cut-off.ts";
 
 /**
  * A rule the SOP states that no drafted invariant checks (or checks only in part). It is written as a
@@ -322,14 +322,14 @@ export async function draftInvariantsFromSop(input: {
   const fields = input.fields ?? knownFields(domain);
   const client = await createClient(input.claude ?? {});
   const schema = outputSchema(domain.tools.map((t) => t.name), Object.keys(domain.world.tables));
-  const base = requestBase(input.claude ?? {}, "high");
+  const base = { ...requestBase(input.claude ?? {}, "high"), max_tokens: SOP_MAX_TOKENS };
 
   const response = await client.beta.messages.parse({
     ...base,
-    output_config: { ...base.output_config, format: betaZodOutputFormat(schema) },
+    output_config: { ...base.output_config, format: lenient(betaZodOutputFormat(schema)) },
     system: SYSTEM,
     messages: [{ role: "user", content: `${describeDomain(domain, fields)}\n\n<sop file="${sopFile}">\n${sop}\n</sop>` }],
-  });
+  }, { timeout: SOP_TIMEOUT_MS });
   const usage: UsageByModel = {};
   recordDraftUsage(usage, input.claude ?? {}, base.model, response);
   if (response.stop_reason === "refusal") throw new Error("the model declined to draft invariants from this SOP");

@@ -20,11 +20,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 ### Changed
 
 - `examples/freight`: `three-rounds-max` is now a `max_count` of `log_offer` calls per load, so it counts the counter-offers the agent logged instead of trusting the round number it writes. A new hard invariant, `counters-only-go-up`, fails a counter-offer below the one before it on the same load. The example now has 21 invariants; the careful agent still scores 100% and the naive agent pass^1 9.6%. `regrade` re-scores stored freight runs under the new rules, and `run --baseline` against an older freight run labels every task's grading changed ([#36](https://github.com/sandtable-ai/sandtable/issues/36)).
+- `init --sop`: the SOP's drafting call may write up to 32,000 tokens, up from 16,000, since its reply lists every rule and then drafts each one, and the two new invariant kinds made a long policy's reply run past 16,000. The dry run's plan counts it, so its upper bound for the SOP rises by up to 16,000 output tokens ([#36](https://github.com/sandtable-ai/sandtable/issues/36)).
 
 ### Fixed
 
 - **`validate`**: a `never` rule whose `when` names an argument its tool doesn't have, such as a misspelled `lod_id`, is now an error, as it is for the other rules' arguments. Before, it validated and never fired ([#462](https://github.com/sandtable-ai/sandtable/issues/462)).
 - **Plugin**: the plan hook now resolves the relative paths of `pnpm run sandtable init` and `pnpm sandtable init` from the package root, where pnpm runs a script, as it has for `npm run` since 1.2.0. The root is the nearest folder with a pnpm manifest (`package.json`, `package.yaml` or `package.json5`), or the one `-C`, `--dir` or `--prefix` names. `pnpm exec`, `pnpm dlx`, and `pnpm sandtable` in a project with no `sandtable` script run in the shell's folder; for a workspace run (`-r`, `--filter`, `-w`), the plan isn't known ([#437](https://github.com/sandtable-ai/sandtable/issues/437)).
+- `init --sop` and `init --transcripts`: a reply cut off at the output limit in the middle of its JSON now says it hit the limit and was still paid for, and its tokens count in the step's usage. Before, it failed with a JSON parse error and its usage wasn't counted ([#36](https://github.com/sandtable-ai/sandtable/issues/36)).
 
 ## [1.2.0] - 2026-10-31
 
