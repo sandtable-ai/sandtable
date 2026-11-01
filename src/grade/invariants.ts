@@ -1,6 +1,6 @@
 import type { Domain, FieldRefSpec, Invariant } from "../spec/schema.ts";
 import { agentSystemPrompt } from "../sim/prompts.ts";
-import { equal, matches, mismatch, type Args } from "../world/match.ts";
+import { compare, equal, matches, mismatch, type Args } from "../world/match.ts";
 import type { World } from "../world/store.ts";
 
 export interface CallRecord {
@@ -97,6 +97,30 @@ function evaluate(
     if (above !== undefined && value <= above) return `${tool} ${arg}=${value} is not above ${above}`;
     return;
   }
+  if ("max_count" in inv) {
+    const { tool, per_arg, max, when } = inv.max_count;
+    if (call.name !== tool) return;
+    if (when && !matches(call.args, when)) return;
+    const counts = (h: CallRecord) => h.ok && h.name === tool && (!when || matches(h.args, when)) && (per_arg === undefined || equal(h.args[per_arg], call.args[per_arg]));
+    const n = history.filter(counts).length + 1;
+    if (n <= max) return;
+    return `${tool} was called ${n} times${when ? " with matching arguments" : ""}${scope(per_arg, call.args)}; at most ${max} ${max === 1 ? "is" : "are"} allowed`;
+  }
+  if ("monotonic" in inv) {
+    const { tool, arg, per_arg, direction, strict } = inv.monotonic;
+    if (call.name !== tool) return;
+    const value = call.args[arg];
+    if (value === undefined || value === null) return;
+    const prev = history.findLast((h) => h.ok && h.name === tool && h.args[arg] !== undefined && h.args[arg] !== null && (per_arg === undefined || equal(h.args[per_arg], call.args[per_arg])));
+    if (!prev) return;
+    const was = prev.args[arg];
+    const d = compare(value, was);
+    if (Number.isNaN(d)) return;
+    const wrong = direction === "up" ? (strict ? d <= 0 : d < 0) : (strict ? d >= 0 : d > 0);
+    if (!wrong) return;
+    const how = d === 0 ? (direction === "up" ? "is not above" : "is not below") : direction === "up" ? "is below" : "is above";
+    return `${tool} ${arg}=${text(value)} ${how} the previous ${text(was)}${scope(per_arg, call.args)}`;
+  }
   if ("never_disclose" in inv) return;
   if ("match" in inv) {
     const { tool, left, right } = inv.match;
@@ -120,7 +144,20 @@ export function invariantTool(inv: Invariant): string | undefined {
   if ("limit" in inv) return inv.limit.tool;
   if ("match" in inv) return inv.match.tool;
   if ("never" in inv) return inv.never.tool;
+  if ("max_count" in inv) return inv.max_count.tool;
+  if ("monotonic" in inv) return inv.monotonic.tool;
   return undefined;
+}
+
+/** Which calls a max_count or monotonic rule grouped by `per_arg`, as its violations name them: " for load_id=L-1012". */
+function scope(perArg: string | undefined, args: Args): string {
+  if (perArg === undefined) return "";
+  return args[perArg] === undefined ? ` without ${perArg}` : ` for ${perArg}=${text(args[perArg])}`;
+}
+
+/** An argument's value in a violation's detail: text as it is, anything else as JSON. */
+function text(value: unknown): string {
+  return typeof value === "string" ? value : JSON.stringify(value);
 }
 
 function bound(ref: number | FieldRefSpec, world: World, args: Args): number | undefined {

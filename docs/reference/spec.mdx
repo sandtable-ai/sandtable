@@ -186,7 +186,7 @@ expect:
     - { table: orders, where: { zip: "94105", items: { $contains: { sku: SEED-TOM } } }, count: 1 }
 ```
 
-`enum` is for scalars only. A `default` for an object or array param must be a valid argument, and a `null` default needs `nullable: true`. Invariants name top-level arguments (`limit.arg`, `require.key_arg`, `before.same`).
+`enum` is for scalars only. A `default` for an object or array param must be a valid argument, and a `null` default needs `nullable: true`. Invariants name top-level arguments (`limit.arg`, `require.key_arg`, `before.same`, `monotonic.arg`, `per_arg`).
 
 There is no `delete` op.
 
@@ -237,6 +237,16 @@ Checked before every tool call, against the world as it is at that moment. A vio
   description: ...
   never: { tool: issue_refund, when: { amount: { $gt: 500 } } }
 
+# at most `max` successful calls of a tool, counted per value of `per_arg` (optionally: only calls matching `when`)
+- id: three-rounds-max
+  description: ...
+  max_count: { tool: log_offer, per_arg: load_id, max: 3 }
+
+# across the calls of a tool for one `per_arg` value, an argument only moves one way
+- id: counters-only-go-up
+  description: ...
+  monotonic: { tool: log_offer, arg: counter_offer, per_arg: load_id, direction: up }
+
 # never say a protected value in any agent message (and never next to these words)
 - id: never-disclose-ceiling
   description: ...
@@ -250,7 +260,16 @@ Checked before every tool call, against the world as it is at that moment. A vio
 | `limit` | on every call to `tool` | `arg` is above `lte`, below `gte`, at or above `lt`, or at or below `gt` (each a number, or a field of the row keyed by `key_arg`) |
 | `match` | on every call to `tool` | `left` and `right` fields differ (skipped if either value is missing) |
 | `never` | on every call to `tool` | always, or when the arguments match `when` |
+| `max_count` | on every call to `tool` whose arguments match `when` | the earlier successful calls that count (with the same `per_arg` value, when given, and matching `when`), plus this one, are more than `max` |
+| `monotonic` | on every call to `tool` that has `arg` | `direction: up` and `arg` is below the value of the last successful call that had it (with the same `per_arg` value, when given), or `down` and above it; with `strict: true`, also when it is equal |
 | `never_disclose` | on every agent message, after the conversation | a value of `table.field` the agent had been shown appears in what it said, unless an `unless` call carried it in that turn or earlier, or the caller said it first; with `never_with`, also when it is in one sentence with one of those words, allowed or not |
+
+`max_count` and `monotonic` check rules across calls, such as a negotiation's: at most three counter-offers per load, and each one at least the last. Only successful calls count as earlier calls. The agent never saw a call the API rejected, or one a [fault](#faults-and-events) hit, succeed, so a retry after a timeout is not one more call, and a failed call's value is not the one to beat. The call being checked is checked whether it then succeeds or not, as with every invariant.
+
+- `max_count.max` is a whole number, 1 or more. A tool that may not be called at all is a `never`, and `validate` says so for `max: 0`. `when` is a where clause on the call's arguments, as in `never`: only matching calls are counted and checked, such as `when: { reason: payment }` for at most two payment handoffs. Without `per_arg`, every call of the tool counts together.
+- `monotonic` compares values as a where clause's `$gte` does: numbers as numbers, and anything else as text, so ISO dates such as `2026-11-04` work. A call without `arg` isn't checked, and neither is the first call for a `per_arg` value, which has nothing to compare with. Repeating a value is allowed unless `strict: true`.
+
+A violation names the count or the two values, and the `per_arg` value: `log_offer was called 4 times for load_id=L-1012; at most 3 are allowed`, or `log_offer counter_offer=950 is below the previous 975 for load_id=L-1012`.
 
 `never_disclose` recognizes the usual spellings of a number (`2350`, `2,350`, `$2,350.00`) without matching identifiers, longer numbers or units (`L-2350`, `12350`, `2350km`). The Unicode hyphens U+2010 and U+2011 read as `-`, so `L‑2350` is an identifier and `555‑0148` matches the value `555-0148`. An en or em dash after a number still ends it (`$2,350—final`). String values shorter than three characters are ignored, and booleans can't be protected. `validate` rejects a `never_disclose` whose field holds booleans, or only strings shorter than three characters, in the seed rows, because it could never fire. `unless` allows a value the agent successfully passed to that tool argument, such as the rate it actually booked. Give a list to allow several, for example the booked and the submitted rate: `unless: [{ tool: book_load, arg: rate }, { tool: submit_offer, arg: rate }]`.
 
@@ -410,7 +429,7 @@ A fault takes:
 - `after_commit: true`, for a timeout or a server error: the tool runs, so its write lands, and then the agent gets the error anyway. Without it, a fault with an error stops the call before the tool runs, and nothing changes.
 - `latency_ms`, a delay before the response, up to 60000, alone or with an error. Live runs wait it out; `lint` and `regrade` don't.
 
-Invariants check a call a fault hits, as they check any call: the agent attempted it. The call counts as failed for `called`, a `before` invariant's `first` call and `never_disclose`'s `unless`, even when its write landed, since the agent never saw it succeed: check what landed with `expect.state`. A fault is not an error of the trial, so a trial with one is graded, never skipped.
+Invariants check a call a fault hits, as they check any call: the agent attempted it. The call counts as failed for `called`, a `before` invariant's `first` call, `never_disclose`'s `unless`, and the earlier calls `max_count` counts and `monotonic` compares with, even when its write landed, since the agent never saw it succeed: check what landed with `expect.state`. A fault is not an error of the trial, so a trial with one is graded, never skipped.
 
 An event changes the world right after the call that `after` names, counted as for faults, whether that call succeeded or not:
 

@@ -205,6 +205,17 @@ export function validateDomain(d: Domain): string[] {
         table(ref.table, where);
         arg(inv.match.tool, ref.key_arg, where);
       }
+    } else if ("max_count" in inv) {
+      const { tool: name, per_arg, when } = inv.max_count;
+      tool(name, where);
+      if (per_arg !== undefined) arg(name, per_arg, where);
+      for (const a of Object.keys(when ?? {})) argPath(name, a, `${where}.max_count.when`);
+      operators(when, `${where}.max_count.when`);
+    } else if ("monotonic" in inv) {
+      const { tool: name, arg: a, per_arg } = inv.monotonic;
+      tool(name, where);
+      arg(name, a, where);
+      if (per_arg !== undefined) arg(name, per_arg, where);
     } else if ("never_disclose" in inv) {
       table(inv.never_disclose.table, where);
       const blind = undetectable(d, inv.never_disclose.table, inv.never_disclose.field);

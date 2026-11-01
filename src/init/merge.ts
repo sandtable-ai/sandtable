@@ -50,7 +50,7 @@ export async function appendToDomainList(
       // Keep the rule body and its source on one line each.
       const key = String((pair.key as YAML.Scalar).value);
       const multiline = YAML.isNode(pair.value) && JSON.stringify(pair.value.toJSON()).includes("\\n");
-      if (YAML.isMap(pair.value) && ["source", "before", "limit", "match", "never"].includes(key) && !multiline) {
+      if (YAML.isMap(pair.value) && ["source", "before", "limit", "match", "never", "max_count", "monotonic"].includes(key) && !multiline) {
         pair.value.flow = true;
       }
     }

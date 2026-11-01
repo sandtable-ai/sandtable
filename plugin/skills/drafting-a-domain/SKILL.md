@@ -199,5 +199,5 @@ The first line is the CI gate: `--strict` fails while anything is pending. The s
 
 ## References
 
-- [references/spec-cheatsheet.md](references/spec-cheatsheet.md): tools, ops, checks, templates, where operators, the six invariant kinds, expectations and their gotchas.
+- [references/spec-cheatsheet.md](references/spec-cheatsheet.md): tools, ops, checks, templates, where operators, the eight invariant kinds, expectations and their gotchas.
 - [references/review-notes.md](references/review-notes.md): resolving each kind of `TODO(review)` note, and checklists for drafted invariants and tasks.

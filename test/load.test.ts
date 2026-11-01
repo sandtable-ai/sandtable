@@ -2,7 +2,8 @@ import { cpSync, mkdtempSync, readFileSync, renameSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { DomainError, loadDomain } from "../src/spec/load.ts";
+import { DomainError, loadDomain, parseDomain, validateDomain } from "../src/spec/load.ts";
+import { InvariantSpec } from "../src/spec/schema.ts";
 import { version } from "../src/version.ts";
 
 // A domain's own files: sandtable.yaml and the policy, world or tasks files it includes.
@@ -127,5 +128,55 @@ describe("loadDomain schema and cross-reference errors", () => {
     const dir = copyOfClinic();
     edit(path.join(dir, "tasks.yaml"), /^ {2}persona: \S+$/m, "  persona: nobody-at-all");
     await expect(loadDomain(dir)).rejects.toThrow(new RegExp(`^${path.join(dir, "tasks.yaml").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:\n {2}- tasks\\.[\\w-]+: unknown persona "nobody-at-all"$`));
+  });
+});
+
+describe("max_count and monotonic cross-references", () => {
+  const freight = () => loadDomain(path.resolve("examples/freight"));
+  const problems = async (...invariants: unknown[]) => validateDomain({ ...(await freight()), invariants: invariants.map((i) => InvariantSpec.parse(i)) });
+
+  it("name a tool the domain doesn't have, and a per_arg, arg or when argument its tool doesn't have", async () => {
+    expect(
+      await problems(
+        { id: "a", description: "x", max_count: { tool: "log_offers", max: 3 } },
+        { id: "b", description: "x", max_count: { tool: "log_offer", per_arg: "load", max: 3, when: { rnd: 1, round: { $gte: 2, $like: 1 } } } },
+        { id: "c", description: "x", monotonic: { tool: "log_offer", arg: "counter", per_arg: "lod_id", direction: "up" } },
+        { id: "d", description: "x", monotonic: { tool: "log_ofer", arg: "counter_offer", direction: "down" } },
+      ),
+    ).toEqual([
+      'invariants.a: unknown tool "log_offers"',
+      'invariants.b: tool "log_offer" has no param "load"',
+      'invariants.b.max_count.when: tool "log_offer" has no param "rnd"',
+      expect.stringMatching(/^invariants\.b\.max_count\.when\.round: unknown operator "\$like" \(use /),
+      'invariants.c: tool "log_offer" has no param "counter"',
+      'invariants.c: tool "log_offer" has no param "lod_id"',
+      'invariants.d: unknown tool "log_ofer"',
+    ]);
+  });
+
+  it("accept the freight example's", async () => {
+    expect(
+      await problems(
+        { id: "a", description: "x", max_count: { tool: "log_offer", per_arg: "load_id", max: 3 } },
+        { id: "b", description: "x", monotonic: { tool: "log_offer", arg: "counter_offer", per_arg: "load_id", direction: "up", strict: true } },
+      ),
+    ).toEqual([]);
+  });
+
+  it("point max: 0 to never, and take only a whole max", async () => {
+    const d = await freight();
+    const parse = (max: unknown) => () => parseDomain({ ...d, invariants: [{ id: "no-offers", description: "x", max_count: { tool: "log_offer", max } }] });
+    expect(parse(0)).toThrow("max is 1 or more: for a tool that may not be called at all, use never: { tool: log_offer }");
+    expect(parse(0)).toThrow("at invariants[0].max_count.max");
+    expect(parse(1.5)).toThrow(DomainError);
+    expect(parse(1)).not.toThrow();
+  });
+
+  it("take direction up or down", () => {
+    const ok = (monotonic: unknown) => InvariantSpec.safeParse({ id: "x", description: "x", monotonic }).success;
+    expect(ok({ tool: "log_offer", arg: "counter_offer", direction: "up" })).toBe(true);
+    expect(ok({ tool: "log_offer", arg: "counter_offer", direction: "down", strict: false })).toBe(true);
+    expect(ok({ tool: "log_offer", arg: "counter_offer", direction: "higher" })).toBe(false);
+    expect(ok({ tool: "log_offer", arg: "counter_offer" })).toBe(false);
   });
 });

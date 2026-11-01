@@ -207,6 +207,38 @@ const NeverInvariant = z
   })
   .strict();
 
+/**
+ * At most `max` calls of `tool`, counted per value of `per_arg` when given, and only the calls whose arguments match
+ * `when`. A call breaks it when the earlier successful calls that count, plus this one, are more than `max`. The agent
+ * never saw a call the API rejected or a fault hit succeed, so its retry is not one more. `max: 0` is a `never`.
+ */
+const MaxCountInvariant = z
+  .object({
+    ...invariantBase,
+    max_count: z
+      .object({ tool: z.string(), per_arg: z.string().optional(), max: z.number().int(), when: Where.optional() })
+      .strict()
+      .superRefine((m, ctx) => {
+        if (m.max < 1) ctx.addIssue({ code: "custom", message: `max is 1 or more: for a tool that may not be called at all, use never: { tool: ${m.tool} }`, path: ["max"] });
+      }),
+  })
+  .strict();
+
+/**
+ * Across the calls of `tool` (for the same value of `per_arg`), `arg` only moves one way: each call's value is at least
+ * (`up`) or at most (`down`) the one of the last successful call that had it, and with `strict: true` not equal to it.
+ * Values compare as where clauses' `$gte` does: numbers as numbers, anything else as text, so ISO dates work. A call
+ * without `arg`, or with no earlier call to compare with, isn't checked.
+ */
+const MonotonicInvariant = z
+  .object({
+    ...invariantBase,
+    monotonic: z
+      .object({ tool: z.string(), arg: z.string(), per_arg: z.string().optional(), direction: z.enum(["up", "down"]), strict: z.boolean().optional() })
+      .strict(),
+  })
+  .strict();
+
 const DiscloseException = z.object({ tool: z.string(), arg: z.string() }).strict();
 
 /**
@@ -235,6 +267,8 @@ export const InvariantSpec = z.union([
   LimitInvariant,
   MatchInvariant,
   NeverInvariant,
+  MaxCountInvariant,
+  MonotonicInvariant,
   NeverDiscloseInvariant,
 ]);
 

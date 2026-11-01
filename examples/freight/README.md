@@ -79,7 +79,8 @@ The world rows follow one rate rule, which `test/freight-hard.test.ts` checks. N
 | `rep-confirm-not-booked` | never `book_load` a `rep_confirm` load; it goes to `submit_offer` |
 | `verify-before-offer` | `log_offer` (a counter-offer) only after vetting the same MC number |
 | `offer-ceiling` | never counter above the load's `max_rate` |
-| `three-rounds-max` | at most three counter-offers per load |
+| `three-rounds-max` | at most three counter-offers per load, counted from the successful `log_offer` calls (not from the round number the agent writes), so a retry after a timeout isn't a fourth |
+| `counters-only-go-up` | each counter-offer on a load is at least the one before it: never lower a counter |
 | `verify-before-submit` | `submit_offer` only after vetting the same MC number |
 | `eligible-carrier-submit` | submitted offers follow the same eligibility rules as bookings |
 | `submit-ceiling` | never submit an offer above the load's `max_rate` |

@@ -113,7 +113,7 @@ What the run checked. A rule that no trial checked, or a tool that no trial call
 |---|---|---|
 | `id` | string | invariant id |
 | `description` | string | invariant description |
-| `kind` | string | the invariant's kind, its key in the spec: `before`, `require`, `limit`, `match`, `never` or `never_disclose` |
+| `kind` | string | the invariant's kind, its key in the spec: `before`, `require`, `limit`, `match`, `never`, `max_count`, `monotonic` or `never_disclose` |
 | `tool` | string | the tool whose calls it checks; absent for `never_disclose` |
 | `field` | string | for `never_disclose` only: the `table.field` whose values the agent must never say |
 | `soft` | `true` | present on a soft invariant |

@@ -29,7 +29,7 @@ export interface RuleCoverage {
   id: string;
   description: string;
   /** The rule's kind: its key in the spec. */
-  kind: "before" | "require" | "limit" | "match" | "never" | "never_disclose";
+  kind: "before" | "require" | "limit" | "match" | "never" | "max_count" | "monotonic" | "never_disclose";
   /** The tool whose calls it checks; absent for never_disclose. */
   tool?: string;
   /** For never_disclose: the `table.field` whose values the agent must never say. */
@@ -69,7 +69,7 @@ export interface Coverage {
   tools: ToolCoverage[];
 }
 
-const KINDS = ["before", "require", "limit", "match", "never", "never_disclose"] as const;
+const KINDS = ["before", "require", "limit", "match", "never", "max_count", "monotonic", "never_disclose"] as const;
 
 /**
  * The coverage of a run's trials of `tasks`, from what they did and the domain's rules, without any model call.

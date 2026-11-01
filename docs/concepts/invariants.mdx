@@ -23,7 +23,7 @@ An invariant is evaluated before each tool call runs, against the world as it wa
 - **Order is visible.** `before` invariants see the call history, so "verify the carrier before booking it" fails when the verification comes after the booking, or was for a different carrier.
 - **The domain states the rule once.** It then holds in every task, including tasks written later, and tasks a drafting step adds.
 
-The six kinds:
+The eight kinds:
 
 | Kind | Rule it expresses | Example |
 |---|---|---|
@@ -32,6 +32,8 @@ The six kinds:
 | `limit` | an argument stays within a bound, constant or from a record | never book above the load's `max_rate` |
 | `match` | two records referenced by the call agree on a field | carrier equipment matches load equipment |
 | `never` | never call a tool, or never with certain arguments | no refunds over $500 |
+| `max_count` | call a tool at most N times, per value of an argument | at most three counter-offers per load |
+| `monotonic` | an argument only moves one way across calls | each counter-offer on a load is at least the last |
 | `never_disclose` | never say a protected value in any message | never reveal the internal rate ceiling |
 
 The [spec](/reference/spec#invariants) has the exact syntax.

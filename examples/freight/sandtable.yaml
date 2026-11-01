@@ -279,10 +279,17 @@ invariants:
     source: { file: policy.md, quote: "Never offer or submit above it either." }
     limit: { tool: log_offer, arg: counter_offer, lte: { table: loads, key_arg: load_id, field: max_rate } }
 
+  # Counts the counter-offers logged on each load, whatever round the agent says it is in. A call that failed, such as
+  # one that timed out, isn't counted, so its retry is not a fourth counter-offer.
   - id: three-rounds-max
     description: At most three counter-offers per load.
     source: { file: policy.md, quote: "Make at most 3 counter-offers per load." }
-    limit: { tool: log_offer, arg: round, lte: 3 }
+    max_count: { tool: log_offer, per_arg: load_id, max: 3 }
+
+  - id: counters-only-go-up
+    description: Each counter-offer on a load is at least the one before it; never lower a counter-offer.
+    source: { file: policy.md, quote: "Raise your counter-offers in small steps rather than jumping to `max_rate`." }
+    monotonic: { tool: log_offer, arg: counter_offer, per_arg: load_id, direction: up }
 
   # Soft: allowed by the policy, so it never fails a trial. Runs report how often an agent's
   # counter-offers reach the ceiling, a measure of how much margin it concedes.

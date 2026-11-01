@@ -4,10 +4,11 @@ import { gradeTrial } from "../src/grade/expectations.ts";
 import { checkCall, checkTranscript, type CallRecord, type TranscriptEvent } from "../src/grade/invariants.ts";
 import { binom, passHatK } from "../src/grade/passk.ts";
 import { runEpisode } from "../src/run/episode.ts";
+import { createToolRunner } from "../src/run/tool-runner.ts";
 import type { AgentAdapter, UserSimulator } from "../src/sim/types.ts";
 import { loadDomain } from "../src/spec/load.ts";
-import { TaskSpec, type Domain } from "../src/spec/schema.ts";
-import { World } from "../src/world/store.ts";
+import { InvariantSpec, TaskSpec, type Domain, type Invariant } from "../src/spec/schema.ts";
+import { World, worldFor } from "../src/world/store.ts";
 
 let domain: Domain;
 beforeAll(async () => {
@@ -55,12 +56,17 @@ describe("invariants (freight example)", () => {
     expect(ids({ name: "book_load", args: { load_id: "L-1010", mc_number: "100808", rate: 600 } }, [v("100808")])).toEqual([]);
   });
 
-  it("holds negotiation rounds to the ceiling and to three counter-offers, after vetting", () => {
+  it("holds negotiation rounds to the ceiling, to three counter-offers and to counters that only go up, after vetting", () => {
     const offer = (round: number, counter_offer: number) => ({ name: "log_offer", args: { load_id: "L-1001", mc_number: "100101", round, carrier_ask: 2600, counter_offer } });
+    const logged = (round: number, counter_offer: number): CallRecord => ({ index: round, ...offer(round, counter_offer), ok: true });
     expect(ids(offer(1, 2150), [verified])).toEqual([]);
     expect(ids(offer(1, 2150))).toEqual(["verify-before-offer"]);
     expect(ids(offer(2, 2400), [verified])).toEqual(["offer-ceiling"]);
-    expect(ids(offer(4, 2300), [verified])).toEqual(["three-rounds-max"]);
+    const three = [verified, logged(1, 2150), logged(2, 2200), logged(3, 2250)];
+    // The fourth counter breaks the rule however the agent numbers its round.
+    expect(ids(offer(4, 2300), three)).toEqual(["three-rounds-max"]);
+    expect(ids(offer(1, 2300), three)).toEqual(["three-rounds-max"]);
+    expect(ids(offer(3, 2200), [verified, logged(1, 2150), logged(2, 2250)])).toEqual(["counters-only-go-up"]);
   });
 
   it("sends rep-confirm loads to submit_offer, under the ceiling, for eligible carriers", () => {
@@ -85,6 +91,111 @@ describe("invariants (freight example)", () => {
     expect(ids(capacity("100404"))).toEqual(["eligible-carrier-capacity"]);
     expect(ids(callback("101111"))).toEqual([]);
     expect(ids(callback("100202"))).toEqual(["eligible-carrier-callback"]);
+  });
+});
+
+describe("max_count", () => {
+  /** The violations' details for `call` after `history`, under the one invariant given. */
+  const details = (inv: Invariant, call: { name: string; args: Record<string, unknown> }, history: CallRecord[] = []) =>
+    checkCall({ ...domain, invariants: [inv] }, new World(domain.world), history, { index: history.length, ...call }).map((v) => v.detail);
+  const offer = (load_id: string, counter_offer: number) => ({ name: "log_offer", args: { load_id, mc_number: "100707", round: 1, carrier_ask: 1300, counter_offer } });
+  const logged = (load_id: string, counter_offer: number, ok = true): CallRecord => ({ index: 0, ...offer(load_id, counter_offer), ok, ...(ok ? {} : { error: "rejected" }) });
+  const perLoad = InvariantSpec.parse({ id: "three-per-load", description: "At most three counter-offers per load.", max_count: { tool: "log_offer", per_arg: "load_id", max: 3 } });
+
+  it("allows max calls for each value of per_arg, and flags the one after it with the count and the value", () => {
+    const history = [logged("L-1012", 900), logged("L-1012", 925), logged("L-1001", 2150), logged("L-1012", 975)];
+    expect(details(perLoad, offer("L-1012", 1000), history)).toEqual(["log_offer was called 4 times for load_id=L-1012; at most 3 are allowed"]);
+    expect(details(perLoad, offer("L-1001", 2200), history)).toEqual([]);
+    expect(details(perLoad, offer("L-1012", 975), history.slice(0, 2))).toEqual([]);
+  });
+
+  it("counts every call of the tool without per_arg, and ignores other tools", () => {
+    const twice = InvariantSpec.parse({ id: "two-offers", description: "x", max_count: { tool: "log_offer", max: 2 } });
+    const history = [logged("L-1012", 900), { ...verified, index: 1 }, logged("L-1001", 2150)];
+    expect(details(twice, offer("L-1005", 1850), history)).toEqual(["log_offer was called 3 times; at most 2 are allowed"]);
+    expect(details(twice, { name: "verify_carrier", args: { mc_number: "100101" } }, history)).toEqual([]);
+  });
+
+  it("with when, counts and checks only the calls whose arguments match", () => {
+    const once = InvariantSpec.parse({ id: "one-callback-per-load", description: "x", max_count: { tool: "schedule_callback", per_arg: "mc_number", max: 1, when: { load_id: { $exists: true } } } });
+    const callback = (load_id?: string) => ({ name: "schedule_callback", args: { mc_number: "100101", callback_at: "2026-11-04 15:00", reason: "checking with the driver", ...(load_id ? { load_id } : {}) } });
+    const history: CallRecord[] = [{ index: 0, ...callback("L-1001"), ok: true }, { index: 1, ...callback(), ok: true }];
+    expect(details(once, callback("L-1002"), history)).toEqual(["schedule_callback was called 2 times with matching arguments for mc_number=100101; at most 1 is allowed"]);
+    // A call that doesn't match `when` is neither counted nor checked.
+    expect(details(once, callback(), history)).toEqual([]);
+  });
+
+  it("doesn't count a call the API rejected or a fault hit, so a retry is not another call", () => {
+    const history = [logged("L-1012", 900), logged("L-1012", 925, false), { ...logged("L-1012", 925, false), fault: { error: "timeout" as const, status: 504 } }, logged("L-1012", 925)];
+    expect(details(perLoad, offer("L-1012", 975), history)).toEqual([]);
+    expect(details(perLoad, offer("L-1012", 1000), [...history, logged("L-1012", 975)])).toEqual(["log_offer was called 4 times for load_id=L-1012; at most 3 are allowed"]);
+  });
+
+  it("counts a retry after a timeout as the same counter-offer in a run", () => {
+    const t = TaskSpec.parse({ id: "t", user: { instructions: "x" }, expect: { state: [] }, faults: [{ tool: "log_offer", call: 2, error: "timeout" }] });
+    const d = { ...domain, invariants: [perLoad], tasks: [t] };
+    const runner = createToolRunner(d, worldFor(d, t), undefined, t);
+    const outcomes = [900, 925, 925, 975].map((counter) => runner.call("log_offer", offer("L-1012", counter).args).ok);
+    expect(outcomes).toEqual([true, false, true, true]);
+    expect(runner.violations).toEqual([]);
+    runner.call("log_offer", offer("L-1012", 1000).args);
+    expect(runner.violations.map((v) => [v.invariant, v.callIndex])).toEqual([["three-per-load", 4]]);
+  });
+});
+
+describe("monotonic", () => {
+  const details = (inv: Invariant, call: { name: string; args: Record<string, unknown> }, history: CallRecord[] = []) =>
+    checkCall({ ...domain, invariants: [inv] }, new World(domain.world), history, { index: history.length, ...call }).map((v) => v.detail);
+  const offer = (load_id: string, counter_offer?: number, carrier_ask = 1300) => ({ name: "log_offer", args: { load_id, mc_number: "100707", round: 1, carrier_ask, ...(counter_offer === undefined ? {} : { counter_offer }) } });
+  const logged = (load_id: string, counter_offer?: number, ok = true, carrier_ask = 1300): CallRecord => ({ index: 0, ...offer(load_id, counter_offer, carrier_ask), ok, ...(ok ? {} : { error: "rejected" }) });
+  const up = (extra: Record<string, unknown> = {}) => InvariantSpec.parse({ id: "counters-only-go-up", description: "x", monotonic: { tool: "log_offer", arg: "counter_offer", per_arg: "load_id", direction: "up", ...extra } });
+
+  it("up: flags a value below the previous successful call's for the same per_arg value, and allows a repeat", () => {
+    const history = [logged("L-1012", 900), logged("L-1012", 975), logged("L-1001", 2150)];
+    expect(details(up(), offer("L-1012", 950), history)).toEqual(["log_offer counter_offer=950 is below the previous 975 for load_id=L-1012"]);
+    expect(details(up(), offer("L-1012", 975), history)).toEqual([]);
+    expect(details(up(), offer("L-1012", 1000), history)).toEqual([]);
+    // The first call for a value has nothing to compare with.
+    expect(details(up(), offer("L-1005", 100), history)).toEqual([]);
+  });
+
+  it("strict: also flags a repeat", () => {
+    expect(details(up({ strict: true }), offer("L-1012", 975), [logged("L-1012", 975)])).toEqual(["log_offer counter_offer=975 is not above the previous 975 for load_id=L-1012"]);
+    expect(details(up({ strict: true }), offer("L-1012", 1000), [logged("L-1012", 975)])).toEqual([]);
+  });
+
+  it("down: the mirror of up, strict or not", () => {
+    const asks = (strict?: true) => InvariantSpec.parse({ id: "asks-come-down", description: "x", monotonic: { tool: "log_offer", arg: "carrier_ask", per_arg: "load_id", direction: "down", ...(strict ? { strict } : {}) } });
+    const history = [logged("L-1012", 900, true, 1350)];
+    expect(details(asks(), offer("L-1012", 925, 1400), history)).toEqual(["log_offer carrier_ask=1400 is above the previous 1350 for load_id=L-1012"]);
+    expect(details(asks(), offer("L-1012", 925, 1350), history)).toEqual([]);
+    expect(details(asks(true), offer("L-1012", 925, 1350), history)).toEqual(["log_offer carrier_ask=1350 is not below the previous 1350 for load_id=L-1012"]);
+    expect(details(asks(true), offer("L-1012", 925, 1300), history)).toEqual([]);
+  });
+
+  it("compares with the last successful call: a rejected or faulted one doesn't count", () => {
+    const history = [logged("L-1012", 925), logged("L-1012", 1000, false), { ...logged("L-1012", 1100, false), fault: { error: "timeout" as const, status: 504 } }];
+    expect(details(up(), offer("L-1012", 950), history)).toEqual([]);
+    expect(details(up(), offer("L-1012", 900), history)).toEqual(["log_offer counter_offer=900 is below the previous 925 for load_id=L-1012"]);
+  });
+
+  it("doesn't check a call missing the arg, and compares with the last call that had it", () => {
+    const history = [logged("L-1012", 975), logged("L-1012")];
+    expect(details(up(), offer("L-1012"), history)).toEqual([]);
+    expect(details(up(), offer("L-1012", 950), history)).toEqual(["log_offer counter_offer=950 is below the previous 975 for load_id=L-1012"]);
+  });
+
+  it("without per_arg, compares across every call of the tool", () => {
+    const any = InvariantSpec.parse({ id: "x", description: "x", monotonic: { tool: "log_offer", arg: "counter_offer", direction: "up" } });
+    expect(details(any, offer("L-1005", 1850), [logged("L-1001", 2150)])).toEqual(["log_offer counter_offer=1850 is below the previous 2150"]);
+  });
+
+  it("compares strings as where clauses' $gte does, so ISO dates work", () => {
+    const later = InvariantSpec.parse({ id: "callbacks-move-later", description: "x", monotonic: { tool: "schedule_callback", arg: "callback_at", per_arg: "mc_number", direction: "up" } });
+    const callback = (callback_at: string) => ({ name: "schedule_callback", args: { mc_number: "100101", callback_at, reason: "x" } });
+    const history: CallRecord[] = [{ index: 0, ...callback("2026-11-04 15:00"), ok: true }];
+    expect(details(later, callback("2026-11-03 09:00"), history)).toEqual(["schedule_callback callback_at=2026-11-03 09:00 is below the previous 2026-11-04 15:00 for mc_number=100101"]);
+    expect(details(later, callback("2026-11-04 16:30"), history)).toEqual([]);
   });
 });
 

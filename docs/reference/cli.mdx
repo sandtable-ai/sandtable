@@ -90,7 +90,7 @@ npx sandtable-ai validate ./my-domain [--strict]
 | `--strict` | also fail while drafted items are pending review |
 
 ```text
-✓ freight-carrier-sales: 8 tables, 9 tools, 20 invariants, 52 tasks
+✓ freight-carrier-sales: 8 tables, 9 tools, 21 invariants, 52 tasks
 ```
 
 A `⚠` line is a warning, not an error, and never fails `validate`, not even with `--strict`. It flags a `never_disclose` field that no tool returns and the policy doesn't state, which can never fire, since a value counts only once the agent has been shown it.
@@ -259,8 +259,8 @@ Only `broken` tasks gate. A `worse` task never passed every trial, and with a fe
 A passing run says nothing about a rule that no trial checked. The summary says how many of the domain's rules the run checked and how many it caught broken, and names the rules no trial checked and the tools no trial called:
 
 ```text
-  coverage: 14 of 19 rules checked (10 caught broken), 2 of 9 tools never called
-     never checked (verify-before-offer, offer-ceiling, … +3 more)
+  coverage: 15 of 21 rules checked (11 caught broken), 2 of 9 tools never called
+     never checked (verify-before-offer, offer-ceiling, … +4 more)
      never called (verify_carrier, log_offer)
 ```
 

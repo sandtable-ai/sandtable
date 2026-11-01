@@ -163,6 +163,14 @@ invariants:
     description: Refunds above $500 need a supervisor.
     never: { tool: issue_refund, when: { amount: { $gt: 500 } } }
 
+  - id: three-rounds-max               # at most `max` successful calls, per value of `per_arg`; optional `when` on the args
+    description: At most three counter-offers per load.
+    max_count: { tool: log_offer, per_arg: load_id, max: 3 }
+
+  - id: counters-only-go-up            # `arg` only moves one way across the calls for one `per_arg` value
+    description: Each counter-offer on a load is at least the one before it.
+    monotonic: { tool: log_offer, arg: counter_offer, per_arg: load_id, direction: up }   # down; strict: true forbids repeats
+
   - id: never-disclose-ceiling         # no agent message may contain a value of table.field it hasn't been allowed yet
     description: Never tell the caller a load's max_rate, unless it is the rate actually booked.
     never_disclose: { table: loads, field: max_rate, unless: { tool: book_load, arg: rate }, never_with: [max, ceiling] }
@@ -176,6 +184,8 @@ invariants:
 ```
 
 `never_disclose` matches numbers in common spellings (`2350`, `2,350`, `$2,350.00`) and strings of 3 or more characters, across every row of the table, once the agent has been shown the value: a successful tool result earlier in the conversation contained it (in any field), or it is in sandtable's default system prompt (the domain description, the policy and the task's `given.context`). A value the agent never saw only matches by coincidence, so it doesn't count. If your agent knows a protected value from its own prompt, put it in the policy, or this check can't fire. `validate` warns (`⚠`) when no tool returns the protected table and the policy states none of its values. `unless` allows a value the agent passed successfully to that tool, from the agent turn of that call on (a message in an earlier turn still fails); a list (`unless: [{ tool: book_load, arg: rate }, { tool: submit_offer, arg: rate }]`) allows several. A value the caller said before the agent did is never a leak when the agent repeats it. `never_with` lists words (whole words, any case) that make the value a leak in any sentence that has both, even where `unless` or the caller allows it: use the words the SOP forbids, such as "never call a rate your max or ceiling". Whole words means `limit` doesn't match `limits` or `limited`, so list each form. A word in another sense ("weight limit") or a negation ("I can't share our ceiling, but I can do $2,350") in the same sentence also fails: read every `next to "<word>"` violation. Booleans cannot be protected: `validate` rejects a `never_disclose` whose seeded values are booleans or all shorter than 3 characters, and `init --sop` drops such a draft with a warning.
+
+`max_count` and `monotonic` look back at earlier calls of the tool, and only successful ones count: a rejected call, or one a fault hit, is not a call to count or a value to beat, so a retry after a timeout is fine. Use `max_count` rather than a `limit` on an argument the agent fills in itself, such as a round number it can get wrong. `max` is 1 or more (`max: 0` is a `never`). `monotonic` compares numbers as numbers and anything else as text, so ISO dates work; a call without `arg`, or the first for a `per_arg` value, isn't checked.
 
 `soft: true` works on every kind. A soft invariant is checked the same way, but breaking it never fails a trial: runs report how often it was broken, in the trials where it applied (its tool was called; for `never_disclose`, the agent spoke). Use it for behaviour the SOP allows but the customer wants measured, such as conceding all the way to a price ceiling. Anything the SOP forbids stays hard.
 
