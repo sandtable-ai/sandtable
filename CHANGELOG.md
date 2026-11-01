@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-01
+
+A minor release with no breaking changes. The `max_count` and `monotonic` invariants check rules across calls, such as at most three counter-offers per load, each at least the last, and the freight example now grades both. A simulation clock, with dates relative to it such as `$today+2d`, keeps a domain valid for an agent that knows the real date. `sandtable import retell` and `import elevenlabs` draft a domain from those platforms' agent exports, and `sandtable serve` grades ElevenLabs test calls. The plugin's hooks cover pnpm scripts and more ways of running the unrelated `sandtable` package.
+
 ### Added
 
 - **`sandtable serve`**: grades ElevenLabs test calls. Its `post_call_transcription` webhook ends and grades a conversation, with each line's time in the call. A request can name its call in an `X-Sandtable-Call` header, which an ElevenLabs webhook tool fills with `{{system__conversation_id}}`, so calls at the same time keep their own worlds. Without the header, a call whose transcript lists other tool calls than its world got is skipped with that error rather than graded on another call's requests. Tool `http` routes also take form-encoded bodies, which ElevenLabs can send ([#459](https://github.com/sandtable-ai/sandtable/issues/459)).
@@ -361,7 +365,8 @@ First public release. sandtable rehearses an AI agent on a simulated copy of one
 
 A rehearsal of the release pipeline (npm, PyPI and GitHub releases from one tag), published before the first public release. Everything in it is also in 0.1.0; use 0.1.0 instead.
 
-[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/sandtable-ai/sandtable/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/sandtable-ai/sandtable/compare/v1.1.3...v1.2.0
 [1.1.3]: https://github.com/sandtable-ai/sandtable/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/sandtable-ai/sandtable/compare/v1.1.1...v1.1.2
