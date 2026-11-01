@@ -1,5 +1,5 @@
 import type { AgentPromptOptions } from "../sim/prompts.ts";
-import { resolveDates, writtenClock } from "../spec/clock.ts";
+import { isClockTime, resolveDates, writtenClock } from "../spec/clock.ts";
 import { pendingReview } from "../spec/load.ts";
 import type { Domain, Task } from "../spec/schema.ts";
 import { worldFor } from "../world/store.ts";
@@ -89,6 +89,11 @@ export function regradeBlocker(domain: Domain, stored: SuiteResult): string | un
     return writtenClock(domain, task) === "now" && s.trials.some((tr) => tr.clock === undefined);
   });
   if (unclocked) return noClockFor(unclocked.id);
+  // A recorded clock is one sandtable wrote; anything else is a file edited by hand.
+  for (const s of stored.tasks) {
+    const bad = s.trials.find((tr) => tr.clock !== undefined && !isClockTime(tr.clock));
+    if (bad) return `trial ${bad.trial} of task ${s.id} records the clock ${JSON.stringify(bad.clock)}, which isn't a date and time such as 2026-11-02T09:00, so its dates can't be resolved again`;
+  }
   return undefined;
 }
 

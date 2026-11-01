@@ -470,6 +470,9 @@ describe("regrade", () => {
     expect(() => regradeSuite(live, unclocked(liveRun))).toThrow(
       "task book-upcoming's clock is now, and its trials record no clock: there is no telling what the time was when they ran, so their dates can't be resolved again",
     );
+    // A clock sandtable didn't write, as in a results.json edited by hand, is refused rather than read.
+    const edited = { ...liveRun, tasks: liveRun.tasks.map((t) => ({ ...t, trials: t.trials.map((trial) => ({ ...trial, clock: "tomorrow" })) })) } as SuiteResult;
+    expect(() => regradeSuite(live, edited)).toThrow('trial 0 of task book-upcoming records the clock "tomorrow", which isn\'t a date and time such as 2026-11-02T09:00');
   });
 });
 
