@@ -10,7 +10,7 @@ import { shellWord } from "../shell.ts";
 import { version } from "../version.ts";
 import { coerceArgs } from "../world/tools.ts";
 import { seedFor } from "../world/store.ts";
-import { dateProblems } from "./clock.ts";
+import { dateProblems, unclockedDates, usesClock } from "./clock.ts";
 import { DomainSpec, type Domain, type Given, type Task, type Tool } from "./schema.ts";
 
 export const DOMAIN_FILE = "sandtable.yaml";
@@ -103,6 +103,7 @@ function groupBy<T>(items: readonly T[], key: (item: T) => string): Map<string, 
 
 /** Cross-reference checks the schema cannot express. Returns human-readable problems. */
 export function validateDomain(d: Domain): string[] {
+  const clocked = usesClock(d);
   const problems: string[] = [];
   const tables = new Set(Object.keys(d.world.tables));
   const tools = new Map(d.tools.map((t) => [t.name, t]));
@@ -156,8 +157,9 @@ export function validateDomain(d: Domain): string[] {
       for (const { ref, name, path } of references(value)) {
         const p = Object.hasOwn(t.params, name) ? t.params[name] : undefined;
         if (!path.length) {
-          // Without a param by that name, "$today" and "$now" are dates, which dateProblems checks.
-          if (!p && !DATE_NAMES.has(name)) problems.push(`${where}: "${ref}" never resolves: tool "${t.name}" has no param "${name}"`);
+          // Without a param by that name, "$today" and "$now" are dates, which dateProblems checks, in a domain with a
+          // clock; without one, they are a missing param, as before clocks existed.
+          if (!p && !(clocked && DATE_NAMES.has(name))) problems.push(`${where}: "${ref}" never resolves: tool "${t.name}" has no param "${name}"`);
           continue;
         }
         // A path after a param with no fields stays literal text, as it did before params could nest.
@@ -226,8 +228,7 @@ export function validateDomain(d: Domain): string[] {
       }
     } else {
       tool(inv.never.tool, where);
-      // A key like $or is an operator, which operators() reports on its own.
-      for (const a of Object.keys(inv.never.when ?? {})) if (!a.startsWith("$")) argPath(inv.never.tool, a, `${where}.never.when`);
+      // An argument the tool doesn't have is a warning until 2.0 (see domainWarnings): 1.2 accepted it.
       operators(inv.never.when, `${where}.never.when`);
     }
   }
@@ -424,6 +425,18 @@ function undetectable(d: Domain, table: string, field: string): string | undefin
  */
 export function domainWarnings(d: Domain): string[] {
   const warnings: string[] = [];
+  // A never rule's when that names an argument the tool doesn't have: the rule never fires. 1.2 accepted it, so it is
+  // a warning, not an error, until 2.0. A key like $or is an operator, which validate reports on its own.
+  for (const inv of d.invariants) {
+    if (!("never" in inv) || !inv.never.when) continue;
+    const t = d.tools.find((x) => x.name === inv.never.tool);
+    for (const a of Object.keys(inv.never.when)) {
+      if (t && !a.startsWith("$") && !paramAt(t.params, a)) {
+        warnings.push(`invariants.${inv.id}.never.when: tool "${t.name}" has no param "${a}", so this rule never fires. Name one of its params; 2.0 will reject this.`);
+      }
+    }
+  }
+  warnings.push(...unclockedDates(d));
   // The default prompt, and each task's prompt that states a `given.context`.
   const prompts = [agentSystemPrompt(d), ...d.tasks.filter((t) => taskContext(t)).map((t) => agentSystemPrompt(d, t))];
   for (const inv of d.invariants) {

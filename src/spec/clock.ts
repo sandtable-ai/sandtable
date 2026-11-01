@@ -209,22 +209,58 @@ const MALFORMED = {
 };
 
 /**
- * What `validate` reports about dates: a malformed expression such as `$today+2h` or `$now+5x`, and any expression in a
- * place whose trials have no clock, since it would stay literal text. A tool's own param named `today` or `now` is that
- * param, not a date, so it is left alone.
+ * Whether a domain or any of its tasks sets a clock. A domain that sets none reads `$today` and `$now` as it did before
+ * clocks existed (1.2): as text, which validate warns about rather than rejects (see unclockedDates), until 2.0.
+ */
+export function usesClock(domain: Domain): boolean {
+  return domain.clock !== undefined || domain.tasks.some((t) => t.clock !== undefined);
+}
+
+/** The date expressions in one string of a place that reads them as `mode` says, except a tool's own params. */
+function expressions(value: string, mode: Mode, shadow: ReadonlySet<string>): { ref: string; name: keyof typeof MALFORMED; body: string }[] {
+  const found: { ref: string; name: keyof typeof MALFORMED; body: string }[] = [];
+  const whole = mode !== "text" ? WHOLE.exec(value) : null;
+  if (whole && !shadow.has(whole[1]!)) found.push({ ref: value, name: whole[1] as keyof typeof MALFORMED, body: value.slice(1) });
+  if (mode !== "value") {
+    for (const m of value.matchAll(INLINE)) if (!shadow.has(m[1]!)) found.push({ ref: m[0], name: m[1] as keyof typeof MALFORMED, body: m[0].slice(2, -1) });
+  }
+  return found;
+}
+
+/**
+ * What `validate` warns about in a domain that sets no clock anywhere: each string that reads as a date expression. It
+ * stays text, as it did before 1.3, when validate accepted it, so 1.3 warns instead of rejecting the domain; 2.0 will
+ * reject it. In a tool's ops or checks, `$today`, `$now`, `${today}` and `${now}` read as references to a param, and
+ * one the tool doesn't have is an error, as it was before 1.3, so they aren't warned about here.
+ */
+export function unclockedDates(domain: Domain): string[] {
+  if (usesClock(domain)) return [];
+  const warnings: string[] = [];
+  const visit: Visit = (value, { mode, path, shadow }) => {
+    for (const { ref } of expressions(value, mode, shadow)) {
+      if (path.startsWith("tools.") && /^\$(?:today|now|\{(?:today|now)\})$/.test(ref)) continue;
+      warnings.push(`${path}: "${ref}" is text, not a date, since the domain sets no clock, as before 1.3: set \`clock:\` to now or a date and time to make it a date. 2.0 will reject it without one.`);
+    }
+    return value;
+  };
+  mapDomain(domain, visit);
+  for (const task of domain.tasks) mapTask(task, visit);
+  return warnings;
+}
+
+/**
+ * What `validate` reports about dates in a domain that uses a clock (see usesClock): a malformed expression such as
+ * `$today+2h` or `$now+5x`, and any expression in a place whose trials have no clock, since it would stay literal text.
+ * A tool's own param named `today` or `now` is that param, not a date, so it is left alone.
  */
 export function dateProblems(domain: Domain): string[] {
+  if (!usesClock(domain)) return [];
   const problems: string[] = [];
   /** Checks one place's strings. `unclocked` is undefined when every trial the place resolves in has a clock; else what follows "needs a clock". */
   const check =
     (unclocked: string | undefined): Visit =>
     (value, { mode, path, shadow }) => {
-      const found: { ref: string; name: keyof typeof MALFORMED; body: string }[] = [];
-      const whole = mode !== "text" ? WHOLE.exec(value) : null;
-      if (whole && !shadow.has(whole[1]!)) found.push({ ref: value, name: whole[1] as keyof typeof MALFORMED, body: value.slice(1) });
-      if (mode !== "value") {
-        for (const m of value.matchAll(INLINE)) if (!shadow.has(m[1]!)) found.push({ ref: m[0], name: m[1] as keyof typeof MALFORMED, body: m[0].slice(2, -1) });
-      }
+      const found = expressions(value, mode, shadow);
       for (const { ref, name, body } of found) {
         // Any clock tells a well-formed expression from a malformed one.
         if (evaluate(body, "2000-01-01T00:00") === undefined) problems.push(`${path}: "${ref}" is not a date: ${MALFORMED[name]}`);

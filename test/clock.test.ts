@@ -12,7 +12,7 @@ import { agentSystemPrompt, userSystemPrompt } from "../src/sim/prompts.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
 import type { AgentAdapter, AgentContext } from "../src/sim/types.ts";
 import { dateOf, describeClock, interpolateDates, localMinute, resolveDates, resolveTrial, trialClock } from "../src/spec/clock.ts";
-import { loadDomain, parseDomain, validateDomain } from "../src/spec/load.ts";
+import { domainWarnings, loadDomain, parseDomain, validateDomain } from "../src/spec/load.ts";
 import { DomainSpec, InvariantSpec, TaskSpec, type Domain } from "../src/spec/schema.ts";
 import { worldFor } from "../src/world/store.ts";
 import { executeTool } from "../src/world/tools.ts";
@@ -292,21 +292,44 @@ describe("validate", () => {
     expect(problems({ clock: "now" })).toEqual([]);
   });
 
-  it("rejects $today and $now, with or without an offset, in a domain whose trials have no clock", () => {
+  it("keeps $today and $now text in a domain that sets no clock anywhere, as 1.2 did, and warns about each (#475)", () => {
     const tasks = (raw().tasks as Record<string, unknown>[]).map((t) => ({ ...t, clock: undefined }));
-    const found = problems({ clock: undefined, tasks });
-    expect(found).toContain(`world.tables.loads.rows[0].pickup_date: "$today+2d" ${NEEDS}`);
-    expect(found).toContain(`world.tables.loads.rows[0].posted_at: "$now-90m" ${NEEDS}`);
-    expect(found).toContain(`tools.get_load.checks[0].where.pickup_date.$gte: "$today" ${NEEDS}`);
-    expect(found).toContain(`tools.get_load.checks[0].error: "\${today}" ${NEEDS}`);
-    expect(found).toContain(`tools.book_load.ops[0].values.summary: "\${now+1h}" ${NEEDS}`);
-    expect(found).toContain(`invariants.no-past-pickup.never.when.pickup_date.$lt: "$today" ${NEEDS}`);
-    expect(found).toContain(`tasks.book-upcoming.user.instructions: "\${today+2d}" ${NEEDS}`);
+    const d = DomainSpec.parse({ ...raw(), clock: undefined, tasks });
+    const TEXT = "is text, not a date, since the domain sets no clock, as before 1.3: set `clock:` to now or a date and time to make it a date. 2.0 will reject it without one.";
+    // In a tool's ops or checks, $today and ${today} are references to a param the tool doesn't have: an error, as in 1.2.
+    expect(validateDomain(d)).toEqual([
+      'tools.get_load.checks[0]: "$today" never resolves: tool "get_load" has no param "today"',
+      'tools.get_load.checks[0]: "${today}" never resolves: tool "get_load" has no param "today"',
+      'tools.list_upcoming.ops[0]: "$today" never resolves: tool "list_upcoming" has no param "today"',
+      'tools.book_load.ops[0]: "$now" never resolves: tool "book_load" has no param "now"',
+      'tools.book_load.ops[0]: "${today}" never resolves: tool "book_load" has no param "today"',
+    ]);
+    const warned = domainWarnings(d);
+    expect(warned).toContain(`world.tables.loads.rows[0].pickup_date: "$today+2d" ${TEXT}`);
+    expect(warned).toContain(`world.tables.loads.rows[0].posted_at: "$now-90m" ${TEXT}`);
+    expect(warned).toContain(`tools.book_load.ops[0].values.summary: "\${now+1h}" ${TEXT}`);
+    expect(warned).toContain(`invariants.no-past-pickup.never.when.pickup_date.$lt: "$today" ${TEXT}`);
+    expect(warned).toContain(`tasks.book-upcoming.user.instructions: "\${today+2d}" ${TEXT}`);
+    expect(warned).toContain(`tasks.book-upcoming.given.rows.loads[0].pickup_date: "$today+1d" ${TEXT}`);
+    expect(warned).toContain(`tasks.book-upcoming.events[0].set.booked_on: "$today" ${TEXT}`);
+    expect(warned).toContain(`tasks.book-upcoming.expect.called[0].args.pickup_date: "$today+2d" ${TEXT}`);
+    expect(warned).toContain(`tasks.book-upcoming.reference[0].args.pickup_date: "$today+2d" ${TEXT}`);
+    // A malformed one is text too, as in 1.2.
+    const rows = [{ load_id: "L-1", pickup_date: "$today+2h" }];
+    const odd = DomainSpec.parse({ ...raw(), clock: undefined, tasks, world: { tables: { loads: { key: "load_id", rows }, bookings: { key: "booking_id" } } } });
+    expect(domainWarnings(odd)).toContain(`world.tables.loads.rows[0].pickup_date: "$today+2h" ${TEXT}`);
+    expect(validateDomain(odd).filter((p) => p.includes("$today+2h"))).toEqual([]);
+    // The tool's own param named today needs no clock.
+    expect(warned.filter((w) => w.includes("echo_today"))).toEqual([]);
+    // Nothing resolves: the trial's world keeps the text, as 1.2's did.
+    expect(resolveTrial(d, d.tasks[0]!, MONDAY).domain.world.tables.loads!.rows[0]!.pickup_date).toBe("$today+2d");
+  });
+
+  it("rejects $today and $now where a task has no clock, in a domain that uses one", () => {
+    // The domain sets none, but one task does: the other task's own places need one.
+    const found = problems({ clock: undefined });
     expect(found).toContain(`tasks.book-upcoming.given.rows.loads[0].pickup_date: "$today+1d" ${NEEDS}`);
-    expect(found).toContain(`tasks.book-upcoming.events[0].set.booked_on: "$today" ${NEEDS}`);
-    expect(found).toContain(`tasks.book-upcoming.expect.called[0].args.pickup_date: "$today+2d" ${NEEDS}`);
-    expect(found).toContain(`tasks.book-upcoming.reference[0].args.pickup_date: "$today+2d" ${NEEDS}`);
-    // The param named today is the tool's own, so it needs no clock; and nothing says $today is an unknown param.
+    expect(found).toContain(`tasks.book-upcoming.user.instructions: "\${today+2d}" ${NEEDS}`);
     expect(found.filter((p) => p.includes("echo_today") || p.includes("never resolves"))).toEqual([]);
   });
 

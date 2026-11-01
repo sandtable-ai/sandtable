@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+### Deprecated
+
+- **`validate`**: two kinds of mistake that 1.3.0 rejected are warnings again until 2.0, as the stability policy asks of a minor release. 1.3.0 failed domains that 1.2 accepted, which could break a CI job that ran `validate` or `run` (both mistakes were in 1.3.0's notes, with no **Breaking:** mark).
+  - A `never` rule whose `when` names an argument its tool doesn't have, such as a misspelled `lod_id`, now gets a warning that the rule never fires. 2.0 will reject it.
+  - In a domain that sets no clock anywhere, `$today`, `$now` and `${today}` are text, as before 1.3, and `validate` warns about each one where a clock would make it a date. In a tool's ops and checks, `$today` and `$now` are again a reference to a param the tool doesn't have, an error as in 1.2. A domain with a clock is checked as in 1.3.0. 2.0 will reject date expressions without a clock ([#475](https://github.com/sandtable-ai/sandtable/issues/475)).
+
 ## [1.3.0] - 2026-11-01
 
 A minor release with no breaking changes. The `max_count` and `monotonic` invariants check rules across calls, such as at most three counter-offers per load, each at least the last, and the freight example now grades both. A simulation clock, with dates relative to it such as `$today+2d`, keeps a domain valid for an agent that knows the real date. `sandtable import retell` and `import elevenlabs` draft a domain from those platforms' agent exports, and `sandtable serve` grades ElevenLabs test calls. The plugin's hooks cover pnpm scripts and more ways of running the unrelated `sandtable` package.

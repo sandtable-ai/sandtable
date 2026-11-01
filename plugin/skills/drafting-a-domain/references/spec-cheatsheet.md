@@ -72,7 +72,7 @@ tasks:
 - `$today` is the clock's date (`2026-11-02`), `$now` its date and time (`2026-11-02T09:00`). One offset each: `$today+2d`, `$today-1d` (days only), `$now+90m`, `$now-3h`, `$now+1d`. The arithmetic is on the wall clock, with no daylight-saving jumps.
 - A whole string resolves in seed rows, `given.rows` and `given.context`, tools' `ops` and `checks`, `events`, `expect.state`, `called`/`not_called` args, `reference` args, and invariants' `where`/`when`. `${today+2d}` and `${now}` interpolate in `user.instructions`, `opening` and `script`, and in strings in tools' `ops` and `checks`.
 - In a tool with a param named `today` or `now`, that name stays the param.
-- `validate` fails on `$today` or `$now` where a task's trials have no clock, and on a malformed offset (`$today+2h`, `$now+5x`).
+- With a clock on the domain or any task, `validate` fails on `$today` or `$now` where a task's trials have no clock, and on a malformed offset (`$today+2h`, `$now+5x`). With no clock anywhere, they stay text as before 1.3, and `validate` warns.
 - With a clock, the default agent prompt and the caller's prompt say `It is now Monday, November 2, 2026, 9:00 AM.`, an HTTP agent gets `now` in each request, and a module agent gets `ctx.now`. Each trial records `clock` in results.json, and `regrade` resolves the trial's dates at it, so a `clock: now` run regrades the same on any day. Without a clock, nothing resolves.
 
 ## Tools

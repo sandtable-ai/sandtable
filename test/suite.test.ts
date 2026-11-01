@@ -6,7 +6,7 @@ import { runSuite } from "../src/run/suite.ts";
 import { noopAgent } from "../src/sim/noop.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
 import type { AgentAdapter } from "../src/sim/types.ts";
-import { DomainError, loadDomain, pendingReview, validateDomain } from "../src/spec/load.ts";
+import { DomainError, domainWarnings, loadDomain, pendingReview, validateDomain } from "../src/spec/load.ts";
 import { DomainSpec, type Task } from "../src/spec/schema.ts";
 
 const example = path.resolve("examples/freight");
@@ -201,11 +201,12 @@ describe("domain validation", () => {
     ]);
   });
 
-  it("reports a never rule whose when names an argument its tool doesn't have, which would never fire (#462)", async () => {
+  it("warns about a never rule whose when names an argument its tool doesn't have, which never fires, and still accepts it as 1.2 did (#462, #475)", async () => {
     const d = await loadDomain(example);
     const never = (id: string, when: Record<string, unknown>) => ({ id, description: id, never: { tool: "book_load", when } });
     const broken = { ...d, invariants: [never("typo", { lod_id: "L-1012" }), never("ok", { load_id: "L-1012", rate: { $gt: 3000 } })] };
-    expect(validateDomain(broken)).toEqual(['invariants.typo.never.when: tool "book_load" has no param "lod_id"']);
+    expect(validateDomain(broken)).toEqual([]);
+    expect(domainWarnings(broken)).toEqual(['invariants.typo.never.when: tool "book_load" has no param "lod_id", so this rule never fires. Name one of its params; 2.0 will reject this.']);
     // An operator where a field belongs gets the operator's message alone.
     const op = validateDomain({ ...d, invariants: [never("op", { $or: [] })] });
     expect(op).toHaveLength(1);
