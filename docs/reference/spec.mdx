@@ -88,8 +88,8 @@ tasks:
 - A whole string resolves in seed rows, a task's `given.rows` and `given.context`, tools' `ops` and `checks` with their where clauses, `events`, `expect.state`, the `args` of `called` and `not_called`, `reference` args, and invariants' `where` and `when`. Dates compare as text, so `$gte` and `$lt` work on them: `{ pickup_date: { $gte: $today } }`.
 - `${today+2d}` and `${now}` interpolate inside text: a task's `user.instructions`, `opening` and `script`, and strings in tools' `ops` and `checks`, where `${arg}` interpolates an argument: `"Booked ${load_id} for ${today+2d}"`.
 - In a tool with a param named `today` or `now`, that name is the param in the tool's `ops` and `checks`, as it was before clocks existed.
-- `validate` fails on a malformed offset, such as `$today+2h` or `$now+5x`, and on `$today` or `$now` in a domain whose trials have no clock: set `clock:` to now or a date and time.
-- Without a clock nothing resolves, and a domain behaves as it did before clocks existed.
+- In a domain that sets a clock, on the domain or on any task, `validate` fails on a malformed offset, such as `$today+2h` or `$now+5x`, and on `$today` or `$now` where a task's trials have no clock.
+- In a domain that sets no clock anywhere, nothing resolves, and the domain behaves as it did before clocks existed: `$today+2d` is text, and `$today` in a tool's ops is a param the tool doesn't have. `validate` warns about each date expression it finds there; 2.0 will reject them without a clock.
 
 With a clock, sandtable's default agent prompt and the simulated caller's prompt each say what time it is, in one line such as `It is now Monday, November 2, 2026, 9:00 AM.` An agent with its own prompt reads the clock as `now` (`2026-11-02T09:00`): in every request of the [HTTP step protocol](/reference/http-protocol), and as `ctx.now` in a [module agent's](/guides/bring-your-agent#your-agent-as-a-js-or-ts-module) `createSession`. Its `ctx.domain` holds the dates resolved.
 
