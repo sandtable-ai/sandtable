@@ -301,8 +301,8 @@ npx sandtable-ai serve ./my-domain --task book-at-posted-rate
 
 It serves the same routes as [`run --serve`](#run): REST, MCP at `/mcp` and webhooks at `/webhook`. Each conversation is a session and a trial of its task:
 
-- A conversation opens with `POST /sessions`, with the first webhook that names a platform's call id (Vapi's `message.call.id`, Retell's `call.call_id`), with an MCP `initialize` (the session's id comes back as `Mcp-Session-Id`), or with the first request that names none while none is open.
-- It ends, and is graded, with `POST /sessions/<id>/end` (optionally with `{ "transcript": [{ "role": "user" | "agent", "text", "time"? }] }`), Vapi's end-of-call report, Retell's `call_ended` event, or an MCP `DELETE`.
+- A conversation opens with `POST /sessions`, with the first webhook that names a platform's call id (Vapi's `message.call.id`, Retell's `call.call_id`), with the first request whose `X-Sandtable-Call` header names a call, with an MCP `initialize` (the session's id comes back as `Mcp-Session-Id`), or with the first request that names none while none is open.
+- It ends, and is graded, with `POST /sessions/<id>/end` (optionally with `{ "transcript": [{ "role": "user" | "agent", "text", "time"? }] }`), Vapi's end-of-call report, Retell's `call_ended` event, ElevenLabs' `post_call_transcription` webhook, or an MCP `DELETE`.
 
 The terminal says when each conversation opens and how it was graded. Stop it with Ctrl-C: it prints the summary of the graded conversations and exits 0. Conversations still open then are named and not graded. [Grade calls another system drives](/guides/black-box#conversations-another-system-drives) has the details.
 

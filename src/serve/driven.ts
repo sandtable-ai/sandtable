@@ -70,11 +70,11 @@ export async function serveConversations(domain: Domain, opts: DrivenOptions): P
         opts.onOpen?.(session);
         return session;
       },
-      async end(session, transcript) {
+      async end(session, transcript, problem) {
         const st = open.get(session.id)!;
         open.delete(session.id);
         server.close(session.id);
-        const trial = gradeConversation(domain, session.task, st, transcript, trials.filter((t) => t.taskId === session.task.id).length);
+        const trial = gradeConversation(domain, session.task, st, transcript, trials.filter((t) => t.taskId === session.task.id).length, problem);
         trials.push(trial);
         latest = summary();
         await opts.onGraded?.(trial, latest);
@@ -121,7 +121,9 @@ export async function serveConversations(domain: Domain, opts: DrivenOptions): P
  * Grade a conversation another system drove: the end state, the invariants and the tools called, and, with a
  * transcript, what the agent said. The tool calls go between the transcript's lines by time when every line has one;
  * otherwise all of them come before the agent's first line. Without a transcript, a task that checks what the agent
- * said can't be graded on it, so the trial ends in an error: skipped, unless the agent broke a rule.
+ * said can't be graded on it, so the trial ends in an error: skipped, unless the agent broke a rule. With `problem`,
+ * such as another call's requests in its world, nothing in it can be trusted to be this call's: the trial ends in that
+ * error, and is skipped whatever it shows.
  */
 function gradeConversation(
   domain: Domain,
@@ -129,6 +131,7 @@ function gradeConversation(
   st: { session: ServedSession; world: World; initial: Snapshot; calls: { at: number; event: TrajectoryEvent }[]; started: number },
   transcript: TranscriptLine[] | undefined,
   trial: number,
+  problem?: string,
 ): TrialResult {
   const lines = transcript ?? [];
   const said = (l: TranscriptLine): TrajectoryEvent => (l.role === "user" ? { type: "user", text: l.text } : { type: "agent", text: l.text, latencyMs: 0 });
@@ -143,14 +146,16 @@ function gradeConversation(
   }
   const agentMessages = lines.filter((l) => l.role === "agent").map((l) => l.text);
   const error =
-    transcript === undefined && task.expect.reply_includes.length
+    problem ??
+    (transcript === undefined && task.expect.reply_includes.length
       ? "the conversation ended without a transcript, so what the agent said can't be graded: send one to POST /sessions/<id>/end, or have the platform send its end-of-call report"
-      : undefined;
+      : undefined);
   const graded = gradeEpisode({ domain, task, world: st.world, runner: st.session.runner, events, agentMessages, ...(error ? { error } : {}) });
   return {
     taskId: task.id,
     trial,
     ...graded,
+    ...(problem ? { passed: false, skipped: true as const } : {}),
     events,
     changes: worldChanges(domain, st.initial, st.world),
     endReason: error ? "error" : "user_stop",

@@ -21,14 +21,18 @@ export interface TranscriptLine {
  * - `calls`: run tools. Vapi's `tool-calls` message, Retell's custom function (`{ name, args, call }`), or a generic
  *   `{ name | tool, arguments | args | parameters }`. At `/webhook/<tool>`, the body is that tool's arguments, alone or
  *   in Retell's wrapper.
- * - `end`: the call is over (Vapi's `end-of-call-report`, Retell's `call_ended` event), with what was said.
- * - `ignore`: another Vapi server message or Retell event, such as a status update, which needs no answer.
- * `callId` is the platform's id for the conversation, when the payload has one.
+ * - `end`: the call is over (Vapi's `end-of-call-report`, Retell's `call_ended` event, ElevenLabs'
+ *   `post_call_transcription` webhook), with what was said.
+ * - `ignore`: another Vapi server message, Retell event or ElevenLabs webhook, such as a status update, which needs no
+ *   answer.
+ * `callId` is the platform's id for the conversation, when the payload has one. ElevenLabs calls a webhook tool's own
+ * URL, a tool's `http` route, so only its post-call webhooks come here; its end's `toolCalls` names the webhook tools the
+ * transcript says the call called, in order.
  */
 export type WebhookRequest =
   | { kind: "calls"; platform: "vapi" | "retell" | "generic"; callId?: string; calls: WebhookCall[] }
-  | { kind: "end"; platform: "vapi" | "retell"; callId?: string; transcript: TranscriptLine[] }
-  | { kind: "ignore"; platform: "vapi" | "retell"; callId?: string }
+  | { kind: "end"; platform: "vapi" | "retell" | "elevenlabs"; callId?: string; transcript: TranscriptLine[]; toolCalls?: string[] }
+  | { kind: "ignore"; platform: "vapi" | "retell" | "elevenlabs"; callId?: string }
   | { kind: "invalid"; error: string };
 
 const str = (v: unknown) => (typeof v === "string" && v !== "" ? v : undefined);
@@ -94,11 +98,34 @@ export function parseWebhook(body: unknown, pathTool?: string): WebhookRequest {
     }
     return { kind: "end", platform: "retell", ...id, transcript };
   }
+  // ElevenLabs' post-call webhooks, { type, event_timestamp, data }: post_call_transcription carries the transcript, with
+  // each line's time in the call; post_call_audio and call_initiation_failure need nothing.
+  if (typeof body.type === "string" && typeof body.event_timestamp === "number" && isPlainObject(body.data)) {
+    const callId = str(body.data.conversation_id);
+    const id = callId ? { callId } : {};
+    if (body.type !== "post_call_transcription") return { kind: "ignore", platform: "elevenlabs", ...id };
+    const start = isPlainObject(body.data.metadata) ? body.data.metadata.start_time_unix_secs : undefined;
+    const transcript: TranscriptLine[] = [];
+    const toolCalls: string[] = [];
+    for (const m of Array.isArray(body.data.transcript) ? body.data.transcript : []) {
+      for (const c of isPlainObject(m) && Array.isArray(m.tool_calls) ? m.tool_calls : []) {
+        if (!isPlainObject(c) || c.tool_has_been_called === false) continue;
+        const type = c.type ?? (isPlainObject(c.tool_details) ? c.tool_details.type : undefined);
+        if (type === "webhook" && str(c.tool_name)) toolCalls.push(str(c.tool_name)!);
+      }
+      const line = transcriptLine(m, m && (m as Record<string, unknown>).message);
+      if (!line) continue;
+      const at = (m as Record<string, unknown>).time_in_call_secs;
+      if (typeof start === "number" && Number.isFinite(start) && typeof at === "number" && Number.isFinite(at)) line.time = Math.round((start + at) * 1000);
+      transcript.push(line);
+    }
+    return { kind: "end", platform: "elevenlabs", ...id, transcript, toolCalls };
+  }
   const name = str(body.name) ?? str(body.tool);
   if (!name) {
     return {
       kind: "invalid",
-      error: "unrecognized webhook payload: send Vapi's tool-calls message, Retell's { name, args }, { name, arguments }, or the arguments alone to /webhook/<tool>",
+      error: "unrecognized webhook payload: send Vapi's tool-calls message, Retell's { name, args }, { name, arguments }, the arguments alone to /webhook/<tool>, or a platform's end-of-call webhook",
     };
   }
   const retell = isPlainObject(body.args) && isPlainObject(body.call);

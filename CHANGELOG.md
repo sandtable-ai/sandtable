@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ### Added
 
+- **`sandtable serve`**: grades ElevenLabs test calls. Its `post_call_transcription` webhook ends and grades a conversation, with each line's time in the call. A request can name its call in an `X-Sandtable-Call` header, which an ElevenLabs webhook tool fills with `{{system__conversation_id}}`, so calls at the same time keep their own worlds. Without the header, a call whose transcript lists other tool calls than its world got is skipped with that error rather than graded on another call's requests. Tool `http` routes also take form-encoded bodies, which ElevenLabs can send ([#459](https://github.com/sandtable-ai/sandtable/issues/459)).
 - **Overview video**: the docs home page plays a 52-second overview of sandtable, and the README links to it from a still in "How it works". It shows a call that sounds fine but books a carrier whose insurance expired, how a trial is graded, the freight example's results, a leaked ceiling rate and why pass^k matters, and the freight leaderboard ([#454](https://github.com/sandtable-ai/sandtable/issues/454)).
 
 ### Fixed
