@@ -61,8 +61,11 @@ export interface WorldServerOptions {
 export interface DrivenSessions {
   /** Open a session for a conversation: a trial of `taskId`, or of the default task when undefined. Throws to refuse. */
   open(taskId: string | undefined): ServedSession;
-  /** The conversation is over: grade it, with what was said when the platform sent it, and return what to answer. */
-  end(session: ServedSession, transcript: TranscriptLine[] | undefined): unknown | Promise<unknown>;
+  /**
+   * The conversation is over: grade it, with what was said when the platform sent it, and return what to answer. With
+   * `problem`, it can't be graded, such as when another call's requests went to its world: the trial is skipped with it.
+   */
+  end(session: ServedSession, transcript: TranscriptLine[] | undefined, problem?: string): unknown | Promise<unknown>;
 }
 
 /** A Host header that names this machine: 127.0.0.1, localhost or [::1], with any port. */
@@ -117,6 +120,10 @@ function routeOf(tool: Tool): Route | undefined {
   return { tool, method: tool.http.method, pattern: new RegExp(`^${source}/?$`), names };
 }
 
+/**
+ * A request's body: JSON, or, with `Content-Type: application/x-www-form-urlencoded` (as an ElevenLabs webhook tool can
+ * send), its fields as an object, where a name given more than once is a list. Undefined for an empty body.
+ */
 async function readBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
   let size = 0;
@@ -133,6 +140,7 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
   if (size > MAX_BODY) throw new HttpError(413, `the request body is over ${MAX_BODY} bytes`, { connection: "close" });
   const text = Buffer.concat(chunks).toString("utf8").trim();
   if (!text) return undefined;
+  if (/^application\/x-www-form-urlencoded\b/i.test(req.headers["content-type"] ?? "")) return fieldsOf(new URLSearchParams(text));
   try {
     return JSON.parse(text);
   } catch {
@@ -146,15 +154,21 @@ function send(res: ServerResponse, status: number, body: unknown, headers: Recor
   res.end(text);
 }
 
-/** The query string as arguments: a name given more than once is a list. */
-function queryArgs(url: URL): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const name of new Set(url.searchParams.keys())) {
-    const all = url.searchParams.getAll(name);
-    out[name] = all.length > 1 ? all : all[0];
+/** A query string's or a form's fields as arguments: a name given more than once is a list. */
+function fieldsOf(params: URLSearchParams): Record<string, unknown> {
+  // One pass: getAll for each name would read the whole list again for every name in a large form.
+  const all = new Map<string, string[]>();
+  for (const [name, value] of params) {
+    const list = all.get(name);
+    if (list) list.push(value);
+    else all.set(name, [value]);
   }
+  const out: Record<string, unknown> = {};
+  for (const [name, list] of all) out[name] = list.length > 1 ? list : list[0];
   return out;
 }
+
+const queryArgs = (url: URL) => fieldsOf(url.searchParams);
 
 export async function startWorldServer(domain: Domain, opts: WorldServerOptions): Promise<WorldServer> {
   const tools = new Map(domain.tools.map((t) => [t.name, t]));
@@ -200,8 +214,41 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
     return s;
   }
 
+  /**
+   * The session an end from a platform whose tool calls name no call (ElevenLabs) is for: the one its call id opened, a
+   * header named, or else the one open conversation that no call names, where those tool calls went. With none open, a
+   * new one, for a call that made no tool call; with several, the end can't tell which is its own.
+   */
+  function forEnd(callId: string): { session: ServedSession; guessed: boolean } {
+    if (byCall.has(callId) || endedCalls.has(callId)) return { session: forCall(callId), guessed: false };
+    const open = [...sessions.values()].filter((s) => !keyedIds.has(s.id));
+    if (open.length > 1) {
+      throw new HttpError(
+        409,
+        `${open.length} conversations are open that no call names, so the end of call ${callId} can't tell which one is its own: send each tool request the call's id in an X-Sandtable-Call header (on ElevenLabs, {{system__conversation_id}})`,
+      );
+    }
+    if (open.length === 0) return { session: forCall(callId), guessed: true };
+    byCall.set(callId, open[0]!.id);
+    keyedIds.add(open[0]!.id);
+    return { session: open[0]!, guessed: true };
+  }
+
+  /**
+   * Why a guessed session isn't this call's own, or undefined when it is: the webhook tools the call's transcript says
+   * it called (`toolCalls`, the domain's tools among them) aren't the calls the session got. Two calls at once, with no
+   * header to tell them apart, put their requests in one world, and grading either on it would be wrong.
+   */
+  function mixed(s: ServedSession, callId: string, toolCalls: string[]): string | undefined {
+    const called = toolCalls.filter((name) => tools.has(name));
+    const got = s.runner.calls.map((c) => c.name);
+    if ([...called].sort().join("\n") === [...got].sort().join("\n")) return undefined;
+    const list = (names: string[]) => (names.length ? names.join(", ") : "none");
+    return `call ${callId}'s transcript lists its tool calls as ${list(called)}, but the conversation it was matched to got ${list(got)}, so this call isn't graded on it: with no call id on its tool requests, another call's requests can go to the same world. Send each tool request the call's id in an X-Sandtable-Call header (on ElevenLabs, {{system__conversation_id}}) to keep calls at the same time apart`;
+  }
+
   /** End a driven session: grade it, stop serving it, and answer with the grade once the run's files have it. */
-  async function finish(res: ServerResponse, s: ServedSession, transcript: TranscriptLine[] | undefined): Promise<void> {
+  async function finish(res: ServerResponse, s: ServedSession, transcript: TranscriptLine[] | undefined, problem?: string): Promise<void> {
     sessions.delete(s.id);
     keyedIds.delete(s.id);
     for (const [call, id] of byCall) {
@@ -209,7 +256,7 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
       byCall.delete(call);
       endedCalls.add(call);
     }
-    send(res, 200, await driven!.end(s, transcript));
+    send(res, 200, await driven!.end(s, transcript, problem));
   }
 
   /** A transcript as `POST /sessions/<id>/end` takes it: `[{ role: "user" | "agent" | "assistant", text, time? }]`. */
@@ -263,7 +310,11 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
       if (!session) throw new HttpError(404, `no session ${id} is open: its trial ended, or it never started`);
       path = scoped[2] ?? "/";
     }
-    const target = () => session ?? current();
+    // Driven, a request may name its conversation as a platform's call id does, in a header: an ElevenLabs webhook tool
+    // can send {{system__conversation_id}} in one.
+    const header = req.headers["x-sandtable-call"];
+    const callHeader = driven && !session && typeof header === "string" && header.trim() !== "" ? header.trim() : undefined;
+    const target = () => session ?? (callHeader !== undefined ? forCall(callHeader) : current());
     const method = req.method ?? "GET";
 
     if (path === "/" || path === "") {
@@ -356,14 +407,21 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
       const request = parseWebhook(await readBody(req), hook[1] === undefined ? undefined : decode(hook[1]));
       if (request.kind === "invalid") throw new HttpError(400, request.error);
       // Driven, a platform's call id names the conversation: its first webhook opens a session for it.
-      const keyed = () => (driven && !session && request.callId !== undefined ? forCall(request.callId) : target());
+      const callId = callHeader ?? request.callId;
+      const keyed = () => (driven && !session && callId !== undefined ? forCall(callId) : target());
       if (request.kind === "end" && driven) {
         // A platform's retry of an end it already sent is answered, not graded again.
-        if (!session && request.callId !== undefined && endedCalls.has(request.callId)) {
-          send(res, 200, { ignored: `call ${request.callId} has ended, and its conversation was graded` });
+        if (!session && callId !== undefined && endedCalls.has(callId)) {
+          send(res, 200, { ignored: `call ${callId} has ended, and its conversation was graded` });
           return;
         }
-        // A call with no tool call is still a trial: its end opens and grades one.
+        // A call with no tool call is still a trial: its end opens and grades one. ElevenLabs' tool calls name no call,
+        // so its end finds the conversation they went to.
+        if (request.platform === "elevenlabs" && !session && callId !== undefined) {
+          const { session: s, guessed } = forEnd(callId);
+          await finish(res, s, request.transcript, guessed && request.toolCalls ? mixed(s, callId, request.toolCalls) : undefined);
+          return;
+        }
         await finish(res, keyed(), request.transcript);
         return;
       }

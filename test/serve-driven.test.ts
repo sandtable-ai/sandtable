@@ -183,6 +183,99 @@ describe("sandtable serve: conversations a platform drives", () => {
     expect(rest).toBeDefined();
   });
 
+  it("grades an ElevenLabs call at its post-call webhook: webhook tools on http routes with no call id, then post_call_transcription (#459)", async () => {
+    const domain = await domainWith(task());
+    const { url, graded } = await start(domain, domain.tasks[0]);
+    const start_time_unix_secs = Math.floor(Date.now() / 1000) - 1;
+    // ElevenLabs calls each webhook tool's own URL: a GET with a path param, and a form-encoded POST.
+    expect((await json(`${url}/carriers/100101`)).body).toMatchObject({ name: "Blue Mesa Trucking" });
+    const form = await fetch(`${url}/bookings`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "load_id=L-1001&mc_number=100101&rate=2100" });
+    expect(await form.json()).toMatchObject({ load_id: "L-1001", status: "confirmed" });
+    expect((await post(`${url}/webhook`, { type: "post_call_audio", event_timestamp: 1, data: { conversation_id: "conv-1", full_audio: "" } })).body).toEqual({});
+    const webhookCall = (tool_name: string) => ({ request_id: tool_name, tool_name, params_as_json: "{}", tool_has_been_called: true, type: "webhook" });
+    const end = {
+      type: "post_call_transcription",
+      event_timestamp: start_time_unix_secs + 60,
+      data: {
+        agent_id: "agent-1",
+        conversation_id: "conv-1",
+        status: "done",
+        transcript: [
+          { role: "user", message: "MC 100101, I want L-1001.", time_in_call_secs: 0, tool_calls: null },
+          { role: "agent", message: null, time_in_call_secs: 1, tool_calls: [webhookCall("verify_carrier"), { ...webhookCall("end_call"), type: "system" }] },
+          { role: "agent", message: null, time_in_call_secs: 2, tool_calls: [webhookCall("book_load"), { ...webhookCall("get_load"), tool_has_been_called: false }] },
+          { role: "agent", message: "L-1001 is booked.", time_in_call_secs: 3600, tool_calls: null },
+        ],
+        metadata: { start_time_unix_secs, call_duration_secs: 60 },
+      },
+    };
+    expect((await post(`${url}/webhook`, end)).body).toMatchObject({ task: "book", trial: 0, passed: true, failed: [] });
+    // A large form is read in one pass: 80,000 fields in about 700 KB answer at once.
+    const many = Array.from({ length: 80_000 }, (_, i) => `f${i}=1`).join("&");
+    const big = await fetch(`${url}/s/${(await post(`${url}/sessions`, {})).body.id}/bookings`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: many });
+    expect(big.status).toBe(400);
+    // Lines and calls in order of time: the agent's reply came after the calls, an hour into the call.
+    expect(graded[0]!.events.map((e) => (e.type === "tool" ? `${e.name} via ${e.via}` : e.type))).toEqual(["user", "verify_carrier via rest", "book_load via rest", "agent"]);
+    // ElevenLabs retries a webhook that failed: a second end of the same call isn't graded again.
+    expect((await post(`${url}/webhook`, end)).body).toEqual({ ignored: "call conv-1 has ended, and its conversation was graded" });
+    expect(graded).toHaveLength(1);
+    // A failed call initiation needs no answer.
+    expect((await post(`${url}/webhook`, { type: "call_initiation_failure", event_timestamp: 1, data: { conversation_id: "conv-2", failure_reason: "busy" } })).body).toEqual({});
+  });
+
+  it("keeps ElevenLabs calls at the same time apart with an X-Sandtable-Call header, and skips calls it can't tell apart without one (#459)", async () => {
+    const domain = await domainWith(task());
+    const transcription = (conversation_id: string, tools: string[]) => ({
+      type: "post_call_transcription",
+      event_timestamp: 1,
+      data: {
+        conversation_id,
+        transcript: [
+          { role: "agent", message: null, tool_calls: tools.map((tool_name) => ({ tool_name, params_as_json: "{}", tool_has_been_called: true, type: "webhook" })) },
+          { role: "agent", message: "L-1001 is booked.", tool_calls: null },
+        ],
+      },
+    });
+    {
+      const { url, graded } = await start(domain, domain.tasks[0]);
+      // Interleaved, each with its own world: both book the same load.
+      for (const call of ["conv-a", "conv-b"]) expect((await json(`${url}/carriers/100101`, { headers: { "x-sandtable-call": call } })).status).toBe(200);
+      for (const call of ["conv-a", "conv-b"]) expect((await post(`${url}/bookings`, BOOK, { "x-sandtable-call": call })).body).toMatchObject({ status: "confirmed" });
+      expect((await post(`${url}/webhook`, transcription("conv-b", ["verify_carrier", "book_load"]))).body).toMatchObject({ passed: true });
+      expect((await post(`${url}/webhook`, transcription("conv-a", ["verify_carrier", "book_load"]))).body).toMatchObject({ passed: true });
+      expect(graded.map((t) => t.events.filter((e) => e.type === "tool").length)).toEqual([2, 2]);
+    }
+    {
+      const { url, graded } = await start(domain, domain.tasks[0]);
+      // Without the header, the second call's request goes to the first call's world, as any request that names no
+      // conversation goes to the one open: the transcripts show it, and neither call is graded on that world.
+      await json(`${url}/carriers/100101`);
+      await json(`${url}/carriers/100101`);
+      await post(`${url}/bookings`, BOOK);
+      const a = await post(`${url}/webhook`, transcription("conv-a", ["verify_carrier", "book_load"]));
+      expect(a.body).toMatchObject({ passed: false, skipped: true });
+      expect(graded[0]!.error).toMatch(/^call conv-a's transcript lists its tool calls as verify_carrier, book_load, but the conversation it was matched to got verify_carrier, verify_carrier, book_load, so this call isn't graded on it: with no call id on its tool requests, another call's requests can go to the same world/);
+      expect(graded[0]!.error).toContain("X-Sandtable-Call header (on ElevenLabs, {{system__conversation_id}})");
+      expect((await post(`${url}/webhook`, transcription("conv-b", ["verify_carrier"]))).body).toMatchObject({ passed: false, skipped: true });
+      expect(graded[1]!.error).toMatch(/lists its tool calls as verify_carrier, but the conversation it was matched to got none/);
+    }
+    {
+      const { url, graded } = await start(domain, domain.tasks[0]);
+      // A post-call webhook with no transcript entries says nothing about the call's tool calls, so it isn't checked.
+      await json(`${url}/carriers/100101`);
+      await post(`${url}/bookings`, BOOK);
+      expect((await post(`${url}/webhook`, { type: "post_call_transcription", event_timestamp: 1, data: { conversation_id: "conv-d", transcript: [] } })).body).toMatchObject({ passed: true });
+      expect(graded[0]!.error).toBeUndefined();
+    }
+    {
+      const { url } = await start(domain, domain.tasks[0]);
+      // Two conversations no call names: an end can't tell which is its own.
+      await post(`${url}/sessions`, {});
+      await post(`${url}/sessions`, {});
+      expect(await post(`${url}/webhook`, transcription("conv-c", []))).toMatchObject({ status: 409, body: { error: /2 conversations are open that no call names/ } });
+    }
+  });
+
   it("refuses an ambiguous URL when several conversations are open", async () => {
     const domain = await domainWith(task());
     const { url } = await start(domain, domain.tasks[0]);
