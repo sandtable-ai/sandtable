@@ -213,6 +213,8 @@ export function validateDomain(d: Domain): string[] {
       }
     } else {
       tool(inv.never.tool, where);
+      // A key like $or is an operator, which operators() reports on its own.
+      for (const a of Object.keys(inv.never.when ?? {})) if (!a.startsWith("$")) argPath(inv.never.tool, a, `${where}.never.when`);
       operators(inv.never.when, `${where}.never.when`);
     }
   }
