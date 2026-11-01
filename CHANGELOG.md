@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Overview video**: the docs home page plays a 52-second overview of sandtable, and the README links to it from a still in "How it works". It shows a call that sounds fine but books a carrier whose insurance expired, how a trial is graded, the freight example's results, a leaked ceiling rate and why pass^k matters, and the freight leaderboard ([#454](https://github.com/sandtable-ai/sandtable/issues/454)).
+
 ## [1.2.0] - 2026-10-31
 
 A minor release for agents you can't change, with no breaking changes. `run --serve` serves each trial's simulated world over REST, MCP and webhooks for an agent that calls its own tools, and `sandtable serve` grades the conversations a hosted voice platform's own test calls drive. A task's faults make tool calls time out, hit a rate limit or fail, and its events change the world mid-call. `sandtable import vapi` drafts a domain from a Vapi assistant's export. The freight example gains two fault tasks and a rule, so stored freight runs can't be regraded under it. The plugin's hooks cover more ways of running and installing sandtable.

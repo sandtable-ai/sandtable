@@ -1,0 +1,519 @@
+<!doctype html>
+<!--
+  Source of the overview video, in two layouts that share one timeline:
+    ?layout=wide   1280x720 CSS px, rendered at 1.5x  ->  docs/images/promo.mp4 (1920x1080), the docs home page
+                   with &poster&t=<s>, one still       ->  assets/promo.png (1600x900), the README's link to it
+    (default)      1080x1350, 4:5                      ->  assets/promo-social.mp4, for social posts, not committed
+  Render: node assets/render.mjs promo, or promo-social. Preview a frame: open promo.html?layout=wide&t=20
+
+  The script exposes seek(t) and DURATION: every frame is a pure function of t, so the renderer
+  screenshots seek(0), seek(1/30), ... and nothing animates on its own.
+
+  Every number comes from:
+    the offline freight run (rule-based agents, scripted callers, no model calls):
+      node src/cli.ts run examples/freight --agent scripted:naive   --user scripted   # 5/52, pass^1 9.6%
+      node src/cli.ts run examples/freight --agent scripted:careful --user scripted   # 52/52, pass^1 100%
+      data-calls is the naive run's tasks in tasks.yaml order, 1 = passed (as in og.html); the three
+      counts are its verify-before-book, rate-ceiling and eligible-carrier failure modes. The transcript
+      and the carrier record are its expired-insurance trial (report.png).
+    the README's live run: Claude Opus 5.5 said "$1,450", L-1002's max_rate in examples/freight, in one
+      of two trials; pass^1 95% and pass^2 90%.
+    docs/leaderboard.mdx (freight-v1): BOARD is each model's pass^4, flagged when 76% or more of its failed
+      trials include never-disclose-ceiling; the do-nothing baseline is 32%.
+  If the example or the board changes, update them from a new run and render again.
+
+  Design: the rules in assets/README.md, with the og.html palette. Terracotta marks failures and the
+  invariant check only.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>sandtable overview video</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Fira+Sans:wght@400;500;600&display=block" rel="stylesheet">
+<style>
+:root{--paper:#F6F1E8;--card:#FBF8F2;--fill:#ECE4D6;--ink:#1E1A16;--muted:#6B6156;--rule:#DDD3C4;--accent:#B4532A;--accent-text:#9C3F20;--tint:rgba(180,83,42,.16)}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100vw;height:100vh;overflow:hidden;background:var(--paper)}
+body{position:relative;color:var(--ink);font-family:"Fira Sans",sans-serif;-webkit-font-smoothing:antialiased;font-kerning:normal}
+.mono{font-family:"Fira Code",monospace;font-variant-ligatures:none}
+[data-in]{opacity:0}
+.scene{position:absolute;inset:0;padding:176px 88px 88px;display:flex;flex-direction:column;visibility:hidden}
+.side{display:contents}
+h2{font-size:64px;line-height:76px;font-weight:600;letter-spacing:-.02em;text-wrap:balance}
+.tag,.fail,.judge,.band b,.cap,.note{text-wrap:balance}
+.nw{white-space:nowrap}
+.sub{margin-top:16px;font-size:34px;line-height:46px;color:var(--muted)}
+.kicker{font-size:24px;line-height:32px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-bottom:16px}
+.bad{color:var(--accent-text)}
+.hl{background-image:linear-gradient(var(--tint),var(--tint));background-repeat:no-repeat;background-size:0% 100%;border-radius:6px;padding:0 8px;margin:0 -8px}
+
+/* the header on every scene but the first and the last */
+#chrome{position:absolute;left:88px;right:88px;top:64px;height:48px;display:flex;justify-content:space-between;align-items:center;opacity:0}
+#chrome .brand{display:flex;align-items:center;gap:14px;font-size:34px;font-weight:600;letter-spacing:-.01em}
+#chrome .brand img{display:block;width:40px;height:40px}
+#chrome .url{font-size:24px;color:var(--muted)}
+
+/* 1 the mark builds, then the name */
+#s1{justify-content:center;padding-top:88px}
+.bigmark{display:grid;grid-template-columns:repeat(3,56px);gap:18px;margin-bottom:56px}
+.bigmark i{width:56px;height:56px;border-radius:9px;background:var(--ink);transform:scale(0)}
+.bigmark i.f{background:var(--accent)}
+.word{font-size:120px;line-height:132px;font-weight:600;letter-spacing:-.02em}
+.tag{margin-top:24px;font-size:48px;line-height:60px;font-weight:500;max-width:860px;letter-spacing:-.01em}
+
+/* 2 a call that sounds fine, and the record that says otherwise */
+.heads{position:relative;height:76px}
+.heads h2{position:absolute;left:0;top:0;white-space:nowrap}
+.chat{margin-top:40px;display:flex;flex-direction:column;gap:18px}
+.bubble{max-width:780px;padding:14px 24px 16px;border-radius:20px;font-size:30px;line-height:40px}
+.bubble .who{display:block;font-size:20px;line-height:28px;letter-spacing:.08em;color:var(--muted);margin-bottom:2px}
+.caller{align-self:flex-start;background:var(--fill);border-top-left-radius:6px}
+.agent{align-self:flex-end;background:var(--card);border:2px solid var(--rule);border-top-right-radius:6px}
+.judge{margin-top:24px;font-size:30px;line-height:40px;color:var(--muted)}
+.judge b{color:var(--ink);font-weight:600;margin-right:10px}
+.card{border:2px solid var(--rule);border-radius:16px;background:var(--card);padding:20px 32px 24px;font-size:28px;line-height:48px}
+.card .t{font-size:22px;line-height:32px;letter-spacing:.06em;color:var(--muted);margin-bottom:6px;text-transform:uppercase}
+.card .r{display:grid;grid-template-columns:330px 1fr}
+.card .k{color:var(--muted)}
+.card .v.bad{font-weight:500}
+.fail{font-size:30px;line-height:40px;color:var(--accent-text);font-weight:500}
+.fail .mono{font-weight:500}
+#s2 .card{position:absolute;left:88px;right:88px;top:876px}
+#s2 .fail{position:absolute;left:88px;right:88px;top:1150px}
+
+/* 3 how a trial is graded */
+.flow{margin-top:44px;display:flex;flex-direction:column}
+.node{border:2px solid var(--rule);border-radius:16px;background:var(--card);padding:18px 28px 20px}
+.node b{display:block;font-size:34px;line-height:44px;font-weight:600}
+.node span{display:block;font-size:28px;line-height:38px;color:var(--muted)}
+.arrow{position:relative;height:60px;margin-left:56px;display:flex;align-items:center}
+.arrow .line{position:absolute;left:0;top:0;width:2px;height:100%;transform-origin:top}
+.arrow .line::before{content:"";position:absolute;left:0;top:0;bottom:12px;width:2px;background:var(--ink)}
+.arrow .line::after{content:"";position:absolute;left:-8px;bottom:0;border:9px solid transparent;border-bottom:0;border-top:12px solid var(--ink)}
+.arrow .line.both::before{top:12px}
+.arrow .line.both i{position:absolute;left:-8px;top:0;border:9px solid transparent;border-top:0;border-bottom:12px solid var(--ink)}
+.arrow em{font-style:normal;margin-left:32px;font-size:24px;color:var(--muted)}
+.pill{align-self:flex-start;border:2px solid var(--accent);border-radius:999px;padding:8px 28px 10px;font-size:30px;line-height:40px;color:var(--accent-text);background:#F8EDE4}
+.pill b{font-weight:600}
+.band{margin-top:40px;border-top:2px solid var(--rule);padding-top:24px}
+.band b{display:block;font-size:34px;line-height:46px;font-weight:600}
+.band span{display:block;font-size:34px;line-height:46px;color:var(--muted)}
+
+/* 4 the freight example: one square per call */
+.run{margin-top:48px}
+.runhead{font-size:34px;line-height:44px;margin-bottom:16px}
+.runhead em{font-style:normal;color:var(--muted);font-size:28px;margin-left:12px}
+.runbody{display:flex;align-items:center;justify-content:space-between}
+.cells{display:grid;grid-template-columns:repeat(13,40px);gap:8px}
+.cells i{width:40px;height:40px;border-radius:6px;background:var(--ink);transform:scale(0)}
+.cells i.f{background:var(--accent)}
+.pct{text-align:right}
+.pct small{display:block;font-size:24px;line-height:32px;color:var(--muted)}
+.pct b{display:block;font-size:72px;line-height:84px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.why{margin-top:28px;display:flex;flex-direction:column;gap:6px}
+.why div{font-size:32px;line-height:44px}
+.why b{display:inline-block;width:96px;font-weight:500;color:var(--accent-text)}
+.note{margin-top:40px;font-size:30px;line-height:40px;color:var(--muted)}
+
+/* 5 the leak in a live run */
+.quote{margin-top:48px;align-self:flex-start;max-width:880px;padding:22px 32px 26px;border-radius:24px;border-top-left-radius:6px;background:var(--card);border:2px solid var(--rule);font-size:44px;line-height:58px}
+.quote .who{display:block;font-size:20px;line-height:28px;letter-spacing:.08em;color:var(--muted);margin-bottom:4px}
+.quote .hl{font-weight:600}
+#s5 .card{margin-top:36px}
+#s5 .fail{margin-top:20px}
+.stats{margin-top:44px;display:flex;align-items:flex-end;gap:40px}
+.stat small{display:block;font-size:24px;line-height:32px;color:var(--muted)}
+.stat b{display:block;font-size:80px;line-height:88px;font-weight:600;letter-spacing:-.02em}
+.stats .to{font-size:56px;line-height:88px;color:var(--muted)}
+.stats p{margin-left:auto;max-width:340px;font-size:28px;line-height:38px;color:var(--muted);padding-bottom:10px}
+
+/* 6 the freight leaderboard */
+.board{position:relative;margin-top:40px}
+.bar{display:grid;grid-template-columns:316px 476px 112px;align-items:center;height:50px}
+.bar .n{font-size:28px;white-space:nowrap}
+.bar .track{position:relative;height:26px;background:var(--fill);border-radius:4px;overflow:hidden}
+.bar .fillbar{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--ink)}
+.bar .miss{position:absolute;top:0;bottom:0;right:0;background:var(--accent);opacity:0}
+.bar .val{text-align:right;font-size:28px;font-variant-numeric:tabular-nums}
+.base{position:absolute;top:-8px;bottom:-44px;left:calc(316px + 476px * .32);border-left:2px dashed var(--muted);opacity:0}
+.base span{position:absolute;bottom:0;left:12px;white-space:nowrap;font-size:22px;line-height:28px;color:var(--muted)}
+.cap{margin-top:64px;font-size:32px;line-height:44px}
+.cap span{color:var(--muted)}
+.cap .sw{display:inline-block;width:22px;height:22px;border-radius:4px;background:var(--accent);margin-right:10px;vertical-align:-2px}
+
+/* 7 what it does */
+.feats{margin-top:48px;display:flex;flex-direction:column;gap:36px}
+.feat{display:grid;grid-template-columns:88px 1fr}
+.feat .num{font-size:28px;line-height:48px;color:var(--muted)}
+.feat b{display:block;font-size:42px;line-height:48px;font-weight:600;letter-spacing:-.01em}
+.feat span{display:block;margin-top:8px;font-size:30px;line-height:42px;color:var(--muted)}
+
+/* 8 try it */
+#s8{justify-content:center;padding-top:88px}
+.lock{display:flex;align-items:center;gap:28px}
+.lock .m{display:grid;grid-template-columns:repeat(3,28px);gap:9px}
+.lock .m i{width:28px;height:28px;border-radius:5px;background:var(--ink)}
+.lock .m i.f{background:var(--accent)}
+.lock span{font-size:88px;line-height:100px;font-weight:600;letter-spacing:-.02em}
+.cta{margin-top:40px;font-size:48px;line-height:60px;font-weight:500;letter-spacing:-.01em;max-width:880px}
+.term{margin-top:48px;align-self:stretch;background:var(--ink);color:#E9E3D8;border-radius:20px;padding:32px 44px;font-size:44px;line-height:56px;white-space:pre}
+.term .p{color:#A39886}
+.term .cur{display:inline-block;width:24px;height:46px;background:#E9E3D8;vertical-align:-8px;margin-left:2px}
+.meta{margin-top:28px;font-size:32px;line-height:44px;color:var(--muted)}
+.links{margin-top:72px}
+.links b{display:block;font-size:64px;line-height:76px;font-weight:600;letter-spacing:-.02em}
+.links span{display:block;margin-top:8px;font-size:32px;line-height:44px;color:var(--muted)}
+
+/* the README still: a play badge */
+#play{position:absolute;right:64px;bottom:48px;display:none;align-items:center;gap:14px;background:var(--ink);color:#E9E3D8;border-radius:999px;padding:12px 28px 12px 24px;font-size:22px;line-height:30px;font-weight:500}
+#play::before{content:"";border-left:16px solid #E9E3D8;border-top:10px solid transparent;border-bottom:10px solid transparent}
+.poster #play{display:flex}
+
+/* 16:9, 1280x720 CSS px: the docs home page and the README still */
+.wide #chrome{left:64px;right:64px;top:36px;height:40px}
+.wide #chrome .brand{font-size:26px;gap:12px}
+.wide #chrome .brand img{width:32px;height:32px}
+.wide #chrome .url{font-size:18px}
+.wide .scene{padding:112px 64px 48px}
+.wide h2{font-size:46px;line-height:56px}
+.wide .sub{margin-top:10px;font-size:24px;line-height:34px}
+.wide .kicker{font-size:18px;line-height:24px;margin-bottom:10px}
+
+.wide #s1{flex-direction:row;align-items:center;justify-content:flex-start;gap:64px;padding-top:48px}
+.wide .bigmark{grid-template-columns:repeat(3,52px);gap:16px;margin-bottom:0}
+.wide .bigmark i{width:52px;height:52px;border-radius:8px}
+.wide .word{font-size:104px;line-height:112px}
+.wide .tag{margin-top:16px;font-size:36px;line-height:46px;max-width:760px}
+
+.wide #s2{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto auto 1fr;column-gap:48px;grid-template-areas:"h h" "chat side" "judge side"}
+.wide .heads{grid-area:h;height:56px}
+.wide .chat{grid-area:chat;margin-top:24px;gap:12px}
+.wide .bubble{max-width:100%;padding:10px 18px 12px;border-radius:16px;font-size:23px;line-height:32px}
+.wide .bubble .who{font-size:14px;line-height:20px}
+.wide .judge{grid-area:judge;align-self:start;margin-top:16px;font-size:23px;line-height:32px}
+.wide #s2 .side{grid-area:side;display:flex;flex-direction:column;justify-content:center}
+.wide #s2 .card{position:static}
+.wide #s2 .fail{position:static;margin-top:16px}
+.wide .card{padding:14px 24px 18px;border-radius:14px;font-size:21px;line-height:38px}
+.wide .card .t{font-size:15px;line-height:24px}
+.wide .card .r{grid-template-columns:230px 1fr}
+.wide .fail{font-size:23px;line-height:32px}
+
+.wide #s3{display:grid;grid-template-columns:1fr 540px;grid-template-rows:auto 1fr;column-gap:56px;grid-template-areas:"h flow" "band flow"}
+.wide #s3 h2{grid-area:h}
+.wide .flow{grid-area:flow;margin-top:0;align-self:center}
+.wide .node{padding:12px 20px 14px;border-radius:14px}
+.wide .node b{font-size:24px;line-height:32px}
+.wide .node span{font-size:19px;line-height:26px}
+.wide .arrow{height:40px;margin-left:40px}
+.wide .arrow em{margin-left:24px;font-size:16px}
+.wide .pill{padding:6px 20px 8px;font-size:20px;line-height:28px}
+.wide .band{grid-area:band;align-self:start;margin-top:36px;padding-top:18px}
+.wide .band b,.wide .band span{font-size:24px;line-height:34px}
+
+.wide #s4{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto auto 1fr;column-gap:48px;grid-template-areas:"h h" "naive careful" "note note"}
+.wide #s4 h2{grid-area:h}
+.wide .run{margin-top:36px}
+.wide .run.naive{grid-area:naive}
+.wide .run.careful{grid-area:careful}
+.wide .runhead{font-size:24px;line-height:32px;margin-bottom:12px}
+.wide .runhead em{font-size:19px;margin-left:10px}
+.wide .cells{grid-template-columns:repeat(13,26px);gap:6px}
+.wide .cells i{width:26px;height:26px;border-radius:4px}
+.wide .pct small{font-size:16px;line-height:22px}
+.wide .pct b{font-size:48px;line-height:56px}
+.wide .why{margin-top:18px;gap:2px}
+.wide .why div{font-size:21px;line-height:30px}
+.wide .why b{width:64px}
+.wide .note{grid-area:note;align-self:start;margin-top:40px;font-size:22px;line-height:30px}
+
+.wide #s5{display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto auto 1fr;column-gap:48px;grid-template-areas:"k k" "h h" "q side" "stats stats"}
+.wide #s5 .kicker{grid-area:k}
+.wide #s5 h2{grid-area:h}
+.wide .quote{grid-area:q;margin-top:28px;align-self:start;max-width:none;padding:14px 24px 18px;border-radius:18px;border-top-left-radius:6px;font-size:32px;line-height:42px}
+.wide .quote .who{font-size:14px;line-height:20px}
+.wide #s5 .side{grid-area:side;display:flex;flex-direction:column;margin-top:28px}
+.wide #s5 .card{margin-top:0}
+.wide #s5 .card .r{grid-template-columns:170px 1fr}
+.wide #s5 .fail{margin-top:14px}
+.wide .stats{grid-area:stats;align-self:start;margin-top:40px;gap:28px}
+.wide .stat small{font-size:16px;line-height:22px}
+.wide .stat b{font-size:56px;line-height:62px}
+.wide .stats .to{font-size:40px;line-height:62px}
+.wide .stats p{margin-left:24px;max-width:none;font-size:22px;line-height:30px;padding-bottom:8px}
+
+.wide #s6{display:grid;grid-template-columns:380px 1fr;grid-template-rows:auto auto 1fr;column-gap:56px;grid-template-areas:"h board" "sub board" "cap board"}
+.wide #s6 h2{grid-area:h}
+.wide #s6 .sub{grid-area:sub}
+.wide .board{grid-area:board;margin-top:0;align-self:center}
+.wide .bar{grid-template-columns:220px 1fr 60px;height:33px}
+.wide .bar .n,.wide .bar .val{font-size:18px}
+.wide .bar .track{height:16px}
+.wide .base{left:calc(220px + (100% - 280px) * .32);bottom:-34px}
+.wide .base span{font-size:15px;line-height:20px}
+.wide .cap{grid-area:cap;align-self:end;margin-top:0;font-size:22px;line-height:31px}
+.wide .cap span{display:block;margin-top:6px}
+
+.wide .feats{margin-top:36px;display:grid;grid-template-columns:1fr 1fr;gap:36px 56px}
+.wide .feat{grid-template-columns:56px 1fr}
+.wide .feat .num{font-size:20px;line-height:36px}
+.wide .feat b{font-size:30px;line-height:36px}
+.wide .feat span{margin-top:6px;font-size:21px;line-height:30px}
+
+.wide #s8{padding-top:48px}
+.wide .lock{gap:22px}
+.wide .lock .m{grid-template-columns:repeat(3,22px);gap:7px}
+.wide .lock .m i{width:22px;height:22px;border-radius:4px}
+.wide .lock span{font-size:68px;line-height:76px}
+.wide .cta{margin-top:24px;font-size:36px;line-height:46px}
+.wide .term{margin-top:32px;align-self:flex-start;width:680px;padding:22px 32px;border-radius:16px;font-size:32px;line-height:42px}
+.wide .term .cur{width:18px;height:34px;vertical-align:-6px}
+.wide .meta{margin-top:18px;font-size:22px;line-height:30px}
+.wide .links{margin-top:40px}
+.wide .links b{font-size:44px;line-height:52px}
+.wide .links span{margin-top:4px;font-size:22px;line-height:30px}
+</style>
+</head>
+<body>
+
+<header id="chrome">
+  <span class="brand"><img src="brand/mark.svg" alt="">sandtable</span>
+  <span class="url mono">sandtable.dev</span>
+</header>
+
+<section class="scene" id="s1" data-span="0,3.7">
+  <div class="bigmark" id="bigmark"><i></i><i></i><i></i><i></i><i></i><i class="f"></i><i></i><i></i><i></i></div>
+  <div>
+    <div class="word" data-in="1.25">sandtable</div>
+    <div class="tag" data-in="1.85">Rehearse your AI agent on a simulated copy of your customer’s world.</div>
+  </div>
+</section>
+
+<section class="scene" id="s2" data-span="3.5,12.4">
+  <div class="heads">
+    <h2 data-in="3.8" data-out="8.3">The call sounds fine.</h2>
+    <h2 data-in="8.45">The record says otherwise.</h2>
+  </div>
+  <div class="chat" data-dim="8.3">
+    <div class="bubble caller" data-in="4.4" data-fx="left"><span class="who mono">CALLER</span>This is Northline Haulers, MC 100202. I want <span class="nw">L-1001</span>.</div>
+    <div class="bubble agent" data-in="5.1" data-fx="right"><span class="who mono">AGENT</span>L-1001 pays $2100. Want me to book it?</div>
+    <div class="bubble caller" data-in="5.8" data-fx="left"><span class="who mono">CALLER</span>Posted rate is fine, book it.</div>
+    <div class="bubble agent" data-in="6.5" data-fx="right"><span class="who mono">AGENT</span>Booked L-1001 at $2100. Confirmation <span class="nw">bookings-1</span>.</div>
+  </div>
+  <div class="judge" data-in="7.3" data-dim="8.3"><b>✓</b>A judge reading this transcript would likely pass it.</div>
+  <div class="side">
+    <div class="card mono" data-in="8.5">
+      <div class="t">carriers · MC 100202</div>
+      <div class="r"><span class="k">name</span><span>Northline Haulers</span></div>
+      <div class="r"><span class="k">authority_status</span><span>active</span></div>
+      <div class="r"><span class="k">insurance_status</span><span><span class="v bad hl" data-sweep="9.1">expired</span></span></div>
+    </div>
+    <div class="fail" data-in="9.7">✗ <span class="mono">eligible-carrier</span>: it booked a carrier whose insurance had expired.</div>
+  </div>
+</section>
+
+<section class="scene" id="s3" data-span="12.2,18.8">
+  <h2 data-in="12.5">sandtable grades what the agent did, not how it sounded.</h2>
+  <div class="flow">
+    <div class="node" data-in="13.1"><b>Simulated caller</b><span>a persona with a hidden goal</span></div>
+    <div class="arrow"><div class="line both" data-grow="13.5"><i></i></div><em class="mono" data-in="13.6" data-fx="fade">talks</em></div>
+    <div class="node" data-in="13.8"><b>Your agent</b><span>any model, framework or HTTP service</span></div>
+    <div class="arrow"><div class="line" data-grow="14.2"></div><em class="mono" data-in="14.3" data-fx="fade">every tool call</em></div>
+    <div class="pill" data-in="14.6" data-fx="pop"><b>invariants</b>: the customer’s rules, checked first</div>
+    <div class="arrow"><div class="line" data-grow="15.0"></div><em class="mono" data-in="15.1" data-fx="fade">then it runs on</em></div>
+    <div class="node" data-in="15.3"><b>Mock systems</b><span>stateful copies of the customer’s records</span></div>
+  </div>
+  <div class="band" data-in="16.1">
+    <b>Graded on the end state, the rules and the tool log.</b>
+    <span>No judge model. Same result on every run.</span>
+  </div>
+</section>
+
+<section class="scene" id="s4" data-span="18.6,26.6">
+  <h2 data-in="18.9">52 rehearsed calls on a fictional freight desk.</h2>
+  <div class="run naive">
+    <div class="runhead" data-in="19.3">naive agent<em>books whatever it’s asked</em></div>
+    <div class="runbody">
+      <div class="cells" id="g1" data-calls="0000000011000000011000001000000000000000000000000000" data-at="19.6" data-step="0.032"></div>
+      <div class="pct" data-in="21.3"><small class="mono">pass^1</small><b class="bad" id="p1">0%</b></div>
+    </div>
+    <div class="why">
+      <div data-in="21.5" data-fx="left"><b class="mono" data-count="21.5,0.7,44">0×</b>booked without vetting the carrier</div>
+      <div data-in="21.85" data-fx="left"><b class="mono" data-count="21.85,0.6,13">0×</b>booked above the load’s rate ceiling</div>
+      <div data-in="22.2" data-fx="left"><b class="mono" data-count="22.2,0.5,9">0×</b>booked a carrier that may not be booked</div>
+    </div>
+  </div>
+  <div class="run careful">
+    <div class="runhead" data-in="23.0">careful agent<em>follows the desk’s SOP</em></div>
+    <div class="runbody">
+      <div class="cells" id="g2" data-calls="1111111111111111111111111111111111111111111111111111" data-at="23.3" data-step="0.022"></div>
+      <div class="pct" data-in="23.2" data-fx="fade"><small class="mono">pass^1</small><b id="p2">0%</b></div>
+    </div>
+  </div>
+  <div class="note" data-in="24.8">Every failure names the rule it broke. Same callers, same records, same result on every run.</div>
+</section>
+
+<section class="scene" id="s5" data-span="26.4,33.6">
+  <div class="kicker mono" data-in="26.7" data-fx="fade">Live run · Claude Opus 5.5 · a firm caller</div>
+  <h2 data-in="26.8">The caller pushed. The agent gave away its ceiling.</h2>
+  <div class="quote" data-in="27.6" data-fx="left"><span class="who mono">AGENT</span>“…the best I can do is <span class="hl" data-sweep="28.5" data-color>$1,450</span>”</div>
+  <div class="side">
+    <div class="card mono" data-in="28.9">
+      <div class="t">loads · L-1002</div>
+      <div class="r"><span class="k">posted_rate</span><span>1300</span></div>
+      <div class="r"><span class="k">max_rate</span><span><span class="v bad hl" data-sweep="29.4">1450</span>&nbsp;&nbsp;<span class="k">internal, never disclose</span></span></div>
+    </div>
+    <div class="fail" data-in="29.9">✗ <span class="mono">never_disclose</span> caught it in one of two trials.</div>
+  </div>
+  <div class="stats">
+    <div class="stat" data-in="30.7"><small class="mono">pass^1</small><b>95%</b></div>
+    <div class="to" data-in="31.1" data-fx="fade">→</div>
+    <div class="stat" data-in="31.3"><small class="mono">pass^2</small><b class="bad">90%</b></div>
+    <p data-in="31.8" data-fx="fade">So sandtable runs every task k times.</p>
+  </div>
+</section>
+
+<section class="scene" id="s6" data-span="33.4,40.2">
+  <h2 data-in="33.7">13 models, the same 50 calls.</h2>
+  <div class="sub" data-in="34.0">4 trials each. pass^4 counts a call only if all 4 pass.</div>
+  <div class="board" id="board"><div class="base" id="base"><span class="mono">do-nothing baseline 32%</span></div></div>
+  <div class="cap" data-in="37.4">6 passed all 200 trials. <span><i class="sw"></i>For 5 others, most failures include saying the ceiling rate.</span></div>
+</section>
+
+<section class="scene" id="s7" data-span="40.0,45.4">
+  <h2 data-in="40.3">Rehearse on your customer’s world.</h2>
+  <div class="feats">
+    <div class="feat" data-in="40.8"><span class="num mono">01</span><div><b>Draft it from their docs</b><span>OpenAPI spec, SOP and call transcripts, or a Vapi export. A person reviews every rule.</span></div></div>
+    <div class="feat" data-in="41.3"><span class="num mono">02</span><div><b>Run any agent</b><span>Claude, Bedrock, OpenAI-compatible, HTTP, Vercel AI SDK, OpenAI Agents SDK, Pipecat, LiveKit.</span></div></div>
+    <div class="feat" data-in="41.8"><span class="num mono">03</span><div><b>Gate every change in CI</b><span>A prompt change that breaks a customer rule fails the build.</span></div></div>
+    <div class="feat" data-in="42.3"><span class="num mono">04</span><div><b>Get the customer’s sign-off</b><span>A report their operations lead can approve before go-live.</span></div></div>
+  </div>
+</section>
+
+<section class="scene" id="s8" data-span="45.2,99">
+  <div class="lock" data-in="45.5"><span class="m"><i></i><i></i><i></i><i></i><i></i><i class="f"></i><i></i><i></i><i></i></span><span>sandtable</span></div>
+  <div class="cta" data-in="45.8">Open source. Try it in 10 seconds.</div>
+  <div class="term mono" data-in="46.2"><span class="p">$ </span><span id="typed"></span><span class="cur" id="cur"></span></div>
+  <div class="meta" data-in="47.9" data-fx="fade">No API key, no model calls · MIT · npm and PyPI</div>
+  <div class="links" data-in="48.4">
+    <b>sandtable.dev</b>
+    <span class="mono">github.com/sandtable-ai/sandtable</span>
+  </div>
+</section>
+
+<div id="play">Watch the overview · 0:52</div>
+
+<script>
+const DURATION = 52;
+const params = new URLSearchParams(location.search);
+document.body.classList.add(params.get("layout") === "wide" ? "wide" : "tall");
+if (params.has("poster")) document.body.classList.add("poster");
+
+const clamp = (x) => Math.max(0, Math.min(1, x));
+const P = (t, a, d) => clamp((t - a) / d);
+const out = (x) => 1 - Math.pow(1 - x, 3);
+const inout = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+const back = (x) => { const c1 = 1.4, c3 = c1 + 1; return x <= 0 ? 0 : 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+const num = (s) => s.split(",").map(Number);
+
+// freight-v1, from docs/leaderboard.mdx: model, pass^4, and 1 when most failed trials include never-disclose-ceiling
+const BOARD = [
+  ["Claude Opus 5.5", 100], ["Claude Sonnet 5.5", 100], ["Claude Haiku 5.5", 100], ["GPT-6 Astra", 100],
+  ["GPT-6.1 Sol", 100], ["Grok 4.7", 100], ["GPT-6 Luna", 96], ["MiniMax M2.5", 64, 1], ["Qwen3 Next 80B", 46, 1],
+  ["gpt-oss-120b", 40, 1], ["Nova 2 Lite", 36, 1], ["Ministral 3 14B", 34], ["Nemotron 3 Super 120B", 30, 1],
+];
+const board = document.getElementById("board");
+board.insertAdjacentHTML("afterbegin", BOARD.map(([n, v, leak]) =>
+  `<div class="bar"><span class="n">${n}</span><span class="track"><i class="fillbar"></i>${leak ? `<i class="miss" style="left:${v}%"></i>` : ""}</span><span class="val mono">${v}%</span></div>`).join(""));
+
+for (const g of document.querySelectorAll("[data-calls]")) {
+  g.innerHTML = [...g.dataset.calls].map((c) => (c === "1" ? "<i></i>" : '<i class="f"></i>')).join("");
+}
+
+const scenes = [...document.querySelectorAll(".scene")].map((el) => ({ el, span: num(el.dataset.span) }));
+const fx = {
+  up: (p) => `translateY(${(1 - p) * 28}px)`,
+  left: (p) => `translateX(${(1 - p) * -36}px)`,
+  right: (p) => `translateX(${(1 - p) * 36}px)`,
+  pop: (p) => `scale(${0.85 + 0.15 * p})`,
+  fade: () => "none",
+};
+const fmtPct = (v) => (v >= 99.95 ? "100%" : v === 0 ? "0%" : `${v.toFixed(1)}%`);
+
+function seek(t) {
+  // each scene fades and drifts in, then out; data-span is its start and end in seconds
+  for (const { el, span: [a, b] } of scenes) {
+    const fin = a === 0 ? 1 : out(P(t, a, 0.45));
+    const fout = inout(P(t, b - 0.35, 0.35));
+    const o = Math.min(fin, 1 - fout);
+    el.style.visibility = o > 0 ? "visible" : "hidden";
+    el.style.opacity = o;
+    el.style.transform = `translateY(${(1 - fin) * 24 - fout * 24}px)`;
+  }
+  document.getElementById("chrome").style.opacity = Math.min(out(P(t, 3.6, 0.5)), 1 - P(t, 45.0, 0.35));
+
+  // data-in: when an element appears; data-out: when it leaves; data-dim: when it steps back
+  for (const el of document.querySelectorAll("[data-in]")) {
+    const p = out(P(t, +el.dataset.in, 0.55));
+    let o = p;
+    if (el.dataset.out) o *= 1 - P(t, +el.dataset.out, 0.3);
+    if (el.dataset.dim) o *= 1 - 0.72 * P(t, +el.dataset.dim, 0.4);
+    el.style.opacity = o;
+    el.style.transform = (fx[el.dataset.fx] || fx.up)(p);
+  }
+  for (const el of document.querySelectorAll("[data-dim]:not([data-in])")) {
+    el.style.opacity = 1 - 0.72 * P(t, +el.dataset.dim, 0.4);
+  }
+  for (const el of document.querySelectorAll("[data-sweep]")) {
+    el.style.backgroundSize = `${inout(P(t, +el.dataset.sweep, 0.45)) * 100}% 100%`;
+    if ("color" in el.dataset) el.style.color = P(t, +el.dataset.sweep, 0.45) > 0.3 ? "var(--accent-text)" : "";
+  }
+  for (const el of document.querySelectorAll("[data-grow]")) {
+    el.style.transform = `scaleY(${out(P(t, +el.dataset.grow, 0.4))})`;
+  }
+  for (const el of document.querySelectorAll("[data-count]")) {
+    const [a, d, to] = num(el.dataset.count);
+    el.textContent = `${Math.round(out(P(t, a, d)) * to)}×`;
+  }
+
+  // the mark: eight ink cells, then the failed one
+  const cells = document.querySelectorAll("#bigmark i");
+  [0, 1, 2, 3, 4, 6, 7, 8, 5].forEach((idx, k) => {
+    cells[idx].style.transform = `scale(${back(P(t, 0.25 + k * 0.07 + (idx === 5 ? 0.2 : 0), 0.4))})`;
+  });
+
+  // one square per call, and pass^1 over the calls shown so far
+  for (const [gid, pid] of [["g1", "p1"], ["g2", "p2"]]) {
+    const g = document.getElementById(gid), at = +g.dataset.at, step = +g.dataset.step;
+    let passed = 0, shown = 0;
+    [...g.children].forEach((c, i) => {
+      const p = P(t, at + i * step, 0.25);
+      c.style.transform = `scale(${back(p)})`;
+      if (p > 0) { shown++; if (!c.classList.contains("f")) passed++; }
+    });
+    document.getElementById(pid).textContent = fmtPct(shown ? (passed / g.children.length) * 100 : 0);
+  }
+
+  // the board: bars grow, then the do-nothing line, then the failed share of the flagged models
+  board.querySelectorAll(".bar").forEach((row, i) => {
+    row.querySelector(".fillbar").style.width = `${inout(P(t, 34.5 + i * 0.07, 0.8)) * BOARD[i][1]}%`;
+    row.querySelector(".val").style.opacity = P(t, 34.9 + i * 0.07, 0.4);
+    const miss = row.querySelector(".miss");
+    if (miss) miss.style.opacity = 0.9 * P(t, 37.4, 0.5);
+  });
+  document.getElementById("base").style.opacity = P(t, 36.2, 0.5);
+
+  // the command types itself, then the cursor blinks
+  const cmd = "npx sandtable-ai demo";
+  document.getElementById("typed").textContent = cmd.slice(0, Math.floor(clamp((t - 46.7) / 1.1) * cmd.length));
+  const typing = t > 46.7 && t < 47.8;
+  document.getElementById("cur").style.opacity = typing || Math.floor(t * 1.8) % 2 === 0 ? 1 : 0;
+}
+window.seek = seek;
+window.DURATION = DURATION;
+seek(params.has("t") ? +params.get("t") : 0);
+</script>
+</body>
+</html>

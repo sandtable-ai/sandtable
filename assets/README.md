@@ -1,6 +1,6 @@
 # Assets
 
-The logo, and the images for the README, the repository's social preview and the docs site's social card. This folder is not part of the npm package.
+The logo, the images for the README, the repository's social preview and the docs site's social card, and the source of the overview video. This folder is not part of the npm package.
 
 | File | What it shows | Source | Regenerate |
 |---|---|---|---|
@@ -8,15 +8,19 @@ The logo, and the images for the README, the repository's social preview and the
 | `report.png`, `report-dark.png` | The HTML report of the offline naive run, on the `expired-insurance` trial: the failed checks, the record changes, and the `book_load` call that violates `verify-before-book` and `eligible-carrier`, up to the agent's "Booked L-1001" reply. 2× for high-DPI screens, 800 px wide at 1× | the report itself (`src/report/html.ts`) | `node assets/render.mjs report` |
 | `og.png` | The GitHub social preview, 1280×640: one row of squares per agent, one square per call | `og.html` | `node assets/render.mjs og` |
 | `../docs/images/og.png` | The same card laid out at 1200×630, the size the docs site declares in its `og:image` tags | `og.html` | (rendered with `og.png`) |
+| `promo.html` | The overview video, 52 s: a call that sounds fine, the record that says otherwise, how a trial is graded, the freight example's results, the leaked ceiling rate and pass^k, the freight leaderboard, and how to try it. Every frame is a function of time (`seek(t)`), so you can preview one by opening `promo.html?layout=wide&t=20` | the HTML itself | (none) |
+| `../docs/images/promo.mp4` | The video in 16:9, 1920×1080, about 3 MB, autoplaying muted on the docs home page | `promo.html?layout=wide` | `node assets/render.mjs promo` |
+| `promo.png` | A still of the video at 26 s with a play badge, 1600×900 (2×), which the README links to the docs home page | `promo.html?layout=wide&poster&t=26` | (rendered with the video) |
+| `promo-social.mp4` | The video in 4:5, 1080×1350, for social posts. Not committed (`.gitignore`): render it when you need it | `promo.html` | `node assets/render.mjs promo-social` |
 | `trial.png`, `trial-dark.png` | How one trial runs and is graded: caller, agent, mock tools, the invariant check on every tool call, and what the grade reads. 2×, 832 px wide at 1×, transparent background | `trial.html` | `node assets/render.mjs trial` |
 | `brand/mark.svg`, `brand/mark-dark.svg` | The logo's mark: a 3×3 grid of squares, one of them terracotta, for one failed trial among passes. 48×48, transparent | the SVG itself | (none) |
 | `brand/lockup.svg`, `brand/lockup-dark.svg` | The mark with the name, which is outlined from Fira Sans SemiBold so it needs no font. 123×32. Copied to `../docs/logo/light.svg` and `dark.svg` for the docs site | the SVG itself | (none) |
 | `brand/favicon.svg`, `brand/favicon-dark.svg` | The mark redrawn on a 16 px grid so its edges stay sharp at 16 and 32 px, in two files: ink cells for light browser tabs, light cells for dark ones. Copied to `../docs/favicon.svg` and `favicon-dark.svg` | the SVG itself | (none) |
 | `brand/avatar.png` | The GitHub organization avatar, 512×512: the mark on the light background | `brand/avatar.svg` | `node assets/render.mjs brand` |
 
-`node assets/render.mjs all` renders every PNG. It drives headless Chrome over the DevTools protocol with no npm dependency, and needs Node 22.18+ and Chrome or Chromium (set `CHROME` to its path if it isn't found). `og.html` and `trial.html` load Fira Sans and Fira Code from Google Fonts, so they need the network. The GIF needs [vhs](https://github.com/charmbracelet/vhs) and the Menlo font, which ships with macOS; elsewhere, change `Set FontFamily` in `demo.tape` to a monospace font that has ✓ and ✗.
+`node assets/render.mjs all` renders every PNG and the docs video. It drives headless Chrome over the DevTools protocol with no npm dependency, and needs Node 22.18+ and Chrome or Chromium (set `CHROME` to its path if it isn't found). `og.html`, `trial.html` and `promo.html` load Fira Sans and Fira Code from Google Fonts, so they need the network. The videos screenshot every frame at 30 fps and pipe them to [ffmpeg](https://ffmpeg.org), which must be on `PATH`; each takes a few minutes. The GIF needs [vhs](https://github.com/charmbracelet/vhs) and the Menlo font, which ships with macOS; elsewhere, change `Set FontFamily` in `demo.tape` to a monospace font that has ✓ and ✗.
 
-Every number in these images comes from an offline run of `examples/freight`, with rule-based agents and scripted callers and no model calls. `og.html` lists where each number comes from. If the example changes, regenerate everything and check the numbers in `og.html` and the `Down` counts in `demo.tape`.
+Every number in these images comes from an offline run of `examples/freight`, with rule-based agents and scripted callers and no model calls. The video also shows the README's live run and the freight leaderboard. `og.html` and `promo.html` list where each number comes from. If the example or the board changes, regenerate everything and check the numbers in `og.html` and `promo.html` and the `Down` counts in `demo.tape`.
 
 The sample reports linked from the README are rebuilt from main by `.github/workflows/pages.yml` and published to GitHub Pages.
 
