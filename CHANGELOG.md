@@ -33,6 +33,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 - **`init --openapi`** and **`import vapi`**: a boolean param's `enum`, and enum values that aren't strings or numbers, are left out of the draft. Before, they made a draft that `validate` rejected ([#35](https://github.com/sandtable-ai/sandtable/issues/35)).
 - **`sandtable import`**: a tool mock that names no tool is skipped with a warning; before, Vapi and Retell gave it to the first tool. A Retell test-case list keeps its test cases when another element isn't one, and warns about that element. A tool with no type, and a Retell tool entry that isn't an object, are warned about; a transfer number listed under several conditions is described once ([#472](https://github.com/sandtable-ai/sandtable/issues/472)).
 
+### Fixed
+
+- **Plugin**: the install hook now also stops `npm exec sandtable`, `npx -p sandtable`, `npx sandtable@<version>` (which names the unrelated package even where sandtable-ai is installed), `npx --no=false sandtable`, `pnpm dlx sandtable`, `yarn dlx sandtable` and `bunx sandtable` from fetching and running the unrelated npm package named `sandtable`, and names the sandtable-ai command to run instead, such as `pnpm dlx sandtable-ai demo` or `bunx -p sandtable-ai sandtable demo` ([#456](https://github.com/sandtable-ai/sandtable/issues/456)).
+
 ## [1.2.0] - 2026-10-31
 
 A minor release for agents you can't change, with no breaking changes. `run --serve` serves each trial's simulated world over REST, MCP and webhooks for an agent that calls its own tools, and `sandtable serve` grades the conversations a hosted voice platform's own test calls drive. A task's faults make tool calls time out, hit a rate limit or fail, and its events change the world mid-call. `sandtable import vapi` drafts a domain from a Vapi assistant's export. The freight example gains two fault tasks and a rule, so stored freight runs can't be regraded under it. The plugin's hooks cover more ways of running and installing sandtable.

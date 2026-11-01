@@ -3,8 +3,9 @@
 // project. All three install into the nearest folder above that has a package.json, which can be another project or the
 // engineer's home folder (#401), so in a folder without one the agent runs `npm init -y` first, whichever manager installs
 // (#432). The drafting and results skills ask for it; this holds the agent to it on any model, even when no skill
-// loaded. It also stops the unrelated npm package named `sandtable` from being installed or run by npx in its place
-// (#441): sandtable's package is sandtable-ai. Anything it can't read, it lets through.
+// loaded. It also stops the unrelated npm package named `sandtable` from being installed or run in its place by npx,
+// npm exec, pnpm dlx, yarn dlx or bunx (#441, #456): sandtable's package is sandtable-ai. Anything it can't read, it
+// lets through.
 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -31,8 +32,25 @@ const ENV = /^(?:\S+=\S*\s+)*/;
 const SANDTABLE = /(?:^|\s)sandtable-ai(?:@\S*)?(?=\s|$)/;
 /** The unrelated npm package named `sandtable`, as an install's package word. */
 const WRONG = /(^|\s)sandtable(@\S*)?(?=\s|$)/;
-/** npx's options that take a value, and the ones among them that name a package. */
-const NPX_VALUE = new Set(["-p", "--package", "-c", "--call", "--cache", "--userconfig", "--registry"]);
+/**
+ * The commands that run a package's bin, fetching the package when it isn't installed: npx and npm's names for it, pnpm
+ * dlx, yarn dlx and bunx. `words` is how many words the runner's name takes, `values` its options that take a value
+ * (`-p` and `--package` name a package), and `local` whether it runs an installed `sandtable` bin, such as
+ * sandtable-ai's, instead of fetching: npx and bunx look in node_modules first, while pnpm dlx and yarn dlx always
+ * fetch. `named` is how the runner's fix names sandtable-ai: as the command, or with `-p` before the `sandtable` bin
+ * for the runners whose docs say to name a package whose bin has another name that way.
+ */
+const NPM_VALUES = ["-p", "--package", "-c", "--call", "--cache", "--userconfig", "--registry", "-w", "--workspace"];
+const RUNNERS = [
+  { name: /^npx$/, words: 1, values: NPM_VALUES, local: true, named: "command" },
+  { name: /^npm\s+(?:exec|x)$/, words: 2, values: NPM_VALUES, local: true, named: "command" },
+  { name: /^pnpm\s+dlx$/, words: 2, values: ["--package", "--allow-build", "--reporter"], local: false, named: "command" },
+  { name: /^yarn\s+dlx$/, words: 2, values: ["-p", "--package"], local: false, named: "package" },
+  { name: /^bunx$/, words: 1, values: ["-p", "--package"], local: true, named: "package" },
+  { name: /^bun\s+x$/, words: 2, values: ["-p", "--package"], local: true, named: "package" },
+];
+/** The unrelated package's name as a whole word, with any version. */
+const WRONG_NAME = /^sandtable(?:@\S*)?$/;
 // Global installs, and npm's --prefix (-C) and pnpm's --dir (-C), which install into the folder they name, creating its
 // package.json if need be.
 const ELSEWHERE = /(?:^|\s)(?:-g|--global|--location[= ]global|(?:--prefix|--dir|-C)(?:[= ]\S+)?)(?=\s|$)/;
@@ -61,32 +79,45 @@ function installedAbove(dir) {
 }
 
 /**
- * Why `npx … sandtable …` must not run, or undefined when it may: its command is `sandtable` with no `-p sandtable-ai`,
- * and no sandtable-ai is installed where npx looks, so npx would fetch and run the unrelated package named `sandtable`.
+ * What to run instead of a runner's `… sandtable …`, or undefined when it may run: it runs the package `sandtable`,
+ * named with `-p` or as its command, and would fetch the unrelated package of that name. A bare `sandtable` command
+ * runs an installed sandtable-ai's bin for the runners that look for one (npx, bunx), when it is installed where they
+ * look; with a version, `sandtable@1.2.0`, it names the package `sandtable` whatever is installed.
  */
-function npxWrong(run, dir) {
+function runnerFix(segment, run, dir) {
   const words = run.split(/\s+/);
-  if (words[0] !== "npx") return undefined;
+  const runner = RUNNERS.find((r) => r.name.test(words.slice(0, r.words).join(" ")));
+  if (!runner) return undefined;
   const packages = [];
-  let i = 1;
+  let i = runner.words;
   for (; i < words.length && words[i].startsWith("-"); i++) {
+    if (words[i] === "--") {
+      i++;
+      break;
+    }
     const [name, value] = words[i].split("=", 2);
-    // npx then runs only what is installed, and fetches nothing.
-    if (name === "--no-install" || name === "--no" || words[i] === "--yes=false") return undefined;
-    if (!NPX_VALUE.has(name)) continue;
+    // npx then runs only what is installed, and fetches nothing. `--no=false` is `--yes`.
+    if (runner.local && (name === "--no-install" || words[i] === "--no" || words[i] === "--no=true" || words[i] === "--yes=false")) return undefined;
+    if (!runner.values.includes(name)) continue;
     const v = value ?? words[++i];
     if (name === "-p" || name === "--package") packages.push(v ?? "");
   }
   const cmd = words[i];
-  if (cmd === undefined || !/^sandtable(?:@\S*)?$/.test(cmd) || packages.length || dir === undefined || installedAbove(dir)) return undefined;
-  return cmd;
+  const swap = (word, to) => segment.replace(new RegExp(String.raw`(\s|=)${word.replace(/[.*+?^$()|[\]\\]/g, "\\$&")}(?=\s|$)`), `$1${to}`);
+  const wrong = packages.find((p) => WRONG_NAME.test(p));
+  if (wrong) return swap(wrong, `sandtable-ai${wrong.slice("sandtable".length)}`);
+  if (packages.length || cmd === undefined || !WRONG_NAME.test(cmd)) return undefined;
+  if (runner.local && cmd === "sandtable" && (dir === undefined || installedAbove(dir))) return undefined;
+  const version = cmd.slice("sandtable".length);
+  return swap(cmd, runner.named === "command" ? `sandtable-ai${version}` : `-p sandtable-ai${version} sandtable`);
 }
 
 const WRONG_PACKAGE = "sandtable plugin: `sandtable` on npm is an unrelated package. sandtable's package is `sandtable-ai`";
 
 /**
  * Why this Bash command must not run, or undefined when it may:
- * - it installs the npm package `sandtable`, or runs it with npx, instead of sandtable-ai, anywhere in the command; or
+ * - it installs the npm package `sandtable`, or runs it with npx, npm exec, pnpm dlx, yarn dlx or bunx, instead of
+ *   sandtable-ai, anywhere in the command; or
  * - it installs sandtable-ai into a folder that has no package.json, and no earlier command in it runs `npm init`,
  *   `pnpm init` or `yarn init` there. A `cd` the hook can't follow ends this check; a yarn `--cwd` it can't follow
  *   skips that install.
@@ -107,11 +138,8 @@ function denial(command, cwd) {
       const fixed = SANDTABLE.test(run) ? segment.replace(WRONG, "") : segment.replace(WRONG, "$1sandtable-ai$2");
       return `${WRONG_PACKAGE}: install it as \`${fixed}\` instead, and run it as \`npx sandtable-ai <command>\`.`;
     }
-    const cmd = npxWrong(run, at);
-    if (cmd) {
-      const fixed = segment.replace(new RegExp(String.raw`(\s)${cmd.replace(/[.*+?^$()|[\]\\]/g, "\\$&")}(?=\s|$)`), `$1sandtable-ai${cmd.slice("sandtable".length)}`);
-      return `${WRONG_PACKAGE}: run \`${fixed}\` instead, or install it in the project first.`;
-    }
+    const fixed = runnerFix(segment, run, at);
+    if (fixed) return `${WRONG_PACKAGE}: run \`${fixed}\` instead, or install it in the project first.`;
   }
   return projectDenial(command, cwd);
 }

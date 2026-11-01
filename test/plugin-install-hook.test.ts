@@ -166,6 +166,34 @@ describe("the plugin's install-in-own-project hook", () => {
     }
   });
 
+  it("stops npm exec, -p sandtable, pnpm dlx, yarn dlx and bunx from running the unrelated package too, and suggests a form it lets through (#456)", () => {
+    const installed = path.join(parent, "installed");
+    mkdirSync(path.join(installed, "node_modules", "sandtable-ai"), { recursive: true });
+    const cases: [string, string][] = [
+      ["npm exec sandtable -- demo", "npm exec sandtable-ai -- demo"],
+      ["npm exec -- sandtable demo", "npm exec -- sandtable-ai demo"],
+      ["npm x --yes sandtable demo", "npm x --yes sandtable-ai demo"],
+      ["npx -p sandtable sandtable demo", "npx -p sandtable-ai sandtable demo"],
+      ["npx --package=sandtable@1.2.0 sandtable demo", "npx --package=sandtable-ai@1.2.0 sandtable demo"],
+      ["npx --no=false sandtable demo", "npx --no=false sandtable-ai demo"],
+      ["pnpm dlx sandtable demo", "pnpm dlx sandtable-ai demo"],
+      ["pnpm dlx --package sandtable sandtable demo", "pnpm dlx --package sandtable-ai sandtable demo"],
+      ["yarn dlx sandtable demo", "yarn dlx -p sandtable-ai sandtable demo"],
+      ["bunx sandtable demo", "bunx -p sandtable-ai sandtable demo"],
+      ["bun x sandtable@1.2.0 demo", "bun x -p sandtable-ai@1.2.0 sandtable demo"],
+    ];
+    for (const [command, fix] of cases) {
+      expect(decide(command, bare), command).toContain(`run \`${fix}\` instead, or install it in the project first.`);
+      expect(decide(fix, bare), fix).toBeUndefined();
+    }
+    // A bare sandtable runs an installed sandtable-ai's bin where npx and bunx look for one. A version names the
+    // package sandtable whatever is installed, -p sandtable names it outright, and pnpm dlx and yarn dlx always fetch.
+    for (const cmd of ["npx sandtable demo", "npm exec sandtable -- demo", "bunx sandtable demo", "npx --no=false sandtable demo"]) expect(decide(cmd, installed), cmd).toBeUndefined();
+    for (const cmd of ["npx sandtable@1.2.0 demo", "npx -p sandtable sandtable demo", "pnpm dlx sandtable demo", "yarn dlx sandtable demo"]) expect(decide(cmd, installed), cmd).toContain("unrelated package");
+    // Runners that may not fetch, and the ones that run only what is installed.
+    for (const cmd of ["npm exec --no sandtable -- demo", "npx --no=true sandtable demo", "pnpm exec sandtable demo", "yarn sandtable demo", "npx -p cowsay sandtable demo"]) expect(decide(cmd, bare), cmd).toBeUndefined();
+  });
+
   it("is registered for Bash in the plugin's hooks.json, by a path inside the plugin", () => {
     const config = JSON.parse(readFileSync(path.resolve("plugin/hooks/hooks.json"), "utf8")) as { hooks: { PreToolUse: { matcher: string; hooks: { type: string; command: string; args: string[] }[] }[] } };
     const bash = config.hooks.PreToolUse.find((e) => e.matcher === "Bash")!;
