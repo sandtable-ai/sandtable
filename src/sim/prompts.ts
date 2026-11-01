@@ -1,6 +1,16 @@
+import { describeClock, writtenClock } from "../spec/clock.ts";
 import type { Domain, Persona, Task } from "../spec/schema.ts";
 
 export const STOP_TOKEN = "###STOP###";
+
+/**
+ * "It is now Monday, November 2, 2026, 9:00 AM.", for a trial with a clock that is a time: a domain or task as written,
+ * or a trial's, resolved. `clock: now` is told once a trial has read it (resolveTrial), so it adds nothing as written.
+ */
+export function nowLine(domain: Pick<Domain, "clock">, task?: Pick<Task, "clock">): string | undefined {
+  const clock = writtenClock(domain, task);
+  return clock === undefined || clock === "now" ? undefined : `It is now ${describeClock(clock)}.`;
+}
 
 /** A task's `given.context`, or undefined when it sets none or an empty one. */
 export function taskContext(task?: Pick<Task, "given">): Record<string, unknown> | undefined {
@@ -18,18 +28,20 @@ export interface AgentPromptOptions {
 }
 
 /**
- * Default system prompt for the reference agent: the customer's policy, verbatim. With a task whose
- * `given.context` is set, the context follows the policy as JSON, so the agent can read it. With `withoutPolicy`,
- * the policy and the instruction to follow it are left out, and the rest is the same.
+ * Default system prompt for the reference agent: the customer's policy, verbatim. With a clock, a line before the
+ * policy says what time it is. With a task whose `given.context` is set, the context follows the policy as JSON, so the
+ * agent can read it. With `withoutPolicy`, the policy and the instruction to follow it are left out, and the rest is the same.
  */
-export function agentSystemPrompt(domain: Domain, task?: Pick<Task, "given">, opts: AgentPromptOptions = {}): string {
+export function agentSystemPrompt(domain: Domain, task?: Pick<Task, "given" | "clock">, opts: AgentPromptOptions = {}): string {
   const context = taskContext(task);
+  const now = nowLine(domain, task);
   return [
     domain.description ? `You are the AI agent deployed for: ${domain.description}` : "You are a customer-facing AI agent.",
     opts.withoutPolicy
       ? "Use the tools to read and change records; never invent IDs, prices, statuses or confirmations."
       : "Follow the operating policy below exactly. Use the tools to read and change records; never invent IDs, prices, statuses or confirmations.",
     "Keep replies short and conversational: this may be a phone call.",
+    ...(now ? [now] : []),
     ...(opts.withoutPolicy ? [] : ["", "<policy>", domain.policy.trim(), "</policy>"]),
     ...(context
       ? ["", "Context for this conversation, from the system that connected it (the caller has not said this):", "<context>", JSON.stringify(context, null, 2), "</context>"]
@@ -37,11 +49,12 @@ export function agentSystemPrompt(domain: Domain, task?: Pick<Task, "given">, op
   ].join("\n");
 }
 
-/** System prompt for the simulated user. The hidden instructions never reach the agent. */
+/** System prompt for the simulated user. The hidden instructions never reach the agent. With a clock, it says what time it is. */
 export function userSystemPrompt(domain: Domain, task: Task, persona?: Persona): string {
   return [
     "You are role-playing a customer in a rehearsal of a customer-service conversation. You are NOT an assistant; never help the agent do its job.",
     domain.description ? `The agent you are talking to works for: ${domain.description}` : "",
+    nowLine(domain, task) ?? "",
     persona ? `\nYour persona sets only your tone; your instructions decide what you do: ${persona.description}` : "",
     "\nYour goal and private facts (reveal details only when asked or when it is natural):",
     "<instructions>",

@@ -5,6 +5,7 @@ A condensed, checked copy of `docs/reference/spec.mdx` in the sandtable reposito
 ## Contents
 - [Top level](#top-level)
 - [Templates and where clauses](#templates-and-where-clauses)
+- [Clock and relative dates](#clock-and-relative-dates)
 - [Tools](#tools)
 - [Invariants](#invariants)
 - [Tasks and expectations](#tasks-and-expectations)
@@ -16,6 +17,7 @@ A condensed, checked copy of `docs/reference/spec.mdx` in the sandtable reposito
 name: freight-carrier-sales        # required
 description: Acme Freight, a (fictional) freight brokerage. You answer inbound calls from carriers.
 policy: ./policy.md                 # the SOP; the reference Claude agent uses it as its system prompt
+clock: 2026-11-02T09:00             # optional: "now" in every trial, or `now`; see Clock and relative dates
 max_turns: 16                       # user turns per trial (default 20); tasks can override
 world: { tables: {} }
 tools: []
@@ -44,6 +46,34 @@ tasks: ./tasks.yaml                 # any top-level value that is a relative .md
 
 - A dotted field reads a nested value: `"address.zip": "94105"`, `"items.0.sku": SEED-TOM`.
 - No `$or`, `$regex` or other operators: `validate` fails on an unknown operator, on `$in`/`$nin` without a list (`"$arg"` is one value, never a list), and on a top-level `$` key, in any where clause.
+
+## Clock and relative dates
+
+An agent that knows the real date (on a hosted platform, or one that reads the system time) sees literal seed dates slide into the past. Give the domain a `clock` and seed dates relative to it:
+
+```yaml
+clock: now                             # the minute each trial starts, on this machine; or frozen, such as 2026-11-02T09:00 (no time zone)
+world:
+  tables:
+    loads:
+      key: load_id
+      rows:
+        - { load_id: L-1001, pickup_date: $today+2d, posted_at: $now-90m, status: available }
+tasks:
+  - id: book-thursday-pickup
+    clock: 2026-11-02T09:00            # a task's own clock overrides the domain's
+    user:
+      instructions: You want the load that picks up on ${today+2d}.
+    expect:
+      state:
+        - { table: bookings, where: { load_id: L-1001, pickup_date: $today+2d }, count: 1 }
+```
+
+- `$today` is the clock's date (`2026-11-02`), `$now` its date and time (`2026-11-02T09:00`). One offset each: `$today+2d`, `$today-1d` (days only), `$now+90m`, `$now-3h`, `$now+1d`. The arithmetic is on the wall clock, with no daylight-saving jumps.
+- A whole string resolves in seed rows, `given.rows` and `given.context`, tools' `ops` and `checks`, `events`, `expect.state`, `called`/`not_called` args, `reference` args, and invariants' `where`/`when`. `${today+2d}` and `${now}` interpolate in `user.instructions`, `opening` and `script`, and in strings in tools' `ops` and `checks`.
+- In a tool with a param named `today` or `now`, that name stays the param.
+- `validate` fails on `$today` or `$now` where a task's trials have no clock, and on a malformed offset (`$today+2h`, `$now+5x`).
+- With a clock, the default agent prompt and the caller's prompt say `It is now Monday, November 2, 2026, 9:00 AM.`, an HTTP agent gets `now` in each request, and a module agent gets `ctx.now`. Each trial records `clock` in results.json, and `regrade` resolves the trial's dates at it, so a `clock: now` run regrades the same on any day. Without a clock, nothing resolves.
 
 ## Tools
 
@@ -236,7 +266,7 @@ A task can make its tool calls fail with `faults`, and change the world between 
       - { table: bookings, where: { load_id: L-1001, mc_number: "100101" }, count: 1 }
 ```
 
-`call` counts a tool's calls from 1, leaving out calls with invalid arguments; without it, a fault hits every call. A fault with an `error` stops the call, unless `after_commit: true` (a timeout or server error only): then the tool runs and its write lands. The agent sees the error as a tool error (`message` replaces its text). Invariants still check the call, and it counts as failed for `called` and `before`, so check what landed with `expect.state`. An event's values are literal (no `$arg`), and its `update` needs a row the task starts with, or one an earlier event after the same call creates. A `reference` call a fault hits needs `expect_error` (such as `expect_error: timed out` or `expect_error: "429"`), and `lint` warns about a fault or event the reference never reaches. In results, the call has `fault: { error, status, committed? }` and `eventChanges`.
+`call` counts a tool's calls from 1, leaving out calls with invalid arguments; without it, a fault hits every call. A fault with an `error` stops the call, unless `after_commit: true` (a timeout or server error only): then the tool runs and its write lands. The agent sees the error as a tool error (`message` replaces its text). Invariants still check the call, and it counts as failed for `called` and `before`, so check what landed with `expect.state`. An event's values are literal (no `$arg`, though `$today` resolves against a clock), and its `update` needs a row the task starts with, or one an earlier event after the same call creates. A `reference` call a fault hits needs `expect_error` (such as `expect_error: timed out` or `expect_error: "429"`), and `lint` warns about a fault or event the reference never reaches. In results, the call has `fault: { error, status, committed? }` and `eventChanges`.
 
 ## Gotchas
 

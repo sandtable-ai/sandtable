@@ -114,7 +114,7 @@ npx sandtable-ai lint ./my-domain
 |---|---|
 | `<domain>` | domain directory (with `sandtable.yaml`) or the file itself |
 
-Each task prints as `✓` (clean), `!` (warnings) or `✗` (errors), followed by whether it expects a write, is ready, is solvable (`solvable ?` when it has no `reference`), and whether the noop baseline passes it.
+Each task prints as `✓` (clean), `!` (warnings) or `✗` (errors), followed by whether it expects a write, is ready, is solvable (`solvable ?` when it has no `reference`), and whether the noop baseline passes it. A task's [dates relative to the clock](/reference/spec#clock-and-relative-dates) resolve at its clock, and a `clock: now` task's at the current minute.
 
 Then it says how many of the domain's rules at least one task puts in play. A task puts a rule in play when its `reference` calls the tool the rule checks, or its `called` or `not_called` names that tool. For a `never_disclose` rule, its system prompt (the policy and its `given.context`) or a successful reference call's result must show the agent a value it must not say. A rule no task puts in play gets a warning, since a run that passes says nothing about it, and the tools no task uses are listed. Warnings never change the exit code. A rule in play is checked whenever the agent acts; whether a task pushes the agent to break it is what a [run's coverage](#coverage) with a careless agent shows.
 
@@ -303,6 +303,7 @@ It serves the same routes as [`run --serve`](#run): REST, MCP at `/mcp` and webh
 
 - A conversation opens with `POST /sessions`, with the first webhook that names a platform's call id (Vapi's `message.call.id`, Retell's `call.call_id`), with the first request whose `X-Sandtable-Call` header names a call, with an MCP `initialize` (the session's id comes back as `Mcp-Session-Id`), or with the first request that names none while none is open.
 - It ends, and is graded, with `POST /sessions/<id>/end` (optionally with `{ "transcript": [{ "role": "user" | "agent", "text", "time"? }] }`), Vapi's end-of-call report, Retell's `call_ended` event, ElevenLabs' `post_call_transcription` webhook, or an MCP `DELETE`.
+- Its [dates relative to the clock](/reference/spec#clock-and-relative-dates) resolve when it opens: with `clock: now`, at that minute.
 
 The terminal says when each conversation opens and how it was graded. Stop it with Ctrl-C: it prints the summary of the graded conversations and exits 0. Conversations still open then are named and not graded. [Grade calls another system drives](/guides/black-box#conversations-another-system-drives) has the details.
 
@@ -413,15 +414,16 @@ npx sandtable-ai regrade .sandtable/runs/<run>/results.json --domain examples/fr
 | `-o, --out <dir>` | output directory for `results.json` and `report.html`. Default: the results' own directory, replacing them |
 | `--no-html` | skip the HTML report |
 
-It replays each trial's tool calls in order against a fresh copy of the world, grades the conversation as a live run would, and recomputes every score. The transcripts, token usage and timing stay as they were recorded. It prints the summary, how many verdicts changed and which, and the new pass^k.
+It replays each trial's tool calls in order against a fresh copy of the world, grades the conversation as a live run would, and recomputes every score. The transcripts, token usage and timing stay as they were recorded. A trial's [dates relative to the clock](/reference/spec#clock-and-relative-dates) resolve at the `clock` it recorded, so a `clock: now` run regrades the same on any day. It prints the summary, how many verdicts changed and which, and the new pass^k.
 
 It refuses, and writes nothing, when `--domain` is another domain: the `name` in its `sandtable.yaml` isn't the `domain` that `results.json` records. The error names both. Pass the domain the run used. If you renamed the domain since the run, restore its `name` or rerun it with `run`.
 
 It also refuses, and writes nothing, when the stored conversations no longer fit the domain:
 
-- the agent or the caller would be given something else now: the policy, a tool's schema, or a task's caller prompt, opening line or turn limit (and its script, for the scripted caller). `results.json` keeps a hash of them as `inputs`.
+- the agent or the caller would be given something else now: the policy, a tool's schema, the clock, or a task's caller prompt, opening line or turn limit (and its script, for the scripted caller). `results.json` keeps a hash of them as `inputs`.
 - a tool call would now return something other than what the agent saw, for example after an edit to the seed records or to what a tool does.
 - a task it ran is gone.
+- a task's clock is `now` and its trials record no `clock`, so nothing says what their dates were.
 
 Rerun those with `run`. Tasks added since the run, with their seed records, don't block it unless they change what a stored tool call returns.
 

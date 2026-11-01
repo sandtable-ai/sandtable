@@ -10,6 +10,7 @@ import { shellWord } from "../shell.ts";
 import { version } from "../version.ts";
 import { coerceArgs } from "../world/tools.ts";
 import { seedFor } from "../world/store.ts";
+import { dateProblems } from "./clock.ts";
 import { DomainSpec, type Domain, type Given, type Task, type Tool } from "./schema.ts";
 
 export const DOMAIN_FILE = "sandtable.yaml";
@@ -155,7 +156,8 @@ export function validateDomain(d: Domain): string[] {
       for (const { ref, name, path } of references(value)) {
         const p = Object.hasOwn(t.params, name) ? t.params[name] : undefined;
         if (!path.length) {
-          if (!p) problems.push(`${where}: "${ref}" never resolves: tool "${t.name}" has no param "${name}"`);
+          // Without a param by that name, "$today" and "$now" are dates, which dateProblems checks.
+          if (!p && !DATE_NAMES.has(name)) problems.push(`${where}: "${ref}" never resolves: tool "${t.name}" has no param "${name}"`);
           continue;
         }
         // A path after a param with no fields stays literal text, as it did before params could nest.
@@ -244,8 +246,12 @@ export function validateDomain(d: Domain): string[] {
       });
     }
   }
+  problems.push(...dateProblems(d));
   return problems;
 }
+
+/** The names a "$name" reference takes as a date when no param has them. */
+const DATE_NAMES: ReadonlySet<string> = new Set(["today", "now"]);
 
 /** The routes the world server keeps for itself: a tool's `http` route can't be one of them. */
 const RESERVED_ROUTE = /^\/(?:tools|mcp|webhook|sessions|s)(?:\/|$)/;

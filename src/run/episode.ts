@@ -1,5 +1,6 @@
 import { gradeTrial, isSkipped, type CheckResult } from "../grade/expectations.ts";
 import { checkTranscript, invariantTool, type CallRecord, type FaultApplied, type Violation } from "../grade/invariants.ts";
+import { resolveTrial } from "../spec/clock.ts";
 import type { Domain, Task } from "../spec/schema.ts";
 import { agentSystemPrompt, taskContext, type AgentPromptOptions } from "../sim/prompts.ts";
 import type { AgentAdapter, CallTool, UserSimulator } from "../sim/types.ts";
@@ -48,6 +49,11 @@ export interface SoftCheck {
 export interface TrialResult {
   taskId: string;
   trial: number;
+  /**
+   * The trial's clock, when its domain or task has one: the minute its dates resolved at, such as `2026-11-02T09:00`
+   * (for `clock: now`, the minute it started). `sandtable regrade` resolves them at it again. Absent without a clock.
+   */
+  clock?: string;
   /** False for a skipped trial too: only a graded trial can pass. */
   passed: boolean;
   /**
@@ -93,9 +99,14 @@ export async function runEpisode(input: {
   prompt?: AgentPromptOptions;
   /** A world server (`run --serve`) to serve this trial's world on while it runs. */
   server?: WorldServer;
+  /** The current time, read once as the trial starts, for `clock: now`: the system clock unless given. */
+  now?: () => Date;
 }): Promise<TrialResult> {
-  const { domain, task, agent, user, trial, prompt } = input;
+  const { agent, user, trial, prompt } = input;
   const started = performance.now();
+  // Dates relative to the clock resolve once, as the trial starts: the world, the tools, the prompts and the grading
+  // after this all see plain values.
+  const { domain, task, clock } = resolveTrial(input.domain, input.task, input.now?.());
   const world = worldFor(domain, task);
   const initial = world.snapshot();
   const events: TrajectoryEvent[] = [];
@@ -120,6 +131,7 @@ export async function runEpisode(input: {
       tools: domain.tools.map(toolSchema),
       sessionId: `${input.runId ? `${input.runId}/` : ""}${task.id}#${trial}`,
       ...(context ? { context } : {}),
+      ...(clock ? { now: clock } : {}),
       recordUsage: (model, u) => recordInto(usage.agent, model, u),
       ...(served ? { world: served.urls } : {}),
     });
@@ -159,6 +171,7 @@ export async function runEpisode(input: {
   return {
     taskId: task.id,
     trial,
+    ...(clock ? { clock } : {}),
     ...gradeEpisode({ domain, task, world, runner, events, agentMessages, error, ...(prompt ? { prompt } : {}) }),
     events,
     changes: worldChanges(domain, initial, world),

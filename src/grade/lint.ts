@@ -1,5 +1,6 @@
 import { createToolRunner } from "../run/tool-runner.ts";
 import { agentSystemPrompt } from "../sim/prompts.ts";
+import { resolveTrial } from "../spec/clock.ts";
 import type { Domain, Invariant, ReferenceCall, Task } from "../spec/schema.ts";
 import { matches } from "../world/match.ts";
 import { worldFor, type World } from "../world/store.ts";
@@ -56,8 +57,10 @@ export interface LintReport {
  * Prove each task is worth grading, without any model call:
  * ready (reachable rows), solvable (reference replay passes), non-vacuous (a do-nothing
  * agent fails tasks that expect a write) and discriminating (something is graded at all).
+ * Each task is checked with its dates resolved at its clock, as a trial resolves them: for `clock: now`, at `now`,
+ * the current time unless given.
  */
-export function lintDomain(domain: Domain): LintReport {
+export function lintDomain(domain: Domain, opts: { now?: Date } = {}): LintReport {
   const changeable = new Set<string>();
   const writers = new Set<string>();
   for (const tool of domain.tools) {
@@ -67,7 +70,11 @@ export function lintDomain(domain: Domain): LintReport {
       if ("create" in op || "update" in op) writers.add(tool.name);
     }
   }
-  const tasks = domain.tasks.map((task) => lintTask(domain, task, changeable, writers));
+  const now = opts.now ?? new Date();
+  const tasks = domain.tasks.map((task) => {
+    const trial = resolveTrial(domain, task, now);
+    return lintTask(trial.domain, trial.task, changeable, writers);
+  });
   const rules = domain.invariants.map((inv) => {
     const ids = tasks.filter((t) => t.rules.includes(inv.id)).map((t) => t.id);
     return { id: inv.id, tasks: ids, warnings: ids.length ? [] : [unchecked(inv)] };

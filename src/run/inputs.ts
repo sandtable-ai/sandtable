@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { writtenClock } from "../spec/clock.ts";
 import type { Domain, Task } from "../spec/schema.ts";
 import { agentSystemPrompt, taskContext, USER_KICKOFF, userSystemPrompt, type AgentPromptOptions } from "../sim/prompts.ts";
 import { seedFor } from "../world/store.ts";
@@ -16,12 +17,14 @@ const unreviewed = <T extends object>(item: T) => Object.fromEntries(Object.entr
  *   task's `given.context`), every tool's definition (what the agent sees and what the tool does), the caller's
  *   prompt and opening, the turn limit, the script when `user` is the scripted user, the seed rows with the
  *   task's `given.rows` merged in, and the task's `faults` and `events`, when it has them. Seed rows and tools are
- *   shared, so editing one changes every task's hash.
+ *   shared, so editing one changes every task's hash. With a clock, the clock too.
  * - `grading`: how its trials are graded: the task's `expect` and `critical`, and every invariant (with `soft`),
  *   since a call to any tool can trip one.
+ * Both hash the spec as written: `$today+2d` and `clock: now` as such, so the hashes stay the same from day to day.
  */
 export function taskFingerprints(domain: Domain, task: Task, user: string, prompt: AgentPromptOptions = {}): { inputs: string; grading: string } {
   const persona = domain.personas.find((p) => p.id === task.persona);
+  const clock = writtenClock(domain, task);
   return {
     inputs: hash({
       agent: agentSystemPrompt(domain, task, prompt),
@@ -38,6 +41,7 @@ export function taskFingerprints(domain: Domain, task: Task, user: string, promp
       world: seedFor(domain, task),
       ...(task.faults ? { faults: task.faults } : {}),
       ...(task.events ? { events: task.events } : {}),
+      ...(clock ? { clock } : {}),
     }),
     grading: hash({
       expect: task.expect,
@@ -60,12 +64,15 @@ export function taskFingerprints(domain: Domain, task: Task, user: string, promp
  * Invariants and expectations are left out, so editing how a trial is graded keeps the hash. Seed records,
  * a task's `given.rows` included, what tools do, and a task's `faults` and `events` are left out too: the agent sees
  * them only through tool results, which a regrade replays call by call. A task id missing from the domain hashes as missing.
+ * A task's clock is in, as written, since the prompts tell it: `clock: now` hashes as `now`, the same from day to day,
+ * and a task without a clock hashes exactly as in results written before clocks existed.
  */
 export function inputsFingerprint(domain: Domain, taskIds: readonly string[], user: string, prompt: AgentPromptOptions = {}): string {
   const tasks = taskIds.map((id) => {
     const task = domain.tasks.find((t) => t.id === id);
     if (!task) return { id, missing: true };
     const persona = domain.personas.find((p) => p.id === task.persona);
+    const clock = writtenClock(domain, task);
     return {
       id,
       ...(taskContext(task) ? { agent: agentSystemPrompt(domain, task, prompt) } : {}),
@@ -73,6 +80,7 @@ export function inputsFingerprint(domain: Domain, taskIds: readonly string[], us
       opening: task.user.opening,
       maxTurns: task.max_turns ?? domain.max_turns,
       ...(user === "scripted" ? { script: task.user.script } : {}),
+      ...(clock ? { clock } : {}),
     };
   });
   return hash({ agent: agentSystemPrompt(domain, undefined, prompt), tools: domain.tools.map(toolSchema), kickoff: USER_KICKOFF, tasks });

@@ -3,6 +3,7 @@ import { inputsFingerprint } from "../run/inputs.ts";
 import { summarize, type SuiteResult } from "../run/suite.ts";
 import { createToolRunner } from "../run/tool-runner.ts";
 import { sumUsage } from "../run/usage.ts";
+import { resolveTrial } from "../spec/clock.ts";
 import { pendingReview } from "../spec/load.ts";
 import type { Domain, Task } from "../spec/schema.ts";
 import { version } from "../version.ts";
@@ -33,6 +34,20 @@ export interface DrivenOptions {
   onOpen?(session: ServedSession): void;
   /** A conversation was graded: its trial, and the run as it stands now. Its end is answered once this settles. */
   onGraded?(trial: TrialResult, result: SuiteResult): void | Promise<void>;
+  /** The current time, read as each session opens, for `clock: now`: the system clock unless given. */
+  now?: () => Date;
+}
+
+/** An open session's trial: its domain and task with their dates resolved, its world as it started and as it is, and its tool calls with the time each came in. */
+interface OpenSession {
+  session: ServedSession;
+  domain: Domain;
+  task: Task;
+  clock?: string;
+  world: World;
+  initial: Snapshot;
+  calls: { at: number; event: TrajectoryEvent }[];
+  started: number;
 }
 
 /**
@@ -47,26 +62,27 @@ export async function serveConversations(domain: Domain, opts: DrivenOptions): P
   const runId = `${startedAt.replace(/[-:]/g, "").replace(/\.\d+Z$/, "")}-${Math.random().toString(36).slice(2, 6)}`;
   const trials: TrialResult[] = [];
   let latest: SuiteResult | undefined;
-  /** Each open session's world, as it started and as it is, and its tool calls with the time each came in. */
-  const open = new Map<string, { session: ServedSession; world: World; initial: Snapshot; calls: { at: number; event: TrajectoryEvent }[]; started: number }>();
+  const open = new Map<string, OpenSession>();
 
   const server: WorldServer = await startWorldServer(domain, {
     port: opts.port,
     ...(opts.host ? { host: opts.host } : {}),
     driven: {
       open(taskId) {
-        const task = taskId === undefined ? opts.task : domain.tasks.find((t) => t.id === taskId);
-        if (!task) {
+        const written = taskId === undefined ? opts.task : domain.tasks.find((t) => t.id === taskId);
+        if (!written) {
           throw new HttpError(
             taskId === undefined ? 409 : 404,
             taskId === undefined ? "no task to rehearse: start sandtable serve with --task <id>, or open a session with POST /sessions and { \"task\": \"<id>\" }" : `unknown task "${taskId}" in ${domain.name}`,
           );
         }
-        const world = worldFor(domain, task);
+        // The session is a trial: its dates resolve once, as it opens.
+        const trial = resolveTrial(domain, written, opts.now?.());
+        const world = worldFor(trial.domain, trial.task);
         const calls: { at: number; event: TrajectoryEvent }[] = [];
-        const runner = createToolRunner(domain, world, (e) => calls.push({ at: Date.now(), event: toolEvent(e) }), task);
-        const session = server.open(task, runner);
-        open.set(session.id, { session, world, initial: world.snapshot(), calls, started: Date.now() });
+        const runner = createToolRunner(trial.domain, world, (e) => calls.push({ at: Date.now(), event: toolEvent(e) }), trial.task);
+        const session = server.open(trial.task, runner);
+        open.set(session.id, { session, ...trial, world, initial: world.snapshot(), calls, started: Date.now() });
         opts.onOpen?.(session);
         return session;
       },
@@ -74,7 +90,7 @@ export async function serveConversations(domain: Domain, opts: DrivenOptions): P
         const st = open.get(session.id)!;
         open.delete(session.id);
         server.close(session.id);
-        const trial = gradeConversation(domain, session.task, st, transcript, trials.filter((t) => t.taskId === session.task.id).length, problem);
+        const trial = gradeConversation(st, transcript, trials.filter((t) => t.taskId === session.task.id).length, problem);
         trials.push(trial);
         latest = summary();
         await opts.onGraded?.(trial, latest);
@@ -125,14 +141,8 @@ export async function serveConversations(domain: Domain, opts: DrivenOptions): P
  * such as another call's requests in its world, nothing in it can be trusted to be this call's: the trial ends in that
  * error, and is skipped whatever it shows.
  */
-function gradeConversation(
-  domain: Domain,
-  task: Task,
-  st: { session: ServedSession; world: World; initial: Snapshot; calls: { at: number; event: TrajectoryEvent }[]; started: number },
-  transcript: TranscriptLine[] | undefined,
-  trial: number,
-  problem?: string,
-): TrialResult {
+function gradeConversation(st: OpenSession, transcript: TranscriptLine[] | undefined, trial: number, problem?: string): TrialResult {
+  const { domain, task, clock } = st;
   const lines = transcript ?? [];
   const said = (l: TranscriptLine): TrajectoryEvent => (l.role === "user" ? { type: "user", text: l.text } : { type: "agent", text: l.text, latencyMs: 0 });
   let events: TrajectoryEvent[];
@@ -154,6 +164,7 @@ function gradeConversation(
   return {
     taskId: task.id,
     trial,
+    ...(clock ? { clock } : {}),
     ...graded,
     ...(problem ? { passed: false, skipped: true as const } : {}),
     events,

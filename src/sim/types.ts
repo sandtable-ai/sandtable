@@ -6,10 +6,11 @@ import type { ToolOutcome, ToolSchema } from "../world/tools.ts";
 export type CallTool = (name: string, args: unknown) => Promise<ToolOutcome>;
 
 export interface AgentContext {
+  /** The domain, with its dates relative to the clock resolved for this trial. */
   domain: Domain;
   /**
-   * Sandtable's default system prompt (domain description + policy, then the task's context); without the policy in a
-   * `run --without-policy` run. Your agent may use its own.
+   * Sandtable's default system prompt (domain description, the time with a clock, then the policy and the task's
+   * context); without the policy in a `run --without-policy` run. Your agent may use its own.
    */
   system: string;
   tools: ToolSchema[];
@@ -19,6 +20,11 @@ export interface AgentContext {
    * or a trigger payload. Absent when the task sets none. An agent with its own prompt reads it here.
    */
   context?: Record<string, unknown>;
+  /**
+   * The trial's clock, when the domain or task has one: "now" as a date and time to the minute with no time zone, such
+   * as `2026-11-02T09:00`. Absent without a clock. An agent with its own prompt or its own clock reads it here.
+   */
+  now?: string;
   /** Report model usage so runs can show tokens and cost. Optional for custom adapters. */
   recordUsage?: UsageRecorder;
   /**

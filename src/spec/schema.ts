@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CLOCK_MESSAGE, clockFrom } from "./clock.ts";
 
 /**
  * A sandtable domain is a simulated copy of one customer's world:
@@ -7,9 +8,21 @@ import { z } from "zod";
  *
  * Strings of the form "$arg" inside ops, checks and `where` clauses are replaced by
  * the tool call's argument values; "${arg}" interpolates inside longer strings.
+ * With a `clock`, "$today", "$now" and their offsets ("$today+2d", "${now-90m}") are dates relative to it (see clock.ts).
  */
 
 const Value = z.unknown();
+
+/**
+ * "Now" for a trial: `now`, the minute each trial starts on the machine running sandtable, or a date and time to the
+ * minute with no time zone, such as `2026-11-02T09:00`. A YAML timestamp or a Date is read as that minute in UTC.
+ */
+const ClockSpec = z.unknown().transform((value, ctx) => {
+  const clock = clockFrom(value);
+  if (clock !== undefined) return clock;
+  ctx.addIssue({ code: "custom", message: CLOCK_MESSAGE });
+  return z.NEVER;
+});
 
 /**
  * Drafted items (from `sandtable init`) start as `pending` and only count as acceptance
@@ -328,7 +341,7 @@ const EventAfter = z.object({ tool: z.string(), call: z.number().int().positive(
 /**
  * A change someone else makes to the world during a task, such as another carrier booking a load the agent found:
  * right after the call that `after` names, `update` sets fields of the row keyed `key`, or `create` adds a row with
- * `values`. Values are literal: a "$arg" in them is not replaced.
+ * `values`. Values are literal: a "$arg" in them is not replaced, while a date relative to the clock ("$today") is.
  */
 export const EventSpec = z.union(
   [z.object({ after: EventAfter, update: z.string(), key: z.string(), set: Where }).strict(), z.object({ after: EventAfter, create: z.string(), values: Where }).strict()],
@@ -343,6 +356,8 @@ export const TaskSpec = z
     tags: z.array(z.string()).default([]),
     /** A release blocker: `sandtable run` exits 1 when any of its trials fails, whatever the score and `--fail-under`. */
     critical: z.boolean().optional(),
+    /** This task's clock, instead of the domain's (see ClockSpec). */
+    clock: ClockSpec.optional(),
     review: Review,
     source: Source,
     user: z
@@ -373,6 +388,8 @@ export const DomainSpec = z
     description: z.string().optional(),
     /** The operating policy / SOP the agent must follow (inline text or a path to a .md file). */
     policy: z.string(),
+    /** "Now" in every trial, unless a task sets its own (see ClockSpec). Without one, "$today" and "$now" are not dates. */
+    clock: ClockSpec.optional(),
     world: z.object({ tables: z.record(z.string(), TableSpec) }).strict(),
     tools: z.array(ToolSpec).min(1),
     invariants: z.array(InvariantSpec).default([]),
