@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 - `examples/freight`: `three-rounds-max` is now a `max_count` of `log_offer` calls per load, so it counts the counter-offers the agent logged instead of trusting the round number it writes. A new hard invariant, `counters-only-go-up`, fails a counter-offer below the one before it on the same load. The example now has 21 invariants; the careful agent still scores 100% and the naive agent pass^1 9.6%. `regrade` re-scores stored freight runs under the new rules, and `run --baseline` against an older freight run labels every task's grading changed ([#36](https://github.com/sandtable-ai/sandtable/issues/36)).
 - `init --sop`: the SOP's drafting call may write up to 32,000 tokens, up from 16,000, since its reply lists every rule and then drafts each one, and the two new invariant kinds made a long policy's reply run past 16,000. The dry run's plan counts it, so its upper bound for the SOP rises by up to 16,000 output tokens ([#36](https://github.com/sandtable-ai/sandtable/issues/36)).
+- **Roadmap**: `ROADMAP.md` and sandtable.dev/roadmap list what 1.3.0 ships, under In 1.3, and propose 1.4 under Next ([#468](https://github.com/sandtable-ai/sandtable/issues/468)).
 
 ### Fixed
 
