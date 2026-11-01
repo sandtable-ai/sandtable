@@ -143,7 +143,10 @@ async function film(browser, { url, width, height, scale, fps = 30, out }) {
   const frames = Math.round((await evaluate("DURATION")) * fps);
   const ffmpeg = spawn("ffmpeg", [
     "-loglevel", "error", "-y", "-f", "image2pipe", "-framerate", String(fps), "-i", "-",
-    "-c:v", "libx264", "-preset", "slow", "-crf", "18", "-tune", "animation", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+    // Convert with the BT.709 matrix and say so in the file: an untagged video leaves players to guess, and
+    // they shift the colors (the terracotta plays redder).
+    "-vf", "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p,setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv",
+    "-c:v", "libx264", "-preset", "slow", "-crf", "18", "-tune", "animation", "-movflags", "+faststart",
     path.join(here, out),
   ], { stdio: ["pipe", "ignore", "inherit"] });
   const encoded = new Promise((resolve, reject) => {
