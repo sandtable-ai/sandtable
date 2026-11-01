@@ -156,11 +156,15 @@ function send(res: ServerResponse, status: number, body: unknown, headers: Recor
 
 /** A query string's or a form's fields as arguments: a name given more than once is a list. */
 function fieldsOf(params: URLSearchParams): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const name of new Set(params.keys())) {
-    const all = params.getAll(name);
-    out[name] = all.length > 1 ? all : all[0];
+  // One pass: getAll for each name would read the whole list again for every name in a large form.
+  const all = new Map<string, string[]>();
+  for (const [name, value] of params) {
+    const list = all.get(name);
+    if (list) list.push(value);
+    else all.set(name, [value]);
   }
+  const out: Record<string, unknown> = {};
+  for (const [name, list] of all) out[name] = list.length > 1 ? list : list[0];
   return out;
 }
 
@@ -236,11 +240,11 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
    * header to tell them apart, put their requests in one world, and grading either on it would be wrong.
    */
   function mixed(s: ServedSession, callId: string, toolCalls: string[]): string | undefined {
-    const called = toolCalls.filter((name) => tools.has(name)).sort();
-    const got = s.runner.calls.map((c) => c.name).sort();
-    if (called.join("\n") === got.join("\n")) return undefined;
+    const called = toolCalls.filter((name) => tools.has(name));
+    const got = s.runner.calls.map((c) => c.name);
+    if ([...called].sort().join("\n") === [...got].sort().join("\n")) return undefined;
     const list = (names: string[]) => (names.length ? names.join(", ") : "none");
-    return `call ${callId}'s transcript lists its tool calls as ${list(called)}, but its conversation's world got ${list(got)}: another call's requests went to the same world, so this one isn't graded. Send each tool request the call's id in an X-Sandtable-Call header (on ElevenLabs, {{system__conversation_id}}) to keep calls at the same time apart`;
+    return `call ${callId}'s transcript lists its tool calls as ${list(called)}, but the conversation it was matched to got ${list(got)}, so this call isn't graded on it: with no call id on its tool requests, another call's requests can go to the same world. Send each tool request the call's id in an X-Sandtable-Call header (on ElevenLabs, {{system__conversation_id}}) to keep calls at the same time apart`;
   }
 
   /** End a driven session: grade it, stop serving it, and answer with the grade once the run's files have it. */

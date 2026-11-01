@@ -210,6 +210,10 @@ describe("sandtable serve: conversations a platform drives", () => {
       },
     };
     expect((await post(`${url}/webhook`, end)).body).toMatchObject({ task: "book", trial: 0, passed: true, failed: [] });
+    // A large form is read in one pass: 80,000 fields in about 700 KB answer at once.
+    const many = Array.from({ length: 80_000 }, (_, i) => `f${i}=1`).join("&");
+    const big = await fetch(`${url}/s/${(await post(`${url}/sessions`, {})).body.id}/bookings`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: many });
+    expect(big.status).toBe(400);
     // Lines and calls in order of time: the agent's reply came after the calls, an hour into the call.
     expect(graded[0]!.events.map((e) => (e.type === "tool" ? `${e.name} via ${e.via}` : e.type))).toEqual(["user", "verify_carrier via rest", "book_load via rest", "agent"]);
     // ElevenLabs retries a webhook that failed: a second end of the same call isn't graded again.
@@ -250,10 +254,18 @@ describe("sandtable serve: conversations a platform drives", () => {
       await post(`${url}/bookings`, BOOK);
       const a = await post(`${url}/webhook`, transcription("conv-a", ["verify_carrier", "book_load"]));
       expect(a.body).toMatchObject({ passed: false, skipped: true });
-      expect(graded[0]!.error).toMatch(/^call conv-a's transcript lists its tool calls as book_load, verify_carrier, but its conversation's world got book_load, verify_carrier, verify_carrier: another call's requests went to the same world/);
+      expect(graded[0]!.error).toMatch(/^call conv-a's transcript lists its tool calls as verify_carrier, book_load, but the conversation it was matched to got verify_carrier, verify_carrier, book_load, so this call isn't graded on it: with no call id on its tool requests, another call's requests can go to the same world/);
       expect(graded[0]!.error).toContain("X-Sandtable-Call header (on ElevenLabs, {{system__conversation_id}})");
       expect((await post(`${url}/webhook`, transcription("conv-b", ["verify_carrier"]))).body).toMatchObject({ passed: false, skipped: true });
-      expect(graded[1]!.error).toMatch(/lists its tool calls as verify_carrier, but its conversation's world got none/);
+      expect(graded[1]!.error).toMatch(/lists its tool calls as verify_carrier, but the conversation it was matched to got none/);
+    }
+    {
+      const { url, graded } = await start(domain, domain.tasks[0]);
+      // A post-call webhook with no transcript entries says nothing about the call's tool calls, so it isn't checked.
+      await json(`${url}/carriers/100101`);
+      await post(`${url}/bookings`, BOOK);
+      expect((await post(`${url}/webhook`, { type: "post_call_transcription", event_timestamp: 1, data: { conversation_id: "conv-d", transcript: [] } })).body).toMatchObject({ passed: true });
+      expect(graded[0]!.error).toBeUndefined();
     }
     {
       const { url } = await start(domain, domain.tasks[0]);

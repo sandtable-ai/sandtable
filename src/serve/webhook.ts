@@ -27,7 +27,7 @@ export interface TranscriptLine {
  *   answer.
  * `callId` is the platform's id for the conversation, when the payload has one. ElevenLabs calls a webhook tool's own
  * URL, a tool's `http` route, so only its post-call webhooks come here; its end's `toolCalls` names the webhook tools the
- * transcript says the call called, in order.
+ * transcript says the call called, in order, and is absent when the webhook has no transcript to say.
  */
 export type WebhookRequest =
   | { kind: "calls"; platform: "vapi" | "retell" | "generic"; callId?: string; calls: WebhookCall[] }
@@ -119,7 +119,9 @@ export function parseWebhook(body: unknown, pathTool?: string): WebhookRequest {
       if (typeof start === "number" && Number.isFinite(start) && typeof at === "number" && Number.isFinite(at)) line.time = Math.round((start + at) * 1000);
       transcript.push(line);
     }
-    return { kind: "end", platform: "elevenlabs", ...id, transcript, toolCalls };
+    // With no transcript entries, it says nothing about the call's tool calls.
+    const said = Array.isArray(body.data.transcript) && body.data.transcript.length > 0;
+    return { kind: "end", platform: "elevenlabs", ...id, transcript, ...(said ? { toolCalls } : {}) };
   }
   const name = str(body.name) ?? str(body.tool);
   if (!name) {
