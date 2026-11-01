@@ -403,7 +403,7 @@ describe("import elevenlabs: tests", () => {
     ]);
     expect(never!.expect).toMatchObject({ called: [], not_called: ["end_call"] });
     expect(ghost!.expect).toMatchObject({ called: [], not_called: [] });
-    expect(draft.warnings).toEqual(["g.json: the test's tool_call_parameters name the tool nope, which the agent doesn't have; skipped"]);
+    expect(draft.warnings).toEqual(["g.json: the test's tool_call_parameters name the tool nope, which the agent doesn't have, so its check is left out of the task"]);
   });
 
   it("makes a next-reply test a task, with its success condition and examples noted", () => {
@@ -470,5 +470,21 @@ describe("import elevenlabs: drafts validate from awkward configs (review of #46
     expect(domain.tools.find((t) => t.name === "get_thing")!.http).toEqual({ method: "GET", path: "/items/{item_id}" });
     expect(draft.tasks[0]!.notes.join("\n")).toContain('Its test answers get_thing with this mock only for some arguments ([{"path":"item_id","value":"7"}])');
     expect(validateDomain(domain)).toEqual([]);
+  });
+});
+
+describe("import elevenlabs: warnings for odd entries (#472)", () => {
+  it("lists a transfer number once with each of its conditions, warns about a tool with no type, and keeps a tool test whose tool is missing", () => {
+    const transfer = (condition: string) => ({ transfer_destination: { type: "phone", phone_number: "+15555550103" }, condition });
+    const { draft } = domainOf(
+      files(
+        ["agent.json", { agent_id: "agent_9", ...elAgent({ tools: [{ name: "typeless", description: "x" }], built_in_tools: { end_call: END_CALL, transfer_to_number: { type: "system", name: "transfer_to_number", params: { system_tool_type: "transfer_to_number", transfers: [transfer("Billing"), transfer("Payments")] } } } }) }],
+        ["t.json", { id: "t1", type: "tool", name: "No refund call", chat_history: [{ role: "user", message: "Refund me", time_in_call_secs: 1 }], tool_call_parameters: { referenced_tool: { id: "tool_gone", type: "webhook" }, parameters: [], verify_absence: true } }],
+      ),
+    );
+    expect(draft.tools.find((t) => t.name === "transfer_to_number")!.description).toBe("Transfer the call to a person. Destinations: +15555550103 (Billing; Payments).");
+    expect(draft.warnings).toContain("agent.json: a tool with no type; skipped");
+    expect(draft.warnings).toContain("t.json: the test's tool_call_parameters name the tool tool_gone, which the agent doesn't have, so its check is left out of the task");
+    expect(draft.tasks.map((t) => t.id)).toEqual(["no-refund-call"]);
   });
 });

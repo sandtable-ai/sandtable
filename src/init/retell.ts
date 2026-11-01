@@ -79,9 +79,15 @@ function classify(files: PlatformFile[], warnings: string[]) {
       else if (isFlow(item)) flows.push({ file, json: item });
       else if (isLlm(item)) llms.push({ file, json: item });
       else {
+        // A list response, such as { items: [...] }: its test cases, and a warning for each element that isn't one.
         const lists = Object.values(item).filter(Array.isArray);
-        if (lists.length === 1 && lists[0]!.length && lists[0]!.every((x) => isPlainObject(x) && isTestCase(x))) tests.push(...lists[0]!.map((json) => ({ file, json: json as Json })));
-        else warnings.push(`${file}: not a Retell agent (with agent_id or response_engine), Retell LLM (with llm_id), conversation flow (with nodes) or test case (with user_prompt and metrics); skipped`);
+        const list = lists.length === 1 ? lists[0]! : [];
+        if (list.some((x) => isPlainObject(x) && isTestCase(x))) {
+          list.forEach((x, i) => {
+            if (isPlainObject(x) && isTestCase(x)) tests.push({ file, json: x });
+            else warnings.push(`${file}: element ${i} of its list isn't a test case (with user_prompt and metrics); skipped`);
+          });
+        } else warnings.push(`${file}: not a Retell agent (with agent_id or response_engine), Retell LLM (with llm_id), conversation flow (with nodes) or test case (with user_prompt and metrics); skipped`);
       }
     }
   }
@@ -203,7 +209,10 @@ export function draftFromRetell(files: PlatformFile[], pick?: string): PlatformD
     // An LLM's tools: its general tools and each state's, which may repeat a general tool by name.
     const seen = new Set<string>();
     for (const t of [...(Array.isArray(json.general_tools) ? json.general_tools : []), ...states.flatMap((s) => (Array.isArray(s.tools) ? s.tools : []))]) {
-      if (!isPlainObject(t)) continue;
+      if (!isPlainObject(t)) {
+        warnings.push(`${engine.file}: a tool that isn't a JSON object (${JSON.stringify(t)}); skipped`);
+        continue;
+      }
       const raw = str(t.name);
       if (raw && seen.has(raw)) continue;
       if (raw) seen.add(raw);
@@ -256,7 +265,8 @@ export function draftFromRetell(files: PlatformFile[], pick?: string): PlatformD
     for (const mock of Array.isArray(test.tool_mocks) ? test.tool_mocks : []) {
       if (!isPlainObject(mock)) continue;
       const mocked = str(mock.tool_name);
-      const tool = tools.find((t) => t.name === mocked || t.platformName === mocked);
+      // A mock that names no tool is for none: undefined would match every tool with no platform name.
+      const tool = mocked === undefined ? undefined : tools.find((t) => t.name === mocked || t.platformName === mocked);
       if (!tool) {
         warnings.push(`${file}: a tool mock for ${mocked ?? "a tool with no tool_name"}, which the agent doesn't have; skipped`);
         continue;
@@ -298,7 +308,11 @@ function destinationOf(raw: unknown): TransferDestination | undefined {
 
 /** A Retell tool as a sandtable tool, or undefined for a type the draft can't model. */
 function toolFrom(json: Json, file: string, names: Set<string>, warnings: string[]): PlatformTool | undefined {
-  const type = String(json.type);
+  const type = str(json.type);
+  if (!type) {
+    warnings.push(`${file}: a tool with no type; skipped`);
+    return undefined;
+  }
   const raw = str(json.name);
   if (type === "custom") {
     if (!raw) {

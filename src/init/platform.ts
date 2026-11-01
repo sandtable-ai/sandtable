@@ -127,7 +127,10 @@ export interface TransferDestination {
 /** A tool that transfers the call: each transfer is a row of the `transfers` table, which the caller adds. */
 export function transferTool(names: Set<string>, name: string, destinations: TransferDestination[], platform: string, description = "Transfer the call to a person."): PlatformTool {
   const targets = [...new Set(destinations.map((d) => d.target).filter((x): x is string => x !== undefined))];
-  const where = destinations.map((d) => `${d.label}${d.description ? ` (${d.description})` : ""}`).join("; ");
+  // One destination listed under several conditions is one destination, with each condition.
+  const byLabel = new Map<string, string[]>();
+  for (const d of destinations) byLabel.set(d.label, [...(byLabel.get(d.label) ?? []), ...(d.description ? [d.description] : [])]);
+  const where = [...byLabel].map(([label, why]) => `${label}${why.length ? ` (${why.join("; ")})` : ""}`).join("; ");
   return {
     ...builtinName(names, name),
     description: `${description}${where ? ` Destinations: ${where}.` : ""}`,

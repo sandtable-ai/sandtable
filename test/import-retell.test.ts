@@ -335,3 +335,30 @@ describe("import retell: drafts validate from awkward configs (review of #469)",
     expect(validateDomain(domain)).toEqual([]);
   });
 });
+
+describe("import retell: warnings for odd entries (#472)", () => {
+  it("takes a list's test cases and warns about each other element, and names a tool or mock that names nothing", () => {
+    const f = files(
+      ["agent.json", agent()],
+      ["llm.json", llm({ general_tools: [{ type: "end_call", name: "end_call" }, null, 5, "x", { name: "untyped" }, custom("lookup", { id: { type: "string", description: "The ticket" } }, ["id"])] })],
+      ["tests.json", { items: [testCase("good", { tool_mocks: [{ input_match_rule: { type: "any" }, output: '{"id":"7"}' }] }), null, { foo: "bar" }] }],
+    );
+    const { draft, domain } = domainOf(f);
+    expect(domain.tasks.map((t) => t.id)).toEqual(["good"]);
+    // A mock with no tool_name is for no tool, not for the first one.
+    expect(domain.tasks[0]!.expect.called).toEqual([]);
+    expect(draft.warnings).toEqual(
+      expect.arrayContaining([
+        "tests.json: element 1 of its list isn't a test case (with user_prompt and metrics); skipped",
+        "tests.json: element 2 of its list isn't a test case (with user_prompt and metrics); skipped",
+        "llm.json: a tool that isn't a JSON object (null); skipped",
+        "llm.json: a tool that isn't a JSON object (5); skipped",
+        'llm.json: a tool that isn\'t a JSON object ("x"); skipped',
+        "llm.json: a tool with no type; skipped",
+        "tests.json: a tool mock for a tool with no tool_name, which the agent doesn't have; skipped",
+      ]),
+    );
+    expect(draft.warnings.join("\n")).not.toContain("undefined");
+    expect(validateDomain(domain)).toEqual([]);
+  });
+});
