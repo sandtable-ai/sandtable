@@ -15,6 +15,9 @@ notes/
 .claude/settings.local.json
 CLAUDE.local.md
 
+# The overview video in 4:5 for social posts (node assets/render.mjs promo-social)
+assets/promo-social.mp4
+
 # The plugin eval suite's results, packed CLI and npm cache (npm run evals:plugin)
 plugin-evals/results/
 plugin-evals/.cache/

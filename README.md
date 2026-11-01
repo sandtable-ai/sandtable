@@ -148,6 +148,10 @@ A `failure-triager` subagent reads the failing trials of a large run outside the
 
 ## How it works
 
+The 52-second overview, from a call that sounds fine to the leaderboard:
+
+[![The sandtable overview video: 52 rehearsed calls on a fictional freight desk, where the naive agent passes 9.6% and the careful agent 100%](https://github.com/sandtable-ai/sandtable/raw/main/assets/promo.png)](https://sandtable.dev)
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://github.com/sandtable-ai/sandtable/raw/main/assets/trial-dark.png">
   <img src="https://github.com/sandtable-ai/sandtable/raw/main/assets/trial.png" width="832" alt="One trial: a simulated caller talks to your agent, every tool call is checked against the invariants, and the trial is graded on the agent's messages, the violations and the end state, with no judge model">
