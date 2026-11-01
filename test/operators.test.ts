@@ -57,7 +57,7 @@ describe("validate checks the operators of every where clause", () => {
   it.each([
     ["a tool's list op", (r: any) => (r.tools[0].ops[0].where = { status: { $equals: "$status" } }), `tools.list_orders.ops[0].where.status: unknown operator "$equals" ${USE}`],
     ["a tool's check", (r: any) => (r.tools[1].checks[0].where = { status: { $like: "open" } }), `tools.close_order.checks[0].where.status: unknown operator "$like" ${USE}`],
-    ["a require invariant", (r: any) => (r.invariants[0].require.where = { status: { $regex: "^open" } }), `invariants.only-open.require.where.status: unknown operator "$regex" ${USE}`],
+    ["a require invariant", (r: any) => (r.invariants[0].require.where = { status: { $like: "open" } }), `invariants.only-open.require.where.status: unknown operator "$like" ${USE}`],
     ["a never invariant", (r: any) => (r.invariants[1].never.when = { id: { $neq: "O-1" } }), `invariants.never-o2.never.when.id: unknown operator "$neq" ${USE}`],
     ["a state assertion's where", (r: any) => (r.tasks[0].expect.state[0].where = { status: { $like: "closed" } }), `tasks.close-o1.expect.state[0].where.status: unknown operator "$like" ${USE}`],
     ["a state assertion's fields", (r: any) => (r.tasks[0].expect.state[1].fields = { status: { $not: "open" } }), `tasks.close-o1.expect.state[1].fields.status: unknown operator "$not" ${USE}`],
@@ -69,6 +69,17 @@ describe("validate checks the operators of every where clause", () => {
   it("rejects a name inherited from Object.prototype as unknown", () => {
     const d = domain((r) => (r.tools[1].checks[0].where = { status: { $constructor: "open" } }));
     expect(validateDomain(d)).toEqual([`tools.close_order.checks[0].where.status: unknown operator "$constructor" ${USE}`]);
+  });
+
+  it("reports invalid regex patterns with the clause path", () => {
+    const d = domain((r) => {
+      r.tools[0].ops[0].where = { status: { $regex: "[" } };
+      r.tasks[0].expect.state[1].fields = { status: { $regex: 1 } };
+    });
+    expect(validateDomain(d)).toEqual([
+      'tools.list_orders.ops[0].where.status: invalid $regex pattern "["',
+      "tasks.close-o1.expect.state[1].fields.status: $regex needs a string pattern",
+    ]);
   });
 
   it("rejects $in and $nin without a list, which would match nothing", () => {

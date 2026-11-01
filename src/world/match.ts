@@ -125,6 +125,12 @@ const OPERATOR_TESTS: Record<string, (actual: unknown, expected: unknown) => boo
   $lt: (actual, expected) => compare(actual, expected) < 0,
   $lte: (actual, expected) => compare(actual, expected) <= 0,
   $exists: (actual, expected) => (actual !== undefined && actual !== null) === Boolean(expected),
+  $regex: (actual, expected) => {
+    if (typeof actual !== "string" || typeof expected !== "string") return false;
+    // Tool arguments can supply a pattern after static validation.
+    try { return new RegExp(expected).test(actual); }
+    catch { return false; }
+  },
   // Text that contains a string (case-insensitive), or a list with an element that matches: a plain object
   // matches an element like a where clause, operators included; anything else, by equality.
   $contains: (actual, expected) => {
@@ -166,6 +172,13 @@ export function operatorProblems(where: Row, opts: { refs?: boolean } = {}): str
       else if ((op === "$in" || op === "$nin") && !Array.isArray(expected)) {
         const ref = opts.refs && typeof expected === "string" && WHOLE_REF.test(expected);
         problems.push(`${field}: ${op} needs a list${ref ? `, and "${expected}" is a single argument value: list the values, or use ${op === "$in" ? "$eq" : "$ne"}` : ""}`);
+      }
+      else if (op === "$regex") {
+        if (typeof expected !== "string") problems.push(`${field}: $regex needs a string pattern`);
+        else {
+          try { new RegExp(expected); }
+          catch { problems.push(`${field}: invalid $regex pattern ${JSON.stringify(expected)}`); }
+        }
       }
     }
   }
