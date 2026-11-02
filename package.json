@@ -56,7 +56,7 @@
     "forward-deployed-engineering"
   ],
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.135.0",
+    "@anthropic-ai/sdk": "^0.137.0",
     "commander": "^14.0.3",
     "yaml": "^2.9.1",
     "zod": "^4.6.7"
@@ -74,7 +74,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/bedrock-sdk": "^0.35.0",
+    "@anthropic-ai/bedrock-sdk": "^0.36.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1152.0",
     "@aws-sdk/credential-providers": "^3.1152.0",
     "@types/node": "^24.0.0",
