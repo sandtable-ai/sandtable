@@ -53,7 +53,7 @@ Inside tool `ops`, `checks`, invariant `where` clauses and task assertions:
 
 There are no top-level operators such as `$or`: every field's condition must hold. `validate` fails on an unknown operator, on `$in` or `$nin` without a list (a `"$arg"` reference is a single value, never a list), on a non-string or invalid `$regex` pattern, and on a top-level `$` key, in every where clause, with the clause's path, such as `tools.list_orders.ops[0].where.status: unknown operator "$like"`.
 
-A tool can supply a regex through a `"$pattern"` argument reference. If that argument is malformed at runtime, the condition does not match; it does not abort the tool or the trial.
+A tool can supply a regex through a `"$pattern"` argument reference. Patterns run without a time limit; a backtracking pattern can block the tool or trial, so use trusted patterns. If the argument is malformed at runtime, the condition does not match; it does not abort the tool or the trial.
 
 ## clock and relative dates
 

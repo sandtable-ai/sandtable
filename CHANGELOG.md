@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+### Added
+- **Spec**: `$regex` matches text with a JavaScript regular expression in `where`, `fields`, `when`, and tool-call argument expectations. Validation rejects non-string and malformed patterns ([#20](https://github.com/sandtable-ai/sandtable/issues/20)).
+
 ## [1.3.1] - 2026-11-01
 
 A patch release that restores 1.2's validation, as the stability policy promises for a minor release. 1.3.0 rejected two kinds of domain that 1.2 accepted: a `never` rule whose `when` names an argument the tool doesn't have, and date text such as `$today+2d` in a domain with no clock. Both validate again, with a warning, until 2.0.
@@ -23,8 +26,6 @@ A patch release that restores 1.2's validation, as the stability policy promises
 A minor release with no breaking changes. The `max_count` and `monotonic` invariants check rules across calls, such as at most three counter-offers per load, each at least the last, and the freight example now grades both. A simulation clock, with dates relative to it such as `$today+2d`, keeps a domain valid for an agent that knows the real date. `sandtable import retell` and `import elevenlabs` draft a domain from those platforms' agent exports, and `sandtable serve` grades ElevenLabs test calls. The plugin's hooks cover pnpm scripts and more ways of running the unrelated `sandtable` package.
 
 ### Added
-
-- **Spec**: `$regex` matches text with a JavaScript regular expression in `where`, `fields`, `when`, and tool-call argument expectations. Validation rejects non-string and malformed patterns ([#20](https://github.com/sandtable-ai/sandtable/issues/20)).
 
 - **`sandtable serve`**: grades ElevenLabs test calls. Its `post_call_transcription` webhook ends and grades a conversation, with each line's time in the call. A request can name its call in an `X-Sandtable-Call` header, which an ElevenLabs webhook tool fills with `{{system__conversation_id}}`, so calls at the same time keep their own worlds. Without the header, a call whose transcript lists other tool calls than its world got is skipped with that error rather than graded on another call's requests. Tool `http` routes also take form-encoded bodies, which ElevenLabs can send ([#459](https://github.com/sandtable-ai/sandtable/issues/459)).
 - **Overview video**: the docs home page plays a 52-second overview of sandtable, and the README links to it from a still in "How it works". It shows a call that sounds fine but books a carrier whose insurance expired, how a trial is graded, the freight example's results, a leaked ceiling rate and why pass^k matters, and the freight leaderboard ([#454](https://github.com/sandtable-ai/sandtable/issues/454)).
