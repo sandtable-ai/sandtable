@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 ### Changed
 
 - **`sandtable import elevenlabs`**: an ElevenLabs tool test's regex check on an argument becomes a `$regex` on that argument of the task's expected call, instead of a note. A pattern JavaScript can't read the same way, or a check on an argument that isn't text, stays a note ([#480](https://github.com/sandtable-ai/sandtable/issues/480)).
+- **Roadmap**: `ROADMAP.md` and sandtable.dev/roadmap list what 1.4.0 ships, under In 1.4, and propose 1.5 under Next ([#482](https://github.com/sandtable-ai/sandtable/issues/482)).
 
 ## [1.3.1] - 2026-11-01
 

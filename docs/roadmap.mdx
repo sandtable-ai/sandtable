@@ -75,9 +75,13 @@ sandtable is stable since 1.0: the contracts change only in a major release, as 
 - `sandtable import retell` and `sandtable import elevenlabs` draft a domain from those platforms' agent exports and tests, and `sandtable serve` grades ElevenLabs test calls, keeping calls at the same time apart ([#35](https://github.com/sandtable-ai/sandtable/issues/35), [#459](https://github.com/sandtable-ai/sandtable/issues/459))
 - The Claude Code plugin's hooks cover `pnpm run sandtable`, and stop `npm exec`, `pnpm dlx`, `yarn dlx` and `bunx` from running the unrelated `sandtable` package; `validate` catches a `never` rule whose `when` names an argument the tool doesn't have ([#437](https://github.com/sandtable-ai/sandtable/issues/437), [#456](https://github.com/sandtable-ai/sandtable/issues/456), [#462](https://github.com/sandtable-ai/sandtable/issues/462))
 
+## In 1.4
+
+- `$regex` in where clauses: a JavaScript regular expression in `where`, `fields`, `when` and the arguments a task expects, such as `load_id: { $regex: "^L-10" }`; `sandtable import elevenlabs` drafts an ElevenLabs regex check on a tool's argument as one ([#20](https://github.com/sandtable-ai/sandtable/issues/20), [#480](https://github.com/sandtable-ai/sandtable/issues/480))
+
 ## Next
 
-Proposed for 1.4: LLM-judged checks scored apart from pass/fail, which the criteria in imported platform tests can feed ([#16](https://github.com/sandtable-ai/sandtable/issues/16)); dates in the places the clock leaves literal ([#465](https://github.com/sandtable-ai/sandtable/issues/465)) and relative dates from `init --transcripts` ([#466](https://github.com/sandtable-ai/sandtable/issues/466)); and an idle timeout for served conversations whose end never arrives ([#467](https://github.com/sandtable-ai/sandtable/issues/467)).
+Proposed for 1.5: LLM-judged checks scored apart from pass/fail, which the criteria in imported platform tests can feed ([#16](https://github.com/sandtable-ai/sandtable/issues/16)); dates in the places the clock leaves literal ([#465](https://github.com/sandtable-ai/sandtable/issues/465)) and relative dates from `init --transcripts` ([#466](https://github.com/sandtable-ai/sandtable/issues/466)); and an idle timeout for served conversations whose end never arrives ([#467](https://github.com/sandtable-ai/sandtable/issues/467)).
 
 ## Later
 
