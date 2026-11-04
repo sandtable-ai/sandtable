@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-04
+
+A minor release with no breaking changes. `$regex` matches text with a JavaScript regular expression in where clauses and in the arguments a task expects, and `sandtable import elevenlabs` drafts an ElevenLabs regex check on a tool's argument as one, anchored so it never passes a value ElevenLabs fails.
+
 ### Added
 
 - **Spec**: `$regex` matches text with a JavaScript regular expression in `where`, `fields`, `when`, and tool-call argument expectations. Validation rejects non-string and malformed patterns ([#20](https://github.com/sandtable-ai/sandtable/issues/20)).
@@ -384,7 +388,8 @@ First public release. sandtable rehearses an AI agent on a simulated copy of one
 
 A rehearsal of the release pipeline (npm, PyPI and GitHub releases from one tag), published before the first public release. Everything in it is also in 0.1.0; use 0.1.0 instead.
 
-[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/sandtable-ai/sandtable/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/sandtable-ai/sandtable/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/sandtable-ai/sandtable/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/sandtable-ai/sandtable/compare/v1.1.3...v1.2.0
