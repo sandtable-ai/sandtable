@@ -360,5 +360,12 @@ export function renderPlatformDraft(d: PlatformDraft, text: ImportText): { domai
     const node = tasks.get(i, true) as YAML.Node | undefined;
     if (node) node.commentBefore = t.notes.map((n) => ` TODO(review): ${n}`).join("\n");
   });
+  // A regex is single-quoted, which keeps its backslashes as written and lets YAML 1.1 readers such as PyYAML parse
+  // its ?, : and # inside a flow mapping.
+  YAML.visit(tasks, {
+    Pair(_, pair) {
+      if (YAML.isScalar(pair.key) && pair.key.value === "$regex" && YAML.isScalar(pair.value)) pair.value.type = "QUOTE_SINGLE";
+    },
+  });
   return { domain: doc.toString({ lineWidth: 0 }), tasks: d.tasks.length ? tasks.toString({ lineWidth: 0 }) : `# TODO: add tasks, or ${text.noTasks} and import them with it.\n[]\n` };
 }

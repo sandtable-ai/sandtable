@@ -12,6 +12,7 @@ import { runSuite } from "../src/run/suite.ts";
 import { noopAgent } from "../src/sim/noop.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
 import { loadDomain, parseDomain, validateDomain } from "../src/spec/load.ts";
+import { matches } from "../src/world/match.ts";
 
 // sandtable import elevenlabs (#35): a draft domain from an ElevenLabs agent, its tools and its tests, as the
 // ElevenLabs CLI pulls them into a project or as the API returns them.
@@ -393,9 +394,10 @@ describe("import elevenlabs: tests", () => {
     const [counts, never, ghost] = domain.tasks;
     expect(counts).toMatchObject({
       user: { instructions: 'In this call you say, in order: "I need 3 of item 7.", then "Yes, three."', opening: "I need 3 of item 7.", script: ["I need 3 of item 7.", "Yes, three."] },
-      expect: { called: [{ tool: "order", args: { qty: 3, "item.sku": "7", note: { $regex: "^thr" } } }] },
+      expect: { called: [{ tool: "order", args: { qty: 3, "item.sku": "7", note: { $regex: "^(?:^thr)$" } } }] },
     });
     expect(draft.tasks[0]!.notes).toEqual([
+      'ElevenLabs checked order\'s note against the pattern ^thr, and its docs don\'t say whether the whole value must match: the expected call requires it, as ^(?:^thr)$, so it never passes a value ElevenLabs fails. If the test meant "contains", drop the ^(?: and )$.',
       'ElevenLabs judged order\'s mood with an LLM ("Sounds happy"): write the value it expects as an argument of the expected call.',
       "ElevenLabs tested the agent's next turn after this chat history; a run plays the whole call, with the user's lines in order whatever the agent says, so check that they still make sense.",
       "It expects the call ElevenLabs checked: check that, and add the end state.",
@@ -432,14 +434,55 @@ describe("import elevenlabs: tests", () => {
       ),
     );
     // An escaped backslash before A is a literal one, and the pattern's trailing space is kept.
-    expect(domain.tasks[0]!.expect).toMatchObject({ called: [{ tool: "order", args: { who: { $regex: "^\\\\A " } } }] });
+    expect(domain.tasks[0]!.expect).toMatchObject({ called: [{ tool: "order", args: { who: { $regex: "^(?:^\\\\A )$" } } }] });
     expect(draft.tasks[0]!.notes.filter((n) => n.startsWith("ElevenLabs checked"))).toEqual([
       "ElevenLabs checked order's note against the pattern (?P<word>thr), which isn't a JavaScript regular expression: rewrite it as one in a $regex on the expected call, or check it another way, such as $contains.",
       "ElevenLabs checked order's mood against the pattern \\Ahappy\\Z, which uses \\A, \\Z or \\z: JavaScript reads those as letters, so write ^ or $ in a $regex on the expected call.",
+      "ElevenLabs checked order's who against the pattern ^\\\\A , and its docs don't say whether the whole value must match: the expected call requires it, as ^(?:^\\\\A )$, so it never passes a value ElevenLabs fails. If the test meant \"contains\", drop the ^(?: and )$.",
       "ElevenLabs checked order's qty against the pattern ^3$, but qty is an integer and $regex matches text only: check it with $eq, $in or a comparison instead.",
       "ElevenLabs checked order's item.sku against an empty pattern, which matches anything: left out of the expected call.",
-      'ElevenLabs checked order\'s ghost for {"$regex":"^x"}, which isn\'t a param of order: left out of the expected call.',
+      'ElevenLabs checked order\'s ghost for {"$regex":"^(?:^x)$"}, which isn\'t a param of order: left out of the expected call.',
     ]);
+  });
+
+  it("anchors a regex check to the whole value, so the draft never passes a value ElevenLabs fails, and quotes it", () => {
+    const { draft, domain } = domainOf(
+      files(
+        ...base(),
+        [
+          "w.json",
+          {
+            id: "w1",
+            type: "tool",
+            name: "Whole values",
+            chat_history: [{ role: "user", message: "Order one." }],
+            tool_call_parameters: {
+              referenced_tool: { id: "tool_q", type: "webhook" },
+              parameters: [
+                { path: "note", eval: { type: "regex", pattern: "^ORD-[0-9]{8}$" } },
+                { path: "mood", eval: { type: "regex", pattern: "a|b" } },
+                { path: "who", eval: { type: "regex", pattern: "thr" } },
+                { path: "item.sku", eval: { type: "regex", pattern: "^7\\$" } },
+              ],
+            },
+          },
+        ],
+      ),
+    );
+    // Already between ^ and $, it stays as written; an alternation or an escaped $ gets the group and anchors.
+    const args = { note: { $regex: "^ORD-[0-9]{8}$" }, mood: { $regex: "^(?:a|b)$" }, who: { $regex: "^(?:thr)$" }, "item.sku": { $regex: "^(?:^7\\$)$" } };
+    expect(domain.tasks[0]!.expect).toMatchObject({ called: [{ tool: "order", args }] });
+    const graded = (field: keyof typeof args, value: string) => matches({ [field]: value }, { [field]: args[field] });
+    expect([graded("who", "thr"), graded("who", "three"), graded("who", "other")]).toEqual([true, false, false]);
+    expect([graded("mood", "a"), graded("mood", "b"), graded("mood", "ab")]).toEqual([true, true, false]);
+    expect([graded("note", "ORD-12345678"), graded("note", "ORD-12345678x")]).toEqual([true, false]);
+    expect([graded("item.sku", "7$"), graded("item.sku", "7$x")]).toEqual([true, false]);
+    expect(draft.tasks[0]!.notes.filter((n) => n.includes("whole value"))).toEqual(
+      [["mood", "a|b", "^(?:a|b)$"], ["who", "thr", "^(?:thr)$"], ["item.sku", "^7\\$", "^(?:^7\\$)$"]].map(
+        ([f, p, w]) => `ElevenLabs checked order's ${f} against the pattern ${p}, and its docs don't say whether the whole value must match: the expected call requires it, as ${w}, so it never passes a value ElevenLabs fails. If the test meant "contains", drop the ^(?: and )$.`,
+      ),
+    );
+    expect(renderElevenLabsDraft(draft).tasks).toContain(`args: { note: { $regex: '^ORD-[0-9]{8}$' }, mood: { $regex: '^(?:a|b)$' }, who: { $regex: '^(?:thr)$' }, item.sku: { $regex: '^(?:^7\\$)$' } }`);
   });
 
   it("makes a next-reply test a task, with its success condition and examples noted", () => {

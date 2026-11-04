@@ -361,9 +361,15 @@ function expectToolCall(test: Json, task: PlatformTask, toolFor: (id: string) =>
     else if (ev.type === "regex") {
       // A pattern's spaces count, so it isn't trimmed.
       const pattern = typeof ev.pattern === "string" ? ev.pattern : "";
-      const note = regexNote(tool.name, field, pattern, paramAt(tool.params, field));
+      const param = paramAt(tool.params, field);
+      const note = regexNote(tool.name, field, pattern, param);
       if (note) task.notes.push(note);
-      else args[field] = { $regex: pattern };
+      else {
+        const whole = wholeMatch(pattern);
+        args[field] = { $regex: whole };
+        // A field that isn't a param is left out of the call, with its own note.
+        if (param && whole !== pattern) task.notes.push(`ElevenLabs checked ${tool.name}'s ${field} against the pattern ${pattern}, and its docs don't say whether the whole value must match: the expected call requires it, as ${whole}, so it never passes a value ElevenLabs fails. If the test meant "contains", drop the ^(?: and )$.`);
+      }
     }
     else if (ev.type === "llm") task.notes.push(`ElevenLabs judged ${tool.name}'s ${field} with an LLM (${JSON.stringify(ev.description ?? "")}): write the value it expects as an argument of the expected call.`);
   }
@@ -384,6 +390,15 @@ function regexNote(tool: string, field: string, pattern: string, param: DraftPar
   if (/(?<!\\)(?:\\\\)*\\[AZz]/.test(pattern)) return `${checked}, which uses \\A, \\Z or \\z: JavaScript reads those as letters, so write ^ or $ in a $regex on the expected call.`;
   if (param && param.type !== "string") return `${checked}, but ${field} is ${article(param.type)} ${param.type} and $regex matches text only: check it with $eq, $in or a comparison instead.`;
   return undefined;
+}
+
+/**
+ * A pattern that matches only a whole value. ElevenLabs' docs don't say whether a regex check searches the value or
+ * matches all of it, and `$regex` searches, so the draft anchors the pattern: it never passes a value ElevenLabs fails.
+ * A pattern already between ^ and an unescaped $, with no | that could split the anchors, stays as written.
+ */
+function wholeMatch(pattern: string): string {
+  return /^\^[^|]*(?<!\\)(?:\\\\)*\$$/.test(pattern) ? pattern : `^(?:${pattern})$`;
 }
 
 /** The note on a next-reply test's LLM judgment, which sandtable doesn't make. */
