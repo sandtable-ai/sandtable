@@ -9,7 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 ## [Unreleased]
 
 ### Added
+
 - **Spec**: `$regex` matches text with a JavaScript regular expression in `where`, `fields`, `when`, and tool-call argument expectations. Validation rejects non-string and malformed patterns ([#20](https://github.com/sandtable-ai/sandtable/issues/20)).
+
+### Changed
+
+- **`sandtable import elevenlabs`**: an ElevenLabs tool test's regex check on an argument becomes a `$regex` on that argument of the task's expected call, instead of a note. A pattern JavaScript can't read the same way, or a check on an argument that isn't text, stays a note ([#480](https://github.com/sandtable-ai/sandtable/issues/480)).
 
 ## [1.3.1] - 2026-11-01
 

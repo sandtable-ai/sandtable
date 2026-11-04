@@ -358,7 +358,7 @@ describe("import elevenlabs: tests", () => {
     expect(draft.warnings).toEqual(["s.json: a tool mock for ghost, which the agent doesn't have; skipped"]);
   });
 
-  it("makes a tool test a task that expects the call, its exact arguments as a where clause on them, and replays the user's lines", () => {
+  it("makes a tool test a task that expects the call, its exact and regex arguments as a where clause on them, and replays the user's lines", () => {
     const { draft, domain } = domainOf(
       files(
         ...base(),
@@ -393,10 +393,9 @@ describe("import elevenlabs: tests", () => {
     const [counts, never, ghost] = domain.tasks;
     expect(counts).toMatchObject({
       user: { instructions: 'In this call you say, in order: "I need 3 of item 7.", then "Yes, three."', opening: "I need 3 of item 7.", script: ["I need 3 of item 7.", "Yes, three."] },
-      expect: { called: [{ tool: "order", args: { qty: 3, "item.sku": "7" } }] },
+      expect: { called: [{ tool: "order", args: { qty: 3, "item.sku": "7", note: { $regex: "^thr" } } }] },
     });
     expect(draft.tasks[0]!.notes).toEqual([
-      "ElevenLabs checked order's note against the pattern ^thr: where clauses have no regex yet (#20), so check it another way, such as $contains.",
       'ElevenLabs judged order\'s mood with an LLM ("Sounds happy"): write the value it expects as an argument of the expected call.',
       "ElevenLabs tested the agent's next turn after this chat history; a run plays the whole call, with the user's lines in order whatever the agent says, so check that they still make sense.",
       "It expects the call ElevenLabs checked: check that, and add the end state.",
@@ -404,6 +403,43 @@ describe("import elevenlabs: tests", () => {
     expect(never!.expect).toMatchObject({ called: [], not_called: ["end_call"] });
     expect(ghost!.expect).toMatchObject({ called: [], not_called: [] });
     expect(draft.warnings).toEqual(["g.json: the test's tool_call_parameters name the tool nope, which the agent doesn't have, so its check is left out of the task"]);
+  });
+
+  it("notes a regex check it can't draft as $regex: not JavaScript, \\A or \\Z anchors, an argument that isn't text, an empty pattern", () => {
+    const { draft, domain } = domainOf(
+      files(
+        ...base(),
+        [
+          "r.json",
+          {
+            id: "r1",
+            type: "tool",
+            name: "Patterns",
+            chat_history: [{ role: "user", message: "Order one." }],
+            tool_call_parameters: {
+              referenced_tool: { id: "tool_q", type: "webhook" },
+              parameters: [
+                { path: "note", eval: { type: "regex", pattern: "(?P<word>thr)" } },
+                { path: "mood", eval: { type: "regex", pattern: "\\Ahappy\\Z" } },
+                { path: "who", eval: { type: "regex", pattern: "^\\\\A " } },
+                { path: "qty", eval: { type: "regex", pattern: "^3$" } },
+                { path: "item.sku", eval: { type: "regex", pattern: "" } },
+                { path: "ghost", eval: { type: "regex", pattern: "^x" } },
+              ],
+            },
+          },
+        ],
+      ),
+    );
+    // An escaped backslash before A is a literal one, and the pattern's trailing space is kept.
+    expect(domain.tasks[0]!.expect).toMatchObject({ called: [{ tool: "order", args: { who: { $regex: "^\\\\A " } } }] });
+    expect(draft.tasks[0]!.notes.filter((n) => n.startsWith("ElevenLabs checked"))).toEqual([
+      "ElevenLabs checked order's note against the pattern (?P<word>thr), which isn't a JavaScript regular expression: rewrite it as one in a $regex on the expected call, or check it another way, such as $contains.",
+      "ElevenLabs checked order's mood against the pattern \\Ahappy\\Z, which uses \\A, \\Z or \\z: JavaScript reads those as letters, so write ^ or $ in a $regex on the expected call.",
+      "ElevenLabs checked order's qty against the pattern ^3$, but qty is an integer and $regex matches text only: check it with $eq, $in or a comparison instead.",
+      "ElevenLabs checked order's item.sku against an empty pattern, which matches anything: left out of the expected call.",
+      'ElevenLabs checked order\'s ghost for {"$regex":"^x"}, which isn\'t a param of order: left out of the expected call.',
+    ]);
   });
 
   it("makes a next-reply test a task, with its success condition and examples noted", () => {
