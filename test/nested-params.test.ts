@@ -198,8 +198,8 @@ describe("nested params: where clauses", () => {
   });
 
   it("validate checks the operators inside $contains", () => {
-    expect(operatorProblems({ items: { $contains: { qty: { $atleast: 2 } } } })).toEqual(['items.$contains.qty: unknown operator "$atleast" (use $eq, $ne, $in, $nin, $gt, $gte, $lt, $lte, $exists, $contains)']);
-    expect(operatorProblems({ qtys: { $contains: { $over: 4 } } })).toEqual(['qtys: unknown operator "$over" (use $eq, $ne, $in, $nin, $gt, $gte, $lt, $lte, $exists, $contains)']);
+    expect(operatorProblems({ items: { $contains: { qty: { $atleast: 2 } } } })).toEqual(['items.$contains.qty: unknown operator "$atleast" (use $eq, $ne, $in, $nin, $gt, $gte, $lt, $lte, $exists, $regex, $contains)']);
+    expect(operatorProblems({ qtys: { $contains: { $over: 4 } } })).toEqual(['qtys: unknown operator "$over" (use $eq, $ne, $in, $nin, $gt, $gte, $lt, $lte, $exists, $regex, $contains)']);
   });
 });
 

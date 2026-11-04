@@ -225,7 +225,7 @@ describe("domain validation", () => {
       'tasks.book-at-posted-rate.expect.called[1]: tool "book_load" has no param "price"',
       'tasks.book-at-posted-rate.expect.called[1]: tool "book_load" has no param "toString"',
       'tasks.book-at-posted-rate.expect: unknown tool "hold_load"',
-      `tasks.book-at-posted-rate.expect.not_called[0].args.reason: unknown operator "$like" (use $eq, $ne, $in, $nin, $gt, $gte, $lt, $lte, $exists, $contains)`,
+      `tasks.book-at-posted-rate.expect.not_called[0].args.reason: unknown operator "$like" (use $eq, $ne, $in, $nin, $gt, $gte, $lt, $lte, $exists, $regex, $contains)`,
       "tasks.book-at-posted-rate.expect.not_called[0].args.mc_number: $in needs a list",
     ]);
   });

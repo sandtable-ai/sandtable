@@ -45,12 +45,15 @@ Inside tool `ops`, `checks`, invariant `where` clauses and task assertions:
 | Operator | Meaning |
 |---|---|
 | `$eq`, `$ne` | equal / not equal |
+| `$regex` | a JavaScript regular expression string, matched case-sensitively against text only, e.g. `load_id: { $regex: "^L-10" }`; use anchors for a whole-value match, with no `/.../` delimiters or flags |
 | `$in`, `$nin` | in / not in a list |
 | `$gt`, `$gte`, `$lt`, `$lte` | numeric comparison (strings compare lexically, so ISO dates work) |
 | `$exists` | `true`: the field is set and not null; `false`: it is missing or null |
 | `$contains` | on text, a case-insensitive substring; on a list, an element that matches: an object matches an element like a where clause, operators included (`items: { $contains: { sku: A-100, qty: { $gte: 2 } } }`), and any other value by equality (`tags: { $contains: rush }`) |
 
-There are no top-level operators such as `$or`: every field's condition must hold. `validate` fails on an unknown operator, on `$in` or `$nin` without a list (a `"$arg"` reference is a single value, never a list), and on a top-level `$` key, in every where clause, with the clause's path, such as `tools.list_orders.ops[0].where.status: unknown operator "$like"`.
+There are no top-level operators such as `$or`: every field's condition must hold. `validate` fails on an unknown operator, on `$in` or `$nin` without a list (a `"$arg"` reference is a single value, never a list), on a non-string or invalid `$regex` pattern, and on a top-level `$` key, in every where clause, with the clause's path, such as `tools.list_orders.ops[0].where.status: unknown operator "$like"`.
+
+A tool can supply a regex through a `"$pattern"` argument reference. Patterns run without a time limit; a backtracking pattern can block the tool or trial, so use trusted patterns. If the argument is malformed at runtime, the condition does not match; it does not abort the tool or the trial.
 
 ## clock and relative dates
 

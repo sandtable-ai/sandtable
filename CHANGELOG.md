@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+### Added
+- **Spec**: `$regex` matches text with a JavaScript regular expression in `where`, `fields`, `when`, and tool-call argument expectations. Validation rejects non-string and malformed patterns ([#20](https://github.com/sandtable-ai/sandtable/issues/20)).
+
 ## [1.3.1] - 2026-11-01
 
 A patch release that restores 1.2's validation, as the stability policy promises for a minor release. 1.3.0 rejected two kinds of domain that 1.2 accepted: a `never` rule whose `when` names an argument the tool doesn't have, and date text such as `$today+2d` in a domain with no clock. Both validate again, with a warning, until 2.0.

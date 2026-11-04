@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { matches, pruneUndefined, resolve } from "../src/world/match.ts";
+import { matches, operatorProblems, pruneUndefined, resolve } from "../src/world/match.ts";
 import { diffSnapshots, World } from "../src/world/store.ts";
 import { coerceArgs, executeTool, toolSchema } from "../src/world/tools.ts";
-import { ToolSpec, type Tool } from "../src/spec/schema.ts";
+import { DomainSpec, TaskSpec, ToolSpec, type Tool } from "../src/spec/schema.ts";
+import { gradeTrial } from "../src/grade/expectations.ts";
+import { checkCall } from "../src/grade/invariants.ts";
 
 const world = () =>
   new World({
@@ -59,6 +61,42 @@ describe("match", () => {
   it("prunes conditions on unset optional params", () => {
     expect(pruneUndefined({ a: undefined, b: { $contains: undefined }, c: 1 })).toEqual({ c: 1 });
   });
+
+  it("matches regex patterns against text without coercing other values", () => {
+    expect(matches({ id: "L-1001" }, { id: { $regex: "^L-10" } })).toBe(true);
+    expect(matches({ id: "L-2001" }, { id: { $regex: "^L-10" } })).toBe(false);
+    expect(matches({ id: "l-1001" }, { id: { $regex: "^L-10" } })).toBe(false);
+    expect(matches({ id: "L-1001" }, { id: { $regex: "1001$", $ne: "L-2001" } })).toBe(true);
+    for (const id of [undefined, null, 1001, ["1001"], {}]) {
+      expect(matches({ id }, { id: { $regex: "1001" } })).toBe(false);
+    }
+    expect(matches({ id: "" }, { id: { $regex: "^$" } })).toBe(true);
+    expect(matches({ items: [{ id: "L-1001" }] }, { items: { $contains: { id: { $regex: "^L-10" } } } })).toBe(true);
+  });
+
+  it("validates regex patterns and permits a tool argument to supply one", () => {
+    expect(operatorProblems({ id: { $regex: "^L-10" } })).toEqual([]);
+    expect(operatorProblems({ id: { $regex: 12 } })).toEqual(["id: $regex needs a string pattern"]);
+    expect(operatorProblems({ id: { $regex: "[" } })[0]).toContain("id: invalid $regex pattern");
+    expect(operatorProblems({ id: { $regex: "$pattern" } }, { refs: true })).toEqual([]);
+    expect(matches({ id: "L-1001" }, resolve({ id: { $regex: "$pattern" } }, { pattern: "^L-10" }) as Record<string, unknown>)).toBe(true);
+  });
+
+  it("uses regex in world filters, state fields, call expectations and invariant conditions", () => {
+    const w = world();
+    expect(w.list("loads", { load_id: { $regex: "^L-1$" } })).toHaveLength(1);
+    const task = TaskSpec.parse({ id: "regex", user: { instructions: "Find L-1." }, expect: {
+      state: [{ table: "loads", key: "L-1", fields: { status: { $regex: "^avail" } } }],
+      called: [{ tool: "book_load", args: { load_id: { $regex: "^L-1$" } } }],
+    } });
+    const call = { index: 0, name: "book_load", args: { load_id: "L-1" }, ok: true };
+    expect(gradeTrial({ task, world: w, calls: [call], agentMessages: [], violations: [] }).passed).toBe(true);
+    const d = DomainSpec.parse({ name: "regex", policy: "Do not book L-1.", world: { tables: {} }, tools: [book],
+      invariants: [{ id: "never-l1", description: "Do not book L-1.", never: { tool: "book_load", when: { load_id: { $regex: "^L-1$" } } } }],
+    });
+    expect(checkCall(d, w, [], call)).toHaveLength(1);
+    expect(checkCall(d, w, [], { ...call, args: { load_id: "L-2" } })).toEqual([]);
+  });
 });
 
 describe("World", () => {
@@ -80,6 +118,18 @@ describe("World", () => {
 });
 
 describe("tools", () => {
+  it("treats malformed runtime regex arguments as non-matches without aborting the tool", () => {
+    const search = ToolSpec.parse({ name: "search", description: "Search loads", params: { pattern: { type: "string" } },
+      ops: [{ list: "loads", where: { load_id: { $regex: "$pattern" } } }],
+    });
+    expect(executeTool(search, world(), { pattern: "[" })).toEqual({ ok: true, result: [] });
+    expect(executeTool(search, world(), { pattern: "^L-1$" })).toMatchObject({ ok: true, result: [{ load_id: "L-1" }] });
+    const checked = ToolSpec.parse({ ...search, checks: [
+      { table: "loads", key: "L-1", where: { load_id: { $regex: "$pattern" } }, error: "Pattern did not match" },
+    ] });
+    expect(executeTool(checked, world(), { pattern: "[" })).toEqual({ ok: false, error: "Pattern did not match" });
+  });
+
   it("builds a JSON schema with required params", () => {
     expect(toolSchema(book).input_schema).toMatchObject({ required: ["load_id", "rate"], additionalProperties: false });
   });

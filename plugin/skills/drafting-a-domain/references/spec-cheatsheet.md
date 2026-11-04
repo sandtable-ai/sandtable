@@ -43,9 +43,11 @@ tasks: ./tasks.yaml                 # any top-level value that is a relative .md
 | `$gt`, `$gte`, `$lt`, `$lte` | numeric comparison (strings compare lexically, so ISO dates work) |
 | `$exists` | `true`: the field is set and not null |
 | `$contains` | on text, a case-insensitive substring; on a list, an element that matches (an object matches like a where clause, operators included) |
+| `$regex` | a JavaScript regex string against text only, case-sensitive, e.g. `load_id: { $regex: "^L-10" }`; no `/.../` delimiters or flags |
 
 - A dotted field reads a nested value: `"address.zip": "94105"`, `"items.0.sku": SEED-TOM`.
-- No `$or`, `$regex` or other operators: `validate` fails on an unknown operator, on `$in`/`$nin` without a list (`"$arg"` is one value, never a list), and on a top-level `$` key, in any where clause.
+- No `$or` or other unlisted operators: `validate` fails on an unknown operator, on `$in`/`$nin` without a list (`"$arg"` is one value, never a list), on a non-string or invalid `$regex` pattern, and on a top-level `$` key, in any where clause.
+- A malformed regex supplied by a tool argument at runtime does not match, rather than aborting the tool.
 
 ## Clock and relative dates
 
