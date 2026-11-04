@@ -337,7 +337,7 @@ export function draftFromElevenLabs(files: PlatformFile[], pick?: string): Platf
 
 /**
  * What a tool test checks, as the task's expected calls: the call of the tool it names, with the arguments it checks
- * exactly, or no call of it with `verify_absence`. Returns the note on what the task expects, when it expects a call.
+ * exactly or with a regex, or no call of it with `verify_absence`. Returns the note on what the task expects, when it expects a call.
  */
 function expectToolCall(test: Json, task: PlatformTask, toolFor: (id: string) => PlatformTool | undefined, file: string, warnings: string[]): string | undefined {
   const check = isPlainObject(test.tool_call_parameters) ? test.tool_call_parameters : {};
@@ -358,11 +358,32 @@ function expectToolCall(test: Json, task: PlatformTask, toolFor: (id: string) =>
     const ev = isPlainObject(p.eval) ? p.eval : {};
     if (!field) continue;
     if (ev.type === "exact") args[field] = coerce(paramAt(tool.params, field), String(ev.expected_value ?? ""));
-    else if (ev.type === "regex") task.notes.push(`ElevenLabs checked ${tool.name}'s ${field} against the pattern ${String(ev.pattern)}: where clauses have no regex yet (#20), so check it another way, such as $contains.`);
+    else if (ev.type === "regex") {
+      // A pattern's spaces count, so it isn't trimmed.
+      const pattern = typeof ev.pattern === "string" ? ev.pattern : "";
+      const note = regexNote(tool.name, field, pattern, paramAt(tool.params, field));
+      if (note) task.notes.push(note);
+      else args[field] = { $regex: pattern };
+    }
     else if (ev.type === "llm") task.notes.push(`ElevenLabs judged ${tool.name}'s ${field} with an LLM (${JSON.stringify(ev.description ?? "")}): write the value it expects as an argument of the expected call.`);
   }
   addCall(task.called, expectedCall(tool, args, task.notes, (f, v) => `ElevenLabs checked ${tool.name}'s ${f} for ${JSON.stringify(v)}, which isn't a param of ${tool.name}: left out of the expected call.`));
   return "It expects the call ElevenLabs checked: check that, and add the end state.";
+}
+
+/**
+ * Why a tool test's regex check can't be a `$regex` on the argument as it stands, as the task's note: an empty pattern,
+ * one JavaScript can't read, \A, \Z or \z (anchors in other engines, letters in JavaScript), or an argument that isn't
+ * text, which `$regex` never matches. Undefined when it can.
+ */
+function regexNote(tool: string, field: string, pattern: string, param: DraftParam | undefined): string | undefined {
+  const checked = `ElevenLabs checked ${tool}'s ${field} against the pattern ${pattern}`;
+  if (!pattern) return `ElevenLabs checked ${tool}'s ${field} against an empty pattern, which matches anything: left out of the expected call.`;
+  try { new RegExp(pattern); }
+  catch { return `${checked}, which isn't a JavaScript regular expression: rewrite it as one in a $regex on the expected call, or check it another way, such as $contains.`; }
+  if (/(?<!\\)(?:\\\\)*\\[AZz]/.test(pattern)) return `${checked}, which uses \\A, \\Z or \\z: JavaScript reads those as letters, so write ^ or $ in a $regex on the expected call.`;
+  if (param && param.type !== "string") return `${checked}, but ${field} is ${article(param.type)} ${param.type} and $regex matches text only: check it with $eq, $in or a comparison instead.`;
+  return undefined;
 }
 
 /** The note on a next-reply test's LLM judgment, which sandtable doesn't make. */
