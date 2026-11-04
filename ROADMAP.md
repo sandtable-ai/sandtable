@@ -63,11 +63,14 @@ Issues and milestones on GitHub are the source of truth; this page is the overvi
 - [x] `sandtable import retell` and `sandtable import elevenlabs` draft a domain from those platforms' agent exports and tests, and `sandtable serve` grades ElevenLabs test calls, keeping calls at the same time apart (#35, #459)
 - [x] The Claude Code plugin's hooks cover `pnpm run sandtable`, and stop `npm exec`, `pnpm dlx`, `yarn dlx` and `bunx` from running the unrelated `sandtable` package; `validate` catches a `never` rule whose `when` names an argument the tool doesn't have (#437, #456, #462)
 
+## In 1.4
+- [x] `$regex` in where clauses: a JavaScript regular expression in `where`, `fields`, `when` and the arguments a task expects, such as `load_id: { $regex: "^L-10" }`; `sandtable import elevenlabs` drafts an ElevenLabs regex check on a tool's argument as one (#20, #480)
+
 ## Next
-Proposed for 1.4 (milestone v1.4): LLM-judged checks scored apart from pass/fail, which the criteria in imported platform tests can feed (#16); dates in the places the clock leaves literal (#465) and relative dates from `init --transcripts` (#466); and an idle timeout for served conversations whose end never arrives (#467).
+Proposed for 1.5 (milestone v1.5): LLM-judged checks scored apart from pass/fail, which the criteria in imported platform tests can feed (#16); dates in the places the clock leaves literal (#465) and relative dates from `init --transcripts` (#466); and an idle timeout for served conversations whose end never arrives (#467).
 
 ## Later
 PR comments with pass^k deltas (#13), voice transport and timing metrics (#17, #43), exports to other harness formats (#18), outcome grading (#39), business metrics (#40), persona × condition matrix (#41), multi-session tasks (#42), Python agents in-process (#44), stale-task flags (#33).
 
 ## Good first issues
-`$regex` in where clauses (#20).
+None is open right now. Example domains and adapters are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md).
