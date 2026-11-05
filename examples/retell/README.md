@@ -16,6 +16,6 @@ npx sandtable-ai validate pinecrest
 npx sandtable-ai run pinecrest --agent noop --user scripted
 ```
 
-The import is a draft: each tool, the table drafted from the test cases' tool mocks, and each task are pending review, with TODO notes on what the export can't say, such as what a function changes and how to grade a test case's metrics without a model. A mock that matches some arguments (`partial_match`) becomes an expected call with those arguments.
+The import is a draft: each tool, the table drafted from the test cases' tool mocks, and each task are pending review, with TODO notes on what the export can't say, such as what a function changes, and a test case's metrics are pending `judged` criteria, which change no verdict. A mock that matches some arguments (`partial_match`) becomes an expected call with those arguments.
 
 To grade the agent's own test calls on the drafted world, run `npx sandtable-ai serve pinecrest` behind a tunnel and set each custom function's URL to the world server's `/webhook/<tool>`, such as `https://<tunnel>/webhook/get_repair`. That route takes Retell's request with or without "Payload: args only". This folder is not part of the npm package.

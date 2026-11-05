@@ -3,8 +3,9 @@
  * ElevenLabs CLI pulls (agents.json, tools.json and tests.json, with agent_configs/, tool_configs/ and test_configs/),
  * or the API's responses for an agent, its tools and its tests. The agent's prompt and its workflow's subagent prompts
  * become the policy; its webhook and client tools, and the end_call and transfer_to_number system tools, become tools,
- * a webhook with its URL's path as its http route; and each test becomes a task. What the export can't say, such as
- * what a tool changes or how ElevenLabs' LLM judges a test, becomes a review note, as `init` does.
+ * a webhook with its URL's path as its http route; and each test becomes a task, with the conditions ElevenLabs' LLM judges
+ * it on as judged criteria, which change no verdict. What the export can't say, such as what a tool changes, becomes a
+ * review note, as `init` does.
  */
 
 import path from "node:path";
@@ -12,6 +13,7 @@ import { isPlainObject } from "../world/match.ts";
 import { slug, toParam, type DraftParam } from "./openapi.ts";
 import {
   addCall,
+  addCriterion,
   article,
   closeTask,
   endCallTool,
@@ -300,9 +302,9 @@ export function draftFromElevenLabs(files: PlatformFile[], pick?: string): Platf
           }
         }
       }
-      const conditions = [...(Array.isArray(test.success_conditions) ? test.success_conditions : []), test.success_condition].map(str).filter((x): x is string => x !== undefined);
-      if (conditions.length) {
-        task.notes.push(`ElevenLabs judged it with an LLM on: ${conditions.map((x) => JSON.stringify(x)).join("; ")}. sandtable doesn't: write each as expect.state, called or not_called, which sandtable grades without a model.`);
+      for (const condition of [...(Array.isArray(test.success_conditions) ? test.success_conditions : []), test.success_condition]) {
+        const text = str(condition);
+        if (text) addCriterion(task, text);
       }
     } else {
       const lines = (Array.isArray(test.chat_history) ? test.chat_history : [])
@@ -315,7 +317,12 @@ export function draftFromElevenLabs(files: PlatformFile[], pick?: string): Platf
         task.script = lines;
       }
       if (test.type === "tool") checked = expectToolCall(test, task, toolFor, file, warnings);
-      else task.notes.push(replyNote(test));
+      else {
+        const condition = str(test.success_condition);
+        if (condition) addCriterion(task, condition);
+        const note = replyNote(test);
+        if (note) task.notes.push(note);
+      }
       if (lines.length) {
         task.notes.push("ElevenLabs tested the agent's next turn after this chat history; a run plays the whole call, with the user's lines in order whatever the agent says, so check that they still make sense.");
       }
@@ -401,8 +408,8 @@ function wholeMatch(pattern: string): string {
   return /^\^[^|]*(?<!\\)(?:\\\\)*\$$/.test(pattern) ? pattern : `^(?:${pattern})$`;
 }
 
-/** The note on a next-reply test's LLM judgment, which sandtable doesn't make. */
-function replyNote(test: Json): string {
+/** The note on what a next-reply test's LLM judgment has that its criterion can't hold, or undefined when it has nothing more. */
+function replyNote(test: Json): string | undefined {
   const condition = str(test.success_condition);
   const examples = (key: string) =>
     (Array.isArray(test[key]) ? test[key] : [])
@@ -413,11 +420,12 @@ function replyNote(test: Json): string {
       .join("; ");
   const passing = examples("success_examples");
   const failing = examples("failure_examples");
+  if (condition && !passing && !failing) return undefined;
   return [
-    `ElevenLabs judged the agent's next reply with an LLM${condition ? `: ${JSON.stringify(condition)}` : ""}.`,
+    condition ? "ElevenLabs gave its LLM examples to judge the agent's next reply by, which a judged criterion has nowhere to hold." : "ElevenLabs judged the agent's next reply with an LLM, and the test gives no condition to draft as a judged criterion.",
     ...(passing ? [`Replies it counted as passing: ${passing}.`] : []),
     ...(failing ? [`Replies it counted as failing: ${failing}.`] : []),
-    "sandtable doesn't: write it as reply_includes, expect.state, called or not_called, which sandtable grades without a model.",
+    `${condition ? "Work what they show into the criterion's text" : "State what it checks as a judged criterion"}, or write it as reply_includes, expect.state, called or not_called, which sandtable grades without a model.`,
   ].join(" ");
 }
 

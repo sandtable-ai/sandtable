@@ -2,13 +2,15 @@
  * `sandtable import vapi`: a draft domain from a Vapi assistant's config, with no model call. The system prompt
  * becomes the policy, the function tools and the transferCall and endCall tools become tools, and simulation
  * scenarios become tasks: the tester's instructions as the caller's goal, the scenario's tool mocks as that task's
- * seed rows, and its variable values as the call's context. What the config can't say, such as what a tool changes
- * or how a scenario is graded, becomes a review note, as `init` does.
+ * seed rows, its variable values as the call's context, and an evaluation whose text says what it checks as a judged
+ * criterion, which changes no verdict. What the config can't say, such as what a tool changes or how any other evaluation
+ * grades a scenario, becomes a review note, as `init` does.
  */
 
 import { isPlainObject } from "../world/match.ts";
 import { slug } from "./openapi.ts";
 import {
+  addCriterion,
   closeTask,
   endCallTool,
   Mocks,
@@ -147,9 +149,14 @@ export function draftFromVapi(files: VapiFile[], agent?: string): PlatformDraft 
     }
     for (const ev of Array.isArray(json.evaluations) ? json.evaluations : []) {
       if (!isPlainObject(ev)) continue;
+      const text = judgedText(ev);
+      if (text) {
+        addCriterion(task, text);
+        continue;
+      }
       const output = str(ev.structuredOutputId) ?? (isPlainObject(ev.structuredOutput) ? (str(ev.structuredOutput.name) ?? "an inline structured output") : "a structured output");
       const test = ev.value === undefined ? "" : ` ${String(ev.comparator ?? "=")} ${JSON.stringify(ev.value)}`;
-      task.notes.push(`Vapi graded it with ${output}${test}: write that as expect.state, called or not_called, which sandtable grades without a model.`);
+      task.notes.push(`Vapi graded it with ${output}${test}: write that as expect.state, called or not_called, which sandtable grades without a model, or state it as a judged criterion.`);
     }
     closeTask(task, "scenario");
     tasks.push(task);
@@ -164,6 +171,19 @@ export function draftFromVapi(files: VapiFile[], agent?: string): PlatformDraft 
     tasks,
     warnings,
   };
+}
+
+/**
+ * The text an evaluation asks an LLM to judge, when that text says all it checks: the description of an inline boolean
+ * output that must be true, or has no test. A description doesn't state another test, such as `= false` or `> 3`, and an
+ * output by id holds no text. Rewriting those into a sentence would guess at what the customer's test meant.
+ */
+function judgedText(ev: Json): string | undefined {
+  const output = ev.structuredOutput;
+  if (!isPlainObject(output) || !isPlainObject(output.schema) || output.schema.type !== "boolean") return undefined;
+  const untested = (ev.comparator ?? ev.value ?? null) === null;
+  if (!untested && !((ev.comparator ?? "=") === "=" && ev.value === true)) return undefined;
+  return str(output.description) ?? str(output.schema.description);
 }
 
 /** A Vapi tool as a sandtable tool, or undefined for a type the draft can't model. */

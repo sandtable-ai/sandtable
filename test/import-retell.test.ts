@@ -11,7 +11,7 @@ import { lintDomain } from "../src/grade/lint.ts";
 import { runSuite } from "../src/run/suite.ts";
 import { noopAgent } from "../src/sim/noop.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
-import { loadDomain, parseDomain, pendingReview, validateDomain } from "../src/spec/load.ts";
+import { domainWarnings, loadDomain, parseDomain, pendingReview, validateDomain } from "../src/spec/load.ts";
 
 // sandtable import retell (#35): a draft domain from a Retell agent, its Retell LLM or conversation flow, and its test cases.
 
@@ -56,7 +56,7 @@ describe("import retell: the bundled example", () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-import-retell-"));
     const out = path.join(dir, "pinecrest");
     const imported = await run(process.execPath, [cli, "import", "retell", example, "-o", out]);
-    expect(imported.stdout).toContain("Imported pinecrest-bike-repair from Retell: 3 tools, 2 tables, 2 tasks, all pending review.");
+    expect(imported.stdout).toContain("Imported pinecrest-bike-repair from Retell: 3 tools, 2 tables, 2 tasks, 4 judged criteria, all pending review.");
     expect(imported.stdout).toContain("{{customer_phone}}");
     expect(imported.stdout).toContain("/webhook/<tool>");
     const domain = await loadDomain(out);
@@ -75,8 +75,26 @@ describe("import retell: the bundled example", () => {
     // A test case with no dynamic variables gets the LLM's defaults.
     expect(parts).toMatchObject({ given: { context: { shop_hours: "Tuesday to Saturday, 9am to 6pm" } }, expect: { called: ["get_repair", "transfer_to_mechanic"] } });
     const tasksYaml = await readFile(path.join(out, "tasks.yaml"), "utf8");
-    expect(tasksYaml).toContain("# TODO(review): Retell's LLM judge graded it on: \"The agent tells the caller the bike is ready and that $85 is due\"");
+    expect(tasksYaml).not.toContain("LLM judge");
+    expect(ready!.judged![0]).toEqual({
+      id: "repair-status-for-a-bike-that-s-ready-judged-1",
+      criterion: "The agent tells the caller the bike is ready and that $85 is due",
+      source: { file: path.join("tests", "repair-ready.json"), quote: "The agent tells the caller the bike is ready and that $85 is due" },
+      review: "pending",
+    });
+    expect(parts!.judged!.map((c) => c.criterion)).toEqual(["The agent says the bike is waiting for parts", "The agent transfers the call to a mechanic for the brake question"]);
     expect(pendingReview(domain).length).toBeGreaterThanOrEqual(4);
+    // `review` shows its source and quote, with no TODO note of its own, and --strict fails until it is accepted too.
+    expect((await run(process.execPath, [cli, "review", out])).stdout).toContain(
+      `- criterion repair-status-for-a-bike-that-s-ready-judged-1  (${path.join("tests", "repair-ready.json")})\n    "The agent tells the caller the bike is ready and that $85 is due"\n- criterion repair-status-for-a-bike-that-s-ready-judged-2`,
+    );
+    const strict = () => run(process.execPath, [cli, "validate", out, "--strict"]).then(() => ({ code: 0, stdout: "" }), (e: { code: number; stdout: string }) => e);
+    const accepted = await readFile(path.join(out, "sandtable.yaml"), "utf8");
+    await writeFile(path.join(out, "sandtable.yaml"), accepted.replaceAll("review: pending", "review: accepted"));
+    await writeFile(path.join(out, "tasks.yaml"), tasksYaml.replaceAll(/^ {2}review: pending$/gm, "  review: accepted"));
+    expect(await strict()).toMatchObject({ code: 1, stdout: expect.stringContaining("⚠ 4 drafted item(s) pending review") });
+    await writeFile(path.join(out, "tasks.yaml"), tasksYaml.replaceAll("review: pending", "review: accepted"));
+    expect((await strict()).code).toBe(0);
     expect((await run(process.execPath, [cli, "validate", out])).stdout).toContain("2 tables, 3 tools, 0 invariants, 2 tasks");
     expect((await run(process.execPath, [cli, "lint", out])).stdout).toContain("0 error(s)");
     const r = await runSuite({ domain, agent: noopAgent(), user: scriptedUser() });
@@ -261,7 +279,7 @@ describe("import retell: tools", () => {
 });
 
 describe("import retell: test cases", () => {
-  it("lifts tool mocks into rows or respond text, partial matches into expected arguments, and quotes the metrics", () => {
+  it("lifts tool mocks into rows or respond text and partial matches into expected arguments, and notes nothing about its metrics", () => {
     const tools = [custom("get_order", { order_id: { type: "string" }, source: { type: "string", const: "phone" } }, ["order_id"]), custom("note", { text: { type: "string" } }, ["text"]), { type: "transfer_call", name: "transfer", transfer_destination: { type: "predefined", number: "+15555550101" }, transfer_option: { type: "cold_transfer" } }];
     const { draft, domain } = domainOf(
       files(
@@ -295,7 +313,6 @@ describe("import retell: test cases", () => {
     });
     expect(draft.tasks[0]!.notes).toEqual([
       'Its test case\'s mock of get_order matched calls with source = "phone", which isn\'t a param of get_order: left out of the expected call.',
-      'Retell\'s LLM judge graded it on: "Says it shipped"; "Is polite". sandtable doesn\'t: write each as expect.state, called or not_called, which sandtable grades without a model.',
       "The test case mocked get_order, note, transfer, so the task expects a successful call of each: check that, and add the end state.",
       "Its opening and script are placeholders for runs with --user scripted: write the caller's lines.",
     ]);
@@ -360,5 +377,43 @@ describe("import retell: warnings for odd entries (#472)", () => {
     );
     expect(draft.warnings.join("\n")).not.toContain("undefined");
     expect(validateDomain(domain)).toEqual([]);
+  });
+});
+
+describe("import retell: metrics as judged criteria (#508)", () => {
+  const withMetrics = (...metrics: unknown[]) => files(["agent.json", agent()], ["llm.json", llm()], ["tests/t1.json", testCase("Shipped", { metrics })]);
+  const entry = (n: number, text: string) => ({ id: `shipped-judged-${n}`, criterion: text, source: { file: "tests/t1.json", quote: text }, review: "pending" });
+
+  it("drafts each metric on its task, trimmed and in order, pending review with its file and text as its source", () => {
+    const { draft, domain } = domainOf(withMetrics("  Says it shipped \n", "Is polite"));
+    expect(domain.tasks[0]!.judged).toEqual([entry(1, "Says it shipped"), entry(2, "Is polite")]);
+    expect(pendingReview(domain).filter((p) => p.kind === "criterion")).toEqual([
+      { kind: "criterion", id: "shipped-judged-1", source: { file: "tests/t1.json", quote: "Says it shipped" } },
+      { kind: "criterion", id: "shipped-judged-2", source: { file: "tests/t1.json", quote: "Is polite" } },
+    ]);
+    // A task with criteria stays pending itself, and they get no note: their source says where they came from.
+    expect(domain.tasks[0]!.review).toBe("pending");
+    expect(draft.tasks[0]!.notes.join("\n")).not.toMatch(/Says it shipped|judge/i);
+    expect(renderRetellDraft(draft).tasks).not.toMatch(/judged:[\s\S]*# TODO/);
+  });
+
+  it("keeps text YAML must quote, as written, and warns about a ${today} as text, since a draft sets no clock", () => {
+    const texts = ["Says: the pickup is ${today+2d} # soon", "{{shop}} is open", "Line one\nLine two: more"];
+    const { domain } = domainOf(withMetrics(...texts));
+    expect(domain.tasks[0]!.judged).toEqual(texts.map((t, i) => entry(i + 1, t)));
+    expect(validateDomain(domain)).toEqual([]);
+    expect(domainWarnings(domain).filter((w) => w.includes("judged"))).toEqual([expect.stringContaining('tasks.shipped.judged[0].criterion: "${today+2d}" is text, not a date, since the domain sets no clock')]);
+  });
+
+  it("grades nothing: a task with only criteria still says nothing is graded, and lint still fails it", () => {
+    const { draft, domain } = domainOf(withMetrics("Is polite"));
+    expect(domain.tasks[0]!.expect).toMatchObject({ state: [], called: [], not_called: [] });
+    expect(draft.tasks[0]!.notes[0]).toBe("Nothing is graded yet: add the end state (expect.state) or the tools a correct call uses (expect.called).");
+    expect(lintDomain(domain).tasks[0]!.errors).not.toEqual([]);
+  });
+
+  it("drafts one criterion for a text given twice, skips what isn't text, and adds no key with none", () => {
+    expect(domainOf(withMetrics("Is polite", 7, "", " Is polite ", "Says goodbye")).domain.tasks[0]!.judged).toEqual([entry(1, "Is polite"), entry(2, "Says goodbye")]);
+    expect(domainOf(withMetrics()).domain.tasks[0]).not.toHaveProperty("judged");
   });
 });

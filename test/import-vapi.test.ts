@@ -10,7 +10,7 @@ import { lintDomain } from "../src/grade/lint.ts";
 import { runSuite } from "../src/run/suite.ts";
 import { noopAgent } from "../src/sim/noop.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
-import { loadDomain, parseDomain, pendingReview } from "../src/spec/load.ts";
+import { domainWarnings, loadDomain, parseDomain, pendingReview, validateDomain } from "../src/spec/load.ts";
 
 // sandtable import vapi (#34): a draft domain from a Vapi assistant's config, its tools and its simulation scenarios.
 
@@ -42,7 +42,7 @@ describe("import vapi: the bundled example", () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-import-"));
     const out = path.join(dir, "pinecrest");
     const imported = await run(process.execPath, [cli, "import", "vapi", example, "-o", out]);
-    expect(imported.stdout).toContain("Imported pinecrest-bike-repair from Vapi: 4 tools, 2 tables, 2 tasks, all pending review.");
+    expect(imported.stdout).toContain("Imported pinecrest-bike-repair from Vapi: 4 tools, 2 tables, 2 tasks, 0 judged criteria, all pending review.");
     expect(imported.stdout).toContain("{{customer_phone}}");
     expect(imported.stdout).toContain(`npx sandtable-ai init --sop ${path.join(out, "policy.md")} -o ${out} --dry-run`);
     const domain = await loadDomain(out);
@@ -185,7 +185,7 @@ describe("import vapi: mapping", () => {
     expect(draft.warnings).toContain("a.json: an apiRequest tool, which Vapi runs itself, has no sandtable counterpart; skipped");
     expect(domain.tasks[0]!.given).toMatchObject({ rows: { get_slots_results: [{ day: "Mon", open: 3 }] }, context: { tier: "gold" } });
     expect(draft.tasks[0]!.notes).toContain("Its scenario's mock of Get Slots! is disabled, so it was left out.");
-    expect(draft.tasks[0]!.notes).toContain("Vapi graded it with so-a: write that as expect.state, called or not_called, which sandtable grades without a model.");
+    expect(draft.tasks[0]!.notes).toContain("Vapi graded it with so-a: write that as expect.state, called or not_called, which sandtable grades without a model, or state it as a judged criterion.");
   });
 
   it("drops a mock that names no tool rather than giving it to the first tool, and warns about a tool with no type (#472)", () => {
@@ -204,5 +204,74 @@ describe("import vapi: mapping", () => {
   it("says why it can't import", () => {
     expect(vapiProblem(files(["t.json", fn("x")]))).toMatch(/has no Vapi assistant/);
     expect(vapiProblem(files(["a.json", assistant()]))).toBeUndefined();
+  });
+});
+
+describe("import vapi: evaluations as judged criteria (#508)", () => {
+  const scenario = (...evaluations: unknown[]) => files(["a.json", assistant({}, { tools: [{ type: "endCall" }] })], ["scenarios/s.json", { name: "Chat", instructions: "Say hi.", evaluations }]);
+  const inline = (description: string, extra: Record<string, unknown> = {}) => ({ structuredOutput: { name: "check", description, schema: { type: "boolean" } }, comparator: "=", value: true, ...extra });
+  const entry = (n: number, text: string) => ({ id: `chat-judged-${n}`, criterion: text, source: { file: "scenarios/s.json", quote: text }, review: "pending" });
+
+  it.each<[string, unknown, string]>([
+    ["a description on the output, = true", inline("  Reads the date back "), "Reads the date back"],
+    ["a description on its schema", { structuredOutput: { name: "check", schema: { type: "boolean", description: "Stays polite" } }, comparator: "=", value: true }, "Stays polite"],
+    ["no test at all", { structuredOutput: { name: "check", description: "Stays polite", schema: { type: "boolean" } } }, "Stays polite"],
+    ["nulls for its test", inline("Stays polite", { comparator: null, value: null }), "Stays polite"],
+    ["true with the comparator left out", inline("Stays polite", { comparator: undefined }), "Stays polite"],
+  ])("drafts an inline boolean output with %s", (_name, evaluation, text) => {
+    const { draft, domain } = domainOf(scenario(evaluation));
+    expect(domain.tasks[0]!.judged).toEqual([entry(1, text)]);
+    expect(draft.tasks[0]!.notes.join("\n")).not.toContain("Vapi graded it");
+    expect(pendingReview(domain)).toContainEqual({ kind: "criterion", id: "chat-judged-1", source: { file: "scenarios/s.json", quote: text } });
+  });
+
+  const write = "write that as expect.state, called or not_called, which sandtable grades without a model, or state it as a judged criterion.";
+  it.each<[string, unknown, string]>([
+    ["an output by id, which has no text", { structuredOutputId: "so-a", comparator: "=", value: true }, "so-a = true"],
+    ["an inline output with no description", { structuredOutput: { name: "check", schema: { type: "boolean" } }, comparator: "=", value: true }, "check = true"],
+    ["an inline output with no name or schema", { structuredOutput: { description: "Stays polite" } }, "an inline structured output"],
+    ["= false", inline("Stays polite", { value: false }), "check = false"],
+    ["!= true", inline("Stays polite", { comparator: "!=" }), "check != true"],
+    ["a text true", inline("Stays polite", { value: "true" }), 'check = "true"'],
+    ["= with no value", inline("Stays polite", { value: undefined }), "check"],
+    ["a number > 3", { structuredOutput: { name: "score", description: "How polite", schema: { type: "number" } }, comparator: ">", value: 3 }, "score > 3"],
+    ["a text output with no test", { structuredOutput: { name: "summary", description: "What it said", schema: { type: "string" } } }, "summary"],
+    ["neither an id nor an output", { comparator: "=", value: true }, "a structured output = true"],
+  ])("keeps a note, and drafts no criterion, for %s", (_name, evaluation, output) => {
+    const { draft, domain } = domainOf(scenario(evaluation));
+    expect(domain.tasks[0]).not.toHaveProperty("judged");
+    expect(draft.tasks[0]!.notes).toContain(`Vapi graded it with ${output}: ${write}`);
+  });
+
+  it("counts only what it drafts, in the export's order, beside the notes it keeps", () => {
+    const { draft, domain } = domainOf(scenario(inline("First"), { structuredOutputId: "so-a" }, inline("Second"), inline("First")));
+    expect(domain.tasks[0]!.judged).toEqual([entry(1, "First"), entry(2, "Second")]);
+    expect(draft.tasks[0]!.notes).toContain(`Vapi graded it with so-a: ${write}`);
+  });
+
+  it("keeps text YAML must quote, as written, and warns about a ${today} as text, since a draft sets no clock", () => {
+    const texts = ["Says: the pickup is ${today+2d} # soon", "{{shop}} is open"];
+    const { domain } = domainOf(scenario(...texts.map((t) => inline(t))));
+    expect(domain.tasks[0]!.judged).toEqual(texts.map((t, i) => entry(i + 1, t)));
+    expect(validateDomain(domain)).toEqual([]);
+    expect(domainWarnings(domain).filter((w) => w.includes("judged"))).toEqual([expect.stringContaining('tasks.chat.judged[0].criterion: "${today+2d}" is text, not a date, since the domain sets no clock')]);
+  });
+
+  it("grades nothing: a task with only criteria still says nothing is graded", () => {
+    const { draft, domain } = domainOf(scenario(inline("Stays polite")));
+    expect(domain.tasks[0]!.expect).toMatchObject({ state: [], called: [], not_called: [] });
+    expect(draft.tasks[0]!.notes[0]).toBe("Nothing is graded yet: add the end state (expect.state) or the tools a correct call uses (expect.called).");
+  });
+
+  it.skipIf(!process.features.typescript)("says how many it drafted, lists them in review, and validates, failing --strict while they are pending", { timeout: 30_000 }, async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-import-judged-"));
+    const [a, s] = scenario(inline("Stays polite"));
+    await writeFile(path.join(dir, "a.json"), JSON.stringify(a!.json));
+    await writeFile(path.join(dir, "s.json"), JSON.stringify(s!.json));
+    const out = path.join(dir, "out");
+    expect((await run(process.execPath, [cli, "import", "vapi", dir, "-o", out])).stdout).toContain("1 tools, 0 tables, 1 tasks, 1 judged criterion, all pending review.");
+    expect((await run(process.execPath, [cli, "review", out])).stdout).toContain(`- criterion chat-judged-1  (s.json)\n    "Stays polite"\n`);
+    expect((await run(process.execPath, [cli, "validate", out])).stdout).toContain("0 tables, 1 tools, 0 invariants, 1 tasks");
+    expect(await run(process.execPath, [cli, "validate", out, "--strict"]).catch((e: { code: number }) => e)).toMatchObject({ code: 1 });
   });
 });

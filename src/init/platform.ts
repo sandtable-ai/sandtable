@@ -1,11 +1,13 @@
 /**
  * What `sandtable import` shares across voice platforms (Vapi, Retell, ElevenLabs): the draft it builds from an
  * agent's export, the tools every platform has (end the call, transfer it), how a test's tool mocks become a task's
- * rows or a tool's answer, and the renderer that writes the draft as sandtable.yaml and tasks.yaml with review notes.
+ * rows or a tool's answer, how what its LLM graded a test on becomes a judged criterion, and the renderer that writes the
+ * draft as sandtable.yaml and tasks.yaml with review notes.
  */
 
 import YAML from "yaml";
 import { httpProblems } from "../spec/load.ts";
+import type { JudgedCriterion } from "../spec/schema.ts";
 import { isPlainObject } from "../world/match.ts";
 import { slug, snake, toParam, uniqueName, type DraftParam } from "./openapi.ts";
 import { flow, flowParam, paramYaml } from "./render.ts";
@@ -50,6 +52,8 @@ export interface PlatformTask {
   notCalled?: DraftCall[];
   maxTurns?: number;
   notes: string[];
+  /** What the platform's LLM graded the test on (see addCriterion). A criterion grades nothing, so `expect` doesn't change. */
+  judged?: JudgedCriterion[];
 }
 
 export interface PlatformDraft {
@@ -145,6 +149,17 @@ export function templateWarning(prompt: string): string | undefined {
   const templated = [...new Set(prompt.match(/\{\{\s*[^}]+\}\}/g) ?? [])];
   if (!templated.length) return undefined;
   return `the prompt uses template variables (${templated.join(", ")}): sandtable doesn't fill them, so give their values in a task's given.context, which the agent is shown`;
+}
+
+/**
+ * Drafts `text`, which the platform's LLM graded a test on, as a judged criterion of its task: pending review, with the
+ * test's file and the text as its source, so it needs no review note. Task ids are unique, so its id is too. The same text
+ * twice is one criterion, which a judge would otherwise grade twice.
+ */
+export function addCriterion(task: PlatformTask, text: string) {
+  const judged = (task.judged ??= []);
+  if (judged.some((c) => c.criterion === text)) return;
+  judged.push({ id: `${task.id}-judged-${judged.length + 1}`, criterion: text, source: { file: task.source, quote: text }, review: "pending" });
 }
 
 /** The tool a call expectation names. */
@@ -348,6 +363,7 @@ export function renderPlatformDraft(d: PlatformDraft, text: ImportText): { domai
       user: { instructions: t.instructions, opening: t.opening ?? "Hi.", script: t.script ?? ["Hi."] },
       ...(t.rows || t.context ? { given: { ...(t.rows ? { rows: t.rows } : {}), ...(t.context ? { context: t.context } : {}) } } : {}),
       expect: { ...(t.called.length ? { called: t.called } : {}), ...(t.notCalled?.length ? { not_called: t.notCalled } : {}) },
+      ...(t.judged?.length ? { judged: t.judged } : {}),
       ...(t.maxTurns !== undefined ? { max_turns: t.maxTurns } : {}),
     })),
   );
