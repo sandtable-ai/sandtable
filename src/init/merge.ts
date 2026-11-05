@@ -94,3 +94,19 @@ export async function appendRows(domainDir: string, rowsByTable: Record<string, 
   await writeFile(file, doc.toString({ lineWidth: 0 }));
   return file;
 }
+
+/**
+ * Set the domain's `clock` in sandtable.yaml, after its policy, when it sets none, editing the YAML document in place.
+ * Returns whether it did: a clock the domain sets already stays, since relative dates work at any clock.
+ */
+export async function addClock(domainDir: string, clock: string): Promise<boolean> {
+  const main = path.join(domainDir, DOMAIN_FILE);
+  const doc = YAML.parseDocument(await readFile(main, "utf8"));
+  const map: unknown = doc.contents;
+  if (!YAML.isMap(map) || doc.has("clock")) return false;
+  // In the spec's order: after the policy, or failing that the description or the name.
+  const after = ["policy", "description", "name"].map((k) => map.items.findIndex((p) => YAML.isScalar(p.key) && p.key.value === k)).find((i) => i >= 0);
+  map.items.splice(after === undefined ? 0 : after + 1, 0, doc.createPair("clock", clock));
+  await writeFile(main, doc.toString({ lineWidth: 0 }));
+  return true;
+}

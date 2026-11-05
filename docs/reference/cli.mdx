@@ -41,6 +41,7 @@ npx sandtable-ai init --openapi api.yaml --sop policy.md --transcripts calls/ -o
 | `--openapi <file>` | OpenAPI 3.x spec (YAML or JSON): drafts tables and tools, no model needed |
 | `--sop <file>` | SOP or policy document: drafts invariants with Claude, each quoting its source |
 | `--transcripts <path>` | call or chat transcripts (a file, or a directory of `.txt`/`.md` files): drafts personas and tasks with Claude |
+| `--call-date <date>` | the date of the calls whose transcript states none, as `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`: `--transcripts` writes each drafted date relative to its call's date (see [dates relative to the call](#dates-relative-to-the-call)). A malformed date exits 2 before anything is drafted, and so does `--call-date` without `--transcripts` |
 | `-o, --out <dir>` | domain directory: `--openapi` creates it, and `--sop` and `--transcripts` add to it. Without `--openapi`, a domain must already be there, or `init` exits 2 and says to draft one with `--openapi` first. Default: `sandtable` |
 | `-m, --model <id>` | Claude model for the drafting steps. A small model such as `claude-haiku-5-5` can spend a call's whole output limit (32,000 tokens for the SOP, 16,000 for a transcript) thinking and write no draft; `init` then says the reply was cut off, which is still billed, and names a larger model to try. Default: `claude-opus-5-5` |
 | `--force` | overwrite existing files when drafting from `--openapi` |
@@ -58,6 +59,18 @@ Plan: 10 model calls (1 for the SOP, 9 for transcripts) to claude-sonnet-5-5 on 
 ```
 
 The bound counts each call's prompt (about 4 characters a token, at the cache-write rate) and the most it may write (`max_tokens`: 32,000 for the SOP, whose reply lists every rule, and 16,000 for each transcript), so a real draft usually costs a fraction of it. Without `--region` or `AWS_REGION`, a Bedrock plan says the region comes from your AWS config. A missing input exits 2, as a real run would.
+
+### Dates relative to the call
+
+A task drafted from a real call holds the call's dates, which are past by the time the suite runs, and an agent that knows the real date treats them as over. So `--transcripts` writes each date relative to the day of its call. The call's date is the first date, or date and time, in the first five non-empty lines of the transcript, such as `Call started 2026-03-14 10:05:41` (seconds and a time zone are dropped), read locally; else `--call-date`. With `--transcripts`, the plan line is followed by the call date each transcript uses, in a real run and with `--dry-run`:
+
+```text
+Call dates, which each chat's drafted dates are made relative to:
+  call-0314.txt: 2026-03-14T10:05, stated in the file
+  call-0316.txt: 2026-03-10, from --call-date
+```
+
+For a call on 2026-03-14 at 10:05, a drafted `2026-03-16` becomes `$today+2d` and `2026-03-14T08:35` becomes `$now-90m`, in seed rows and the task's places that read a whole value, and `${today+2d}` inside the caller's lines, `reply_includes` and fault messages. A date and time stays literal when the call's time isn't known. Each task gets a `# TODO(review):` note that lists what was made relative. When a date was made relative and the domain sets no `clock`, `init` sets `clock: now` in `sandtable.yaml`; a domain with a clock keeps it. A chat with no call date keeps its dates literal, with a note saying they may be past when the suite runs. See the [clock](/reference/spec#clock-and-relative-dates).
 
 ## import
 

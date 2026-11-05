@@ -4,13 +4,16 @@ import path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
 import { freightScriptedAgent } from "../src/demo/freight-agents.ts";
-import { appendRows, appendToDomainList } from "../src/init/merge.ts";
+import { addClock, appendRows, appendToDomainList } from "../src/init/merge.ts";
 import { lintDomain } from "../src/grade/lint.ts";
 import { copiedValueNotes } from "../src/init/copied.ts";
+import { callDateIn, parseCallDate, relativeToCall } from "../src/init/relative-dates.ts";
 import { draftTasksFromTranscripts, onlyThisTranscript, reusedRowConflicts, scrubPii } from "../src/init/transcripts.ts";
 import { runSuite } from "../src/run/suite.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
-import { DOMAIN_FILE, loadDomain, pendingReview } from "../src/spec/load.ts";
+import { dateOf, expressionFor, resolveDates } from "../src/spec/clock.ts";
+import { DOMAIN_FILE, loadDomain, pendingReview, validateDomain } from "../src/spec/load.ts";
+import { TaskSpec, type Domain } from "../src/spec/schema.ts";
 
 const good = {
   id: "negotiate-new-lane",
@@ -178,6 +181,9 @@ const withInAndExists = {
   ],
 };
 
+/** The note on a drafted task that holds a date, such as good's pickup date, from a chat that states no call date (#466). */
+const NO_CALL_DATE = "this chat states no call date, so its dates are literal and may be past when the suite runs: pass --call-date, or make them relative ($today+2d) by hand";
+
 function fakeClient(outputs: unknown[]) {
   const requests: Array<{ system: string; messages: Array<{ content: string }> }> = [];
   const client = {
@@ -282,7 +288,8 @@ describe("init from transcripts", () => {
     expect(res.tasks.map((t) => t.id)).toEqual(["lapsed-insurance-new-carrier", "negotiate-new-lane"]);
     expect(res.rows.carriers).toEqual([expect.objectContaining({ mc_number: "104242", insurance_status: "expired" })]);
     expect(res.warnings).toEqual([]);
-    expect(res.notes).toEqual({});
+    // No conflict: only the note on good's literal pickup date.
+    expect(res.notes).toEqual({ "negotiate-new-lane": [NO_CALL_DATE] });
   });
 
   it("drafts reference calls, and keeps a task whose reference fails lint with a warning and a review note", async () => {
@@ -299,7 +306,7 @@ describe("init from transcripts", () => {
       { tool: "book_load", args: { load_id: "L-2001", mc_number: "100101", rate: 2300 } },
     ]);
     expect(res.warnings).toEqual([expect.stringMatching(/^call-2\.txt: negotiate-reference-misses: reference does not pass: state:bookings#1: 0 bookings row\(s\) match/)]);
-    expect(Object.keys(res.notes)).toEqual(["negotiate-reference-misses"]);
+    expect(res.notes["negotiate-new-lane"]).toEqual([NO_CALL_DATE]);
     expect(res.notes["negotiate-reference-misses"]![0]).toMatch(/^lint: reference does not pass: state:bookings#1: .*\. Fix the expectation, the seed rows or the reference\.$/);
 
     await appendRows(dir, res.rows);
@@ -342,7 +349,7 @@ describe("init from transcripts", () => {
     const res = await draftTasksFromTranscripts({ domain, claude: { client }, transcripts: [{ file: "call-1.txt", text: "..." }] });
     expect(res.tasks[0]!.reference![1]).toEqual({ tool: "search_loads", args: { origin: "Dallas", equipment: "dry_van" } });
     expect(res.warnings).toEqual(['call-1.txt: negotiate-new-lane: reference[1] search_loads equipment "Dry Van" → dry_van']);
-    expect(res.notes).toEqual({});
+    expect(res.notes).toEqual({ "negotiate-new-lane": [NO_CALL_DATE] });
   });
 
   it("keeps a value that matches no allowed value, or several, for review", async () => {
@@ -351,7 +358,7 @@ describe("init from transcripts", () => {
     const res = await draftTasksFromTranscripts({ domain, claude: { client }, transcripts: [{ file: "call-1.txt", text: "..." }] });
     expect(res.tasks[0]!.reference![1]!.args).toEqual({ origin: "Dallas", equipment: "Box Truck" });
     expect(res.warnings).toEqual([expect.stringMatching(/^call-1\.txt: negotiate-new-lane: reference\[1\] search_loads: invalid arguments: argument "equipment" must be one of dry_van, reefer, flatbed$/)]);
-    expect(res.notes["negotiate-new-lane"]).toEqual([expect.stringMatching(/^lint: reference\[1\] search_loads: invalid arguments: .*\. Fix the expectation, the seed rows or the reference\.$/)]);
+    expect(res.notes["negotiate-new-lane"]).toEqual([NO_CALL_DATE, expect.stringMatching(/^lint: reference\[1\] search_loads: invalid arguments: .*\. Fix the expectation, the seed rows or the reference\.$/)]);
 
     // Two allowed values that read the same: the draft can't tell which one the caller meant.
     const twoSpellings = structuredClone(domain);
@@ -461,6 +468,7 @@ describe("values a draft copied from its chat", () => {
     expect(requests[0]!.messages[0]!.content).not.toContain("415-555-0142");
     const where = "(in the caller's instructions)";
     expect(res.notes["negotiate-new-lane"]).toEqual([
+      NO_CALL_DATE,
       `copied from chat-7.txt: replace "phalvorsen88@mail.example" with a fictional value ${where}`,
       `copied from chat-7.txt: replace "phalvorsen88" with a fictional value ${where}`,
       `copied from chat-7.txt: replace "415-555-0142" with a fictional value ${where}`,
@@ -476,7 +484,8 @@ describe("values a draft copied from its chat", () => {
     // L-2001 and MC 100101 are what the task is about; Blue Mesa Trucking is a seeded carrier.
     const res = await draftTasksFromTranscripts({ domain, claude: { client }, transcripts: [{ file: "chat-7.txt", text: `${chat}\nCustomer: This is Blue Mesa Trucking, MC 100101.` }] });
     expect(res.copied).toBe(0);
-    expect(res.notes["negotiate-new-lane"]).toBeUndefined();
+    // Nothing copied: only the note on good's literal pickup date.
+    expect(res.notes["negotiate-new-lane"]).toEqual([NO_CALL_DATE]);
   });
 
   it("finds a surname alone, a phone written another way, and a name in a new persona", async () => {
@@ -489,6 +498,7 @@ describe("values a draft copied from its chat", () => {
     const { client } = fakeClient([elsewhere]);
     const res = await draftTasksFromTranscripts({ domain, claude: { client }, transcripts: [{ file: "chat-7.txt", text: chat }] });
     expect(res.notes["negotiate-new-lane"]).toEqual([
+      NO_CALL_DATE,
       'copied from chat-7.txt: replace "(415) 555 0142" with a fictional value (in the caller\'s instructions)',
       'copied from chat-7.txt: replace "Halvorsen" with a fictional value (in the caller\'s instructions)',
       'copied from chat-7.txt: replace "Priya Halvorsen" with a fictional value (in persona veteran-dispatcher)',
@@ -512,7 +522,7 @@ describe("values a draft copied from its chat", () => {
     };
     const { client } = fakeClient([draft]);
     const res = await draftTasksFromTranscripts({ domain, claude: { client }, transcripts: [{ file: "chat-9.txt", text: raw }] });
-    const values = (res.notes["negotiate-new-lane"] ?? []).map((n) => /replace "([^"]+)"/.exec(n)![1]);
+    const values = (res.notes["negotiate-new-lane"] ?? []).filter((n) => n.startsWith("copied from")).map((n) => /replace "([^"]+)"/.exec(n)![1]);
     expect(values.sort()).toEqual(["4417 Larkspur Drive", "Brennan Iyer", "Marisol Okafor", "Tavi Lindqvist", "bi447102", "kito.reyes"].sort());
     expect(res.notes["negotiate-new-lane"]).toContain('copied from chat-9.txt: replace "4417 Larkspur Drive" with a fictional value (in a new carriers row)');
   });
@@ -531,5 +541,206 @@ describe("values a draft copied from its chat", () => {
     const { client } = fakeClient([{ ...good, instructions: `${good.instructions} Customer Service and Support Agent were on the call.` }]);
     const res = await draftTasksFromTranscripts({ domain, claude: { client }, transcripts: [{ file: "chat-8.txt", text: roles }] });
     expect(res.copied).toBe(0);
+  });
+});
+
+describe("dates relative to the call (#466)", () => {
+  /** A booking two days after the call: a pickup date, a time to be there, and when the load was posted, in values and in text. */
+  const dated = {
+    ...withReference,
+    id: "book-pickup-two-days-out",
+    new_persona: null,
+    persona_id: "easygoing",
+    instructions: "You are Dana at Blue Mesa Trucking, MC 100101. You want L-2001, which picks up 2026-03-16; be at the dock by 2026-03-16T08:05. Ask for $2,600; accept $2,250 or more.",
+    script: ["Hi, MC 100101. Is L-2001 still picking up 2026-03-16?", "I need $2,600.", "How about $2,300?", "Deal, book it.", "Thanks."],
+    new_rows: [
+      {
+        table: "loads",
+        fields: [...good.new_rows[0]!.fields.map((f) => (f.name === "pickup_date" ? { ...f, value: "2026-03-16" } : f)), { name: "posted_at", value: "2026-03-14T08:35" }],
+      },
+    ],
+    expect_state: [
+      { table: "loads", conditions: [{ field: "load_id", op: "eq", value: "L-2001" }, { field: "pickup_date", op: "gte", value: "2026-03-15" }], count: 1 },
+      ...good.expect_state,
+    ],
+  };
+  const STAMPED = "Call started 2026-03-14 10:05:41\nREP: Thanks for calling.\nCALLER: Is the load still on for Monday?";
+  const UNSTAMPED = "REP: Thanks for calling.\nCALLER: Is the load still on for Monday?";
+  /** A load that picks up before today can't be booked: the rule that makes a literal date go stale. */
+  const NOT_PAST = { table: "loads", key: "$load_id", where: { pickup_date: { $gte: "$today" } }, error: "Load ${load_id} picked up before ${today}" };
+  /** The freight example on a clock of now, with no tasks, whose book_load refuses a load that picked up already. */
+  async function clockedFreight(): Promise<Domain> {
+    const d = await loadDomain(path.resolve("examples/freight"));
+    return { ...d, clock: "now", tasks: [], tools: d.tools.map((t) => (t.name === "book_load" ? { ...t, checks: [...t.checks, NOT_PAST] } : t)) };
+  }
+  /** The domain with a draft's rows, personas and tasks added, as init writes them. */
+  const merged = (domain: Domain, res: Awaited<ReturnType<typeof draftTasksFromTranscripts>>): Domain => ({
+    ...domain,
+    ...(res.clockNow ? { clock: "now" } : {}),
+    world: { tables: Object.fromEntries(Object.entries(domain.world.tables).map(([name, t]) => [name, { ...t, rows: [...t.rows, ...(res.rows[name] ?? [])] }])) },
+    personas: [...domain.personas, ...res.personas],
+    tasks: [...domain.tasks, ...res.tasks],
+  });
+  const draft = async (domain: Domain, text: string, extra: { callDate?: string; proposal?: object } = {}) => {
+    const { client, requests } = fakeClient([extra.proposal ?? dated]);
+    const res = await draftTasksFromTranscripts({ domain, claude: { client }, transcripts: [{ file: "call-1.txt", text }], ...(extra.callDate ? { callDate: extra.callDate } : {}) });
+    return { res, requests };
+  };
+  // Far apart: the day of the call, and years later.
+  const DAYS = [new Date(2026, 2, 14, 10, 5), new Date(2031, 6, 1, 9, 0)];
+
+  it("reads the call's date and time from the first five non-empty lines of the file, locally", () => {
+    expect(callDateIn("Call started 2026-03-14 10:05:41\nREP: Hi.")).toBe("2026-03-14T10:05");
+    expect(callDateIn("\n\n  \nRecorded: 2026-03-14T10:05:41.250Z\n")).toBe("2026-03-14T10:05");
+    expect(callDateIn("Date: 2026-03-14\nTime: 10:05")).toBe("2026-03-14");
+    expect(callDateIn("Ref 2026-02-30, call on 2026-03-01T16:20+01:00")).toBe("2026-03-01T16:20");
+    expect(callDateIn("a\nb\nc\nd\ne\nCall started 2026-03-14")).toBeUndefined();
+    expect(callDateIn("Booking BK-2026-03-14 confirmed.")).toBeUndefined();
+    expect(callDateIn(UNSTAMPED)).toBeUndefined();
+  });
+
+  it("takes a --call-date of a date, or a date and a time to the minute, and nothing else", () => {
+    expect(["2026-03-14", "2026-03-14T10:05"].map(parseCallDate)).toEqual(["2026-03-14", "2026-03-14T10:05"]);
+    for (const bad of ["2026-02-30", "2026-03-14T24:00", "2026-03-14 10:05", "2026-03-14T10:05:00", "14/03/2026", "March 14", ""]) expect(parseCallDate(bad), bad).toBeUndefined();
+  });
+
+  it("writes each date as the expression that resolves to it, in the largest exact unit", () => {
+    const CALL = "2026-03-14T10:05";
+    const cases: [string, string][] = [
+      ["2026-03-14", "today"],
+      ["2026-03-16", "today+2d"],
+      ["2026-03-10", "today-4d"],
+      ["2027-03-14", "today+365d"],
+      ["2026-03-14T10:05", "now"],
+      ["2026-03-16T10:05", "now+2d"],
+      ["2026-03-16T08:05", "now+46h"],
+      ["2026-03-14T08:35", "now-90m"],
+    ];
+    for (const [value, expression] of cases) {
+      expect(expressionFor(value, CALL), value).toBe(expression);
+      expect(dateOf(`$${expression}`, CALL), expression).toBe(value);
+    }
+    expect(expressionFor("tomorrow", CALL)).toBeUndefined();
+  });
+
+  it("makes each drafted date relative to the call the file states, sets clock: now on a domain with none, and notes what moved", async () => {
+    const domain = await loadDomain(path.resolve("examples/freight"));
+    const { res } = await draft(domain, STAMPED);
+    expect(res.warnings).toEqual([]);
+    const task = res.tasks[0]!;
+    expect(task.user.instructions).toBe("You are Dana at Blue Mesa Trucking, MC 100101. You want L-2001, which picks up ${today+2d}; be at the dock by ${now+46h}. Ask for $2,600; accept $2,250 or more.");
+    expect(task.user.script![0]).toBe("Hi, MC 100101. Is L-2001 still picking up ${today+2d}?");
+    expect(task.expect.state[0]!.where).toEqual({ load_id: "L-2001", pickup_date: { $gte: "$today+1d" } });
+    expect(res.rows.loads![0]).toMatchObject({ load_id: "L-2001", pickup_date: "$today+2d", posted_at: "$now-90m" });
+    expect(res.notes[task.id]).toContain(
+      "dates made relative to the call on 2026-03-14T10:05: user.instructions 2026-03-16 → ${today+2d}, user.instructions 2026-03-16T08:05 → ${now+46h}, user.script[0] 2026-03-16 → ${today+2d}, " +
+        "expect.state[0].where.pickup_date.$gte 2026-03-15 → $today+1d, new loads row L-2001 pickup_date 2026-03-16 → $today+2d, new loads row L-2001 posted_at 2026-03-14T08:35 → $now-90m",
+    );
+    expect(res.clockNow).toBe(true);
+    expect(res.relative).toEqual([task.id]);
+    // What the domain held before this run stays as it was.
+    expect(domain.world.tables.loads!.rows[0]!.pickup_date).toBe("2026-11-04");
+    expect(validateDomain(merged(domain, res))).toEqual([]);
+    // Other text keeps its dates: the source quote and description are no place a date resolves.
+    const { res: quoted } = await draft(domain, STAMPED, { proposal: { ...dated, description: "A booking for 2026-03-16.", quote: "On 2026-03-16?" } });
+    expect([quoted.tasks[0]!.description, quoted.tasks[0]!.source?.quote]).toEqual(["A booking for 2026-03-16.", "On 2026-03-16?"]);
+  });
+
+  it("lints clean on any day with clock: now, where the same chat's literal dates go stale", async () => {
+    const domain = await clockedFreight();
+    const { res } = await draft(domain, STAMPED);
+    // A domain that sets a clock keeps it.
+    expect(res.clockNow).toBe(false);
+    for (const now of DAYS) expect(lintDomain(merged(domain, res), { now }).tasks[0], String(now)).toMatchObject({ solvable: true, errors: [] });
+    // With no call date, the dates stay literal, with a note, and the booking fails once its pickup has passed.
+    const { res: literal } = await draft(domain, UNSTAMPED);
+    expect(literal.relative).toEqual([]);
+    expect(literal.rows.loads![0]!.pickup_date).toBe("2026-03-16");
+    expect(literal.notes[literal.tasks[0]!.id]).toContain(NO_CALL_DATE);
+    expect(literal.literal).toEqual(["book-pickup-two-days-out"]);
+    expect(lintDomain(merged(domain, literal), { now: DAYS[0] }).tasks[0]!.errors).toEqual([]);
+    expect(lintDomain(merged(domain, literal), { now: DAYS[1] }).tasks[0]!.errors).not.toEqual([]);
+  });
+
+  it("dates a chat that states none by --call-date, and a date the file states wins", async () => {
+    const domain = await clockedFreight();
+    const { res } = await draft(domain, UNSTAMPED, { callDate: "2026-03-10" });
+    expect(res.rows.loads![0]!.pickup_date).toBe("$today+6d");
+    expect(res.notes[res.tasks[0]!.id]!.find((n) => n.startsWith("dates made relative"))).toMatch(/^dates made relative to the call on 2026-03-10: /);
+    const { res: stated } = await draft(domain, STAMPED, { callDate: "2026-03-10" });
+    expect(stated.rows.loads![0]!.pickup_date).toBe("$today+2d");
+    await expect(draftTasksFromTranscripts({ domain, claude: { client: fakeClient([]).client }, transcripts: [], callDate: "2026-02-30" })).rejects.toThrow(
+      "callDate must be a date, YYYY-MM-DD, or a date and time, YYYY-MM-DDTHH:MM, not 2026-02-30",
+    );
+  });
+
+  it("leaves a date and time literal when the call's time isn't known, and says so", async () => {
+    const domain = await clockedFreight();
+    const { res } = await draft(domain, "Call on 2026-03-14\nREP: Thanks for calling.");
+    expect(res.tasks[0]!.user.instructions).toContain("which picks up ${today+2d}; be at the dock by 2026-03-16T08:05.");
+    expect(res.rows.loads![0]).toMatchObject({ pickup_date: "$today+2d", posted_at: "2026-03-14T08:35" });
+    expect(res.notes[res.tasks[0]!.id]).toContain(
+      "this chat states its call's date, 2026-03-14, but not its time, so its dates and times stay literal and may be past when the suite runs: user.instructions 2026-03-16T08:05, new loads row L-2001 posted_at 2026-03-14T08:35. Make them relative ($now+2d) by hand",
+    );
+  });
+
+  it("rewrites every place a trial resolves dates in, and no other", async () => {
+    const task = TaskSpec.parse({
+      id: "t",
+      description: "Rebook from 2026-03-16.",
+      user: { instructions: "Pickup 2026-03-16.", opening: "Is 2026-03-16 still on?", script: ["2026-03-16?"] },
+      given: { rows: { loads: [{ load_id: "L-1", pickup_date: "2026-03-16", note: "moved from 2026-03-15" }] }, context: { called_at: "2026-03-14T10:05" } },
+      events: [{ after: { tool: "get_load" }, update: "loads", key: "L-1", set: { pickup_date: "2026-03-17" } }],
+      faults: [{ tool: "get_load", error: "rate_limit", message: "Retry after 2026-03-14T10:10." }],
+      reference: [{ tool: "book_load", args: { load_id: "L-1", pickup_date: "2026-03-16" } }],
+      expect: {
+        state: [{ table: "loads", key: "L-1", fields: { pickup_date: "2026-03-17" } }],
+        called: [{ tool: "book_load", args: { pickup_date: "2026-03-16" } }],
+        not_called: [{ tool: "book_load", args: { pickup_date: { $lt: "2026-03-14" } } }],
+        reply_includes: ["see you on 2026-03-16", "ref BK-2026-03-16"],
+      },
+    });
+    const { task: t, rows } = relativeToCall(task, { loads: [{ load_id: "L-2", pickup_date: "2026-03-18" }] }, "2026-03-14T10:05", { loads: "load_id" });
+    expect(t.description).toBe("Rebook from 2026-03-16.");
+    expect(t.user).toEqual({ instructions: "Pickup ${today+2d}.", opening: "Is ${today+2d} still on?", script: ["${today+2d}?"] });
+    // A seed field is a whole value: a date inside its text stays.
+    expect(t.given).toEqual({ rows: { loads: [{ load_id: "L-1", pickup_date: "$today+2d", note: "moved from 2026-03-15" }] }, context: { called_at: "$now" } });
+    expect(t.events![0]).toMatchObject({ set: { pickup_date: "$today+3d" } });
+    expect(t.faults![0]!.message).toBe("Retry after ${now+5m}.");
+    expect(t.reference![0]!.args).toEqual({ load_id: "L-1", pickup_date: "$today+2d" });
+    // A date inside an ID stays.
+    expect(t.expect).toEqual({
+      state: [{ table: "loads", key: "L-1", fields: { pickup_date: "$today+3d" } }],
+      called: [{ tool: "book_load", args: { pickup_date: "$today+2d" } }],
+      not_called: [{ tool: "book_load", args: { pickup_date: { $lt: "$today" } } }],
+      reply_includes: ["see you on ${today+2d}", "ref BK-2026-03-16"],
+    });
+    expect(rows).toEqual({ loads: [{ load_id: "L-2", pickup_date: "$today+4d" }] });
+    // At the call's clock, a trial resolves every expression back to the date it replaced.
+    expect(resolveDates(await loadDomain(path.resolve("examples/freight")), t, "2026-03-14T10:05").task).toEqual(task);
+  });
+
+  it("tells the model to write dates as YYYY-MM-DD, and times as YYYY-MM-DDTHH:MM", async () => {
+    const { requests } = await draft(await clockedFreight(), STAMPED);
+    expect(requests[0]!.system).toContain("Write every date you draft as YYYY-MM-DD, and a date with a time as YYYY-MM-DDTHH:MM");
+  });
+
+  it("writes clock: now into sandtable.yaml after the policy, so the domain init wrote lints clean on any day", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-tx-"));
+    await cp(path.resolve("examples/freight"), dir, { recursive: true });
+    const { res } = await draft(await loadDomain(dir), STAMPED);
+    await appendRows(dir, res.rows);
+    await appendToDomainList(dir, "tasks", res.tasks, undefined, res.notes);
+    expect(res.clockNow).toBe(true);
+    expect(await addClock(dir, "now")).toBe(true);
+    const yaml = await readFile(path.join(dir, DOMAIN_FILE), "utf8");
+    expect(yaml).toMatch(/^policy: \.\/policy\.md\nclock: now\n/m);
+    expect(await readFile(path.join(dir, "tasks.yaml"), "utf8")).toContain("# TODO(review): dates made relative to the call on 2026-03-14T10:05: ");
+    const domain = await loadDomain(dir);
+    expect(domain.clock).toBe("now");
+    for (const now of DAYS) expect(lintDomain({ ...domain, tasks: domain.tasks.filter((t) => t.id === "book-pickup-two-days-out") }, { now }).tasks[0], String(now)).toMatchObject({ solvable: true, errors: [] });
+    // A domain that sets a clock keeps it.
+    expect(await addClock(dir, "2026-11-02T09:00")).toBe(false);
+    expect((await loadDomain(dir)).clock).toBe("now");
   });
 });
