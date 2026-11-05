@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `clock`: dates relative to the clock resolve in four more places: `${today}` and `${now+5m}` inside the policy, faults' `message`s and `expect.reply_includes`, and a whole `$today` in a param's `default`, nested ones included. A policy can say "Today is ${today}", a tool's `pickup_from` can default to today, and a task can expect "your pickup is ${today+2d}". `reply_includes` also matches an ISO date said in words, such as `Wednesday, November 4` or `Nov. 4th` for `2026-11-04`, so an existing phrase with a literal ISO date now passes too when the agent says the date that way. With a clock, `validate` checks the four places as it checks the others; without one, it warns about a date expression in them ([#465](https://github.com/sandtable-ai/sandtable/issues/465)).
+
 ## [1.4.0] - 2026-11-04
 
 A minor release with no breaking changes. `$regex` matches text with a JavaScript regular expression in where clauses and in the arguments a task expects, and `sandtable import elevenlabs` drafts an ElevenLabs regex check on a tool's argument as one, anchored so it never passes a value ElevenLabs fails.

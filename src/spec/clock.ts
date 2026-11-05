@@ -92,8 +92,9 @@ export function interpolateDates(text: string, clock: string, shadow: ReadonlySe
 
 const NONE: ReadonlySet<string> = new Set();
 
-const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+/** The days of the week and the months in en-US, from Sunday and January: how a clock is told, and how a reply may say a date. */
+export const WEEKDAYS: readonly string[] = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+export const MONTHS: readonly string[] = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 /**
  * A clock as an en-US speaker says it, such as `Monday, November 2, 2026, 9:00 AM`. Written out here rather than with
@@ -123,17 +124,40 @@ function walk<T>(value: T, mode: Mode, path: string, visit: Visit, shadow: Reado
   return value;
 }
 
+type Params = Domain["tools"][number]["params"];
+
 /**
- * The domain with `visit` applied to every string in the places a date resolves: seed rows, tools' ops and checks, and
- * invariants' `where` and `when`. In a tool with a param named `today` or `now`, that name is the param.
+ * A tool's params with `visit` applied to each `default`, a whole value like a seed field, and to the defaults of the
+ * `properties` of an object param and of an array's items. Nothing else in a param is a place a date resolves.
+ */
+function mapParams(params: Params, path: string, visit: Visit, shadow: ReadonlySet<string>): Params {
+  const param = (p: Params[string], at: string): Params[string] => ({
+    ...p,
+    ...(p.default !== undefined ? { default: walk(p.default, "value", `${at}.default`, visit, shadow) } : {}),
+    ...(p.properties ? { properties: mapParams(p.properties, `${at}.properties`, visit, shadow) } : {}),
+    ...(p.items ? { items: param(p.items, `${at}.items`) } : {}),
+  });
+  return Object.fromEntries(Object.entries(params).map(([name, p]) => [name, param(p, `${path}.${name}`)]));
+}
+
+/**
+ * The domain with `visit` applied to every string in the places a date resolves: the policy, seed rows, tools' params'
+ * defaults, ops and checks, and invariants' `where` and `when`. In a tool with a param named `today` or `now`, that
+ * name is the param.
  */
 function mapDomain(domain: Domain, visit: Visit): Domain {
   return {
     ...domain,
+    policy: walk(domain.policy, "text", "policy", visit),
     world: { tables: Object.fromEntries(Object.entries(domain.world.tables).map(([name, t]) => [name, { ...t, rows: walk(t.rows, "value", `world.tables.${name}.rows`, visit) }])) },
     tools: domain.tools.map((t) => {
       const shadow = new Set(NAMES.filter((n) => Object.hasOwn(t.params, n)));
-      return { ...t, checks: walk(t.checks, "both", `tools.${t.name}.checks`, visit, shadow), ops: walk(t.ops, "both", `tools.${t.name}.ops`, visit, shadow) };
+      return {
+        ...t,
+        params: mapParams(t.params, `tools.${t.name}.params`, visit, shadow),
+        checks: walk(t.checks, "both", `tools.${t.name}.checks`, visit, shadow),
+        ops: walk(t.ops, "both", `tools.${t.name}.ops`, visit, shadow),
+      };
     }),
     invariants: domain.invariants.map((inv) => {
       const at = `invariants.${inv.id}`;
@@ -147,7 +171,8 @@ function mapDomain(domain: Domain, visit: Visit): Domain {
 
 /**
  * The task with `visit` applied to every string in the places a date resolves: its `given` rows and context, events,
- * `expect` (state, and `called`/`not_called` args), `reference` args, and the caller's instructions, opening and script.
+ * faults' messages, `expect` (state, `called`/`not_called` args, and `reply_includes`), `reference` args, and the
+ * caller's instructions, opening and script.
  */
 function mapTask(task: Task, visit: Visit): Task {
   const at = `tasks.${task.id}`;
@@ -162,12 +187,14 @@ function mapTask(task: Task, visit: Visit): Task {
     },
     ...(task.given ? { given: walk(task.given, "value", `${at}.given`, visit) } : {}),
     ...(task.events ? { events: walk(task.events, "value", `${at}.events`, visit) } : {}),
+    ...(task.faults ? { faults: task.faults.map((f, i) => (f.message === undefined ? f : { ...f, message: walk(f.message, "text", `${at}.faults[${i}].message`, visit) })) } : {}),
     ...(task.reference ? { reference: task.reference.map((c, i) => ({ ...c, args: walk(c.args, "value", `${at}.reference[${i}].args`, visit) })) } : {}),
     expect: {
       ...task.expect,
       state: walk(task.expect.state, "value", `${at}.expect.state`, visit),
       called: walk(task.expect.called, "value", `${at}.expect.called`, visit),
       not_called: walk(task.expect.not_called, "value", `${at}.expect.not_called`, visit),
+      reply_includes: walk(task.expect.reply_includes, "text", `${at}.expect.reply_includes`, visit),
     },
   };
 }
@@ -238,7 +265,7 @@ export function unclockedDates(domain: Domain): string[] {
   const warnings: string[] = [];
   const visit: Visit = (value, { mode, path, shadow }) => {
     for (const { ref } of expressions(value, mode, shadow)) {
-      if (path.startsWith("tools.") && /^\$(?:today|now|\{(?:today|now)\})$/.test(ref)) continue;
+      if (mode === "both" && /^\$(?:today|now|\{(?:today|now)\})$/.test(ref)) continue;
       warnings.push(`${path}: "${ref}" is text, not a date, since the domain sets no clock, as before 1.3: set \`clock:\` to now or a date and time to make it a date. 2.0 will reject it without one.`);
     }
     return value;

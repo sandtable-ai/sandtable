@@ -476,6 +476,109 @@ describe("Unicode hyphens are graded like -", () => {
   });
 });
 
+describe("reply_includes with a date (#465)", () => {
+  /** The reply check of a task that expects `phrase`, after the agent said `messages`. */
+  const reply = (phrase: string, ...messages: string[]) => {
+    const task = TaskSpec.parse({ id: "t", user: { instructions: "x" }, expect: { reply_includes: [phrase] } });
+    return gradeTrial({ task, world: new World(domain.world), calls: [], agentMessages: messages, violations: [] }).checks[0]!;
+  };
+  const says = (phrase: string, message: string) => reply(phrase, message).passed;
+  // Wednesday, November 4, 2026.
+  const PHRASE = "Your pickup is 2026-11-04";
+
+  it("matches an ISO date as written, or in the words an en-US speaker uses, case-insensitive", () => {
+    for (const said of [
+      "Your pickup is 2026-11-04.",
+      "your pickup is November 4.",
+      "Your pickup is Nov 4.",
+      "Your pickup is Nov. 4, see you then",
+      "Your pickup is November 4th",
+      "Your pickup is November 04",
+      "Your pickup is 4 November",
+      "Your pickup is 4th November 2026",
+      "Your pickup is the 4th of November",
+      "Your pickup is Wednesday, November 4, 2026.",
+      "Your pickup is Wednesday November 4th",
+      "Your pickup is Wed, Nov 4",
+      "Your pickup is Wed. the 4th of Nov.",
+      "YOUR PICKUP IS NOVEMBER 4TH, 2026!",
+      "Your pickup is November 4",
+    ]) {
+      expect(says(PHRASE, said), said).toBe(true);
+    }
+  });
+
+  it("does not match another day, a list that runs into the day, another year, or a weekday that contradicts the date", () => {
+    for (const said of [
+      "Your pickup is November 14.",
+      "Your pickup is 14 November.",
+      "Your pickup is November 45.",
+      "Your pickup is November 4,5.",
+      "Your pickup is November 4.5",
+      "Your pickup is November 3.",
+      "Your pickup is December 4.",
+      "Your pickup is November 4, 2027.",
+      "Your pickup is 4 November 2025",
+      "Your pickup is Tuesday, November 4.",
+      "Your pickup is Tue the 4th of November",
+      "Your pickup is Thursday November 4th",
+      "Your pickup is November 5th",
+      "Your pickup is Novel 4",
+      "Your pickup is on November 4.",
+    ]) {
+      expect(says(PHRASE, said), said).toBe(false);
+    }
+    // A weekday that contradicts the date also fails a phrase that is the date alone.
+    expect(says("2026-11-04", "That's Tuesday, November 4.")).toBe(false);
+    expect(says("2026-11-04", "That's Wednesday, November 4.")).toBe(true);
+  });
+
+  it("knows each month's names and each day's ordinal", () => {
+    const cases: [string, string][] = [
+      ["2026-01-01", "January 1st"],
+      ["2026-02-02", "Feb 2nd"],
+      ["2026-03-03", "Tuesday, March 3rd"],
+      ["2026-05-11", "May 11th"],
+      ["2026-06-12", "12th June"],
+      ["2026-07-13", "Jul. 13th"],
+      ["2026-08-21", "August 21st"],
+      ["2026-09-22", "Sept. 22nd"],
+      ["2026-09-23", "Sep 23rd"],
+      ["2026-10-31", "Saturday the 31st of October"],
+      ["2028-02-29", "Tuesday, February 29, 2028"],
+    ];
+    for (const [date, said] of cases) expect(says(date, `It's ${said}.`), `${date}: ${said}`).toBe(true);
+    // The wrong ordinal is not one.
+    expect(says("2026-11-02", "November 2th")).toBe(false);
+    expect(says("2026-11-11", "November 11st")).toBe(false);
+  });
+
+  it("matches each date in a phrase, written literally or resolved from the clock, with the rest of the phrase as before", () => {
+    expect(says("from 2026-11-04 to 2026-11-06", "From Wednesday, Nov 4 to Friday, Nov 6.")).toBe(true);
+    expect(says("from 2026-11-04 to 2026-11-06", "From Wednesday, Nov 4 to Friday, Nov 7.")).toBe(false);
+    // U+2011 in the agent's message still reads as -, around a date said in words too.
+    expect(says("L-1001 picks up 2026-11-04", "L‑1001 picks up Nov 4.")).toBe(true);
+    // The rest of the phrase is still exact text.
+    expect(says("L-1001 picks up 2026-11-04", "L-1002 picks up Nov 4.")).toBe(false);
+    // Regex characters in the phrase are text.
+    expect(says("(rate $2,100) on 2026-11-04?", "(Rate $2,100) on November 4?")).toBe(true);
+  });
+
+  it("leaves a date and time, a date inside an ID, and a date that doesn't exist as written", () => {
+    expect(says("call back at 2026-11-02T11:00", "Call back at 2026-11-02T11:00.")).toBe(true);
+    expect(says("call back at 2026-11-02T11:00", "Call back at November 2 at 11:00.")).toBe(false);
+    expect(says("ref BK-2026-11-04", "ref BK-November 4")).toBe(false);
+    expect(says("ref BK-2026-11-04", "Ref BK-2026-11-04.")).toBe(true);
+    expect(says("2026-02-30", "February 30")).toBe(false);
+    expect(says("2026-02-30", "on 2026-02-30")).toBe(true);
+  });
+
+  it("names the check after the phrase as resolved, and looks in every message", () => {
+    expect(reply(PHRASE, "Hello.", "Your pickup is Wednesday, November 4.")).toEqual({ id: `reply:${PHRASE}`, kind: "reply", passed: true, detail: `agent said "${PHRASE}"` });
+    expect(reply(PHRASE, "Hello.")).toEqual({ id: `reply:${PHRASE}`, kind: "reply", passed: false, detail: `agent never said "${PHRASE}"` });
+  });
+});
+
 describe("expect.called and expect.not_called with argument matchers", () => {
   const call = (index: number, name: string, args: Record<string, unknown>, ok = true): CallRecord => ({ index, name, args, ok, ...(ok ? {} : { error: "rejected" }) });
   const grade = (expect: { called?: unknown[]; not_called?: unknown[] }, calls: CallRecord[]) => {

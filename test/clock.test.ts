@@ -358,6 +358,185 @@ describe("validate", () => {
   });
 });
 
+describe("dates in the policy, param defaults, fault messages and reply_includes (#465)", () => {
+  /** A tool whose optional params default to dates, as a real API's often do, nested ones too. */
+  const schedule = (defaults: { from?: string; until?: string; ready?: string } = {}) => ({
+    name: "schedule_pickup",
+    description: "Schedule a load's pickup window, from today unless the caller says otherwise.",
+    params: {
+      load_id: { type: "string", description: "Not $today: a description stays as written." },
+      pickup_from: { type: "string", required: false, default: defaults.from ?? "$today" },
+      window: {
+        type: "object",
+        required: false,
+        default: { until: "$today+3d" },
+        properties: {
+          until: { type: "string", required: false, default: defaults.until ?? "$today+2d" },
+          note: { type: "string", required: false, default: "from ${today}" },
+        },
+      },
+      stops: { type: "array", required: false, items: { type: "object", properties: { ready_at: { type: "string", required: false, default: defaults.ready ?? "$now" } } } },
+      kind: { type: "string", required: false, enum: ["$today", "later"] },
+    },
+    ops: [{ respond: { load_id: "$load_id", from: "$pickup_from", until: "$window.until" } }],
+  });
+  /** Its own param named today shadows the date, in its defaults as in its ops; now is still a date. */
+  const echo = {
+    name: "echo_today",
+    description: "A tool with a param of its own named today.",
+    params: { today: { type: "string", required: false, default: "$today" }, at: { type: "string", required: false, default: "$now" } },
+    ops: [{ respond: { got: "$today" } }],
+  };
+  const tools = (extra = schedule()) => [...(raw().tools as Record<string, unknown>[]).filter((t) => t.name !== "echo_today"), echo, extra];
+  const POLICY = "Today is ${today}; cancellations close at ${today+1d} 09:00. A bare $today stays prose.";
+  const FAULT = { tool: "get_load", call: 1, error: "rate_limit", message: "Rate limited until ${now+5m}. Try again after $today." };
+  const REPLIES = ["your pickup is ${today+2d}", "$today stays", "call back at ${now+2h}"];
+  const [first, second] = raw().tasks as Record<string, unknown>[];
+  const places = (patch: { policy?: string; extra?: object; fault?: object; reply?: string[]; clock?: string } = {}) => ({
+    ...(Object.hasOwn(patch, "clock") ? { clock: patch.clock } : {}),
+    policy: patch.policy ?? POLICY,
+    tools: tools(patch.extra as ReturnType<typeof schedule>),
+    tasks: [{ ...first, faults: [patch.fault ?? FAULT], expect: { ...(first!.expect as object), reply_includes: patch.reply ?? REPLIES } }, second],
+  });
+
+  it("resolve at the trial's clock: the policy and fault messages inside text, param defaults as whole strings, nested ones too", () => {
+    const domain = domainWith(places());
+    const { domain: d, task: t } = resolveDates(domain, domain.tasks[0]!, CLOCK);
+    expect(d.policy).toBe("Today is 2026-11-02; cancellations close at 2026-11-03 09:00. A bare $today stays prose.");
+    expect(d.tools.find((x) => x.name === "schedule_pickup")!.params).toEqual({
+      load_id: { type: "string", required: true, description: "Not $today: a description stays as written." },
+      pickup_from: { type: "string", required: false, default: "2026-11-02" },
+      window: {
+        type: "object",
+        required: false,
+        default: { until: "2026-11-05" },
+        properties: {
+          until: { type: "string", required: false, default: "2026-11-04" },
+          // A default is a whole value, like a seed field: ${today} inside it stays text.
+          note: { type: "string", required: false, default: "from ${today}" },
+        },
+      },
+      stops: { type: "array", required: false, items: { type: "object", required: true, properties: { ready_at: { type: "string", required: false, default: "2026-11-02T09:00" } } } },
+      kind: { type: "string", required: false, enum: ["$today", "later"] },
+    });
+    expect(t.faults).toEqual([{ ...FAULT, message: "Rate limited until 2026-11-02T09:05. Try again after $today." }]);
+    // As written: the domain the trial was resolved from keeps its expressions.
+    expect(domain.policy).toBe(POLICY);
+    expect(domain.tasks[0]!.faults![0]!.message).toBe(FAULT.message);
+  });
+
+  it("follow a tool's own param named today in its defaults, as its ops do", () => {
+    const domain = domainWith(places());
+    const { domain: d } = resolveDates(domain, domain.tasks[0]!, CLOCK);
+    expect(d.tools.find((x) => x.name === "echo_today")!.params).toEqual({
+      today: { type: "string", required: false, default: "$today" },
+      at: { type: "string", required: false, default: "2026-11-02T09:00" },
+    });
+  });
+
+  it("resolve reply_includes inside text: a bare $today stays, and ${now} is a date and time", () => {
+    const domain = domainWith(places());
+    expect(resolveDates(domain, domain.tasks[0]!, CLOCK).task.expect.reply_includes).toEqual(["your pickup is 2026-11-04", "$today stays", "call back at 2026-11-02T11:00"]);
+  });
+
+  it("reach the agent and the grading in a run: the prompt, the tool schema, a default the agent leaves out, the fault's error, and a reply said in words", async () => {
+    const seen: AgentContext[] = [];
+    const agent: AgentAdapter = {
+      name: "scheduler",
+      async createSession(ctx) {
+        seen.push(ctx);
+        let turns = 0;
+        return {
+          async reply(_message, callTool) {
+            if (turns++ > 0) return "Anything else?";
+            await callTool("get_load", { load_id: "L-1" });
+            await callTool("schedule_pickup", { load_id: "L-1" });
+            return "Your pickup is Wednesday, November 4.";
+          },
+        };
+      },
+    };
+    const task = { id: "schedule", user: { instructions: "Ask when L-1 picks up.", script: ["When does L-1 pick up?"] }, faults: [FAULT], expect: { called: ["schedule_pickup"], reply_includes: ["Your pickup is ${today+2d}"] } };
+    const domain = domainWith({ ...places(), clock: "now", tasks: [task] });
+    const monday = await runSuite({ domain, agent, user: scriptedUser(), now: () => MONDAY });
+    const trial = monday.tasks[0]!.trials[0]!;
+    expect(seen[0]!.system).toContain("Today is 2026-11-02; cancellations close at 2026-11-03 09:00. A bare $today stays prose.");
+    const properties = seen[0]!.tools.find((x) => x.name === "schedule_pickup")!.input_schema.properties as Record<string, { default?: unknown }>;
+    expect(properties.pickup_from!.default).toBe("2026-11-02");
+    const calls = trial.events.flatMap((e) => (e.type === "tool" ? [[e.name, e.ok ? e.result : e.error]] : []));
+    expect(calls).toEqual([
+      ["get_load", "Rate limited until 2026-11-02T09:05. Try again after $today."],
+      ["schedule_pickup", { load_id: "L-1", from: "2026-11-02", until: "2026-11-05" }],
+    ]);
+    expect(trial.checks.filter((c) => c.kind === "reply")).toEqual([{ id: "reply:Your pickup is 2026-11-04", kind: "reply", passed: true, detail: 'agent said "Your pickup is 2026-11-04"' }]);
+    expect(trial.passed).toBe(true);
+    // On Tuesday the pickup is Thursday the 5th, so the same words fail, while the fingerprints, of the spec as written, stay.
+    const tuesday = await runSuite({ domain, agent, user: scriptedUser(), now: () => TUESDAY });
+    expect(tuesday.tasks[0]!.trials[0]!.checks.filter((c) => c.kind === "reply")).toEqual([{ id: "reply:Your pickup is 2026-11-05", kind: "reply", passed: false, detail: 'agent never said "Your pickup is 2026-11-05"' }]);
+    expect([tuesday.inputs, tuesday.tasks[0]!.inputs, tuesday.tasks[0]!.grading]).toEqual([monday.inputs, monday.tasks[0]!.inputs, monday.tasks[0]!.grading]);
+    // A regrade the next day resolves them with the trial's recorded clock, so it gives the same verdict.
+    const stored = JSON.parse(JSON.stringify(monday)) as SuiteResult;
+    expect(regradeSuite(domain, stored).tasks[0]!.trials[0]!.passed).toBe(true);
+  });
+
+  describe("validate", () => {
+    const problems = (patch: Record<string, unknown>) => validateDomain(DomainSpec.parse({ ...raw(), ...patch }));
+    const NEEDS = "needs a clock: set `clock:` to now or a date and time, such as `clock: 2026-11-02T09:00`";
+    const malformed = places({
+      policy: "Today is ${today+2h}.",
+      extra: schedule({ from: "$today+2h", until: "$now+5x", ready: "$now-" }),
+      fault: { ...FAULT, message: "Retry after ${now+5x}" },
+      reply: ["your pickup is ${today+1x}"],
+    });
+
+    it("accepts them with a clock, and a tool's own param named today needs none", () => {
+      expect(problems(places())).toEqual([]);
+    });
+
+    it("reports a malformed date in each place, at its path", () => {
+      expect(problems(malformed)).toEqual([
+        'policy: "${today+2h}" is not a date: $today takes an offset in days, such as $today+2d',
+        'tools.schedule_pickup.params.pickup_from.default: "$today+2h" is not a date: $today takes an offset in days, such as $today+2d',
+        'tools.schedule_pickup.params.window.properties.until.default: "$now+5x" is not a date: an offset is a whole number of d, h or m, such as $now+90m or $now-3h',
+        'tools.schedule_pickup.params.stops.items.properties.ready_at.default: "$now-" is not a date: an offset is a whole number of d, h or m, such as $now+90m or $now-3h',
+        'tasks.book-upcoming.faults[0].message: "${now+5x}" is not a date: an offset is a whole number of d, h or m, such as $now+90m or $now-3h',
+        'tasks.book-upcoming.expect.reply_includes[0]: "${today+1x}" is not a date: $today takes an offset in days, such as $today+2d',
+      ]);
+    });
+
+    it("rejects each where a task has no clock, in a domain that uses one", () => {
+      const found = problems(places({ clock: undefined }));
+      const SOME = "needs a clock, and task book-upcoming has none: set `clock:` to now or a date and time, such as `clock: 2026-11-02T09:00`";
+      expect(found).toContain(`policy: "\${today}" ${SOME}`);
+      expect(found).toContain(`tools.schedule_pickup.params.pickup_from.default: "$today" ${SOME}`);
+      expect(found).toContain(`tools.schedule_pickup.params.window.default.until: "$today+3d" ${SOME}`);
+      expect(found).toContain(`tasks.book-upcoming.faults[0].message: "\${now+5m}" ${NEEDS}`);
+      expect(found).toContain(`tasks.book-upcoming.expect.reply_includes[0]: "\${today+2d}" ${NEEDS}`);
+      expect(found.filter((p) => p.includes("echo_today.params.today") || p.includes('"$today stays"'))).toEqual([]);
+    });
+
+    it("keeps them text in a domain that sets no clock anywhere, and warns about each", () => {
+      const tasks = (places().tasks as Record<string, unknown>[]).map((t) => ({ ...t, clock: undefined }));
+      const d = DomainSpec.parse({ ...raw(), ...places({ clock: undefined }), tasks });
+      const TEXT = "is text, not a date, since the domain sets no clock, as before 1.3: set `clock:` to now or a date and time to make it a date. 2.0 will reject it without one.";
+      const warned = domainWarnings(d);
+      expect(warned).toContain(`policy: "\${today}" ${TEXT}`);
+      expect(warned).toContain(`policy: "\${today+1d}" ${TEXT}`);
+      // A default is a value, not a reference to a param, so it is warned about like a seed field.
+      expect(warned).toContain(`tools.schedule_pickup.params.pickup_from.default: "$today" ${TEXT}`);
+      expect(warned).toContain(`tools.schedule_pickup.params.stops.items.properties.ready_at.default: "$now" ${TEXT}`);
+      expect(warned).toContain(`tools.echo_today.params.at.default: "$now" ${TEXT}`);
+      expect(warned).toContain(`tasks.book-upcoming.faults[0].message: "\${now+5m}" ${TEXT}`);
+      expect(warned).toContain(`tasks.book-upcoming.expect.reply_includes[0]: "\${today+2d}" ${TEXT}`);
+      expect(warned.filter((w) => w.includes("echo_today.params.today") || w.includes("$today stays") || w.includes("description"))).toEqual([]);
+      expect(validateDomain(d).filter((p) => /^(policy|tools\.\w+\.params|tasks\.[\w-]+\.(faults|expect\.reply_includes))/.test(p))).toEqual([]);
+      // Nothing resolves: the trial keeps the text.
+      const trial = resolveTrial(d, d.tasks[0]!, MONDAY);
+      expect([trial.domain.policy, trial.task.faults![0]!.message, trial.task.expect.reply_includes[0]]).toEqual([POLICY, FAULT.message, REPLIES[0]]);
+    });
+  });
+});
+
 describe("who is told the time", () => {
   const LINE = "It is now Monday, November 2, 2026, 9:00 AM.";
 

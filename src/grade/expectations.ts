@@ -1,3 +1,4 @@
+import { MONTHS, WEEKDAYS } from "../spec/clock.ts";
 import type { CallExpect, StateAssert, Task } from "../spec/schema.ts";
 import { matches, mismatch, type Row } from "../world/match.ts";
 import type { World } from "../world/store.ts";
@@ -39,7 +40,8 @@ export function gradeTrial(input: {
   for (const e of task.expect.not_called) checks.push(checkNotCalled(e, calls));
 
   for (const phrase of task.expect.reply_includes) {
-    const ok = agentMessages.some((m) => asciiHyphens(m).toLowerCase().includes(asciiHyphens(phrase).toLowerCase()));
+    const said = replyMatcher(phrase);
+    const ok = agentMessages.some(said);
     checks.push({
       id: `reply:${phrase}`,
       kind: "reply",
@@ -50,6 +52,70 @@ export function gradeTrial(input: {
 
   return { passed: checks.every((c) => c.passed), checks };
 }
+
+/**
+ * Whether a message says `phrase`, as `reply_includes` checks it: as text, case-insensitive, with U+2010 and U+2011 read
+ * as `-`. An ISO date in the phrase (`2026-11-04`), standing alone rather than in a date and time or an ID, may also be
+ * said in words, as an en-US speaker says it: `November 4`, `Nov. 4th`, `4 November`, `the 4th of November`, with an
+ * optional weekday before it (`Wednesday, November 4`) and year after it (`November 4, 2026`). A weekday that isn't the
+ * date's, or a day or year that runs on into another number (`November 14`, `November 4,5`, `November 4, 2027`), isn't it.
+ */
+export function replyMatcher(phrase: string): (message: string) => boolean {
+  const wanted = asciiHyphens(phrase).toLowerCase();
+  let source = "";
+  let from = 0;
+  for (const m of wanted.matchAll(ISO_DATE)) {
+    const words = spokenDate(Number(m[1]), Number(m[2]), Number(m[3]));
+    if (words === undefined) continue;
+    source += `${escapeRegex(wanted.slice(from, m.index))}(?:${escapeRegex(m[0])}|${words})`;
+    from = m.index + m[0].length;
+  }
+  if (!source) return (message) => asciiHyphens(message).toLowerCase().includes(wanted);
+  const pattern = new RegExp(source + escapeRegex(wanted.slice(from)));
+  return (message) => pattern.test(asciiHyphens(message).toLowerCase());
+}
+
+/** An ISO date on its own: not part of a date and time (`2026-11-02t11:00`, lowercased) or of an ID (`bk-2026-11-04`). */
+const ISO_DATE = /(?<![\w-])(\d{4})-(\d{2})-(\d{2})(?![\w-])/g;
+
+/** Other spellings of a day's or a month's name, besides its full name and its first three letters. */
+const MORE_NAMES: Record<string, string[]> = { tuesday: ["tues"], wednesday: ["weds"], thursday: ["thur", "thurs"], september: ["sept"] };
+
+/** A name as a regex alternation of how it is written, lowercase, longest first: `wednesday|weds|wed`. */
+const spellings = (name: string) => {
+  const full = name.toLowerCase();
+  return [...new Set([full, ...(MORE_NAMES[full] ?? []), full.slice(0, 3)])].join("|");
+};
+
+/** The suffix of a day of the month said as an ordinal: `st` for 1, `nd` for 22, `th` for 11. */
+const ordinal = (day: number) => (day % 100 >= 11 && day % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][day % 10] ?? "th");
+
+/**
+ * A regex, over lowercased text, for the date `year`-`month`-`day` in words (see replyMatcher), or undefined when it is
+ * no real date, such as 2026-02-30. Weekday and month names are written out here rather than read from Intl, as in
+ * describeClock, so a check grades the same on every machine.
+ */
+function spokenDate(year: number, month: number, day: number): string | undefined {
+  const at = new Date(Date.UTC(year, month - 1, day));
+  if (at.getUTCFullYear() !== year || at.getUTCMonth() !== month - 1 || at.getUTCDate() !== day) return undefined;
+  const weekday = at.getUTCDay();
+  const others = WEEKDAYS.filter((_, i) => i !== weekday).map(spellings).join("|");
+  const name = `(?:${spellings(MONTHS[month - 1]!)})(?![a-z])\\.?`;
+  const nth = `0?${day}(?:${ordinal(day)})?`;
+  const monthFirst = `${name}\\s+${nth}`;
+  const dayFirst = `(?:the\\s+)?(?<![\\w.,-])${nth}(?:\\s+of)?\\s+${name}`;
+  return (
+    // Not right after another weekday, as in "Tuesday, November 4" when it is a Wednesday.
+    `(?<!\\b(?:${others})\\.?,?\\s+(?:the\\s+)?)` +
+    `(?:\\b(?:${spellings(WEEKDAYS[weekday]!)})\\.?,?\\s+)?` +
+    `\\b(?:${monthFirst}|${dayFirst})(?:,?\\s+${year})?` +
+    // Not running on into another word or number: a longer day or a wrong ordinal, a list (4,5 or 4.5), or another year.
+    `(?![a-z\\d]|[.,]\\d|,?\\s+\\d{4}(?!\\d))`
+  );
+}
+
+/** Text as a regex that matches it literally. */
+const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** The tool a `called` or `not_called` entry names. */
 export function expectedTool(e: CallExpect): string {

@@ -72,8 +72,9 @@ tasks:
 ```
 
 - `$today` is the clock's date (`2026-11-02`), `$now` its date and time (`2026-11-02T09:00`). One offset each: `$today+2d`, `$today-1d` (days only), `$now+90m`, `$now-3h`, `$now+1d`. The arithmetic is on the wall clock, with no daylight-saving jumps.
-- A whole string resolves in seed rows, `given.rows` and `given.context`, tools' `ops` and `checks`, `events`, `expect.state`, `called`/`not_called` args, `reference` args, and invariants' `where`/`when`. `${today+2d}` and `${now}` interpolate in `user.instructions`, `opening` and `script`, and in strings in tools' `ops` and `checks`.
-- In a tool with a param named `today` or `now`, that name stays the param.
+- A whole string resolves in seed rows, `given.rows` and `given.context`, tools' params' `default`s (nested ones too: `default: $today`), tools' `ops` and `checks`, `events`, `expect.state`, `called`/`not_called` args, `reference` args, and invariants' `where`/`when`. `${today+2d}` and `${now}` interpolate in the `policy` (`Today is ${today}.`), `user.instructions`, `opening` and `script`, faults' `message`s, `expect.reply_includes`, and strings in tools' `ops` and `checks`. Where only `${...}` interpolates, a bare `$today` stays text.
+- `reply_includes: ["your pickup is ${today+2d}"]` resolves to `your pickup is 2026-11-04`, and any ISO date in a phrase, resolved or literal, also matches it in words: `November 4`, `Nov. 4th`, `4 November`, `the 4th of November`, `Wednesday, November 4, 2026`. Not `November 14`, another year, or the wrong weekday. A date and time (`${now+2h}`) matches only as written, so use it for dates, not times.
+- In a tool with a param named `today` or `now`, that name stays the param, in its `ops`, `checks` and `default`s.
 - With a clock on the domain or any task, `validate` fails on `$today` or `$now` where a task's trials have no clock, and on a malformed offset (`$today+2h`, `$now+5x`). With no clock anywhere, they stay text as before 1.3, and `validate` warns.
 - With a clock, the default agent prompt and the caller's prompt say `It is now Monday, November 2, 2026, 9:00 AM.`, an HTTP agent gets `now` in each request, and a module agent gets `ctx.now`. Each trial records `clock` in results.json, and `regrade` resolves the trial's dates at it, so a `clock: now` run regrades the same on any day. Without a clock, nothing resolves.
 
@@ -235,7 +236,7 @@ When the call itself is the outcome, say which call: `called: [{ tool: transfer_
 | `called: [{ tool, args }]` | some successful call of the tool has arguments matching `args` (a where clause, literal values) |
 | `not_called: [tool]` | each tool was never attempted |
 | `not_called: [{ tool, args }]` | no call of the tool, successful or not, has arguments matching `args` |
-| `reply_includes: [phrase]` | some agent message contains it (case-insensitive substring); use sparingly |
+| `reply_includes: [phrase]` | some agent message contains it (case-insensitive substring; an ISO date in it also matches in words, such as `Wednesday, November 4`); use sparingly |
 
 A task can change the world it starts in with `given`, instead of a seed row only it uses or a copy of the domain:
 
@@ -278,7 +279,7 @@ A task can make its tool calls fail with `faults`, and change the world between 
       - { table: bookings, where: { load_id: L-1001, mc_number: "100101" }, count: 1 }
 ```
 
-`call` counts a tool's calls from 1, leaving out calls with invalid arguments; without it, a fault hits every call. A fault with an `error` stops the call, unless `after_commit: true` (a timeout or server error only): then the tool runs and its write lands. The agent sees the error as a tool error (`message` replaces its text). Invariants still check the call, and it counts as failed for `called` and `before`, so check what landed with `expect.state`. An event's values are literal (no `$arg`, though `$today` resolves against a clock), and its `update` needs a row the task starts with, or one an earlier event after the same call creates. A `reference` call a fault hits needs `expect_error` (such as `expect_error: timed out` or `expect_error: "429"`), and `lint` warns about a fault or event the reference never reaches. In results, the call has `fault: { error, status, committed? }` and `eventChanges`.
+`call` counts a tool's calls from 1, leaving out calls with invalid arguments; without it, a fault hits every call. A fault with an `error` stops the call, unless `after_commit: true` (a timeout or server error only): then the tool runs and its write lands. The agent sees the error as a tool error (`message` replaces its text, and `${now+5m}` in it resolves against a clock). Invariants still check the call, and it counts as failed for `called` and `before`, so check what landed with `expect.state`. An event's values are literal (no `$arg`, though `$today` resolves against a clock), and its `update` needs a row the task starts with, or one an earlier event after the same call creates. A `reference` call a fault hits needs `expect_error` (such as `expect_error: timed out` or `expect_error: "429"`), and `lint` warns about a fault or event the reference never reaches. In results, the call has `fault: { error, status, committed? }` and `eventChanges`.
 
 ## Gotchas
 
