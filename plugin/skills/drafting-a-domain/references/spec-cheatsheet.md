@@ -196,7 +196,7 @@ invariants:
 
 ## Judged criteria
 
-A rule that isn't state, such as tone or reading a booking back, can't be a check on the end state or a tool call. State it as a criterion, for an LLM judge to grade as a score apart from pass/fail. This release only states and validates criteria: no command grades them yet.
+A rule that isn't state, such as tone or reading a booking back, can't be a check on the end state or a tool call. State it as a criterion, for an LLM judge to grade as a score apart from pass/fail. `npx sandtable-ai judge <results.json> -d <domain>` grades them on a stored run, at one model call per trial; `--dry-run` prints the calls and a cost bound for free.
 
 ```yaml
 judged:                                # every task's trials
@@ -216,7 +216,7 @@ tasks:
 ```
 
 - `id` and `criterion` are required and not empty. `id` is unique across the domain's criteria and every task's, and `validate` names both places of a duplicate. `${today+2d}` and `${now}` interpolate in `criterion`: with a clock on the domain or any task, `validate` fails on a malformed offset, and on one where a task's trials have no clock.
-- Criteria change no verdict, pass^k, gate or exit code, aren't shown to the agent or the caller, and stay out of `results.json` and the `inputs` and `grading` hashes. For a rule a tool call or a record can show, measured as a rate, use `soft: true` on an invariant.
+- Criteria change no verdict, pass^k, gate or exit code, aren't shown to the agent or the caller, and stay out of the `inputs` and `grading` hashes. `results.json` says nothing about them until `judge` runs. For a rule a tool call or a record can show, measured as a rate, use `soft: true` on an invariant.
 - A `review: pending` criterion shows in `review` and fails `validate --strict`, but doesn't make a run provisional, since it can't change the score.
 
 ## Tasks and expectations

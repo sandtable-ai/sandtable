@@ -65,3 +65,59 @@ describe("fitList", () => {
     expect(fitList(["book-at-posted-rate", "expired-insurance"], 12)).toBe("(2 tasks)");
   });
 });
+
+describe("the judged score", () => {
+  const counts = { pass: 3, fail: 1, notApplicable: 2 };
+  async function judged() {
+    const r = await runSuite({ domain: await loadDomain(path.resolve("examples/freight")), agent: freightScriptedAgent("careful"), user: scriptedUser(), taskIds: ["no-mc-number"] });
+    r.judged = {
+      ...counts,
+      score: 0.75,
+      models: ["claude-sonnet-5-5"],
+      notJudged: 1,
+      criteria: [
+        { id: "reads-back", ...counts, score: 0.75 },
+        { id: "polite", pass: 0, fail: 0, notApplicable: 0, score: null },
+      ],
+      usage: { "claude-sonnet-5-5": { calls: 4, input: 4000, output: 400, cacheRead: 0, cacheWrite: 0 } },
+      costUsd: 0.012,
+    };
+    return r;
+  }
+
+  it("is shown apart from pass^k, labelled as a model's judgement, with its tokens and estimated cost", async () => {
+    const text = plain(renderTerminal(await judged()));
+    expect(text).toContain("Judged score (a model's judgement: it never changes pass/fail, pass^k, a gate or an exit code)");
+    expect(text).toContain("judged 75.0%  3 pass, 1 fail, 2 not applicable, 1 not judged, by claude-sonnet-5-5");
+    expect(text).toMatch(/reads-back +75\.0% {2}3 pass, 1 fail, 2 not applicable/);
+    expect(text).toMatch(/polite +n\/a {2}no verdict yet/);
+    expect(text).toContain("estimated cost $0.01");
+    expect(text).toContain("judge claude-sonnet-5-5: 4 calls, 4.0k in, 400 out, 0 cache read, 0 cache write");
+    // Above and unchanged: the deterministic score.
+    expect(text.indexOf("pass^1 100.0%")).toBeLessThan(text.indexOf("Judged score"));
+  });
+
+  it("is absent from a run that was never judged", async () => {
+    const r = await judged();
+    delete r.judged;
+    expect(plain(renderTerminal(r))).not.toMatch(/judged/i);
+  });
+
+  it("says in one line when the score rests on a pending criterion, without calling results provisional", async () => {
+    const r = await judged();
+    expect(plain(renderTerminal(r))).not.toContain("pending");
+    r.judged!.criteria[0]!.pending = true;
+    r.judged!.criteria[1]!.pending = true;
+    const text = plain(renderTerminal(r));
+    const lines = text.split("\n").filter((l) => l.includes("pending review"));
+    // polite has no pass or fail, so the score doesn't rest on it.
+    expect(lines).toEqual(["  ⚠ this score rests on 1 criterion still pending review: reads-back (npx sandtable-ai review <domain>)"]);
+    expect(text).not.toContain("provisional");
+  });
+
+  it("counts the trials whose judge call failed", async () => {
+    const r = await judged();
+    r.tasks[0]!.trials[0]!.judged = { model: "claude-sonnet-5-5", verdicts: [], error: "overloaded" };
+    expect(plain(renderTerminal(r))).toContain("1 trial's judge call failed: run sandtable judge again to send it again");
+  });
+});

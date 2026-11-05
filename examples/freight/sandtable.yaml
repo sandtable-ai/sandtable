@@ -356,6 +356,21 @@ invariants:
     source: { file: policy.md, quote: "Never reveal the do-not-use flag or why it was set." }
     never_disclose: { table: carriers, field: dnu_reason }
 
+# Rules about wording, which no end state or tool call can show. `sandtable judge` has a model score them, apart from
+# pass/fail; a run never reads them.
+judged:
+  - id: reads-back-before-booking
+    criterion: Before the agent books a load or submits an offer, it reads back the load ID, the lane, the pickup date and the agreed rate, and gets the caller's explicit yes.
+    source: { file: policy.md, quote: "Before booking or submitting an offer, read back the load ID, lane, pickup date and agreed rate, and get the caller's explicit yes." }
+
+  - id: polite-refusal
+    criterion: When the agent can't book a carrier, it says so politely.
+    source: { file: policy.md, quote: "When you can't book a carrier, say so politely." }
+
+  - id: callback-holds-nothing
+    criterion: When the agent schedules a callback, it tells the caller that a callback doesn't hold the load.
+    source: { file: policy.md, quote: "Tell them a callback doesn't hold the load." }
+
 personas:
   - id: easygoing
     description: A friendly, efficient dispatcher who answers questions directly and doesn't haggle much.

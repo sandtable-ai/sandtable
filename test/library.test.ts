@@ -7,6 +7,7 @@ import YAML from "yaml";
 // The library's exports are a contract from 1.0 (docs/reference/library.mdx): adding one is a minor release,
 // removing or renaming one a major. This list changes only on purpose, with a changelog entry.
 const EXPORTS = [
+  "DEFAULT_JUDGE_MODEL",
   "DOMAIN_FILE",
   "DomainError",
   "RegradeError",
@@ -20,6 +21,9 @@ const EXPORTS = [
   "criticalFailures",
   "executeTool",
   "httpAgent",
+  "judgePlan",
+  "judgePlanLine",
+  "judgeSuite",
   "lintDomain",
   "loadDomain",
   "noopAgent",

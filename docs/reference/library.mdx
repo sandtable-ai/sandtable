@@ -60,6 +60,9 @@ An agent is an `AgentAdapter`: a `name`, and `createSession(ctx)` that returns a
 | `startWorldServer(domain, { port, host? }): Promise<WorldServer>` | Starts the [world server](/guides/black-box) on `host` (default `127.0.0.1`) and `port` (`0` for a free one), for `runSuite({ server })`. `WorldServer` has the base `url`, `open(task, runner, tools?)`, which serves one trial's world and returns its `ServedSession` (`id`, `task`, `runner`, `tools`, `urls`), `close(id)` and `stop()`. `tools` are the trial's tools with their dates resolved at its clock, which MCP `tools/list` shows; left out, the domain's tools as written. `runSuite` opens and closes a session per trial. |
 | `regradeSuite(domain, stored): SuiteResult` | Grades a stored run's trials again under the domain's current rules, without calling a model, as `sandtable regrade` does, with each trial's dates resolved at the `clock` it recorded. Throws `RegradeError` when the agent or the caller would now be given different prompts. |
 | `RegradeError` | The error `regradeSuite` throws for a run it can't regrade. |
+| `judgeSuite({ domain, stored, claude?, concurrency?, onTrial? }): Promise<JudgeOutcome>` | Has a model judge a stored run's trials on the domain's [judged criteria](/reference/spec#judged), as `sandtable judge` does, and returns the run with its judged fields, leaving every other field as stored, with what happened: `sent`, `failed`, `alreadyJudged`, `skipped`, `dropped`, `warnings` and, when a failure every later call would hit stopped it, `stopped`. `onTrial({ trial, result, warnings })` is called and awaited as each call settles, so `result` can be saved. It takes `claude.client` for a test. Throws before any call for a run it can't judge. |
+| `judgePlan(domain, stored, claude?): JudgePlan`, `judgePlanLine(plan)` | What judging would send and cost at most, and the line `judge` prints for it, without credentials or a model call. |
+| `DEFAULT_JUDGE_MODEL` | The model that judges unless `claude.model` says otherwise: `claude-sonnet-5-5`. |
 | `baselineSnapshot(result)` | The per-task results of a run, as `run --baseline` stores them in `results.json`. |
 | `compareRuns(baseline, now): Comparison` | What changed per task between a baseline snapshot and a new run: broken, worse, fixed, better, changed, added, removed. |
 | `criticalFailures(result)` | The critical tasks with a failed trial, which make `run` exit 1. |
@@ -90,6 +93,7 @@ Every type the package exports, by what it describes. Like the values above, the
 | A run and its results | `SuiteOptions`, `SuiteResult`, `TaskSummary`, `TrialResult`, `TrajectoryEvent`, `EndReason`, `CheckResult`, `CheckKind`, `CallRecord`, `Violation`, `FaultApplied`, `SoftCheck`, `SoftScore`, `FailureMode`, `Verdict`, `CallerNote`, `Attribution`, `AttributionCounts`, `Owner`, `Coverage`, `RuleCoverage`, `CoverageCell`, `ToolCoverage`, `TokenUsage`, `UsageByModel`, `Usage`, `UsageRecorder` |
 | Serving the world | `WorldServer`, `WorldServerOptions`, `ServedSession` |
 | Reports | `CustomerReportOptions` |
+| Judging a run | `JudgeOptions`, `JudgeOutcome`, `JudgePlan`, `JudgedVerdict`, `TrialJudgement`, `JudgedCounts`, `JudgedSummary` |
 | Comparing runs, and lint | `BaselineSnapshot`, `Comparison`, `TaskDelta`, `TaskChange`, `LintReport`, `TaskLint`, `RuleLint` |
 
 ## Example: a suite in your test runner
