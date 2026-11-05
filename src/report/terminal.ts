@@ -109,7 +109,7 @@ export function renderJudged(r: SuiteResult): string[] {
   const resting = j.criteria.filter((c) => c.pending && c.pass + c.fail > 0).map((c) => c.id);
   if (resting.length) lines.push(yellow(`  ⚠ this score rests on ${resting.length === 1 ? "1 criterion" : `${resting.length} criteria`} still pending review: ${resting.join(", ")} (npx sandtable-ai review <domain>)`));
   const failed = r.tasks.flatMap((t) => t.trials).filter((tr) => tr.judged?.error !== undefined).length;
-  if (failed) lines.push(yellow(failed === 1 ? "  1 trial's judge call failed: run sandtable judge again to send it again" : `  ${failed} trials' judge calls failed: run sandtable judge again to send them again`));
+  if (failed) lines.push(yellow(failed === 1 ? "  1 trial's judge call failed: run npx sandtable-ai judge again to send it again" : `  ${failed} trials' judge calls failed: run npx sandtable-ai judge again to send them again`));
   const usage = tokenLine("judge", j.usage);
   if (usage) lines.push(dim(`  estimated cost ${formatCost(j.costUsd)}`), dim(`    ${usage}`));
   return lines;

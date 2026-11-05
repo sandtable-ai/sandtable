@@ -118,6 +118,6 @@ describe("the judged score", () => {
   it("counts the trials whose judge call failed", async () => {
     const r = await judged();
     r.tasks[0]!.trials[0]!.judged = { model: "claude-sonnet-5-5", verdicts: [], error: "overloaded" };
-    expect(plain(renderTerminal(r))).toContain("1 trial's judge call failed: run sandtable judge again to send it again");
+    expect(plain(renderTerminal(r))).toContain("1 trial's judge call failed: run npx sandtable-ai judge again to send it again");
   });
 });

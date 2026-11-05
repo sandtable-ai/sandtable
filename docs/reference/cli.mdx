@@ -474,7 +474,7 @@ Each trial gets one call, for the criteria that apply to it: the domain's and it
 
 `results.json` is written after each trial, so Ctrl-C loses at most the calls in flight. Running `judge` again sends only what a trial still lacks: a criterion with no verdict, or one whose text changed. Another model's verdicts don't count, so `-m <other> -o <dir>` gives a second set of verdicts and leaves the first where it was. A trial with a verdict on every criterion, at the same text and from the same model, isn't sent.
 
-The judged score changes no verdict, pass^k, gate or exit code, and every existing field stays as stored: the judge's tokens and cost are in [`judged`](/reference/results-schema#judgedsummary), not in `usage`. The terminal shows the score apart from pass^k, as `regrade` and `report` do for a judged run. The HTML report doesn't show it yet.
+The judged score changes no verdict, pass^k, gate or exit code, and every existing field stays as stored: the judge's tokens and cost are in [`judged`](/reference/results-schema#judgedsummary), not in `usage`. The terminal shows the score apart from pass^k, as `regrade` does for a judged run. The HTML report doesn't show it yet.
 
 It exits 0 when it finishes, even if some calls failed: each is kept as `judged.error` on its trial, the terminal says how many, and the next `judge` sends them again. A failure every later call would hit too, such as missing credentials or an unknown model, stops it with exit 2, and what was judged so far stays written. It never exits 1, since the judged score sets no gate.
 
