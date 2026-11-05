@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `sandtable serve`: `--idle-timeout <minutes>` ends a conversation that gets no request for that long, such as one whose platform never sends its end of call. It is graded as a trial that ended in an error, so it is skipped unless the agent broke a rule. The terminal shows the error, the conversation's world is no longer served, and its end, if it comes later, is answered as already graded. The default is 30 minutes, and `0` turns it off ([#467](https://github.com/sandtable-ai/sandtable/issues/467)).
+
 ## [1.4.0] - 2026-11-04
 
 A minor release with no breaking changes. `$regex` matches text with a JavaScript regular expression in where clauses and in the arguments a task expects, and `sandtable import elevenlabs` drafts an ElevenLabs regex check on a tool's argument as one, anchored so it never passes a value ElevenLabs fails.

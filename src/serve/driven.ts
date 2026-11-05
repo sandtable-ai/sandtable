@@ -14,6 +14,16 @@ import type { TranscriptLine } from "./webhook.ts";
 /** The simulated user's name in a served run's results: someone else drove the conversation. */
 export const EXTERNAL_USER = "external";
 
+/** Minutes a served conversation may go with no request before it is ended without its end, unless told otherwise. */
+export const DEFAULT_IDLE_TIMEOUT = 30;
+/** The longest idle timeout in minutes: a timer can't wait longer than 2^31 - 1 milliseconds, about 24 days. */
+export const MAX_IDLE_TIMEOUT = Math.floor((2 ** 31 - 1) / 60_000);
+
+/** The error a conversation ended for want of a request is graded with. */
+function idleError(minutes: number): string {
+  return `no request and no end of the conversation came within ${minutes} ${minutes === 1 ? "minute" : "minutes"}, so it was ended without one: check that the platform sends its end of call to this server (--idle-timeout ${minutes})`;
+}
+
 /** What `end` answers with: the graded trial's verdict and what failed. */
 export interface GradedAnswer {
   session: string;
@@ -36,6 +46,11 @@ export interface DrivenOptions {
   onGraded?(trial: TrialResult, result: SuiteResult): void | Promise<void>;
   /** The current time, read as each session opens, for `clock: now`: the system clock unless given. */
   now?: () => Date;
+  /**
+   * Minutes a conversation may go with no request before it is ended without its end, a whole number: 0 never ends one.
+   * It is graded then as a trial that ended in an error, so it is skipped unless the agent broke a rule. Default 30.
+   */
+  idleTimeout?: number;
 }
 
 /** An open session's trial: its domain and task with their dates resolved, its world as it started and as it is, and its tool calls with the time each came in. */
@@ -57,6 +72,10 @@ interface OpenSession {
  * sends the transcript. The run so far is `result()`: one task summary per task with a graded conversation.
  */
 export async function serveConversations(domain: Domain, opts: DrivenOptions): Promise<{ server: WorldServer; result(): SuiteResult | undefined; openSessions(): ServedSession[] }> {
+  const idleTimeout = opts.idleTimeout ?? DEFAULT_IDLE_TIMEOUT;
+  if (!Number.isInteger(idleTimeout) || idleTimeout < 0 || idleTimeout > MAX_IDLE_TIMEOUT) {
+    throw new RangeError(`idleTimeout must be a whole number of minutes, 0-${MAX_IDLE_TIMEOUT} (0 never ends a conversation), not ${idleTimeout}`);
+  }
   const startedAt = new Date().toISOString();
   const started = Date.now();
   const runId = `${startedAt.replace(/[-:]/g, "").replace(/\.\d+Z$/, "")}-${Math.random().toString(36).slice(2, 6)}`;
@@ -87,13 +106,7 @@ export async function serveConversations(domain: Domain, opts: DrivenOptions): P
         return session;
       },
       async end(session, transcript, problem) {
-        const st = open.get(session.id)!;
-        open.delete(session.id);
-        server.close(session.id);
-        const trial = gradeConversation(st, transcript, trials.filter((t) => t.taskId === session.task.id).length, problem);
-        trials.push(trial);
-        latest = summary();
-        await opts.onGraded?.(trial, latest);
+        const trial = await grade(session, transcript, problem === undefined ? {} : { problem });
         const answer: GradedAnswer = {
           session: session.id,
           task: session.task.id,
@@ -104,8 +117,24 @@ export async function serveConversations(domain: Domain, opts: DrivenOptions): P
         };
         return answer;
       },
+      idleMs: idleTimeout * 60_000,
+      async idle(session) {
+        await grade(session, undefined, { error: idleError(idleTimeout) });
+      },
     },
   });
+
+  /** A conversation ended: stop serving it, grade it as a trial of its task, and report the run as it stands now. */
+  async function grade(session: ServedSession, transcript: TranscriptLine[] | undefined, ended: Ended): Promise<TrialResult> {
+    const st = open.get(session.id)!;
+    open.delete(session.id);
+    server.close(session.id);
+    const trial = gradeConversation(st, transcript, trials.filter((t) => t.taskId === session.task.id).length, ended);
+    trials.push(trial);
+    latest = summary();
+    await opts.onGraded?.(trial, latest);
+    return trial;
+  }
 
   /** The run so far: the tasks with a graded conversation, k their most trials. */
   function summary(): SuiteResult {
@@ -134,14 +163,22 @@ export async function serveConversations(domain: Domain, opts: DrivenOptions): P
 }
 
 /**
+ * How a conversation ended, besides its transcript. `problem`: nothing in it can be trusted to be this call's, such as
+ * another call's requests in its world. `error`: it ended without its end, such as when no request came for too long.
+ */
+interface Ended {
+  problem?: string;
+  error?: string;
+}
+
+/**
  * Grade a conversation another system drove: the end state, the invariants and the tools called, and, with a
  * transcript, what the agent said. The tool calls go between the transcript's lines by time when every line has one;
  * otherwise all of them come before the agent's first line. Without a transcript, a task that checks what the agent
- * said can't be graded on it, so the trial ends in an error: skipped, unless the agent broke a rule. With `problem`,
- * such as another call's requests in its world, nothing in it can be trusted to be this call's: the trial ends in that
- * error, and is skipped whatever it shows.
+ * said can't be graded on it, so the trial ends in an error: skipped, unless the agent broke a rule. So does a trial
+ * that ended in an `error`. With a `problem`, the trial ends in that error, and is skipped whatever it shows.
  */
-function gradeConversation(st: OpenSession, transcript: TranscriptLine[] | undefined, trial: number, problem?: string): TrialResult {
+function gradeConversation(st: OpenSession, transcript: TranscriptLine[] | undefined, trial: number, { problem, error: endError }: Ended = {}): TrialResult {
   const { domain, task, clock } = st;
   const lines = transcript ?? [];
   const said = (l: TranscriptLine): TrajectoryEvent => (l.role === "user" ? { type: "user", text: l.text } : { type: "agent", text: l.text, latencyMs: 0 });
@@ -157,6 +194,7 @@ function gradeConversation(st: OpenSession, transcript: TranscriptLine[] | undef
   const agentMessages = lines.filter((l) => l.role === "agent").map((l) => l.text);
   const error =
     problem ??
+    endError ??
     (transcript === undefined && task.expect.reply_includes.length
       ? "the conversation ended without a transcript, so what the agent said can't be graded: send one to POST /sessions/<id>/end, or have the platform send its end-of-call report"
       : undefined);
