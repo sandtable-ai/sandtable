@@ -1,4 +1,4 @@
-import { MONTHS, WEEKDAYS } from "../spec/clock.ts";
+import { MONTHS, WEEKDAYS, type ResolvedPhrase } from "../spec/clock.ts";
 import type { CallExpect, StateAssert, Task } from "../spec/schema.ts";
 import { matches, mismatch, type Row } from "../world/match.ts";
 import type { World } from "../world/store.ts";
@@ -19,13 +19,18 @@ export interface CheckResult {
  */
 export function gradeTrial(input: {
   task: Task;
+  /**
+   * The task's `reply_includes` resolved in pieces, as resolveTrial gives them: a date that a phrase wrote as
+   * `${today...}` may also be said in words. Without them, a phrase matches as written.
+   */
+  phrases?: readonly ResolvedPhrase[];
   world: World;
   calls: readonly CallRecord[];
   agentMessages: readonly string[];
   violations: readonly Violation[];
   error?: string;
 }): { passed: boolean; checks: CheckResult[] } {
-  const { task, world, calls, agentMessages, violations, error } = input;
+  const { task, phrases, world, calls, agentMessages, violations, error } = input;
   const checks: CheckResult[] = [];
 
   if (error) checks.push({ id: "runtime", kind: "runtime", passed: false, detail: error });
@@ -39,8 +44,8 @@ export function gradeTrial(input: {
   for (const e of task.expect.called) checks.push(checkCalled(e, calls));
   for (const e of task.expect.not_called) checks.push(checkNotCalled(e, calls));
 
-  for (const phrase of task.expect.reply_includes) {
-    const said = replyMatcher(phrase);
+  task.expect.reply_includes.forEach((phrase, i) => {
+    const said = replyMatcher(phrase, phrases?.[i]);
     const ok = agentMessages.some(said);
     checks.push({
       id: `reply:${phrase}`,
@@ -48,35 +53,35 @@ export function gradeTrial(input: {
       passed: ok,
       detail: ok ? `agent said "${phrase}"` : `agent never said "${phrase}"`,
     });
-  }
+  });
 
   return { passed: checks.every((c) => c.passed), checks };
 }
 
 /**
  * Whether a message says `phrase`, as `reply_includes` checks it: as text, case-insensitive, with U+2010 and U+2011 read
- * as `-`. An ISO date in the phrase (`2026-11-04`), standing alone rather than in a date and time or an ID, may also be
- * said in words, as an en-US speaker says it: `November 4`, `Nov. 4th`, `4 November`, `the 4th of November`, with an
- * optional weekday before it (`Wednesday, November 4`) and year after it (`November 4, 2026`). A weekday that isn't the
- * date's, or a day or year that runs on into another number (`November 14`, `November 4,5`, `November 4, 2027`), isn't it.
+ * as `-`. Each date in `pieces` that came from a `${today...}` in the phrase as written may also be said in words, as an
+ * en-US speaker says it: `November 4`, `Nov. 4th`, `4 November`, `the 4th of November`, with an optional weekday before
+ * it (`Wednesday, November 4`) and year after it (`November 4, 2026`). A weekday that isn't the date's, or a day or year
+ * that runs on into another number (`November 14`, `November 4,5`, `November 4, 2027`), isn't it. A date written
+ * literally in the phrase matches only as written, as it did before dates resolved there.
  */
-export function replyMatcher(phrase: string): (message: string) => boolean {
-  const wanted = asciiHyphens(phrase).toLowerCase();
-  let source = "";
-  let from = 0;
-  for (const m of wanted.matchAll(ISO_DATE)) {
-    const words = spokenDate(Number(m[1]), Number(m[2]), Number(m[3]));
-    if (words === undefined) continue;
-    source += `${escapeRegex(wanted.slice(from, m.index))}(?:${escapeRegex(m[0])}|${words})`;
-    from = m.index + m[0].length;
+export function replyMatcher(phrase: string, pieces?: ResolvedPhrase): (message: string) => boolean {
+  const asWritten = asciiHyphens(phrase).toLowerCase();
+  // Pieces that don't make up this phrase, such as another task's, say nothing about its dates.
+  if (!pieces?.some((p) => p.date) || pieces.map((p) => p.text).join("") !== phrase) {
+    return (message) => asciiHyphens(message).toLowerCase().includes(asWritten);
   }
-  if (!source) return (message) => asciiHyphens(message).toLowerCase().includes(wanted);
-  const pattern = new RegExp(source + escapeRegex(wanted.slice(from)));
+  const source = pieces
+    .map((p) => {
+      const text = escapeRegex(asciiHyphens(p.text).toLowerCase());
+      const words = p.date ? spokenDate(p.text) : undefined;
+      return words === undefined ? text : `(?:${text}|${words})`;
+    })
+    .join("");
+  const pattern = new RegExp(source);
   return (message) => pattern.test(asciiHyphens(message).toLowerCase());
 }
-
-/** An ISO date on its own: not part of a date and time (`2026-11-02t11:00`, lowercased) or of an ID (`bk-2026-11-04`). */
-const ISO_DATE = /(?<![\w-])(\d{4})-(\d{2})-(\d{2})(?![\w-])/g;
 
 /** Other spellings of a day's or a month's name, besides its full name and its first three letters. */
 const MORE_NAMES: Record<string, string[]> = { tuesday: ["tues"], wednesday: ["weds"], thursday: ["thur", "thurs"], september: ["sept"] };
@@ -91,11 +96,14 @@ const spellings = (name: string) => {
 const ordinal = (day: number) => (day % 100 >= 11 && day % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][day % 10] ?? "th");
 
 /**
- * A regex, over lowercased text, for the date `year`-`month`-`day` in words (see replyMatcher), or undefined when it is
- * no real date, such as 2026-02-30. Weekday and month names are written out here rather than read from Intl, as in
- * describeClock, so a check grades the same on every machine.
+ * A regex, over lowercased text, for an ISO date such as `2026-11-04` in words (see replyMatcher), or undefined when it
+ * is no real date. Weekday and month names are written out here rather than read from Intl, as in describeClock, so a
+ * check grades the same on every machine.
  */
-function spokenDate(year: number, month: number, day: number): string | undefined {
+function spokenDate(iso: string): string | undefined {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return undefined;
+  const [year, month, day] = [Number(m[1]), Number(m[2]), Number(m[3])];
   const at = new Date(Date.UTC(year, month - 1, day));
   if (at.getUTCFullYear() !== year || at.getUTCMonth() !== month - 1 || at.getUTCDate() !== day) return undefined;
   const weekday = at.getUTCDay();

@@ -1,6 +1,6 @@
 import { gradeTrial, isSkipped, type CheckResult } from "../grade/expectations.ts";
 import { checkTranscript, invariantTool, type CallRecord, type FaultApplied, type Violation } from "../grade/invariants.ts";
-import { resolveTrial } from "../spec/clock.ts";
+import { resolveTrial, type ResolvedPhrase } from "../spec/clock.ts";
 import type { Domain, Task } from "../spec/schema.ts";
 import { agentSystemPrompt, taskContext, type AgentPromptOptions } from "../sim/prompts.ts";
 import type { AgentAdapter, CallTool, UserSimulator } from "../sim/types.ts";
@@ -106,7 +106,7 @@ export async function runEpisode(input: {
   const started = performance.now();
   // Dates relative to the clock resolve once, as the trial starts: the world, the tools, the prompts and the grading
   // after this all see plain values.
-  const { domain, task, clock } = resolveTrial(input.domain, input.task, input.now?.());
+  const { domain, task, clock, phrases } = resolveTrial(input.domain, input.task, input.now?.());
   const world = worldFor(domain, task);
   const initial = world.snapshot();
   const events: TrajectoryEvent[] = [];
@@ -123,7 +123,7 @@ export async function runEpisode(input: {
   let error: string | undefined;
 
   // Served for the whole trial, so its calls over HTTP go through the same runner as in-process ones.
-  const served = input.server?.open(task, runner);
+  const served = input.server?.open(task, runner, domain.tools);
   try {
     const session = await agent.createSession({
       domain,
@@ -172,7 +172,7 @@ export async function runEpisode(input: {
     taskId: task.id,
     trial,
     ...(clock ? { clock } : {}),
-    ...gradeEpisode({ domain, task, world, runner, events, agentMessages, error, ...(prompt ? { prompt } : {}) }),
+    ...gradeEpisode({ domain, task, world, runner, events, agentMessages, error, ...(prompt ? { prompt } : {}), ...(phrases ? { phrases } : {}) }),
     events,
     changes: worldChanges(domain, initial, world),
     endReason,
@@ -216,12 +216,14 @@ export function gradeEpisode(input: {
   error?: string;
   /** How the agent was prompted, so a value counts as shown to it only if its prompt held it. */
   prompt?: AgentPromptOptions;
+  /** The task's `reply_includes` in pieces, as resolveTrial resolved them: the dates a reply may say in words. */
+  phrases?: readonly ResolvedPhrase[];
 }): Pick<TrialResult, "passed" | "skipped" | "checks" | "violations" | "soft" | "callerNotes"> {
-  const { domain, task, world, runner, events, agentMessages, error, prompt } = input;
+  const { domain, task, world, runner, events, agentMessages, error, prompt, phrases } = input;
   const said = checkTranscript(domain, world, runner.calls, events, agentSystemPrompt(domain, task, prompt));
   const violations: Violation[] = [...runner.violations, ...said.filter((v) => !v.soft)];
   const soft = softChecks(domain, runner.calls, agentMessages.length, [...runner.soft, ...said.filter((v) => v.soft)]);
-  const { passed, checks } = gradeTrial({ task, world, calls: runner.calls, agentMessages, violations, error });
+  const { passed, checks } = gradeTrial({ task, ...(phrases ? { phrases } : {}), world, calls: runner.calls, agentMessages, violations, error });
   const notes = callerNotes(events);
   return { passed, ...(isSkipped(checks, error) ? { skipped: true as const } : {}), checks, violations, soft, ...(notes.length ? { callerNotes: notes } : {}) };
 }

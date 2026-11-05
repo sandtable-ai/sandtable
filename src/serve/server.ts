@@ -30,14 +30,16 @@ export interface ServedSession {
   id: string;
   task: Task;
   runner: ToolRunner;
+  /** The tools as this session's trial resolved them at its clock (see resolveTrial): what MCP `tools/list` shows. The domain's, as written, when left out. */
+  tools?: readonly Tool[];
   urls: WorldUrls;
 }
 
 export interface WorldServer {
   /** The base URL, such as `http://127.0.0.1:4010`. */
   url: string;
-  /** Serve one trial's world, through the runner its episode uses. */
-  open(task: Task, runner: ToolRunner): ServedSession;
+  /** Serve one trial's world, through the runner its episode uses, listing `tools`, its tools as its trial resolved them. */
+  open(task: Task, runner: ToolRunner, tools?: readonly Tool[]): ServedSession;
   /** Stop serving a trial: its URLs answer 404 from then on. */
   close(id: string): void;
   /** Stop listening, and clear the clocks of conversations still open. */
@@ -223,6 +225,12 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
 
   /** The answer to a late end of a session that was ended for want of a request: it was graded then. */
   const alreadyGraded = (id: string) => ({ ignored: `session ${id} has ended, and its conversation was graded` });
+
+  /** The session a request without `/s/<id>` would go to, without opening one: the one trial running, if just one is. */
+  function running(): ServedSession | undefined {
+    const open = [...sessions.values()].filter((s) => !keyedIds.has(s.id));
+    return open.length === 1 ? open[0] : undefined;
+  }
 
   /** The session a request without `/s/<id>` is for: the one trial that is running, or, driven, a new one. */
   function current(): ServedSession {
@@ -443,7 +451,9 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
         }
         return (await callIn(s, name, args, "mcp")).outcome;
       };
-      const out = await mcpBody(domain, body, call);
+      // The tools as the session the request is for resolved them, without opening one; as written when there is none.
+      const listed = (session ?? mcpSession ?? opened ?? running())?.tools ?? domain.tools;
+      const out = await mcpBody({ name: domain.name, tools: listed }, body, call);
       if (out === undefined) send(res, 202, undefined);
       else send(res, 200, out);
       return;
@@ -535,10 +545,10 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
 
   return {
     url: base,
-    open(task, runner) {
+    open(task, runner, tools) {
       const id = `t${next++}`;
       const at = `${base}/s/${id}`;
-      const session = { id, task, runner, urls: { url: at, mcp: `${at}/mcp`, webhook: `${at}/webhook` } };
+      const session = { id, task, runner, ...(tools ? { tools } : {}), urls: { url: at, mcp: `${at}/mcp`, webhook: `${at}/webhook` } };
       sessions.set(id, session);
       return touch(session);
     },

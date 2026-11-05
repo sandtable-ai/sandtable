@@ -44,7 +44,7 @@ export function regradeTrial(written: Domain, trial: TrialResult, prompt: AgentP
   const writtenTask = written.tasks.find((t) => t.id === trial.taskId);
   if (!writtenTask) throw new RegradeError(`task ${trial.taskId} is not in ${written.name}`);
   const clock = regradeClock(written, writtenTask, trial);
-  const { domain, task } = clock === undefined ? { domain: written, task: writtenTask } : resolveDates(written, writtenTask, clock);
+  const { domain, task, phrases } = clock === undefined ? { domain: written, task: writtenTask, phrases: undefined } : resolveDates(written, writtenTask, clock);
   const world = worldFor(domain, task);
   const initial = world.snapshot();
   const events: TrajectoryEvent[] = [];
@@ -64,7 +64,7 @@ export function regradeTrial(written: Domain, trial: TrialResult, prompt: AgentP
   return {
     ...stored,
     ...(clock !== undefined ? { clock } : {}),
-    ...gradeEpisode({ domain, task, world, runner, events, agentMessages, prompt, ...(trial.error !== undefined ? { error: trial.error } : {}) }),
+    ...gradeEpisode({ domain, task, world, runner, events, agentMessages, prompt, ...(phrases ? { phrases } : {}), ...(trial.error !== undefined ? { error: trial.error } : {}) }),
     events,
     changes: worldChanges(domain, initial, world),
   };

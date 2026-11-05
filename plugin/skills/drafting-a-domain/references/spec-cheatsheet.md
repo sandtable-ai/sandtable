@@ -73,9 +73,9 @@ tasks:
 
 - `$today` is the clock's date (`2026-11-02`), `$now` its date and time (`2026-11-02T09:00`). One offset each: `$today+2d`, `$today-1d` (days only), `$now+90m`, `$now-3h`, `$now+1d`. The arithmetic is on the wall clock, with no daylight-saving jumps.
 - A whole string resolves in seed rows, `given.rows` and `given.context`, tools' params' `default`s (nested ones too: `default: $today`), tools' `ops` and `checks`, `events`, `expect.state`, `called`/`not_called` args, `reference` args, and invariants' `where`/`when`. `${today+2d}` and `${now}` interpolate in the `policy` (`Today is ${today}.`), `user.instructions`, `opening` and `script`, faults' `message`s, `expect.reply_includes`, and strings in tools' `ops` and `checks`. Where only `${...}` interpolates, a bare `$today` stays text.
-- `reply_includes: ["your pickup is ${today+2d}"]` resolves to `your pickup is 2026-11-04`, and any ISO date in a phrase, resolved or literal, also matches it in words: `November 4`, `Nov. 4th`, `4 November`, `the 4th of November`, `Wednesday, November 4, 2026`. Not `November 14`, another year, or the wrong weekday. A date and time (`${now+2h}`) matches only as written, so use it for dates, not times.
+- `reply_includes: ["your pickup is ${today+2d}"]` resolves to `your pickup is 2026-11-04`, and a date written as `${today...}` also matches in words: `November 4`, `Nov. 4th`, `4 November`, `the 4th of November`, `Wednesday, November 4, 2026`. Not `November 14`, another year, or the wrong weekday. A literal `2026-11-04` matches only as written, as before, and so does a date and time (`${now+2h}`): use it for dates, not times.
 - In a tool with a param named `today` or `now`, that name stays the param, in its `ops`, `checks` and `default`s.
-- With a clock on the domain or any task, `validate` fails on `$today` or `$now` where a task's trials have no clock, and on a malformed offset (`$today+2h`, `$now+5x`). With no clock anywhere, they stay text as before 1.3, and `validate` warns.
+- With a clock on the domain or any task, `validate` fails on `$today` or `$now` where a task's trials have no clock, and on a malformed offset (`$today+2h`, `$now+5x`); in the policy, `default`s, faults' `message`s and `reply_includes` it only warns, and they stay text, as in 1.4. With no clock anywhere, they stay text as before 1.3, and `validate` warns.
 - With a clock, the default agent prompt and the caller's prompt say `It is now Monday, November 2, 2026, 9:00 AM.`, an HTTP agent gets `now` in each request, and a module agent gets `ctx.now`. Each trial records `clock` in results.json, and `regrade` resolves the trial's dates at it, so a `clock: now` run regrades the same on any day. Without a clock, nothing resolves.
 
 ## Tools
@@ -236,7 +236,7 @@ When the call itself is the outcome, say which call: `called: [{ tool: transfer_
 | `called: [{ tool, args }]` | some successful call of the tool has arguments matching `args` (a where clause, literal values) |
 | `not_called: [tool]` | each tool was never attempted |
 | `not_called: [{ tool, args }]` | no call of the tool, successful or not, has arguments matching `args` |
-| `reply_includes: [phrase]` | some agent message contains it (case-insensitive substring; an ISO date in it also matches in words, such as `Wednesday, November 4`); use sparingly |
+| `reply_includes: [phrase]` | some agent message contains it (case-insensitive substring; a `${today...}` date in it also matches in words, such as `Wednesday, November 4`); use sparingly |
 
 A task can change the world it starts in with `given`, instead of a seed row only it uses or a copy of the domain:
 

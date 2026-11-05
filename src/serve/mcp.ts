@@ -1,4 +1,4 @@
-import type { Domain } from "../spec/schema.ts";
+import type { Tool } from "../spec/schema.ts";
 import { version } from "../version.ts";
 import { isPlainObject } from "../world/match.ts";
 import { toolSchema, type ToolOutcome } from "../world/tools.ts";
@@ -25,8 +25,14 @@ export type McpCall = (name: string, args: unknown) => Promise<ToolOutcome | { n
 
 const error = (id: JsonRpcId, code: number, message: string): JsonRpcResponse => ({ jsonrpc: "2.0", id, error: { code, message } });
 
+/** What the MCP server serves: the domain's name, and its tools as the session the request is for resolved them. */
+export interface McpServed {
+  name: string;
+  tools: readonly Tool[];
+}
+
 /** The response to one JSON-RPC message, or undefined for a notification or a response, which need none. */
-export async function mcpMessage(domain: Domain, message: unknown, call: McpCall): Promise<JsonRpcResponse | undefined> {
+export async function mcpMessage(domain: McpServed, message: unknown, call: McpCall): Promise<JsonRpcResponse | undefined> {
   if (!isPlainObject(message) || message.jsonrpc !== "2.0") return error(null, -32600, "Invalid Request: expected a JSON-RPC 2.0 message");
   if (typeof message.method !== "string") return undefined;
   if (!("id" in message)) return undefined;
@@ -72,7 +78,7 @@ export async function mcpMessage(domain: Domain, message: unknown, call: McpCall
 }
 
 /** The response to a POST's body: one message or a batch. Undefined when nothing needs an answer (HTTP 202). */
-export async function mcpBody(domain: Domain, body: unknown, call: McpCall): Promise<unknown> {
+export async function mcpBody(domain: McpServed, body: unknown, call: McpCall): Promise<unknown> {
   if (Array.isArray(body)) {
     const out = (await Promise.all(body.map((m) => mcpMessage(domain, m, call)))).filter((r) => r !== undefined);
     return out.length ? out : undefined;

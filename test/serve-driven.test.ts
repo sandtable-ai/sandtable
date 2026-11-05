@@ -9,7 +9,7 @@ import { MAX_IDLE_TIMEOUT, serveConversations, type DrivenOptions } from "../src
 import type { SuiteResult } from "../src/run/suite.ts";
 import type { TrialResult } from "../src/run/episode.ts";
 import { loadDomain } from "../src/spec/load.ts";
-import { TaskSpec, type Domain, type Task } from "../src/spec/schema.ts";
+import { TaskSpec, ToolSpec, type Domain, type Task } from "../src/spec/schema.ts";
 
 // sandtable serve (#444): conversations another system drives, such as a hosted voice platform's test calls, each
 // graded when it ends. Every request goes to a server on 127.0.0.1.
@@ -422,6 +422,32 @@ describe("sandtable serve: a conversation whose end never comes (#467)", () => {
     expect(served.openSessions()).toHaveLength(1);
     await served.server.stop();
     expect(clear).toHaveBeenCalledWith(timer);
+  });
+});
+
+describe("sandtable serve: dates relative to the clock (#465)", () => {
+  it("an MCP connection lists the tools as its session resolved them, and its reply is graded on the date said in words", async () => {
+    const pickups = ToolSpec.parse({
+      name: "pickups_from",
+      description: "Loads that pick up from a date on: today unless the caller says otherwise.",
+      params: { from: { type: "string", required: false, default: "$today" } },
+      ops: [{ respond: { from: "$from" } }],
+    });
+    const freight = await loadDomain(example);
+    const t = task({ expect: { called: ["pickups_from"], reply_includes: ["Your pickup is ${today+2d}"] } });
+    const domain: Domain = { ...freight, clock: "now", tools: [...freight.tools, pickups], tasks: [t] };
+    // Tuesday, November 3, 2026, 9:00 on this machine's clock.
+    const { url, graded } = await start(domain, t, { now: () => new Date(2026, 10, 3, 9, 0) });
+    const rpc = (id: number, method: string, params: unknown, headers: Record<string, string> = {}) => post(`${url}/mcp`, { jsonrpc: "2.0", id, method, params }, headers);
+    const init = await rpc(1, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "0" } });
+    const session = init.headers.get("mcp-session-id")!;
+    const listed = (await rpc(2, "tools/list", {}, { "mcp-session-id": session })).body.result.tools as { name: string; inputSchema: { properties: Record<string, { default?: unknown }> } }[];
+    expect(listed.find((x) => x.name === "pickups_from")!.inputSchema.properties.from!.default).toBe("2026-11-03");
+    const called = (await rpc(3, "tools/call", { name: "pickups_from", arguments: {} }, { "mcp-session-id": session })).body.result;
+    expect(JSON.parse(called.content[0].text)).toEqual({ from: "2026-11-03" });
+    const end = await post(`${url}/sessions/${session}/end`, { transcript: [{ role: "agent", text: "Your pickup is Thursday, November 5." }] });
+    expect(end.body).toMatchObject({ passed: true });
+    expect(graded[0]!.checks.filter((c) => c.kind === "reply")).toEqual([{ id: "reply:Your pickup is 2026-11-05", kind: "reply", passed: true, detail: 'agent said "Your pickup is 2026-11-05"' }]);
   });
 });
 

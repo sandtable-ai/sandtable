@@ -6,6 +6,7 @@ import { binom, passHatK } from "../src/grade/passk.ts";
 import { runEpisode } from "../src/run/episode.ts";
 import { createToolRunner } from "../src/run/tool-runner.ts";
 import type { AgentAdapter, UserSimulator } from "../src/sim/types.ts";
+import { resolveTrial } from "../src/spec/clock.ts";
 import { loadDomain } from "../src/spec/load.ts";
 import { InvariantSpec, TaskSpec, type Domain, type Invariant } from "../src/spec/schema.ts";
 import { World, worldFor } from "../src/world/store.ts";
@@ -476,17 +477,19 @@ describe("Unicode hyphens are graded like -", () => {
   });
 });
 
-describe("reply_includes with a date (#465)", () => {
-  /** The reply check of a task that expects `phrase`, after the agent said `messages`. */
-  const reply = (phrase: string, ...messages: string[]) => {
+describe("reply_includes with a date from the clock (#465)", () => {
+  const CLOCK = "2026-11-02T09:00";
+  /** The reply check of a task that expects `phrase`, resolved at `clock` as a trial resolves it, after the agent said `messages`. */
+  const reply = (phrase: string, messages: string[], clock: string | null = CLOCK) => {
     const task = TaskSpec.parse({ id: "t", user: { instructions: "x" }, expect: { reply_includes: [phrase] } });
-    return gradeTrial({ task, world: new World(domain.world), calls: [], agentMessages: messages, violations: [] }).checks[0]!;
+    const trial = resolveTrial({ ...domain, ...(clock ? { clock } : {}), tasks: [task] }, task);
+    return gradeTrial({ task: trial.task, phrases: trial.phrases, world: new World(domain.world), calls: [], agentMessages: messages, violations: [] }).checks[0]!;
   };
-  const says = (phrase: string, message: string) => reply(phrase, message).passed;
-  // Wednesday, November 4, 2026.
-  const PHRASE = "Your pickup is 2026-11-04";
+  const says = (phrase: string, message: string, clock?: string | null) => reply(phrase, [message], clock).passed;
+  // Two days after Monday, November 2, 2026: Wednesday, November 4.
+  const PHRASE = "Your pickup is ${today+2d}";
 
-  it("matches an ISO date as written, or in the words an en-US speaker uses, case-insensitive", () => {
+  it("matches a date written as ${today...} as resolved, or in the words an en-US speaker uses, case-insensitive", () => {
     for (const said of [
       "Your pickup is 2026-11-04.",
       "your pickup is November 4.",
@@ -502,7 +505,7 @@ describe("reply_includes with a date (#465)", () => {
       "Your pickup is Wed, Nov 4",
       "Your pickup is Wed. the 4th of Nov.",
       "YOUR PICKUP IS NOVEMBER 4TH, 2026!",
-      "Your pickup is November 4",
+      "Your pickup is November\u00a04",
     ]) {
       expect(says(PHRASE, said), said).toBe(true);
     }
@@ -529,8 +532,8 @@ describe("reply_includes with a date (#465)", () => {
       expect(says(PHRASE, said), said).toBe(false);
     }
     // A weekday that contradicts the date also fails a phrase that is the date alone.
-    expect(says("2026-11-04", "That's Tuesday, November 4.")).toBe(false);
-    expect(says("2026-11-04", "That's Wednesday, November 4.")).toBe(true);
+    expect(says("${today+2d}", "That's Tuesday, November 4.")).toBe(false);
+    expect(says("${today+2d}", "That's Wednesday, November 4.")).toBe(true);
   });
 
   it("knows each month's names and each day's ordinal", () => {
@@ -547,35 +550,43 @@ describe("reply_includes with a date (#465)", () => {
       ["2026-10-31", "Saturday the 31st of October"],
       ["2028-02-29", "Tuesday, February 29, 2028"],
     ];
-    for (const [date, said] of cases) expect(says(date, `It's ${said}.`), `${date}: ${said}`).toBe(true);
+    for (const [date, said] of cases) expect(says("${today}", `It's ${said}.`, `${date}T09:00`), `${date}: ${said}`).toBe(true);
     // The wrong ordinal is not one.
-    expect(says("2026-11-02", "November 2th")).toBe(false);
-    expect(says("2026-11-11", "November 11st")).toBe(false);
+    expect(says("${today}", "November 2th")).toBe(false);
+    expect(says("${today+9d}", "November 11st")).toBe(false);
   });
 
-  it("matches each date in a phrase, written literally or resolved from the clock, with the rest of the phrase as before", () => {
-    expect(says("from 2026-11-04 to 2026-11-06", "From Wednesday, Nov 4 to Friday, Nov 6.")).toBe(true);
-    expect(says("from 2026-11-04 to 2026-11-06", "From Wednesday, Nov 4 to Friday, Nov 7.")).toBe(false);
+  it("matches each date from the clock in a phrase, with the rest of the phrase as before", () => {
+    expect(says("from ${today+2d} to ${today+4d}", "From Wednesday, Nov 4 to Friday, Nov 6.")).toBe(true);
+    expect(says("from ${today+2d} to ${today+4d}", "From Wednesday, Nov 4 to Friday, Nov 7.")).toBe(false);
     // U+2011 in the agent's message still reads as -, around a date said in words too.
-    expect(says("L-1001 picks up 2026-11-04", "L‑1001 picks up Nov 4.")).toBe(true);
+    expect(says("L-1001 picks up ${today+2d}", "L‑1001 picks up Nov 4.")).toBe(true);
     // The rest of the phrase is still exact text.
-    expect(says("L-1001 picks up 2026-11-04", "L-1002 picks up Nov 4.")).toBe(false);
+    expect(says("L-1001 picks up ${today+2d}", "L-1002 picks up Nov 4.")).toBe(false);
     // Regex characters in the phrase are text.
-    expect(says("(rate $2,100) on 2026-11-04?", "(Rate $2,100) on November 4?")).toBe(true);
+    expect(says("(rate $2,100) on ${today+2d}?", "(Rate $2,100) on November 4?")).toBe(true);
   });
 
-  it("leaves a date and time, a date inside an ID, and a date that doesn't exist as written", () => {
-    expect(says("call back at 2026-11-02T11:00", "Call back at 2026-11-02T11:00.")).toBe(true);
-    expect(says("call back at 2026-11-02T11:00", "Call back at November 2 at 11:00.")).toBe(false);
-    expect(says("ref BK-2026-11-04", "ref BK-November 4")).toBe(false);
-    expect(says("ref BK-2026-11-04", "Ref BK-2026-11-04.")).toBe(true);
-    expect(says("2026-02-30", "February 30")).toBe(false);
-    expect(says("2026-02-30", "on 2026-02-30")).toBe(true);
+  it("matches a date written literally only as written, as before, beside one from the clock", () => {
+    expect(says("Your pickup is 2026-11-04", "Your pickup is November 4.")).toBe(false);
+    expect(says("Your pickup is 2026-11-04", "your pickup is 2026-11-04.")).toBe(true);
+    expect(says("${today+2d}, not 2026-11-05", "Wednesday, November 4, not 2026-11-05")).toBe(true);
+    expect(says("${today+2d}, not 2026-11-05", "Wednesday, November 4, not November 5")).toBe(false);
+  });
+
+  it("leaves a date and time, a malformed expression, and a phrase in a domain with no clock as written", () => {
+    expect(says("call back at ${now+2h}", "Call back at 2026-11-02T11:00.")).toBe(true);
+    expect(says("call back at ${now+2h}", "Call back at November 2 at 11:00.")).toBe(false);
+    expect(says("on ${today+2x}", "On ${today+2x}.")).toBe(true);
+    expect(says("on ${today+2x}", "On November 4.")).toBe(false);
+    expect(says(PHRASE, "Your pickup is ${today+2d}", null)).toBe(true);
+    expect(says(PHRASE, "Your pickup is Wednesday, November 4.", null)).toBe(false);
   });
 
   it("names the check after the phrase as resolved, and looks in every message", () => {
-    expect(reply(PHRASE, "Hello.", "Your pickup is Wednesday, November 4.")).toEqual({ id: `reply:${PHRASE}`, kind: "reply", passed: true, detail: `agent said "${PHRASE}"` });
-    expect(reply(PHRASE, "Hello.")).toEqual({ id: `reply:${PHRASE}`, kind: "reply", passed: false, detail: `agent never said "${PHRASE}"` });
+    const resolved = "Your pickup is 2026-11-04";
+    expect(reply(PHRASE, ["Hello.", "Your pickup is Wednesday, November 4."])).toEqual({ id: `reply:${resolved}`, kind: "reply", passed: true, detail: `agent said "${resolved}"` });
+    expect(reply(PHRASE, ["Hello."])).toEqual({ id: `reply:${resolved}`, kind: "reply", passed: false, detail: `agent never said "${resolved}"` });
   });
 });
 

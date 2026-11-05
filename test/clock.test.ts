@@ -474,14 +474,16 @@ describe("dates in the policy, param defaults, fault messages and reply_includes
     const tuesday = await runSuite({ domain, agent, user: scriptedUser(), now: () => TUESDAY });
     expect(tuesday.tasks[0]!.trials[0]!.checks.filter((c) => c.kind === "reply")).toEqual([{ id: "reply:Your pickup is 2026-11-05", kind: "reply", passed: false, detail: 'agent never said "Your pickup is 2026-11-05"' }]);
     expect([tuesday.inputs, tuesday.tasks[0]!.inputs, tuesday.tasks[0]!.grading]).toEqual([monday.inputs, monday.tasks[0]!.inputs, monday.tasks[0]!.grading]);
-    // A regrade the next day resolves them with the trial's recorded clock, so it gives the same verdict.
+    // A regrade the next day resolves them with the trial's recorded clock, so it gives the same verdict, the date said in words included.
     const stored = JSON.parse(JSON.stringify(monday)) as SuiteResult;
-    expect(regradeSuite(domain, stored).tasks[0]!.trials[0]!.passed).toBe(true);
+    expect(regradeSuite(domain, stored).tasks[0]!.trials[0]!.checks).toEqual(trial.checks);
   });
 
   describe("validate", () => {
-    const problems = (patch: Record<string, unknown>) => validateDomain(DomainSpec.parse({ ...raw(), ...patch }));
-    const NEEDS = "needs a clock: set `clock:` to now or a date and time, such as `clock: 2026-11-02T09:00`";
+    const parsed = (patch: Record<string, unknown>) => DomainSpec.parse({ ...raw(), ...patch });
+    /** The problems or warnings about the four places: 1.4 took any string in them as text. */
+    const PLACES = /^(policy|tools\.[\w-]+\.params|tasks\.[\w-]+\.(faults|expect\.reply_includes))/;
+    const about = (lines: string[]) => lines.filter((l) => PLACES.test(l));
     const malformed = places({
       policy: "Today is ${today+2h}.",
       extra: schedule({ from: "$today+2h", until: "$now+5x", ready: "$now-" }),
@@ -489,30 +491,46 @@ describe("dates in the policy, param defaults, fault messages and reply_includes
       reply: ["your pickup is ${today+1x}"],
     });
 
-    it("accepts them with a clock, and a tool's own param named today needs none", () => {
-      expect(problems(places())).toEqual([]);
+    it("accepts them with a clock, with no warning, and a tool's own param named today needs none", () => {
+      expect(validateDomain(parsed(places()))).toEqual([]);
+      expect(about(domainWarnings(parsed(places())))).toEqual([]);
     });
 
-    it("reports a malformed date in each place, at its path", () => {
-      expect(problems(malformed)).toEqual([
-        'policy: "${today+2h}" is not a date: $today takes an offset in days, such as $today+2d',
-        'tools.schedule_pickup.params.pickup_from.default: "$today+2h" is not a date: $today takes an offset in days, such as $today+2d',
-        'tools.schedule_pickup.params.window.properties.until.default: "$now+5x" is not a date: an offset is a whole number of d, h or m, such as $now+90m or $now-3h',
-        'tools.schedule_pickup.params.stops.items.properties.ready_at.default: "$now-" is not a date: an offset is a whole number of d, h or m, such as $now+90m or $now-3h',
-        'tasks.book-upcoming.faults[0].message: "${now+5x}" is not a date: an offset is a whole number of d, h or m, such as $now+90m or $now-3h',
-        'tasks.book-upcoming.expect.reply_includes[0]: "${today+1x}" is not a date: $today takes an offset in days, such as $today+2d',
+    it("warns about a malformed date in each place, at its path, and leaves it text, as 1.4 did", () => {
+      const d = parsed(malformed);
+      expect(validateDomain(d)).toEqual([]);
+      expect(about(domainWarnings(d))).toEqual([
+        'policy: "${today+2h}" is text, not a date, as in 1.4: $today takes an offset in days, such as $today+2d. 2.0 will reject it.',
+        'tools.schedule_pickup.params.pickup_from.default: "$today+2h" is text, not a date, as in 1.4: $today takes an offset in days, such as $today+2d. 2.0 will reject it.',
+        'tools.schedule_pickup.params.window.properties.until.default: "$now+5x" is text, not a date, as in 1.4: an offset is a whole number of d, h or m, such as $now+90m or $now-3h. 2.0 will reject it.',
+        'tools.schedule_pickup.params.stops.items.properties.ready_at.default: "$now-" is text, not a date, as in 1.4: an offset is a whole number of d, h or m, such as $now+90m or $now-3h. 2.0 will reject it.',
+        'tasks.book-upcoming.faults[0].message: "${now+5x}" is text, not a date, as in 1.4: an offset is a whole number of d, h or m, such as $now+90m or $now-3h. 2.0 will reject it.',
+        'tasks.book-upcoming.expect.reply_includes[0]: "${today+1x}" is text, not a date, as in 1.4: $today takes an offset in days, such as $today+2d. 2.0 will reject it.',
+      ]);
+      const { domain: r, task } = resolveTrial(d, d.tasks[0]!, MONDAY);
+      expect([r.policy, task.faults![0]!.message, task.expect.reply_includes[0]]).toEqual(["Today is ${today+2h}.", "Retry after ${now+5x}", "your pickup is ${today+1x}"]);
+      expect(r.tools.find((t) => t.name === "schedule_pickup")!.params.pickup_from!.default).toBe("$today+2h");
+      // The places that resolved before keep rejecting a malformed date.
+      const rows = [{ load_id: "L-1", pickup_date: "$today+2h" }];
+      expect(validateDomain(parsed({ ...malformed, world: { tables: { loads: { key: "load_id", rows }, bookings: { key: "booking_id" } } } }))).toEqual([
+        'world.tables.loads.rows[0].pickup_date: "$today+2h" is not a date: $today takes an offset in days, such as $today+2d',
       ]);
     });
 
-    it("rejects each where a task has no clock, in a domain that uses one", () => {
-      const found = problems(places({ clock: undefined }));
-      const SOME = "needs a clock, and task book-upcoming has none: set `clock:` to now or a date and time, such as `clock: 2026-11-02T09:00`";
-      expect(found).toContain(`policy: "\${today}" ${SOME}`);
-      expect(found).toContain(`tools.schedule_pickup.params.pickup_from.default: "$today" ${SOME}`);
-      expect(found).toContain(`tools.schedule_pickup.params.window.default.until: "$today+3d" ${SOME}`);
-      expect(found).toContain(`tasks.book-upcoming.faults[0].message: "\${now+5m}" ${NEEDS}`);
-      expect(found).toContain(`tasks.book-upcoming.expect.reply_includes[0]: "\${today+2d}" ${NEEDS}`);
-      expect(found.filter((p) => p.includes("echo_today.params.today") || p.includes('"$today stays"'))).toEqual([]);
+    it("warns about each where a task has no clock, in a domain that uses one, and keeps rejecting the other places there", () => {
+      const d = parsed(places({ clock: undefined }));
+      const found = validateDomain(d);
+      expect(found).toContain('tasks.book-upcoming.given.rows.loads[0].pickup_date: "$today+1d" needs a clock: set `clock:` to now or a date and time, such as `clock: 2026-11-02T09:00`');
+      expect(about(found)).toEqual([]);
+      const warned = about(domainWarnings(d));
+      const SOME = "is text, not a date, as in 1.4: it needs a clock, and task book-upcoming has none. Set `clock:` to now or a date and time, such as `clock: 2026-11-02T09:00`, to make it a date; 2.0 will reject it without one.";
+      const NONE = "is text, not a date, as in 1.4: it needs a clock. Set `clock:` to now or a date and time, such as `clock: 2026-11-02T09:00`, to make it a date; 2.0 will reject it without one.";
+      expect(warned).toContain(`policy: "\${today}" ${SOME}`);
+      expect(warned).toContain(`tools.schedule_pickup.params.pickup_from.default: "$today" ${SOME}`);
+      expect(warned).toContain(`tools.schedule_pickup.params.window.default.until: "$today+3d" ${SOME}`);
+      expect(warned).toContain(`tasks.book-upcoming.faults[0].message: "\${now+5m}" ${NONE}`);
+      expect(warned).toContain(`tasks.book-upcoming.expect.reply_includes[0]: "\${today+2d}" ${NONE}`);
+      expect(warned.filter((w) => w.includes("echo_today.params.today") || w.includes('"$today stays"'))).toEqual([]);
     });
 
     it("keeps them text in a domain that sets no clock anywhere, and warns about each", () => {
