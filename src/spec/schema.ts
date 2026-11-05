@@ -384,6 +384,20 @@ export const EventSpec = z.union(
   { error: "an event has after, and either update with key and set, or create with values" },
 );
 
+/**
+ * A rule that isn't state, such as tone or "reads the booking back before booking", for an LLM judge to grade as a score
+ * apart from pass/fail, so it changes no verdict, pass^k, gate or exit code. It isn't shown to the agent or the caller.
+ * `id` is unique across the domain's criteria and every task's. With a clock, `${today+2d}` in `criterion` is a date.
+ */
+export const JudgedCriterionSpec = z
+  .object({
+    id: z.string().min(1),
+    criterion: z.string().trim().min(1),
+    source: Source,
+    review: Review,
+  })
+  .strict();
+
 export const TaskSpec = z
   .object({
     id: z.string(),
@@ -414,6 +428,8 @@ export const TaskSpec = z
     /** Changes made to the world by someone else during this task (see EventSpec). */
     events: z.array(EventSpec).min(1).optional(),
     expect: ExpectSpec,
+    /** Criteria for this task's trials (see JudgedCriterionSpec). Not in `expect`, whose whole value is hashed as how a trial is graded. */
+    judged: z.array(JudgedCriterionSpec).optional(),
     max_turns: z.number().int().positive().optional(),
   })
   .strict();
@@ -429,6 +445,8 @@ export const DomainSpec = z
     world: z.object({ tables: z.record(z.string(), TableSpec) }).strict(),
     tools: z.array(ToolSpec).min(1),
     invariants: z.array(InvariantSpec).default([]),
+    /** Criteria for every task's trials (see JudgedCriterionSpec). */
+    judged: z.array(JudgedCriterionSpec).optional(),
     personas: z.array(PersonaSpec).default([]),
     tasks: z.array(TaskSpec).default([]),
     max_turns: z.number().int().positive().default(20),
@@ -448,3 +466,4 @@ export type Persona = z.infer<typeof PersonaSpec>;
 export type Given = z.infer<typeof GivenSpec>;
 export type Fault = z.infer<typeof FaultSpec>;
 export type TaskEvent = z.infer<typeof EventSpec>;
+export type JudgedCriterion = z.infer<typeof JudgedCriterionSpec>;

@@ -11,7 +11,7 @@ import { version } from "../version.ts";
 import { coerceArgs } from "../world/tools.ts";
 import { seedFor } from "../world/store.ts";
 import { dateProblems, dateWarnings, usesClock } from "./clock.ts";
-import { DomainSpec, type Domain, type Given, type Task, type Tool } from "./schema.ts";
+import { DomainSpec, type Domain, type Given, type JudgedCriterion, type Task, type Tool } from "./schema.ts";
 
 export const DOMAIN_FILE = "sandtable.yaml";
 
@@ -233,6 +233,17 @@ export function validateDomain(d: Domain): string[] {
     }
   }
 
+  // A criterion's id is unique across the domain's criteria and every task's, with the place each was first seen.
+  const criteria = new Map<string, string>();
+  const uniqueCriteria = (list: readonly JudgedCriterion[] | undefined, where: string) => {
+    list?.forEach((c, i) => {
+      const first = criteria.get(c.id);
+      if (first === undefined) criteria.set(c.id, `${where}[${i}]`);
+      else problems.push(`${where}[${i}]: duplicate criterion id "${c.id}", also at ${first}`);
+    });
+  };
+  uniqueCriteria(d.judged, "judged");
+
   const personas = new Set(d.personas.map((p) => p.id));
   const taskIds = new Set<string>();
   for (const task of d.tasks) {
@@ -240,6 +251,7 @@ export function validateDomain(d: Domain): string[] {
     if (taskIds.has(task.id)) problems.push(`${where}: duplicate task id`);
     taskIds.add(task.id);
     if (task.persona && !personas.has(task.persona)) problems.push(`${where}: unknown persona "${task.persona}"`);
+    uniqueCriteria(task.judged, `${where}.judged`);
     task.expect.state.forEach((a, i) => {
       table(a.table, `${where}.expect.state[${i}]`);
       operators(a.where, `${where}.expect.state[${i}].where`);
@@ -461,17 +473,19 @@ function returnsTable(t: Tool, table: string): boolean {
 }
 
 export interface PendingItem {
-  kind: "tool" | "invariant" | "task";
+  kind: "tool" | "invariant" | "task" | "criterion";
   id: string;
   source?: { file: string; quote?: string };
 }
 
-/** Drafted items nobody has accepted yet. Results that depend on them are provisional. */
+/** Drafted items nobody has accepted yet. A run is provisional while any of them but a judged criterion is pending (see runPendingReview). */
 export function pendingReview(d: Domain): PendingItem[] {
+  const criteria = [...(d.judged ?? []), ...d.tasks.flatMap((t) => t.judged ?? [])];
   return [
     ...d.tools.filter((t) => t.review === "pending").map((t) => ({ kind: "tool" as const, id: t.name })),
     ...d.invariants.filter((i) => i.review === "pending").map((i) => ({ kind: "invariant" as const, id: i.id, source: i.source })),
     ...d.tasks.filter((t) => t.review === "pending").map((t) => ({ kind: "task" as const, id: t.id, source: t.source })),
+    ...criteria.filter((c) => c.review === "pending").map((c) => ({ kind: "criterion" as const, id: c.id, source: c.source })),
   ];
 }
 

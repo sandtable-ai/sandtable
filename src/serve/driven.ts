@@ -1,10 +1,9 @@
 import { gradeEpisode, toolEvent, worldChanges, type TrajectoryEvent, type TrialResult } from "../run/episode.ts";
 import { inputsFingerprint } from "../run/inputs.ts";
-import { summarize, type SuiteResult } from "../run/suite.ts";
+import { runPendingReview, summarize, type SuiteResult } from "../run/suite.ts";
 import { createToolRunner } from "../run/tool-runner.ts";
 import { sumUsage } from "../run/usage.ts";
 import { resolveTrial, type ResolvedPhrase } from "../spec/clock.ts";
-import { pendingReview } from "../spec/load.ts";
 import type { Domain, Task } from "../spec/schema.ts";
 import { version } from "../version.ts";
 import { worldFor, type Snapshot, type World } from "../world/store.ts";
@@ -157,7 +156,7 @@ export async function serveConversations(domain: Domain, opts: DrivenOptions): P
       durationMs: Date.now() - started,
       ...summarize(domain, tasks, trials, k, EXTERNAL_USER),
       usage: sumUsage(trials.map((t) => t.usage)),
-      pendingReview: pendingReview(domain),
+      pendingReview: runPendingReview(domain),
       // The platform's own timing isn't known here.
       latency: { agentTurnP50Ms: null, agentTurnP95Ms: null },
     };

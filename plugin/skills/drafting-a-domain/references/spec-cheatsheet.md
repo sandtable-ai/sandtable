@@ -8,6 +8,7 @@ A condensed, checked copy of `docs/reference/spec.mdx` in the sandtable reposito
 - [Clock and relative dates](#clock-and-relative-dates)
 - [Tools](#tools)
 - [Invariants](#invariants)
+- [Judged criteria](#judged-criteria)
 - [Tasks and expectations](#tasks-and-expectations)
 - [Gotchas](#gotchas)
 
@@ -22,6 +23,7 @@ max_turns: 16                       # user turns per trial (default 20); tasks c
 world: { tables: {} }
 tools: []
 invariants: []
+judged: []                          # optional: criteria for an LLM judge, apart from pass/fail; see Judged criteria
 personas: []
 tasks: ./tasks.yaml                 # any top-level value that is a relative .md/.yaml/.yml path is inlined
 ```
@@ -72,7 +74,7 @@ tasks:
 ```
 
 - `$today` is the clock's date (`2026-11-02`), `$now` its date and time (`2026-11-02T09:00`). One offset each: `$today+2d`, `$today-1d` (days only), `$now+90m`, `$now-3h`, `$now+1d`. The arithmetic is on the wall clock, with no daylight-saving jumps.
-- A whole string resolves in seed rows, `given.rows` and `given.context`, tools' params' `default`s (nested ones too: `default: $today`), tools' `ops` and `checks`, `events`, `expect.state`, `called`/`not_called` args, `reference` args, and invariants' `where`/`when`. `${today+2d}` and `${now}` interpolate in the `policy` (`Today is ${today}.`), `user.instructions`, `opening` and `script`, faults' `message`s, `expect.reply_includes`, and strings in tools' `ops` and `checks`. Where only `${...}` interpolates, a bare `$today` stays text.
+- A whole string resolves in seed rows, `given.rows` and `given.context`, tools' params' `default`s (nested ones too: `default: $today`), tools' `ops` and `checks`, `events`, `expect.state`, `called`/`not_called` args, `reference` args, and invariants' `where`/`when`. `${today+2d}` and `${now}` interpolate in the `policy` (`Today is ${today}.`), `user.instructions`, `opening` and `script`, faults' `message`s, `expect.reply_includes`, a judged `criterion`, and strings in tools' `ops` and `checks`. Where only `${...}` interpolates, a bare `$today` stays text.
 - `reply_includes: ["your pickup is ${today+2d}"]` resolves to `your pickup is 2026-11-04`, and a date written as `${today...}` also matches in words: `November 4`, `Nov. 4th`, `4 November`, `the 4th of November`, `Wednesday, November 4, 2026`. Not `November 14`, another year, or the wrong weekday. A literal `2026-11-04` matches only as written, as before, and so does a date and time (`${now+2h}`): use it for dates, not times.
 - In a tool with a param named `today` or `now`, that name stays the param, in its `ops`, `checks` and `default`s.
 - With a clock on the domain or any task, `validate` fails on `$today` or `$now` where a task's trials have no clock, and on a malformed offset (`$today+2h`, `$now+5x`); in the policy, `default`s, faults' `message`s and `reply_includes` it only warns, and they stay text, as in 1.4. With no clock anywhere, they stay text as before 1.3, and `validate` warns.
@@ -191,6 +193,31 @@ invariants:
 `max_count` and `monotonic` look back at earlier calls of the tool, and only the ones that took effect count: a rejected call, or one a fault stopped before it ran, is not a call to count or a value to beat, so a retry after a timeout is fine. A call whose write landed counts even when an `after_commit` fault made the agent see an error, so retrying it is one more call. Use `max_count` rather than a `limit` on an argument the agent fills in itself, such as a round number it can get wrong. `max` is 1 or more (`max: 0` is a `never`). `monotonic` compares numbers as numbers and anything else as text, so ISO dates work; a call without `arg`, or the first for a `per_arg` value, isn't checked.
 
 `soft: true` works on every kind. A soft invariant is checked the same way, but breaking it never fails a trial: runs report how often it was broken, in the trials where it applied (its tool was called; for `never_disclose`, the agent spoke). Use it for behaviour the SOP allows but the customer wants measured, such as conceding all the way to a price ceiling. Anything the SOP forbids stays hard.
+
+## Judged criteria
+
+A rule that isn't state, such as tone or reading a booking back, can't be a check on the end state or a tool call. State it as a criterion, for an LLM judge to grade as a score apart from pass/fail. This release only states and validates criteria: no command grades them yet.
+
+```yaml
+judged:                                # every task's trials
+  - id: reads-back-before-booking
+    criterion: The agent reads the load, the rate and the pickup date back to the caller before it books.
+tasks:
+  - id: book-thursday-pickup
+    user:
+      instructions: You want the load that picks up on ${today+2d}.
+    expect:
+      called: [book_load]
+    judged:                            # this task's trials too
+      - id: names-the-date
+        criterion: The agent tells the caller the pickup is on ${today+2d}.
+        source: { file: tests/scenario-12.json, quote: "Confirms the pickup date" }
+        review: pending
+```
+
+- `id` and `criterion` are required and not empty. `id` is unique across the domain's criteria and every task's, and `validate` names both places of a duplicate. `${today+2d}` and `${now}` interpolate in `criterion`: with a clock on the domain or any task, `validate` fails on a malformed offset, and on one where a task's trials have no clock.
+- Criteria change no verdict, pass^k, gate or exit code, aren't shown to the agent or the caller, and stay out of `results.json` and the `inputs` and `grading` hashes. For a rule a tool call or a record can show, measured as a rate, use `soft: true` on an invariant.
+- A `review: pending` criterion shows in `review` and fails `validate --strict`, but doesn't make a run provisional, since it can't change the score.
 
 ## Tasks and expectations
 
