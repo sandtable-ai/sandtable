@@ -114,6 +114,11 @@ describe("the judged key", () => {
     expect(() => parseDomain(raw({ domain: "Reads back." }))).toThrow(/→ at judged/);
     expect(() => parseDomain(raw({ tasks: { book: { id: "x", criterion: "Reads back." } } }))).toThrow(/→ at tasks\[0\]\.judged/);
   });
+
+  it("doesn't belong inside expect, which is hashed as how a trial is graded", () => {
+    const r = TaskSpec.safeParse({ id: "t", user: { instructions: "Hi." }, expect: { judged: [{ id: "x", criterion: "Reads back." }] } });
+    expect(r.success).toBe(false);
+  });
 });
 
 describe("validate", () => {
@@ -129,7 +134,6 @@ describe("validate", () => {
     expect(problems(raw({ domain: [entry("a")], tasks: { ask: [entry("b"), entry("a")] } }))).toEqual(['tasks.ask.judged[1]: duplicate criterion id "a", also at judged[0]']);
     expect(problems(raw({ tasks: { book: [entry("a")], ask: [entry("a")] } }))).toEqual(['tasks.ask.judged[0]: duplicate criterion id "a", also at tasks.book.judged[0]']);
     expect(problems(raw({ tasks: { book: [entry("a"), entry("a")] } }))).toEqual(['tasks.book.judged[1]: duplicate criterion id "a", also at tasks.book.judged[0]']);
-    expect(() => parseDomain(raw({ domain: [entry("a"), entry("a")] }))).toThrow(DomainError);
   });
 
   it("names the first place for each later duplicate", () => {
@@ -137,6 +141,10 @@ describe("validate", () => {
       'tasks.book.judged[0]: duplicate criterion id "a", also at judged[0]',
       'tasks.ask.judged[0]: duplicate criterion id "a", also at judged[0]',
     ]);
+  });
+
+  it("makes parseDomain throw on a duplicate", () => {
+    expect(() => parseDomain(raw({ domain: [entry("a"), entry("a")] }))).toThrow(DomainError);
   });
 
   it("reads the domain's criteria from their own file, and reports a problem in that file", async () => {
@@ -246,6 +254,11 @@ describe("dates in a criterion", () => {
     expect(validateDomain(d)).toEqual([]);
     const r = resolveDates(d, d.tasks[0]!, CLOCK);
     expect(r.domain.judged!.map((c) => c.criterion)).toEqual(["$today", "Says 2026-11-04."]);
+  });
+
+  it("leave a task without criteria without the key", () => {
+    const d = dated();
+    expect(resolveDates(d, d.tasks[1]!, CLOCK).task).not.toHaveProperty("judged");
   });
 
   it("are a problem when malformed in a domain with a clock, with each place's path, and never lenient", () => {
