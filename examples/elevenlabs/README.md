@@ -17,6 +17,6 @@ npx sandtable-ai validate pinecrest
 npx sandtable-ai run pinecrest --agent noop --user scripted
 ```
 
-The import is a draft: each tool and each task are pending review, with TODO notes on what the export can't say, such as what a tool changes and how to grade a test's success conditions without a model. Each webhook tool gets its URL's path as its `http` route, such as `GET /api/repairs/{ticket_id}`.
+The import is a draft: each tool and each task are pending review, with TODO notes on what the export can't say, such as what a tool changes, and a test's success conditions are pending `judged` criteria, which change no verdict. Each webhook tool gets its URL's path as its `http` route, such as `GET /api/repairs/{ticket_id}`.
 
 To grade the agent's own test calls on the drafted world, run `npx sandtable-ai serve pinecrest` behind a tunnel and point each webhook tool's URL at it, keeping the path: `https://<tunnel>/api/repairs/{ticket_id}`. Add the header `X-Sandtable-Call: {{system__conversation_id}}` to each webhook tool too, so concurrent test calls each get their own world. This folder is not part of the npm package.

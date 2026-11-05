@@ -90,7 +90,7 @@ npx sandtable-ai import elevenlabs ./my-elevenlabs-project --agent "Support Desk
 | `--agent <name or id>` | the agent to import, by name or id, when the export holds several. For ElevenLabs, a branch too, by its name, its id or `<agent>.<branch>`; for Retell without an agent file, a Retell LLM or conversation flow by its id |
 | `--force` | overwrite existing files |
 
-It writes `sandtable.yaml`, `policy.md` and `tasks.yaml`, with every tool and task pending review, and prints what it skipped. It stops with exit 2, writing nothing, when the files hold no agent, several and no `--agent` (it lists them), an agent `--agent` doesn't match, a Retell agent on a custom LLM or whose LLM or flow isn't in the export, or JSON it can't read, or the agent has no tool sandtable can model. See [from a voice platform](/guides/init#from-a-voice-platform-import).
+It writes `sandtable.yaml`, `policy.md` and `tasks.yaml`, with every tool and task pending review, and with what the platform's own LLM judge grades a test on as pending [`judged` criteria](/reference/spec#judged), which change no verdict. It prints how many criteria it drafted and what it skipped. It stops with exit 2, writing nothing, when the files hold no agent, several and no `--agent` (it lists them), an agent `--agent` doesn't match, a Retell agent on a custom LLM or whose LLM or flow isn't in the export, or JSON it can't read, or the agent has no tool sandtable can model. See [from a voice platform](/guides/init#from-a-voice-platform-import).
 
 ## validate
 
