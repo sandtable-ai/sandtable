@@ -46,7 +46,7 @@ interface Param {
   required: boolean;
   nullable?: boolean;
   enum?: (string | number)[];
-  /** Value used when the agent omits this (optional) param, as the real API would. */
+  /** Value used when the agent omits this (optional) param, as the real API would. With a clock, `$today` in it is a date. */
   default?: unknown;
   properties?: Record<string, Param>;
   items?: Param;
@@ -346,7 +346,8 @@ export const FAULT_ERRORS = ["timeout", "rate_limit", "server_error"] as const;
  * a delay of `latency_ms` before the response, or both. `call` picks the calls of `tool` it hits, counting from 1 the
  * calls whose arguments are valid; every call when left out. A fault with an error stops the call before the tool runs,
  * unless `after_commit: true`: then the tool runs and its write lands, and the agent sees the error anyway, the classic
- * double-booking trap. `message` replaces the error's default text. Invariants check the call either way.
+ * double-booking trap. `message` replaces the error's default text; with a clock, `${now+5m}` in it is a date. Invariants
+ * check the call either way.
  */
 export const FaultSpec = z
   .object({
@@ -421,7 +422,7 @@ export const DomainSpec = z
   .object({
     name: z.string(),
     description: z.string().optional(),
-    /** The operating policy / SOP the agent must follow (inline text or a path to a .md file). */
+    /** The operating policy / SOP the agent must follow (inline text or a path to a .md file). With a clock, `${today}` in it is a date. */
     policy: z.string(),
     /** "Now" in every trial, unless a task sets its own (see ClockSpec). Without one, "$today" and "$now" are not dates. */
     clock: ClockSpec.optional(),

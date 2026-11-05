@@ -10,7 +10,7 @@ import { shellWord } from "../shell.ts";
 import { version } from "../version.ts";
 import { coerceArgs } from "../world/tools.ts";
 import { seedFor } from "../world/store.ts";
-import { dateProblems, unclockedDates, usesClock } from "./clock.ts";
+import { dateProblems, dateWarnings, usesClock } from "./clock.ts";
 import { DomainSpec, type Domain, type Given, type Task, type Tool } from "./schema.ts";
 
 export const DOMAIN_FILE = "sandtable.yaml";
@@ -436,7 +436,7 @@ export function domainWarnings(d: Domain): string[] {
       }
     }
   }
-  warnings.push(...unclockedDates(d));
+  warnings.push(...dateWarnings(d));
   // The default prompt, and each task's prompt that states a `given.context`.
   const prompts = [agentSystemPrompt(d), ...d.tasks.filter((t) => taskContext(t)).map((t) => agentSystemPrompt(d, t))];
   for (const inv of d.invariants) {

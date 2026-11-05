@@ -3,7 +3,7 @@ import { inputsFingerprint } from "../run/inputs.ts";
 import { summarize, type SuiteResult } from "../run/suite.ts";
 import { createToolRunner } from "../run/tool-runner.ts";
 import { sumUsage } from "../run/usage.ts";
-import { resolveTrial } from "../spec/clock.ts";
+import { resolveTrial, type ResolvedPhrase } from "../spec/clock.ts";
 import { pendingReview } from "../spec/load.ts";
 import type { Domain, Task } from "../spec/schema.ts";
 import { version } from "../version.ts";
@@ -53,12 +53,16 @@ export interface DrivenOptions {
   idleTimeout?: number;
 }
 
-/** An open session's trial: its domain and task with their dates resolved, its world as it started and as it is, and its tool calls with the time each came in. */
+/**
+ * An open session's trial: its domain and task with their dates resolved (and its `reply_includes` in pieces, see
+ * resolveTrial), its world as it started and as it is, and its tool calls with the time each came in.
+ */
 interface OpenSession {
   session: ServedSession;
   domain: Domain;
   task: Task;
   clock?: string;
+  phrases?: ResolvedPhrase[];
   world: World;
   initial: Snapshot;
   calls: { at: number; event: TrajectoryEvent }[];
@@ -100,7 +104,7 @@ export async function serveConversations(domain: Domain, opts: DrivenOptions): P
         const world = worldFor(trial.domain, trial.task);
         const calls: { at: number; event: TrajectoryEvent }[] = [];
         const runner = createToolRunner(trial.domain, world, (e) => calls.push({ at: Date.now(), event: toolEvent(e) }), trial.task);
-        const session = server.open(trial.task, runner);
+        const session = server.open(trial.task, runner, trial.domain.tools);
         open.set(session.id, { session, ...trial, world, initial: world.snapshot(), calls, started: Date.now() });
         opts.onOpen?.(session);
         return session;
@@ -179,7 +183,7 @@ interface Ended {
  * that ended in an `error`. With a `problem`, the trial ends in that error, and is skipped whatever it shows.
  */
 function gradeConversation(st: OpenSession, transcript: TranscriptLine[] | undefined, trial: number, { problem, error: endError }: Ended = {}): TrialResult {
-  const { domain, task, clock } = st;
+  const { domain, task, clock, phrases } = st;
   const lines = transcript ?? [];
   const said = (l: TranscriptLine): TrajectoryEvent => (l.role === "user" ? { type: "user", text: l.text } : { type: "agent", text: l.text, latencyMs: 0 });
   let events: TrajectoryEvent[];
@@ -198,7 +202,7 @@ function gradeConversation(st: OpenSession, transcript: TranscriptLine[] | undef
     (transcript === undefined && task.expect.reply_includes.length
       ? "the conversation ended without a transcript, so what the agent said can't be graded: send one to POST /sessions/<id>/end, or have the platform send its end-of-call report"
       : undefined);
-  const graded = gradeEpisode({ domain, task, world: st.world, runner: st.session.runner, events, agentMessages, ...(error ? { error } : {}) });
+  const graded = gradeEpisode({ domain, task, world: st.world, runner: st.session.runner, events, agentMessages, ...(phrases ? { phrases } : {}), ...(error ? { error } : {}) });
   return {
     taskId: task.id,
     trial,

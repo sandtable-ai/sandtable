@@ -15,7 +15,7 @@ import { httpAgent } from "../src/sim/http.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
 import type { AgentAdapter, AgentContext, CallTool, WorldUrls } from "../src/sim/types.ts";
 import { loadDomain, validateDomain } from "../src/spec/load.ts";
-import { TaskSpec, type Domain, type Task } from "../src/spec/schema.ts";
+import { TaskSpec, ToolSpec, type Domain, type Task } from "../src/spec/schema.ts";
 import { worldFor } from "../src/world/store.ts";
 
 // The world server (#443): each trial's simulated world over REST, MCP and webhooks, for an agent that calls its tools
@@ -218,6 +218,42 @@ describe("the world server's MCP endpoint", () => {
     expect(batch.body).toEqual([{ jsonrpc: "2.0", id: 7, result: {} }]);
     expect((await json(session.urls.mcp)).status).toBe(405);
     expect(runner.calls.map((c) => c.name)).toEqual(["get_load", "get_load"]);
+  });
+
+  it("lists a tool's params as the trial resolved them at its clock, and as written while no trial is open (#465)", async () => {
+    const pickups = ToolSpec.parse({
+      name: "pickups_from",
+      description: "Loads that pick up from a date on: today unless the caller says otherwise.",
+      params: { from: { type: "string", required: false, default: "$today" } },
+      ops: [{ respond: { from: "$from" } }],
+    });
+    const freight = await domainWith(task());
+    const domain: Domain = { ...freight, clock: "now", tools: [...freight.tools, pickups] };
+    const server = await serve(domain);
+    type Listed = { name: string; inputSchema: { properties: Record<string, { default?: unknown }> } }[];
+    const listedDefault = async (url: string) => ((await rpc(url, "tools/list")).body.result.tools as Listed).find((t) => t.name === "pickups_from")!.inputSchema.properties.from!.default;
+    // No trial to resolve them for: the spec as written.
+    expect(await listedDefault(`${server.url}/mcp`)).toBe("$today");
+    const seen: unknown[] = [];
+    const agent: AgentAdapter = {
+      name: "lister",
+      async createSession(ctx) {
+        let turns = 0;
+        return {
+          async reply() {
+            if (turns++ > 0) return "Anything else?";
+            // At the trial's own URL, and at the base URL while it is the one trial running.
+            seen.push(await listedDefault(ctx.world!.mcp), await listedDefault(`${server.url}/mcp`));
+            const out = (await rpc(ctx.world!.mcp, "tools/call", { name: "pickups_from", arguments: {} })).body.result;
+            seen.push(JSON.parse(out.content[0].text).from);
+            return "Done.";
+          },
+        };
+      },
+    };
+    // Tuesday, November 3, 2026, 9:00 on this machine's clock.
+    await runEpisode({ domain, task: domain.tasks[0]!, agent, user: scriptedUser(), trial: 0, server, now: () => new Date(2026, 10, 3, 9, 0) });
+    expect(seen).toEqual(["2026-11-03", "2026-11-03", "2026-11-03"]);
   });
 });
 
