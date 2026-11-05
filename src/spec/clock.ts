@@ -80,6 +80,25 @@ function evaluate(body: string, clock: string): string | undefined {
   return name === "today" ? at.toISOString().slice(0, 10) : at.toISOString().slice(0, 16);
 }
 
+/**
+ * The expression, without its `$`, that resolves to `value` at `clock`: the inverse of evaluate, for a tool that writes
+ * dates, such as `init --transcripts`. A date (`2026-11-04`) is `today`, `today+2d` or `today-1d`; a date and time to the
+ * minute (`2026-11-02T10:30`) is `now` with an offset in the largest unit that is exact: `now+90m`, `now+3h`, `now-1d`.
+ * Undefined for anything else.
+ */
+export function expressionFor(value: string, clock: string): string | undefined {
+  const signed = (n: number, unit: string) => `${n > 0 ? "+" : "-"}${Math.abs(n)}${unit}`;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value) && isClockTime(`${value}T00:00`)) {
+    const days = Math.round((clockMs(`${value}T00:00`) - clockMs(`${clock.slice(0, 10)}T00:00`)) / UNIT_MS.d);
+    return days === 0 ? "today" : `today${signed(days, "d")}`;
+  }
+  if (!isClockTime(value)) return undefined;
+  const minutes = Math.round((clockMs(value) - clockMs(clock)) / UNIT_MS.m);
+  if (minutes === 0) return "now";
+  if (minutes % 1440 === 0) return `now${signed(minutes / 1440, "d")}`;
+  return minutes % 60 === 0 ? `now${signed(minutes / 60, "h")}` : `now${signed(minutes, "m")}`;
+}
+
 /** A whole-string date expression's value at `clock`: `$today+2d` is `2026-11-04` at 2026-11-02T09:00. Undefined for anything else. */
 export function dateOf(value: string, clock: string): string | undefined {
   return value.startsWith("$") ? evaluate(value.slice(1), clock) : undefined;
@@ -201,6 +220,17 @@ function mapTask(task: Task, visit: Visit): Task {
       reply_includes: walk(task.expect.reply_includes, "text", `${at}.expect.reply_includes`, visit, NONE, true),
     },
   };
+}
+
+/**
+ * `task` with `visit` applied to every string in the places a trial resolves dates in (see mapTask), each with whether
+ * the place reads dates inside text (`${today+2d}`) or as a whole value (`$today+2d`), and its path in the task, such
+ * as `user.instructions` or `reference[0].args.date`. For a tool that writes dates, such as `init --transcripts`, so
+ * every expression it writes is one a trial resolves.
+ */
+export function mapTaskDates(task: Task, visit: (value: string, at: { text: boolean; path: string }) => string): Task {
+  const prefix = `tasks.${task.id}.`;
+  return mapTask(task, (value, { mode, path }) => visit(value, { text: mode === "text", path: path.slice(prefix.length) }));
 }
 
 /** Replaces each date expression a place reads with its value at `clock`. */

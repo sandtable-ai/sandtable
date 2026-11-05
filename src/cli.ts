@@ -23,7 +23,8 @@ import { DEFAULT_OPENAI_BASE_URL } from "./sim/openai-compat.ts";
 import { scriptedUser } from "./sim/scripted.ts";
 import { leaderboardAgent, resolveAgent, resolveUser } from "./sim/resolve.ts";
 import { reachProblems, type Role } from "./sim/preflight.ts";
-import { appendRows, appendToDomainList } from "./init/merge.ts";
+import { addClock, appendRows, appendToDomainList } from "./init/merge.ts";
+import { CALL_DATE_FORMAT, callDateIn, parseCallDate } from "./init/relative-dates.ts";
 import { draftFromOpenApi, openApiProblem } from "./init/openapi.ts";
 import { draftInvariantsFromSop, knownFields, softRuleComments } from "./init/sop.ts";
 import { draftTasksFromTranscripts } from "./init/transcripts.ts";
@@ -346,6 +347,23 @@ async function readJsonFiles(p: string): Promise<{ file: string; json: unknown }
   );
 }
 
+/** An `init --call-date`: a real date, or a date and a time to the minute. */
+const callDate = (v: string) => {
+  if (parseCallDate(v) === undefined) throw new InvalidArgumentError(`must be ${CALL_DATE_FORMAT}`);
+  return v;
+};
+
+/** Which call date each transcript's drafted dates are made relative to: the one its file states, else `--call-date`'s. */
+function callDateLines(transcripts: { file: string; text: string }[], fallback: string | undefined): string[] {
+  return [
+    "Call dates, which each chat's drafted dates are made relative to:",
+    ...transcripts.map((t) => {
+      const stated = callDateIn(t.text);
+      return `  ${t.file}: ${stated !== undefined ? `${stated}, stated in the file` : fallback !== undefined ? `${fallback}, from --call-date` : "none: its dates stay literal"}`;
+    }),
+  ];
+}
+
 /**
  * The `init` command that drafts these transcripts again into the same domain, with the model and provider flags given.
  * It leaves out `--openapi` and `--sop`, whose drafts are already written.
@@ -407,12 +425,18 @@ withProviderFlags(program
   .option("--openapi <file>", "OpenAPI 3.x spec (YAML or JSON): drafts tables and tools, no model needed")
   .option("--sop <file>", "SOP / policy document: drafts invariants with Claude, each quoting its source")
   .option("--transcripts <path>", "call/chat transcripts (a file or a directory of .txt/.md): drafts personas and tasks with Claude")
+  .option(
+    "--call-date <date>",
+    "the date of the calls whose transcript states none in its first five lines, YYYY-MM-DD or YYYY-MM-DDTHH:MM: --transcripts writes each drafted date relative to its call's date, such as $today+2d, on a clock: now domain",
+    callDate,
+  )
   .option("-o, --out <dir>", "domain directory: --openapi creates it, and --sop and --transcripts add to it", "sandtable")
   .option("-m, --model <id>", "Claude model for drafting steps")
   .option("--force", "overwrite existing files when drafting from --openapi")
   .option("--dry-run", "print the plan for --sop and --transcripts (model calls, model, provider, a cost bound) and the files --openapi would write, then stop: no model call, nothing written, no credentials needed")
-  .action(async (o: { openapi?: string; sop?: string; transcripts?: string; out: string; model?: string; force?: boolean; dryRun?: boolean } & ProviderFlags) => {
+  .action(async (o: { openapi?: string; sop?: string; transcripts?: string; callDate?: string; out: string; model?: string; force?: boolean; dryRun?: boolean } & ProviderFlags) => {
     if (!o.openapi && !o.sop && !o.transcripts) throw new Error("pass at least one of --openapi, --sop, --transcripts");
+    if (o.callDate !== undefined && !o.transcripts) throw new Error("--call-date dates the chats --transcripts drafts from: pass --transcripts too");
     // Read every input before drafting anything, so a wrong path fails before a file is written or a model is called.
     const sopText = o.sop ? await readUserText(o.sop, { from: "--sop" }) : undefined;
     const transcripts = o.transcripts ? await readTranscripts(o.transcripts) : undefined;
@@ -461,6 +485,7 @@ withProviderFlags(program
       // The domain the drafting calls describe: the one --openapi would write, else the one at -o, which must exist.
       const domainChars = draftedDomainChars ?? JSON.stringify(await loadDomain(o.out)).length;
       console.log(planLine(draftPlan({ domainChars, ...(sopText !== undefined ? { sopChars: sopText.length } : {}), transcriptChars: (transcripts ?? []).map((t) => t.text.length), claude: { ...providerOpts(o), ...(o.model ? { model: o.model } : {}) } })));
+      if (transcripts) for (const l of callDateLines(transcripts, o.callDate)) console.log(l);
       console.log("Dry run: no model was called and nothing was written. Run the same command without --dry-run to draft.");
       return;
     }
@@ -476,6 +501,7 @@ withProviderFlags(program
       // What the model steps below will spend, said before the first call, as `--dry-run` says it.
       const domainChars = JSON.stringify(await loadDomain(o.out)).length;
       console.log(planLine(draftPlan({ domainChars, ...(sopText !== undefined ? { sopChars: sopText.length } : {}), transcriptChars: (transcripts ?? []).map((t) => t.text.length), claude: { ...providerOpts(o), ...(o.model ? { model: o.model } : {}) } })));
+      if (transcripts) for (const l of callDateLines(transcripts, o.callDate)) console.log(l);
     }
     if (o.sop && sopText !== undefined) {
       const domain = await loadDomain(o.out);
@@ -500,10 +526,12 @@ withProviderFlags(program
     let undrafted: { failed: { file: string; error: string }[]; notSent: string[]; all: boolean } | undefined;
     if (transcripts) {
       console.log(`Drafting tasks from ${transcripts.length} transcript(s) (PII scrubbed locally first)...`);
+      const domain = await loadDomain(o.out);
       const res = await draftTasksFromTranscripts({
-        domain: await loadDomain(o.out),
+        domain,
         transcripts,
         claude: { ...providerOpts(o), ...(o.model ? { model: o.model } : {}) },
+        ...(o.callDate !== undefined ? { callDate: o.callDate } : {}),
       });
       if (Object.keys(res.rows).length) await appendRows(o.out, res.rows);
       if (res.personas.length) await appendToDomainList(o.out, "personas", res.personas);
@@ -511,6 +539,12 @@ withProviderFlags(program
       const rows = Object.values(res.rows).reduce((n, r) => n + r.length, 0);
       const copied = res.copied ? `; ${res.copied} value(s) copied from the chats: marked TODO(review)` : "";
       console.log(`  ${res.tasks.length} task(s), ${res.personas.length} persona(s), ${rows} seed row(s) drafted; ${res.redactions} PII redaction(s)${copied}`);
+      if (res.relative.length) {
+        // Relative dates resolve only on a domain with a clock: set one, or keep the domain's.
+        const clock = res.clockNow && (await addClock(o.out, "now")) ? `set clock: now in ${path.join(o.out, DOMAIN_FILE)}, so they resolve on the day each trial runs` : `the domain keeps its clock, ${domain.clock}`;
+        console.log(`  dates made relative to their call in ${res.relative.length} task(s), each with a review note; ${clock}`);
+      }
+      if (res.literal.length) console.log(`  ! ${res.literal.length} task(s) keep literal dates, since their chat states no call date: pass --call-date, or see their TODO(review) notes`);
       for (const l of draftUsageLines(res.usage)) console.log(l);
       for (const w of res.warnings) console.log(`  ! ${w}`);
       if (res.failed.length) undrafted = { failed: res.failed, notSent: res.notSent, all: res.failed.length + res.notSent.length === transcripts.length };

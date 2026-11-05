@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -83,6 +83,27 @@ describe.skipIf(!process.features.typescript)("`sandtable init --dry-run`, with 
     const out = path.join(empty, "nothing");
     expect(noDomain.stderr).toContain(`--sop adds to an existing domain, and there is no sandtable.yaml at ${out}. Draft one first with \`npx sandtable-ai init --openapi <spec> -o ${out}\`, or pass --openapi <spec> in this same run.`);
     expect(noDomain.stderr).not.toContain("draft it with `npx sandtable-ai init`");
+  });
+
+  it("shows the call date each transcript's dates would be made relative to, and refuses a malformed --call-date (#466)", async () => {
+    const chats = mkdtempSync(path.join(tmpdir(), "sandtable-chats-"));
+    writeFileSync(path.join(chats, "a.txt"), "Call started 2026-03-14 10:05:41\nREP: Thanks for calling.");
+    writeFileSync(path.join(chats, "b.txt"), "REP: Thanks for calling.\nCALLER: Is my appointment still on?");
+    const r = await scrubbed("init", "--transcripts", chats, "-o", domain, "--dry-run");
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("Call dates, which each chat's drafted dates are made relative to:\n  a.txt: 2026-03-14T10:05, stated in the file\n  b.txt: none: its dates stay literal\n");
+    expect(r.stdout).toContain("no model was called and nothing was written");
+    const dated = await scrubbed("init", "--transcripts", chats, "--call-date", "2026-03-10", "-o", domain, "--dry-run");
+    expect(dated.stdout).toContain("  a.txt: 2026-03-14T10:05, stated in the file\n  b.txt: 2026-03-10, from --call-date\n");
+    for (const bad of ["2026-02-30", "03/10/2026"]) {
+      const refused = await scrubbed("init", "--transcripts", chats, "--call-date", bad, "-o", domain, "--dry-run");
+      expect(refused.code, bad).toBe(2);
+      expect(refused.stderr).toContain(`option '--call-date <date>' argument '${bad}' is invalid. must be a date, YYYY-MM-DD, or a date and time, YYYY-MM-DDTHH:MM`);
+      expect(refused.stdout).not.toContain("Plan:");
+    }
+    const alone = await scrubbed("init", "--sop", sop, "--call-date", "2026-03-10", "-o", domain, "--dry-run");
+    expect(alone.code).toBe(2);
+    expect(alone.stderr).toContain("--call-date dates the chats --transcripts drafts from: pass --transcripts too");
   });
 
   it("names both steps, quotes the folder, and holds before any model call, with or without --dry-run", async () => {
