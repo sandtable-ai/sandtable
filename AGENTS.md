@@ -28,7 +28,7 @@ npm run check   # typecheck, build, tests (the package contents too), version an
 
 Also run these when you touch the area: `claude plugin validate . --strict` and `claude plugin validate ./plugin --strict` (`plugin/`, `.claude-plugin/`), `cd docs && npx mint broken-links` (`docs/`), `uv build python --out-dir python/dist` (`python/`).
 
-Ask before running anything that calls a model, because it needs keys and costs money. That covers `run` or `leaderboard` with a `claude`, `openai:` or `bedrock:` agent, `demo --live`, `init --sop`, `init --transcripts` and `npm run evals:plugin` (the plugin's eval suite, `plugin-evals/`). The default simulated user is Claude, so an offline run always passes `--user scripted`. Runs write to `.sandtable/runs/` (gitignored) unless you pass `-o`.
+Ask before running anything that calls a model, because it needs keys and costs money. That covers `run` or `leaderboard` with a `claude`, `openai:` or `bedrock:` agent, `demo --live`, `init --sop`, `init --transcripts`, `judge` without `--dry-run` and `npm run evals:plugin` (the plugin's eval suite, `plugin-evals/`). The default simulated user is Claude, so an offline run always passes `--user scripted`. Runs write to `.sandtable/runs/` (gitignored) unless you pass `-o`.
 
 ## Workflow
 
@@ -62,7 +62,7 @@ Ask before running anything that calls a model, because it needs keys and costs 
 
 ## Rules
 
-- Grading stays deterministic. Pass and fail come only from the end state, invariants, required and forbidden tools, and `never_disclose`. Never put a model call in `src/grade/` or `lint`. LLM-judged checks, when they land, will be a separate judged score.
+- Grading stays deterministic. Pass and fail come only from the end state, invariants, required and forbidden tools, and `never_disclose`. Never put a model call in `src/grade/` or `lint`. LLM-judged checks are a separate judged score (`sandtable judge`, `src/judge/`), which never changes pass or fail.
 - No network in tests. For SDK-based adapters, use the fake client in `test/adapters.test.ts`. For HTTP adapters, stub `fetch` as in `test/openai-compat.test.ts`. A test that needs an API key is a bug.
 - Use fictional data only. Examples, docs, tests, fixtures and changelog entries use invented companies, people, IDs and procedures, never a real company, customer or anything from a customer's documents.
 - Maintainers' clones run a pre-commit hook that scans for private names. Never bypass it with `--no-verify`. If it blocks, replace the name with a fictional one.
@@ -131,6 +131,7 @@ Update these in the same PR as the code change:
   - prompts
 - `src/run/`: the episode, suite and leaderboard runners, the tool runner, and token usage and cost.
 - `src/grade/`: invariants, end-state expectations, pass^k and `lint`.
+- `src/judge/`: `sandtable judge`: the model call, its plan, and the judged score, in a module with no model code so `regrade` can read it.
 - `src/report/`: the terminal summary and the self-contained HTML report.
 - `src/init/`: drafts domains from an OpenAPI spec, an SOP or transcripts (PII is scrubbed locally), then merges and renders them.
 - `src/demo/`: rule-based agents for the bundled examples.

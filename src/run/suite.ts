@@ -3,6 +3,7 @@ import { invariantTool } from "../grade/invariants.ts";
 import { lintDomain, type LintReport } from "../grade/lint.ts";
 import { passAtK, passHatK, wilsonInterval } from "../grade/passk.ts";
 import { pendingReview, type PendingItem } from "../spec/load.ts";
+import type { JudgedCounts, JudgedSummary } from "../judge/summary.ts";
 import type { Domain, Task } from "../spec/schema.ts";
 import type { AgentPromptOptions } from "../sim/prompts.ts";
 import type { AgentAdapter, UserSimulator } from "../sim/types.ts";
@@ -44,6 +45,8 @@ export interface TaskSummary {
    */
   inputs?: string;
   grading?: string;
+  /** The verdicts `sandtable judge` gave on this task's trials. Absent while they have none. */
+  judged?: JudgedCounts;
 }
 
 export interface FailureMode {
@@ -127,6 +130,8 @@ export interface SuiteResult {
    * depend on it. Absent in results from before attribution, until `sandtable regrade` re-scores them.
    */
   attribution?: AttributionCounts;
+  /** The judged score from `sandtable judge`, apart from pass^k and changing nothing else here. Absent until it runs. */
+  judged?: JudgedSummary;
   failureModes: FailureMode[];
   /** pass^1 and pass^k per task tag ("untagged" for tasks without tags). */
   byTag: TagScore[];

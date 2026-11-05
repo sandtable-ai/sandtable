@@ -7,7 +7,8 @@ import { describe, expect, it } from "vitest";
 import { freightScriptedAgent } from "../src/demo/freight-agents.ts";
 import { inputsFingerprint } from "../src/run/inputs.ts";
 import { writeFileAtomic } from "../src/run/write.ts";
-import { regradeSuite, RegradeError } from "../src/run/regrade.ts";
+import { droppedVerdicts, regradeSuite, RegradeError, storedCriteria } from "../src/run/regrade.ts";
+import { droppedLine, withJudgedSummary, type JudgedVerdict } from "../src/judge/summary.ts";
 import { runSuite, type SuiteResult } from "../src/run/suite.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
 import { loadDomain } from "../src/spec/load.ts";
@@ -24,6 +25,87 @@ async function stored(domain: Domain, mode: "careful" | "naive"): Promise<SuiteR
 }
 
 const verdicts = (r: SuiteResult) => Object.fromEntries(r.tasks.flatMap((t) => t.trials.map((tr) => [`${tr.taskId}#${tr.trial}`, tr.passed])));
+
+/** A run with a stored judgement on every trial, as `sandtable judge` writes it. */
+function judgedRun(domain: Domain, run: SuiteResult, verdict: JudgedVerdict["verdict"] = "pass"): SuiteResult {
+  const tasks = run.tasks.map((t) => ({
+    ...t,
+    trials: t.trials.map((tr) => ({ ...tr, judged: { model: "m-a", verdicts: (domain.judged ?? []).map((c) => ({ id: c.id, criterion: c.criterion, verdict, reason: "Because." })) } })),
+  }));
+  return withJudgedSummary({ ...run, tasks }, storedCriteria(domain), { "m-a": { calls: 2, input: 1000, output: 100, cacheRead: 0, cacheWrite: 0 } });
+}
+
+describe("regrade of a judged run", () => {
+  const criteria = [
+    { id: "reads-back", criterion: "The agent reads the load back." },
+    { id: "polite", criterion: "The agent stays polite." },
+  ];
+  const TASKS = ["book-at-posted-rate", "no-mc-number"];
+  async function fixture() {
+    const domain: Domain = { ...(await loadDomain(example)), judged: criteria };
+    const run = JSON.parse(JSON.stringify(await runSuite({ domain, agent: freightScriptedAgent("careful"), user: scriptedUser(), taskIds: TASKS }))) as SuiteResult;
+    return { domain, run, judged: judgedRun(domain, run) };
+  }
+
+  it("adds nothing to a run with no judged", async () => {
+    const { domain, run } = await fixture();
+    const regraded = regradeSuite(domain, run);
+    expect(JSON.stringify(regraded)).not.toContain('"judged"');
+    expect(droppedVerdicts(domain, run, regraded)).toEqual([]);
+  });
+
+  it("keeps a verdict while its criterion applies with the same text, with the score, tokens and cost as stored", async () => {
+    const { domain, judged } = await fixture();
+    const regraded = regradeSuite(domain, judged);
+    expect(regraded.judged).toEqual(judged.judged);
+    expect(regraded.tasks.map((t) => t.judged)).toEqual(judged.tasks.map((t) => t.judged));
+    expect(regraded.tasks[0]!.trials[0]!.judged).toEqual(judged.tasks[0]!.trials[0]!.judged);
+    expect(droppedVerdicts(domain, judged, regraded)).toEqual([]);
+  });
+
+  it("drops a verdict whose text changed or whose criterion is gone, says why, and recomputes the summary", async () => {
+    const { domain, judged } = await fixture();
+    const edited: Domain = { ...domain, judged: [{ id: "reads-back", criterion: "The agent reads back the load and the rate." }] };
+    const regraded = regradeSuite(edited, judged);
+    expect(regraded.tasks[0]!.trials[0]!.judged).toBeUndefined();
+    expect(regraded.tasks[0]!.judged).toBeUndefined();
+    // Nothing of the verdicts is left, and what they cost still is: the tokens were paid for.
+    expect(regraded.judged).toMatchObject({ pass: 0, score: null, notJudged: 2, criteria: [{ id: "reads-back", pass: 0, score: null }], usage: { "m-a": { calls: 2 } } });
+    const dropped = droppedVerdicts(edited, judged, regraded);
+    expect(dropped.sort()).toEqual(["its criterion no longer applies", "its criterion no longer applies", "its criterion's text changed", "its criterion's text changed"]);
+    expect(droppedLine(dropped)).toBe("4 stored judged verdict(s) dropped: 2 because its criterion no longer applies, 2 because its criterion's text changed");
+    // The verdicts that still fit stay.
+    const one: Domain = { ...domain, judged: [criteria[0]!] };
+    const kept = regradeSuite(one, judged);
+    expect(kept.tasks[0]!.trials[0]!.judged!.verdicts.map((v) => v.id)).toEqual(["reads-back"]);
+    expect(kept.judged).toMatchObject({ pass: 2, notJudged: 0 });
+  });
+
+  it("drops the verdicts of a trial that is now skipped, and says so in the CLI", async () => {
+    const { domain, judged } = await fixture();
+    const errored = structuredClone(judged);
+    errored.tasks[0]!.trials[0]!.error = "the agent's endpoint went down";
+    const regraded = regradeSuite(domain, errored);
+    expect(regraded.tasks[0]!.trials[0]!.skipped).toBe(true);
+    expect(regraded.tasks[0]!.trials[0]!.judged).toBeUndefined();
+    expect(regraded.judged).toMatchObject({ pass: 2, notJudged: 2 });
+    expect(droppedVerdicts(domain, errored, regraded)).toEqual(["its trial is now skipped", "its trial is now skipped"]);
+  });
+
+  it.skipIf(!process.features.typescript)("prints how many it dropped and why", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-regrade-judged-"));
+    const { domain, judged } = await fixture();
+    await cp(example, path.join(dir, "domain"), { recursive: true });
+    const spec = path.join(dir, "domain", "sandtable.yaml");
+    const text = (await readFile(spec, "utf8")).replace(/^judged:\n(?: .*\n|\n)*/m, "");
+    await writeFile(spec, `${text}\njudged:\n  - id: reads-back\n    criterion: The agent reads back the load and the rate.\n`);
+    expect(domain.name).toBe("freight-carrier-sales");
+    await writeFile(path.join(dir, "results.json"), JSON.stringify(judged));
+    const { stdout } = await promisify(execFile)(process.execPath, [cli, "regrade", path.join(dir, "results.json"), "-d", path.join(dir, "domain"), "--no-html"]);
+    expect(stdout).toContain("4 stored judged verdict(s) dropped: 2 because its criterion no longer applies, 2 because its criterion's text changed");
+    expect(JSON.parse(await readFile(path.join(dir, "results.json"), "utf8")).judged).toMatchObject({ pass: 0, notJudged: 2 });
+  });
+});
 
 describe("regrade", () => {
   it("reproduces a run's verdicts, checks and scores exactly when nothing changed", async () => {

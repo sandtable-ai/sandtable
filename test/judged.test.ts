@@ -456,7 +456,7 @@ describe("nothing else changes", () => {
     writeFileSync(tasksFile, YAML.stringify(tasks.map((t, i) => ({ ...t, judged: [{ ...second, id: `${second.id}-${i}` }] }))));
     const main = path.join(dir, "sandtable.yaml");
     const pendingFirst = { ...first, review: "pending" };
-    writeFileSync(main, `${readFileSync(main, "utf8")}\n${YAML.stringify({ judged: [pendingFirst] })}`);
+    writeFileSync(main, `${readFileSync(main, "utf8").replace(/^judged:\n(?: .*\n|\n)*/m, "")}\n${YAML.stringify({ judged: [pendingFirst] })}`);
     expect((await loadDomain(dir)).judged).toEqual([pendingFirst]);
 
     for (const [agent, code] of [["scripted:careful", 0], ["scripted:naive", 1]] as const) {

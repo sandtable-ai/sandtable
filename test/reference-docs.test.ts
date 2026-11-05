@@ -107,4 +107,11 @@ describe("docs/reference/results-schema.mdx", () => {
     const doc = page("results-schema");
     expect([...fields].filter((f) => !mentions(doc, f)).sort()).toEqual([]);
   });
+
+  // An offline run writes none of these: only `sandtable judge` does.
+  it("documents every field sandtable judge writes", () => {
+    const doc = page("results-schema");
+    const judged = ["judged", "pass", "fail", "notApplicable", "score", "models", "notJudged", "criteria", "pending", "usage", "costUsd", "model", "verdicts", "error", "id", "criterion", "verdict", "quote", "quoteFound", "reason"];
+    expect(judged.filter((f) => !mentions(doc, f))).toEqual([]);
+  });
 });

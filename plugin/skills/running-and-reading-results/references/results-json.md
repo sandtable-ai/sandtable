@@ -29,6 +29,11 @@ SuiteResult
   callerNotes                  { turns, trials }: caller turns that stepped out of role, and the trials they are in
   attribution                  { agent, "simulated-user", "task-spec", harness }: trials that didn't pass, by the
                                owner each trial's attribution names (absent before 0.3.0 until regraded)
+  judged?                      only once `sandtable judge` ran: { pass, fail, notApplicable, score, models[], notJudged,
+                               criteria[]: { id, pending?, pass, fail, notApplicable, score }, usage, costUsd }.
+                               score = pass / (pass + fail), null with neither: a model's judgement over verdicts, not
+                               pass^k, and it changes no other field. notJudged = trial-and-criterion pairs with no
+                               verdict (skipped, failed or left out). Its tokens are here, never in the run's usage
   byTag[]                      { tag, tasks, passHat1, passHatK }; "untagged" for tasks without tags
   failureModes[]               { id, kind, count, tasks[], example }: failed checks of graded trials clustered, most
                                frequent first; skipped trials' errors are not in it
@@ -96,6 +101,11 @@ SuiteResult
                                simulated-user: a caller note before the first hard failure (or anywhere, when only
                                the end state, called or reply failed). agent: everything else, the default, not a
                                finding. Never changes passed
+      judged?                  only once `sandtable judge` sent it: { model, error?, verdicts[]: { id, criterion,
+                               verdict: "pass" | "fail" | "not_applicable", quote?, quoteFound?: false, reason } }.
+                               criterion = the text at the trial's clock. quoteFound: false = the quote isn't in the
+                               transcript. error = the last call failed, and the next `judge` sends it again. Never
+                               changes passed
       events[]                 the transcript, in order:
                                  { type: "user", text }
                                  { type: "agent", text, latencyMs }
