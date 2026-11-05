@@ -3,7 +3,7 @@
 
 // Domains: load, parse and check them. The spec's types are TypeScript types only, so the schema library behind
 // them is not part of the API.
-export type { Domain, Tool, Op, Invariant, Task, StateAssert, CallExpect, ReferenceCall, FieldRefSpec, Persona, Given, Fault, TaskEvent } from "./spec/schema.ts";
+export type { Domain, Tool, Op, Invariant, Task, StateAssert, CallExpect, ReferenceCall, FieldRefSpec, Persona, Given, Fault, TaskEvent, JudgedCriterion } from "./spec/schema.ts";
 export { loadDomain, parseDomain, validateDomain, pendingReview, DomainError, DOMAIN_FILE, type PendingItem } from "./spec/load.ts";
 
 // The simulated world and its tools, for an agent that runs tools itself.

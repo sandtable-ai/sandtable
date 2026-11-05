@@ -1,5 +1,5 @@
 import { isPlainObject } from "../world/match.ts";
-import type { Domain, Task } from "./schema.ts";
+import type { Domain, JudgedCriterion, Task } from "./schema.ts";
 
 /**
  * The simulation clock. A domain's or a task's `clock` is a date and time to the minute with no time zone, such as
@@ -163,10 +163,15 @@ function mapParams(params: Params, path: string, visit: Visit, shadow: ReadonlyS
   return Object.fromEntries(Object.entries(params).map(([name, p]) => [name, param(p, `${path}.${name}`)]));
 }
 
+/** Criteria with `visit` applied to each `criterion`, which reads dates inside text. */
+function mapCriteria(criteria: readonly JudgedCriterion[], path: string, visit: Visit): JudgedCriterion[] {
+  return criteria.map((c, i) => ({ ...c, criterion: walk(c.criterion, "text", `${path}[${i}].criterion`, visit) }));
+}
+
 /**
  * The domain with `visit` applied to every string in the places a date resolves: the policy, seed rows, tools' params'
- * defaults, ops and checks, and invariants' `where` and `when`. In a tool with a param named `today` or `now`, that
- * name is the param.
+ * defaults, ops and checks, invariants' `where` and `when`, and judged criteria. In a tool with a param named `today` or
+ * `now`, that name is the param.
  */
 function mapDomain(domain: Domain, visit: Visit): Domain {
   return {
@@ -189,13 +194,14 @@ function mapDomain(domain: Domain, visit: Visit): Domain {
       if ("max_count" in inv && inv.max_count.when) return { ...inv, max_count: { ...inv.max_count, when: walk(inv.max_count.when, "value", `${at}.max_count.when`, visit) } };
       return inv;
     }),
+    ...(domain.judged ? { judged: mapCriteria(domain.judged, "judged", visit) } : {}),
   };
 }
 
 /**
  * The task with `visit` applied to every string in the places a date resolves: its `given` rows and context, events,
- * faults' messages, `expect` (state, `called`/`not_called` args, and `reply_includes`), `reference` args, and the
- * caller's instructions, opening and script.
+ * faults' messages, `expect` (state, `called`/`not_called` args, and `reply_includes`), `reference` args, judged criteria,
+ * and the caller's instructions, opening and script.
  */
 function mapTask(task: Task, visit: Visit): Task {
   const at = `tasks.${task.id}`;
@@ -212,6 +218,7 @@ function mapTask(task: Task, visit: Visit): Task {
     ...(task.events ? { events: walk(task.events, "value", `${at}.events`, visit) } : {}),
     ...(task.faults ? { faults: task.faults.map((f, i) => (f.message === undefined ? f : { ...f, message: walk(f.message, "text", `${at}.faults[${i}].message`, visit, NONE, true) })) } : {}),
     ...(task.reference ? { reference: task.reference.map((c, i) => ({ ...c, args: walk(c.args, "value", `${at}.reference[${i}].args`, visit) })) } : {}),
+    ...(task.judged ? { judged: mapCriteria(task.judged, `${at}.judged`, visit) } : {}),
     expect: {
       ...task.expect,
       state: walk(task.expect.state, "value", `${at}.expect.state`, visit),

@@ -20,11 +20,11 @@ The package is an ES module. Its TypeScript types ship with it. The exports belo
 | `loadDomain(path): Promise<Domain>` | Reads a domain directory (with `sandtable.yaml`) or the file itself, inlines the `.md` and `.yaml` files it names, and checks it as `sandtable validate` does. Throws a `DomainError` that says what is wrong and in which file. |
 | `parseDomain(value): Domain` | Checks a domain built in code: the schema, then the cross-references. Its values are used as they are, so a path such as `./policy.md` is not read. Throws a `DomainError`. |
 | `validateDomain(domain): string[]` | The cross-reference problems of a parsed domain (an unknown tool, table or persona, a bad where clause), as readable lines. Empty when there are none. |
-| `pendingReview(domain): PendingItem[]` | The drafted items still marked `review: pending`, as `sandtable review` lists them. |
+| `pendingReview(domain): PendingItem[]` | The drafted items still marked `review: pending`, as `sandtable review` lists them. A pending judged criterion is among them, with kind `criterion`. A run's own `pendingReview` leaves it out, since a criterion can't change the score. |
 | `DomainError` | The error `loadDomain` and `parseDomain` throw for an invalid domain. |
 | `DOMAIN_FILE` | `"sandtable.yaml"`. |
 
-The spec's shapes are TypeScript types: `Domain`, `Tool`, `Op`, `Invariant`, `Task`, `StateAssert`, `CallExpect`, `ReferenceCall`, `FieldRefSpec`, `Persona`, `Given`, `Fault` and `TaskEvent`. [The spec reference](/reference/spec) describes every key.
+The spec's shapes are TypeScript types: `Domain`, `Tool`, `Op`, `Invariant`, `Task`, `StateAssert`, `CallExpect`, `ReferenceCall`, `FieldRefSpec`, `Persona`, `Given`, `Fault`, `TaskEvent` and `JudgedCriterion`. [The spec reference](/reference/spec) describes every key.
 
 ## The world and its tools
 
@@ -84,7 +84,7 @@ Every type the package exports, by what it describes. Like the values above, the
 
 | Describes | Types |
 |---|---|
-| A domain | `Domain`, `Tool`, `Op`, `Invariant`, `Task`, `StateAssert`, `CallExpect`, `ReferenceCall`, `FieldRefSpec`, `Persona`, `Given`, `Fault`, `TaskEvent`, `PendingItem` |
+| A domain | `Domain`, `Tool`, `Op`, `Invariant`, `Task`, `StateAssert`, `CallExpect`, `ReferenceCall`, `FieldRefSpec`, `Persona`, `Given`, `Fault`, `TaskEvent`, `JudgedCriterion`, `PendingItem` |
 | The world and its tools | `Change`, `Snapshot`, `ToolOutcome`, `ToolSchema` |
 | Agents and simulated users | `AgentAdapter`, `AgentContext`, `AgentSession`, `CallTool`, `WorldUrls`, `UserSimulator`, `UserContext`, `UserSession`, `UserTurn`, `ClaudeOptions`, `ClaudeAgentOptions`, `OpenAICompatOptions`, `OpenAICompatAgentOptions`, `BedrockConverseOptions` |
 | A run and its results | `SuiteOptions`, `SuiteResult`, `TaskSummary`, `TrialResult`, `TrajectoryEvent`, `EndReason`, `CheckResult`, `CheckKind`, `CallRecord`, `Violation`, `FaultApplied`, `SoftCheck`, `SoftScore`, `FailureMode`, `Verdict`, `CallerNote`, `Attribution`, `AttributionCounts`, `Owner`, `Coverage`, `RuleCoverage`, `CoverageCell`, `ToolCoverage`, `TokenUsage`, `UsageByModel`, `Usage`, `UsageRecorder` |

@@ -1,12 +1,11 @@
 import type { AgentPromptOptions } from "../sim/prompts.ts";
 import { isClockTime, resolveDates, writtenClock } from "../spec/clock.ts";
-import { pendingReview } from "../spec/load.ts";
 import type { Domain, Task } from "../spec/schema.ts";
 import { worldFor } from "../world/store.ts";
 import type { ToolOutcome } from "../world/tools.ts";
 import { gradeEpisode, toolEvent, worldChanges, type TrajectoryEvent, type TrialResult } from "./episode.ts";
 import { inputsFingerprint } from "./inputs.ts";
-import { summarize, trialStatus, type SuiteResult } from "./suite.ts";
+import { runPendingReview, summarize, trialStatus, type SuiteResult } from "./suite.ts";
 import { createToolRunner } from "./tool-runner.ts";
 import { version } from "../version.ts";
 
@@ -122,6 +121,6 @@ export function regradeSuite(domain: Domain, stored: SuiteResult): SuiteResult {
     ...stored,
     sandtable: { ...stored.sandtable, regradedWith: version },
     ...summarize(domain, tasks, trials, stored.k, stored.user, prompt),
-    pendingReview: pendingReview(domain),
+    pendingReview: runPendingReview(domain),
   };
 }

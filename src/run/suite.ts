@@ -138,7 +138,7 @@ export interface SuiteResult {
    */
   coverage?: Coverage;
   usage: Usage;
-  /** Drafted items not yet accepted; while non-empty, results are provisional. */
+  /** Drafted items not yet accepted that the score rests on (see runPendingReview); while non-empty, results are provisional. */
   pendingReview: PendingItem[];
   /** Time the agent took to answer each user turn, tool calls included. */
   latency: { agentTurnP50Ms: number | null; agentTurnP95Ms: number | null };
@@ -221,9 +221,17 @@ export async function runSuite(opts: SuiteOptions): Promise<SuiteResult> {
     durationMs: Math.round(performance.now() - started),
     ...summarize(domain, tasks, results, k, user.name, prompt),
     usage: sumUsage(results.map((r) => r.usage)),
-    pendingReview: pendingReview(domain),
+    pendingReview: runPendingReview(domain),
     latency: { agentTurnP50Ms: percentile(turnLatencies, 50), agentTurnP95Ms: percentile(turnLatencies, 95) },
   };
+}
+
+/**
+ * A run's `pendingReview`: what makes its score not yet a claim about the customer's rules. A pending judged criterion
+ * isn't in it, though `sandtable review` and `validate --strict` list it, since a criterion can't change the score.
+ */
+export function runPendingReview(domain: Domain): PendingItem[] {
+  return pendingReview(domain).filter((p) => p.kind !== "criterion");
 }
 
 /** Per-task results and the scores derived from the verdicts, for a live run or a regrade. */

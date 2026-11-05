@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import YAML from "yaml";
 import { ModelsFile } from "../src/run/leaderboard.ts";
-import { InvariantSpec, PersonaSpec, TableSpec, TaskSpec, ToolSpec } from "../src/spec/schema.ts";
+import { InvariantSpec, JudgedCriterionSpec, PersonaSpec, TableSpec, TaskSpec, ToolSpec } from "../src/spec/schema.ts";
 
 // The Claude Code plugin's skills teach coding agents exact commands and spec snippets.
 // These tests keep them true as the CLI and the spec change.
@@ -49,7 +49,7 @@ function fences(text: string): { lang: string; code: string }[] {
   return [...text.matchAll(/^([ \t]*)```(\w*)\n([\s\S]*?)^\1```/gm)].map((m) => ({ lang: m[2]!, code: m[3]! }));
 }
 
-const schemas = { tools: ToolSpec, invariants: InvariantSpec, tasks: TaskSpec, personas: PersonaSpec } as const;
+const schemas = { tools: ToolSpec, invariants: InvariantSpec, tasks: TaskSpec, personas: PersonaSpec, judged: JudgedCriterionSpec } as const;
 
 /** Problems with one YAML snippet: a domain fragment (a mapping of top-level keys), a leaderboard models file, or a list of tools, invariants or tasks. */
 function snippetProblems(value: unknown): string[] {

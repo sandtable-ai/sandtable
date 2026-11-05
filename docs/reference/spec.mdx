@@ -18,6 +18,7 @@ max_turns: 20               # user turns per trial before it is cut off
 world: { tables: ... }      # required
 tools: [...]                # required, at least one
 invariants: [...]
+judged: [...]               # criteria for an LLM judge, apart from pass/fail (see judged)
 personas: [...]
 tasks: [...] | ./tasks.yaml
 ```
@@ -89,7 +90,7 @@ tasks:
 - `clock` is a date and a time to the minute, with no time zone, such as `2026-11-02T09:00`, or `now`: the time each trial starts, on the machine running sandtable, to the minute. A task's `clock` overrides the domain's. `validate` fails on anything else, such as a date without a time or `2026-02-30T09:00`.
 - `$today` is the clock's date (`2026-11-02`) and `$now` its date and time (`2026-11-02T09:00`). Each takes one offset, a sign, a whole number and a unit `d`, `h` or `m`: `$today+2d`, `$today-1d`, `$now+90m`, `$now-3h`, `$now+1d`. `$today` takes only `d`. The arithmetic is on the wall clock, with no daylight-saving jumps: `$now+1h` at `2026-03-08T01:30` is `2026-03-08T02:30`.
 - A whole string resolves in seed rows, a task's `given.rows` and `given.context`, tools' params' `default`s (those of an object's `properties` and of the properties of an array's `items` too, as in `pickup_from: { type: string, required: false, default: $today }`), tools' `ops` and `checks` with their where clauses, `events`, `expect.state`, the `args` of `called` and `not_called`, `reference` args, and invariants' `where` and `when`. Dates compare as text, so `$gte` and `$lt` work on them: `{ pickup_date: { $gte: $today } }`.
-- `${today+2d}` and `${now}` interpolate inside text: the `policy` (`Today is ${today}.`), a task's `user.instructions`, `opening` and `script`, its faults' `message`s (`Retry after ${now+5m}`), its `expect.reply_includes`, and strings in tools' `ops` and `checks`, where `${arg}` interpolates an argument: `"Booked ${load_id} for ${today+2d}"`. In the places that read only `${...}`, a bare `$today` stays text, as prose would.
+- `${today+2d}` and `${now}` interpolate inside text: the `policy` (`Today is ${today}.`), a task's `user.instructions`, `opening` and `script`, its faults' `message`s (`Retry after ${now+5m}`), its `expect.reply_includes`, a [judged](#judged) `criterion`, and strings in tools' `ops` and `checks`, where `${arg}` interpolates an argument: `"Booked ${load_id} for ${today+2d}"`. In the places that read only `${...}`, a bare `$today` stays text, as prose would.
 - In a tool with a param named `today` or `now`, that name is the param in the tool's `ops`, `checks` and params' `default`s, as it was before clocks existed.
 - In a domain that sets a clock, on the domain or on any task, `validate` fails on a malformed offset, such as `$today+2h` or `$now+5x`, and on `$today` or `$now` where a task's trials have no clock. In the policy, params' `default`s, faults' `message`s and `reply_includes`, which took any string as text before 1.5, it warns instead: such an expression stays text, and 2.0 will reject it.
 - In a domain that sets no clock anywhere, nothing resolves, and the domain behaves as it did before clocks existed: `$today+2d` is text, and `$today` in a tool's ops is a param the tool doesn't have. `validate` warns about each date expression it finds there; 2.0 will reject them without a clock.
@@ -304,6 +305,34 @@ The `Soft rule` comments that `init --sop` writes are different: they note the S
 
 Every invariant also accepts `review` and `source`, as `source: { file, quote }`: the document the rule comes from and the sentence it enforces, which `init --sop` fills in (see [Review workflow](/concepts/review-workflow)).
 
+## judged
+
+Some rules aren't state, such as tone, or reading a booking back before making it: no end state or tool call shows whether the agent kept them. A judged criterion states such a rule, for an LLM judge to grade as a score apart from pass/fail. `judged` on the domain applies to every task's trials, and `judged` on a task applies to that task's trials too.
+
+```yaml
+judged:
+  - id: reads-back-before-booking
+    criterion: The agent reads the load, the rate and the pickup date back to the caller before it books.
+
+tasks:
+  - id: book-thursday-pickup
+    judged:
+      - id: names-the-date
+        criterion: The agent tells the caller the pickup is on ${today+2d}.
+        source: { file: tests/scenario-12.json, quote: "Confirms the pickup date" }
+        review: pending
+```
+
+<Note>
+This release only states and validates criteria. No command grades them yet.
+</Note>
+
+Criteria change no verdict, pass^k, gate or exit code. They aren't shown to the agent or the caller: neither one's prompt states them. They stay out of `results.json` and out of a task's `inputs` and `grading` hashes, so adding, editing or removing one doesn't mark a task as changed. For a rule that a tool call or a record can show, measured as a rate without failing a trial, use a [soft invariant](#soft-invariants) (`soft: true`).
+
+- `id` is required and not empty. It is unique across the domain's criteria and every task's: `validate` fails on a duplicate, and names both places.
+- `criterion` is required and not empty, and surrounding whitespace is trimmed. `${today+2d}` and `${now}` interpolate inside it, at the trial's clock. In a domain that sets a clock, `validate` fails on a malformed offset, and on one where a task's trials have no clock. See [clock and relative dates](#clock-and-relative-dates).
+- `source` and `review` work as they do on an invariant. A `review: pending` criterion shows in `sandtable review` and fails `validate --strict`, but doesn't make a run provisional, since it can't change the score: it isn't in the run's `pendingReview`.
+
 ## personas and tasks
 
 ```yaml
@@ -343,6 +372,8 @@ tasks:
       called: [verify_carrier]          # each must have succeeded at least once
       not_called: [transfer_to_human]   # never attempted
       reply_includes: ["confirmation"]  # some agent message contains it (case-insensitive, U+2010/U+2011 read as -, a ${today...} date also in words); use sparingly
+    judged:                            # optional: criteria for an LLM judge on this task's trials, apart from pass/fail, see judged
+      - { id: walks-away-politely, criterion: The agent stays polite when it turns the rate down. }
 ```
 
 A `reference` call must succeed when `lint` replays it, unless it has `expect_error`: then the call must fail with a tool error, as a correct agent's lookup of an unknown MC number does in a refusal task. `expect_error: true` accepts any tool error, and text such as `expect_error: not found` requires an error that contains it, case-insensitive, so a domain edit that removes the check rejecting the call shows up in `lint`. A call with an unknown tool or arguments the tool rejects is a `lint` error either way. References only feed `lint`: they never grade a trial.
