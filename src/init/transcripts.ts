@@ -7,6 +7,7 @@ import type { UsageByModel } from "../run/usage.ts";
 import { createClient, recordDraftUsage, requestBase, type ClaudeOptions } from "../sim/claude.ts";
 import { cutOff, cutOffHint, lenient } from "./cut-off.ts";
 import { copiedValueNotes, type Place } from "./copied.ts";
+import { CALL_DATE_FORMAT, callDateIn, callDateNotes, holdsDates, NO_CALL_DATE, parseCallDate, relativeToCall } from "./relative-dates.ts";
 import { ConditionSpec, describeTools, whereOf } from "./sop.ts";
 import { equal } from "../world/match.ts";
 
@@ -23,6 +24,12 @@ export interface TranscriptDraft {
   copied: number;
   /** Tokens the drafting calls used, one per transcript, per model, for `init` to print with an estimated cost. */
   usage: UsageByModel;
+  /** The drafted tasks whose dates were made relative to their call's date (see relativeToCall), in order. */
+  relative: string[];
+  /** The drafted tasks that hold dates their chat gives no call date for, so they stay literal, each with a review note. */
+  literal: string[];
+  /** Whether the domain needs `clock: now`, which `init` sets: a drafted date was made relative, and the domain sets no clock. */
+  clockNow: boolean;
   /**
    * The transcripts whose drafting call failed, in order, with the error. A failure that concerns only that chat (an
    * outage, throttling or an oversized request that outlasted the retries) lets the others be drafted, so one failed
@@ -120,6 +127,8 @@ You get the company's policy, the agent's tools, the world's tables with their c
 - as reference, the tool calls a correct agent makes when it follows the policy, in order and with their arguments, using the identifiers of the rows you reuse or add. sandtable replays them against the world to prove the scenario can be passed, so list only calls that succeed: leave out a call the API would reject, such as a lookup of an identifier that doesn't exist. A refusal may end with lookups only.
 
 Make everything fictional. Replace people's names, company names and identifiers with fictional ones. Use only the listed tables, fields and tools. A param with values in parentheses takes exactly one of them, as written: map the transcript's wording to it ("By Mail" is by_mail). Prefer exact conditions on keys (e.g. which load was booked by which carrier) and ranges for negotiated numbers; use in for a field that may end as any of several values, and exists for a field that must be set or left unset.
+
+Write every date you draft as YYYY-MM-DD, and a date with a time as YYYY-MM-DDTHH:MM, in values and in text such as the caller's instructions and script, so sandtable can make each one relative to the day of the call.
 
 Keep the transcript's facts. Reuse an existing row only when every fact the transcript states about it matches the row: a membership level, status, date, amount or item that differs means it is not the same record, even when the name matches (the same customer may have called before, with different facts then). Otherwise propose new_rows with new identifiers and every field the scenario needs, including the table key, consistent with the conditions you expect. Never change what the transcript says to fit an existing row, and never invent a conflict the transcript does not have. List each existing row you reuse in existing_rows, with the facts the transcript states about it.`;
 
@@ -240,15 +249,20 @@ export function proposalToTask(p: Proposal, file: string): { task: Task; persona
  * Draft one task per transcript. Transcripts are PII-scrubbed locally first. Each proposal
  * must survive schema and cross-reference validation against the domain plus the rows it
  * adds; survivors are `review: pending` with the transcript as their source.
+ * With the call's date known, the date the transcript states (callDateIn) or else `callDate`, each date a task drafts
+ * is made relative to it, on a domain with a clock (see relativeToCall); without one, its dates stay literal, with a note.
  */
 export async function draftTasksFromTranscripts(input: {
   domain: Domain;
   transcripts: { file: string; text: string }[];
   claude?: ClaudeOptions;
+  /** The date of the calls whose transcript states none: `2026-03-14`, or `2026-03-14T10:05`. */
+  callDate?: string;
 }): Promise<TranscriptDraft> {
+  if (input.callDate !== undefined && parseCallDate(input.callDate) === undefined) throw new Error(`callDate must be ${CALL_DATE_FORMAT}, not ${input.callDate}`);
   const client = await createClient(input.claude ?? {});
   const base = requestBase(input.claude ?? {}, "high");
-  const out: TranscriptDraft = { tasks: [], personas: [], rows: {}, warnings: [], notes: {}, redactions: 0, copied: 0, usage: {}, failed: [], notSent: [] };
+  const out: TranscriptDraft = { tasks: [], personas: [], rows: {}, warnings: [], notes: {}, redactions: 0, copied: 0, usage: {}, relative: [], literal: [], clockNow: false, failed: [], notSent: [] };
   let domain = input.domain;
   // What the domain held before drafting: a value it already has, such as a seeded customer's name, isn't copied from a chat.
   const known = JSON.stringify({ world: input.domain.world, policy: input.domain.policy, tools: input.domain.tools, personas: input.domain.personas });
@@ -289,11 +303,21 @@ export async function draftTasksFromTranscripts(input: {
       continue;
     }
 
+    // The call's dates are past by the time the suite runs: with the call's date known, each becomes an offset from it.
+    const call = callDateIn(t.text) ?? input.callDate;
+    const keys = Object.fromEntries(Object.entries(domain.world.tables).map(([name, table]) => [name, table.key]));
+    const dates = call === undefined ? undefined : relativeToCall(conv.task, conv.rows, call, keys);
+    if (dates) Object.assign(conv, { task: dates.task, rows: dates.rows });
+    const literal = call === undefined && holdsDates(conv.task, conv.rows);
+    const relative = (dates?.changed.length ?? 0) > 0;
+
     // A reference argument spelled as the transcript says it ("By Mail") gets the allowed value it plainly means.
     for (const c of normalizeEnumArgs(domain, conv.task)) out.warnings.push(`${t.file}: ${conv.task.id}: ${c}`);
 
-    // Validate against the domain as it would be after adding this task's rows and persona.
+    // Validate against the domain as it would be after adding this task's rows and persona, and the clock its relative
+    // dates need.
     const candidate: Domain = structuredClone(domain);
+    if (relative && candidate.clock === undefined) candidate.clock = "now";
     let rowProblem: string | undefined;
     for (const [table, rows] of Object.entries(conv.rows)) {
       const spec = candidate.world.tables[table]!;
@@ -317,7 +341,8 @@ export async function draftTasksFromTranscripts(input: {
     // A reused row that contradicts the transcript changes the scenario: keep the task for review, and say where.
     const conflicts = reusedRowConflicts(candidate, response.parsed_output.existing_rows ?? []);
     for (const c of conflicts) out.warnings.push(`${t.file}: ${conv.task.id} ${c}: keep the transcript's facts by giving the task its own row with new IDs, or correct the task`);
-    const notes = conflicts.map((c) => `${c[0]!.toUpperCase()}${c.slice(1)}. Keep the transcript's facts: give this task its own row with new IDs, or correct the task.`);
+    const notes = call !== undefined && dates ? callDateNotes(call, dates) : literal ? [NO_CALL_DATE] : [];
+    notes.push(...conflicts.map((c) => `${c[0]!.toUpperCase()}${c.slice(1)}. Keep the transcript's facts: give this task its own row with new IDs, or correct the task.`));
     // Lint the task as `sandtable lint` would, replaying its drafted reference: a draft that can't be passed is kept for
     // review, with why. A failing reference usually points at a wrong expectation or a missing seed row.
     const lint = lintDomain({ ...candidate, tasks: [conv.task] }).tasks[0]!;
@@ -332,11 +357,14 @@ export async function draftTasksFromTranscripts(input: {
 
     domain = candidate;
     out.tasks.push(conv.task);
+    if (relative) out.relative.push(conv.task.id);
+    if (literal) out.literal.push(conv.task.id);
     if (conv.persona && !input.domain.personas.some((p) => p.id === conv.persona!.id) && !out.personas.some((p) => p.id === conv.persona!.id)) {
       out.personas.push(conv.persona);
     }
     for (const [table, rows] of Object.entries(conv.rows)) (out.rows[table] ??= []).push(...rows);
   }
+  out.clockNow = out.relative.length > 0 && input.domain.clock === undefined;
   if (cutOffs) {
     // Out of the chats sent: after an early stop, the rest were never sent.
     const sent = input.transcripts.length - out.notSent.length;
