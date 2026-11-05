@@ -2,14 +2,16 @@
  * `sandtable import retell`: a draft domain from a Retell agent's export, with no model call. The agent's response
  * engine, a Retell LLM or a conversation flow, gives the policy (its prompts) and the tools (custom functions, end_call
  * and transfer_call), and each test case becomes a task: its user prompt as the caller's goal, its tool mocks as that
- * task's seed rows and expected calls, and its dynamic variables as the call's context. What the export can't say, such
- * as what a function changes or how Retell's LLM judge grades a test, becomes a review note, as `init` does.
+ * task's seed rows and expected calls, its dynamic variables as the call's context, and the metrics Retell's LLM judge
+ * grades it on as judged criteria, which change no verdict. What the export can't say, such as what a function changes,
+ * becomes a review note, as `init` does.
  */
 
 import { isPlainObject } from "../world/match.ts";
 import { slug } from "./openapi.ts";
 import {
   addCall,
+  addCriterion,
   article,
   closeTask,
   endCallTool,
@@ -286,9 +288,9 @@ export function draftFromRetell(files: PlatformFile[], pick?: string): PlatformD
       }
       mocks.add(task, tool, mock.output, file, call());
     }
-    const metrics = (Array.isArray(test.metrics) ? test.metrics : []).map(str).filter((m): m is string => m !== undefined);
-    if (metrics.length) {
-      task.notes.push(`Retell's LLM judge graded it on: ${metrics.map((m) => JSON.stringify(m)).join("; ")}. sandtable doesn't: write each as expect.state, called or not_called, which sandtable grades without a model.`);
+    for (const metric of Array.isArray(test.metrics) ? test.metrics : []) {
+      const text = str(metric);
+      if (text) addCriterion(task, text);
     }
     closeTask(task, "test case");
     tasks.push(task);

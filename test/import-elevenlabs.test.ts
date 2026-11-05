@@ -11,7 +11,7 @@ import { lintDomain } from "../src/grade/lint.ts";
 import { runSuite } from "../src/run/suite.ts";
 import { noopAgent } from "../src/sim/noop.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
-import { loadDomain, parseDomain, validateDomain } from "../src/spec/load.ts";
+import { domainWarnings, loadDomain, parseDomain, pendingReview, validateDomain } from "../src/spec/load.ts";
 import { matches } from "../src/world/match.ts";
 
 // sandtable import elevenlabs (#35): a draft domain from an ElevenLabs agent, its tools and its tests, as the
@@ -44,7 +44,7 @@ describe("import elevenlabs: the bundled example", () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-import-el-"));
     const out = path.join(dir, "pinecrest");
     const imported = await run(process.execPath, [cli, "import", "elevenlabs", example, "-o", out]);
-    expect(imported.stdout).toContain("Imported pinecrest-bike-repair from ElevenLabs: 3 tools, 0 tables, 2 tasks, all pending review.");
+    expect(imported.stdout).toContain("Imported pinecrest-bike-repair from ElevenLabs: 3 tools, 0 tables, 2 tasks, 2 judged criteria, all pending review.");
     expect(imported.stdout).toContain("{{customer_phone}}");
     expect(imported.stdout).toContain("base URL");
     const domain = await loadDomain(out);
@@ -59,6 +59,12 @@ describe("import elevenlabs: the bundled example", () => {
     expect(domain.tools.find((t) => t.name === "book_service")!.ops).toEqual([{ respond: "Booked: tune-up for Riley Chen on 2026-11-12, confirmation PB-77" }]);
     const [book, lookup] = domain.tasks;
     expect(book).toMatchObject({ id: "book-a-tune-up", max_turns: 8, given: { context: { customer_phone: "+15555550142" } }, expect: { called: ["book_service"] } });
+    expect(book!.judged!.map((c) => [c.id, c.criterion, c.review])).toEqual([
+      ["book-a-tune-up-judged-1", "The agent books a tune-up for November 12, 2026, after the caller confirms it", "pending"],
+      ["book-a-tune-up-judged-2", "The agent gives the caller the confirmation number", "pending"],
+    ]);
+    expect((await run(process.execPath, [cli, "review", out])).stdout).toContain(`- criterion book-a-tune-up-judged-1  (${path.join("test_configs", "Book-a-tune-up.json")})\n    "The agent books a tune-up`);
+    expect(await run(process.execPath, [cli, "validate", out, "--strict"]).catch((e: { code: number }) => e)).toMatchObject({ code: 1 });
     expect(lookup).toMatchObject({
       id: "looks-up-the-ticket-before-answering",
       user: { opening: "Hi, is my bike ready? The ticket is R-2041.", script: ["Hi, is my bike ready? The ticket is R-2041."] },
@@ -325,7 +331,7 @@ describe("import elevenlabs: tests", () => {
     ["n.json", { id: "tool_n", tool_config: webhook("note_it", { url: "https://desk.example/notes", method: "POST" }) }],
   ] as [string, unknown][];
 
-  it("makes a simulation a task: its scenario, variables, turns and mocks, with its success conditions noted", () => {
+  it("makes a simulation a task: its scenario, variables, turns and mocks, with its success conditions as judged criteria", () => {
     const { draft, domain } = domainOf(
       files(...base(), [
         "s.json",
@@ -352,11 +358,28 @@ describe("import elevenlabs: tests", () => {
     });
     expect(draft.tasks[0]!.notes).toEqual([
       'Its test mocks note_it to fail ("boom"): model that failure with a fault or a check, which this draft leaves out.',
-      'ElevenLabs judged it with an LLM on: "Finds it"; "Is kind". sandtable doesn\'t: write each as expect.state, called or not_called, which sandtable grades without a model.',
       "The test mocked lookup, so the task expects a successful call of each: check that, and add the end state.",
       "Its opening and script are placeholders for runs with --user scripted: write the caller's lines.",
     ]);
     expect(draft.warnings).toEqual(["s.json: a tool mock for ghost, which the agent doesn't have; skipped"]);
+    expect(domain.tasks[0]!.judged).toEqual([
+      { id: "lost-item-judged-1", criterion: "Finds it", source: { file: "s.json", quote: "Finds it" }, review: "pending" },
+      { id: "lost-item-judged-2", criterion: "Is kind", source: { file: "s.json", quote: "Is kind" }, review: "pending" },
+    ]);
+    expect(pendingReview(domain)).toContainEqual({ kind: "criterion", id: "lost-item-judged-1", source: { file: "s.json", quote: "Finds it" } });
+  });
+
+  it("drafts one criterion for a condition given in both fields, and keeps text YAML must quote, warning about a ${today} as text, since a draft sets no clock", () => {
+    const text = "Says: the pickup is ${today+2d} # soon";
+    const { domain } = domainOf(
+      files(...base(), ["s.json", { id: "s1", type: "simulation", name: "Quoted", simulation_scenario: "Ask.", success_conditions: [text, "  Is kind "], success_condition: "Is kind" }]),
+    );
+    expect(domain.tasks[0]!.judged!.map((c) => [c.id, c.criterion, c.source])).toEqual([
+      ["quoted-judged-1", text, { file: "s.json", quote: text }],
+      ["quoted-judged-2", "Is kind", { file: "s.json", quote: "Is kind" }],
+    ]);
+    expect(validateDomain(domain)).toEqual([]);
+    expect(domainWarnings(domain).filter((w) => w.includes("judged"))).toEqual([expect.stringContaining('tasks.quoted.judged[0].criterion: "${today+2d}" is text, not a date, since the domain sets no clock')]);
   });
 
   it("makes a tool test a task that expects the call, its exact and regex arguments as a where clause on them, and replays the user's lines", () => {
@@ -392,6 +415,8 @@ describe("import elevenlabs: tests", () => {
       ),
     );
     const [counts, never, ghost] = domain.tasks;
+    // An LLM check on one argument of one call isn't about the conversation, so it stays a note.
+    expect(counts).not.toHaveProperty("judged");
     expect(counts).toMatchObject({
       user: { instructions: 'In this call you say, in order: "I need 3 of item 7.", then "Yes, three."', opening: "I need 3 of item 7.", script: ["I need 3 of item 7.", "Yes, three."] },
       expect: { called: [{ tool: "order", args: { qty: 3, "item.sku": "7", note: { $regex: "^(?:^thr)$" } } }] },
@@ -485,8 +510,8 @@ describe("import elevenlabs: tests", () => {
     expect(renderElevenLabsDraft(draft).tasks).toContain(`args: { note: { $regex: '^ORD-[0-9]{8}$' }, mood: { $regex: '^(?:a|b)$' }, who: { $regex: '^(?:thr)$' }, item.sku: { $regex: '^(?:^7\\$)$' } }`);
   });
 
-  it("makes a next-reply test a task, with its success condition and examples noted", () => {
-    const { draft } = domainOf(
+  it("makes a next-reply test a task, with its success condition as a judged criterion and its examples noted", () => {
+    const { draft, domain } = domainOf(
       files(...base(), [
         "r.json",
         {
@@ -501,10 +526,28 @@ describe("import elevenlabs: tests", () => {
       ]),
     );
     expect(draft.tasks[0]!.notes).toEqual([
-      'ElevenLabs judged the agent\'s next reply with an LLM: "Greets the caller". Replies it counted as passing: "Hi!". Replies it counted as failing: "What?". sandtable doesn\'t: write it as reply_includes, expect.state, called or not_called, which sandtable grades without a model.',
+      'ElevenLabs gave its LLM examples to judge the agent\'s next reply by, which a judged criterion has nowhere to hold. Replies it counted as passing: "Hi!". Replies it counted as failing: "What?". Work what they show into the criterion\'s text, or write it as reply_includes, expect.state, called or not_called, which sandtable grades without a model.',
       "ElevenLabs tested the agent's next turn after this chat history; a run plays the whole call, with the user's lines in order whatever the agent says, so check that they still make sense.",
       "Nothing is graded yet: add the end state (expect.state) or the tools a correct call uses (expect.called).",
     ]);
+    expect(domain.tasks[0]!.judged).toEqual([{ id: "greets-judged-1", criterion: "Greets the caller", source: { file: "r.json", quote: "Greets the caller" }, review: "pending" }]);
+  });
+
+  it("notes a next-reply test only for what its criterion can't hold", () => {
+    const reply = (extra: Record<string, unknown>) => {
+      const { draft, domain } = domainOf(files(...base(), ["r.json", { id: "r1", type: "llm", name: "Greets", ...extra }]));
+      return { notes: draft.tasks[0]!.notes, judged: domain.tasks[0]!.judged };
+    };
+    const nothing = "Nothing is graded yet: add the end state (expect.state) or the tools a correct call uses (expect.called).";
+    const placeholders = "Its opening and script are placeholders for runs with --user scripted: write the caller's lines.";
+    // A condition and no examples: all of it is in the criterion.
+    expect(reply({ success_condition: "Greets the caller" })).toMatchObject({ notes: [nothing, placeholders], judged: [{ id: "greets-judged-1" }] });
+    // No condition: nothing to draft, and the note says what to do about it.
+    const state = "State what it checks as a judged criterion, or write it as reply_includes, expect.state, called or not_called, which sandtable grades without a model.";
+    expect(reply({})).toEqual({ notes: [`ElevenLabs judged the agent's next reply with an LLM, and the test gives no condition to draft as a judged criterion. ${state}`, nothing, placeholders] });
+    expect(reply({ failure_examples: [{ response: "What?" }] })).toEqual({
+      notes: [`ElevenLabs judged the agent's next reply with an LLM, and the test gives no condition to draft as a judged criterion. Replies it counted as failing: "What?". ${state}`, nothing, placeholders],
+    });
   });
 
   it("imports only the tests attached to the agent, when it lists them", () => {
