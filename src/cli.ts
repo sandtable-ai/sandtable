@@ -636,7 +636,8 @@ program
     if (draft.tools.length === 0) throw new Error([`${input}: ${importer.noTools}. Nothing was written.`, ...draft.warnings.map((w) => `  ! ${w}`)].join("\n"));
     const rendered = importer.render(draft);
     const written = await writeDraft(o.out, { [DOMAIN_FILE]: rendered.domain, "policy.md": draft.policy, "tasks.yaml": rendered.tasks }, o.force);
-    console.log(`Imported ${draft.name} from ${importer.label}: ${draft.tools.length} tools, ${Object.keys(draft.tables).length} tables, ${draft.tasks.length} tasks, all pending review.`);
+    const criteria = draft.tasks.reduce((n, t) => n + (t.judged?.length ?? 0), 0);
+    console.log(`Imported ${draft.name} from ${importer.label}: ${draft.tools.length} tools, ${Object.keys(draft.tables).length} tables, ${draft.tasks.length} tasks, ${criteria} judged ${criteria === 1 ? "criterion" : "criteria"}, all pending review.`);
     for (const w of draft.warnings) console.log(`  ! ${w}`);
     for (const f of written) console.log(`  wrote ${f}`);
     console.log(
