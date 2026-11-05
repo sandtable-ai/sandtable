@@ -1,10 +1,11 @@
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-import { serveConversations } from "../src/serve/driven.ts";
+import { promisify } from "node:util";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { MAX_IDLE_TIMEOUT, serveConversations, type DrivenOptions } from "../src/serve/driven.ts";
 import type { SuiteResult } from "../src/run/suite.ts";
 import type { TrialResult } from "../src/run/episode.ts";
 import { loadDomain } from "../src/spec/load.ts";
@@ -36,9 +37,9 @@ afterEach(async () => {
   await Promise.all(stops.splice(0).map((s) => s()));
 });
 
-async function start(domain: Domain, t?: Task) {
+async function start(domain: Domain, t?: Task, extra: Partial<DrivenOptions> = {}) {
   const graded: TrialResult[] = [];
-  const served = await serveConversations(domain, { port: 0, label: "test agent", ...(t ? { task: t } : {}), onGraded: (trial) => {
+  const served = await serveConversations(domain, { port: 0, label: "test agent", ...(t ? { task: t } : {}), ...extra, onGraded: (trial) => {
       graded.push(trial);
     } });
   stops.push(() => served.server.stop());
@@ -285,6 +286,145 @@ describe("sandtable serve: conversations a platform drives", () => {
   });
 });
 
+describe("sandtable serve: a conversation whose end never comes (#467)", () => {
+  const MIN = 60_000;
+  const idleError = (n: number) =>
+    `no request and no end of the conversation came within ${n} ${n === 1 ? "minute" : "minutes"}, so it was ended without one: check that the platform sends its end of call to this server (--idle-timeout ${n})`;
+  /** Only the timers the idle clock uses are fake, so the local server and fetch run as they do. */
+  const fakeClock = () => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+  const openIds = async (url: string) => ((await json(`${url}/sessions`)).body as { id: string }[]).map((s) => s.id);
+  const mcpInit = async (url: string) => (await post(`${url}/mcp`, { jsonrpc: "2.0", id: 1, method: "initialize", params: {} })).headers.get("mcp-session-id")!;
+  const mcpCall = (url: string, sid: string, name: string, args: unknown) => post(`${url}/mcp`, { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name, arguments: args } }, { "mcp-session-id": sid });
+
+  it("ends one with no request for 30 minutes by default, and grades it as a trial that ended in that error: skipped, unless the agent broke a rule", async () => {
+    fakeClock();
+    const domain = await domainWith(task());
+    const { url, graded, result } = await start(domain, domain.tasks[0]);
+    // A Vapi call that verifies the carrier, and a session that books without verifying it, then goes quiet.
+    await post(`${url}/webhook`, vapiCall("v-1", "verify_carrier", { mc_number: "100101" }));
+    const quiet = (await post(`${url}/sessions`, {})).body;
+    expect((await post(`${quiet.url}/bookings`, BOOK)).status).toBe(200);
+    await vi.advanceTimersByTimeAsync(29 * MIN);
+    await post(`${url}/webhook`, vapiCall("v-1", "book_load", BOOK));
+    await vi.advanceTimersByTimeAsync(MIN - 1);
+    expect(graded).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    // 30 minutes after its last request, the quiet one is ended and graded at once: failed, since it broke a rule.
+    expect(graded).toHaveLength(1);
+    expect(graded[0]).toMatchObject({ passed: false, endReason: "error", error: idleError(30) });
+    expect(graded[0]!.skipped).toBeUndefined();
+    expect(graded[0]!.checks.filter((c) => !c.passed).map((c) => c.id)).toContain("verify-before-book");
+    expect(await openIds(url)).not.toContain(quiet.id);
+    // The call's own clock restarted at its last request: it ends 30 minutes after that, skipped, since it broke none.
+    await vi.advanceTimersByTimeAsync(29 * MIN - 1);
+    expect(graded).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(graded[1]).toMatchObject({ passed: false, skipped: true, endReason: "error", error: idleError(30) });
+    expect(graded[1]!.events.filter((e) => e.type === "tool").map((e) => e.type === "tool" && e.name)).toEqual(["verify_carrier", "book_load"]);
+    expect(await openIds(url)).toEqual([]);
+    expect(result()).toMatchObject({ k: 2, tasks: [{ id: "book" }] });
+  });
+
+  it("restarts a conversation's clock on each request routed to it, over REST, an http route, MCP or a webhook, and on no other's", async () => {
+    fakeClock();
+    const domain = await domainWith(task());
+    const { url, graded } = await start(domain, domain.tasks[0], { idleTimeout: 10 });
+    await post(`${url}/webhook`, vapiCall("v-1", "verify_carrier", { mc_number: "100101" }));
+    const call = (await openIds(url))[0]!;
+    const mcp = await mcpInit(url);
+    await post(`${url}/tools/get_load`, { load_id: "L-1001" });
+    const rest = (await openIds(url)).find((id) => id !== call && id !== mcp)!;
+    await vi.advanceTimersByTimeAsync(4 * MIN);
+    // A request that names no session goes to the one open conversation no call names: its clock restarts.
+    await post(`${url}/tools/get_load`, { load_id: "L-1001" });
+    await vi.advanceTimersByTimeAsync(2 * MIN);
+    // A platform's status update for an open call is a request for it too.
+    expect((await post(`${url}/webhook`, { message: { type: "status-update", status: "in-progress", call: { id: "v-1" } } })).body).toEqual({});
+    await vi.advanceTimersByTimeAsync(2 * MIN);
+    await mcpCall(url, mcp, "get_load", { load_id: "L-1001" });
+    await vi.advanceTimersByTimeAsync(MIN);
+    // The call's tool's http route at its own URL.
+    expect((await json(`${url}/s/${call}/carriers/100101`)).status).toBe(200);
+    await vi.advanceTimersByTimeAsync(5 * MIN - 1);
+    expect(await openIds(url)).toEqual([call, mcp, rest]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await openIds(url)).toEqual([call, mcp]);
+    await vi.advanceTimersByTimeAsync(4 * MIN);
+    expect(await openIds(url)).toEqual([call]);
+    await vi.advanceTimersByTimeAsync(MIN);
+    expect(await openIds(url)).toEqual([]);
+    expect(graded.map((t) => t.error)).toEqual([idleError(10), idleError(10), idleError(10)]);
+  });
+
+  it("stops serving its world, and answers its late end as already graded: a platform's end-of-call webhook, an MCP DELETE or POST /sessions/<id>/end", async () => {
+    fakeClock();
+    const domain = await domainWith(task());
+    const { url, graded } = await start(domain, domain.tasks[0]);
+    await post(`${url}/webhook`, vapiCall("v-1", "verify_carrier", { mc_number: "100101" }));
+    const mcp = await mcpInit(url);
+    const s = (await post(`${url}/sessions`, {})).body;
+    await vi.advanceTimersByTimeAsync(30 * MIN);
+    expect(graded).toHaveLength(3);
+    expect(await openIds(url)).toEqual([]);
+    const ignored = (what: string) => ({ status: 200, body: { ignored: `${what} has ended, and its conversation was graded` } });
+    expect(await post(`${url}/webhook`, vapiEnd("v-1", [{ role: "assistant", message: "Booked." }]))).toMatchObject(ignored("call v-1"));
+    expect(await json(`${url}/mcp`, { method: "DELETE", headers: { "mcp-session-id": mcp } })).toMatchObject(ignored(`session ${mcp}`));
+    expect(await post(`${url}/sessions/${s.id}/end`, { transcript: [{ role: "agent", text: "Booked." }] })).toMatchObject(ignored(`session ${s.id}`));
+    expect(graded).toHaveLength(3);
+    // A later request that names it is answered as for any conversation that ended.
+    expect(await post(`${url}/webhook`, vapiCall("v-1", "book_load", BOOK))).toMatchObject({ status: 409, body: { error: "call v-1 has ended, and its conversation was graded" } });
+    expect((await mcpCall(url, mcp, "get_load", { load_id: "L-1001" })).status).toBe(404);
+    expect((await post(`${s.url}/tools/get_load`, { load_id: "L-1001" })).status).toBe(404);
+    // A request that names no session no longer goes to it: it opens a conversation of its own.
+    await post(`${url}/tools/get_load`, { load_id: "L-1001" });
+    const now = await openIds(url);
+    expect(now).toHaveLength(1);
+    expect(now[0]).not.toBe(s.id);
+  });
+
+  it("never ends one with an idle timeout of 0, says 1 minute in the singular, and refuses a timeout that isn't a whole number of minutes", async () => {
+    fakeClock();
+    const domain = await domainWith(task());
+    {
+      const { url, graded } = await start(domain, domain.tasks[0], { idleTimeout: 0 });
+      const s = (await post(`${url}/sessions`, {})).body;
+      await vi.advanceTimersByTimeAsync(7 * 24 * 60 * MIN);
+      expect(await openIds(url)).toEqual([s.id]);
+      expect(graded).toHaveLength(0);
+    }
+    {
+      const { url, graded } = await start(domain, domain.tasks[0], { idleTimeout: 1 });
+      await post(`${url}/sessions`, {});
+      await vi.advanceTimersByTimeAsync(MIN);
+      expect(graded[0]!.error).toBe(idleError(1));
+      expect(graded[0]!.error).toContain("within 1 minute, so");
+    }
+    for (const idleTimeout of [-1, 1.5, Number.NaN, Infinity, 40_000]) {
+      await expect(serveConversations(domain, { port: 0, label: "test agent", idleTimeout })).rejects.toThrow(/idleTimeout must be a whole number of minutes/);
+    }
+  });
+
+  it("clears its timers when the server stops, and they never keep the process alive", async () => {
+    const set = vi.spyOn(globalThis, "setTimeout");
+    const clear = vi.spyOn(globalThis, "clearTimeout");
+    const domain = await domainWith(task());
+    const served = await serveConversations(domain, { port: 0, label: "test agent", task: domain.tasks[0]! });
+    await post(`${served.server.url}/sessions`, {});
+    const at = set.mock.calls.findIndex((c) => c[1] === 30 * MIN);
+    expect(at).toBeGreaterThanOrEqual(0);
+    const timer = set.mock.results[at]!.value as NodeJS.Timeout;
+    expect(timer.hasRef()).toBe(false);
+    // Ctrl-C reports it as not graded.
+    expect(served.openSessions()).toHaveLength(1);
+    await served.server.stop();
+    expect(clear).toHaveBeenCalledWith(timer);
+  });
+});
+
 describe("the serve command", () => {
   /** A port no server listens on right now. */
   async function freePort(): Promise<number> {
@@ -306,6 +446,7 @@ describe("the serve command", () => {
     for (let i = 0; i < 100 && !stdout.includes("Results:"); i++) await new Promise((r) => setTimeout(r, 100));
     expect(stdout).toContain(`Serving freight-carrier-sales at ${url} for conversations another system drives`);
     expect(stdout).toContain("Each conversation is a trial of book-at-posted-rate");
+    expect(stdout).toContain("One with no request for 30 minutes is ended without its end, and skipped unless the agent broke a rule (--idle-timeout).");
     await post(`${url}/webhook`, vapiCall("c1", "verify_carrier", { mc_number: "100101" }));
     await post(`${url}/webhook`, vapiCall("c1", "search_loads", { origin: "Dallas", destination: "Atlanta", equipment: "dry_van" }));
     await post(`${url}/webhook`, vapiCall("c1", "book_load", BOOK));
@@ -331,5 +472,12 @@ describe("the serve command", () => {
     expect(stdout).toContain("pass^1 100.0%");
     expect(stdout).toContain(`results: ${path.join(dir, "results.json")}`);
     expect((await readFile(path.join(dir, "report.html"), "utf8")).length).toBeGreaterThan(1000);
+  });
+
+  it.skipIf(!process.features.typescript)("refuses an --idle-timeout that isn't a whole number of minutes", { timeout: 30_000 }, async () => {
+    const results = await Promise.all(
+      ["-1", "abc", "1.5"].map((v) => promisify(execFile)(process.execPath, [cli, "serve", example, "--idle-timeout", v]).catch((err: { code: number; stderr: string }) => err)),
+    );
+    for (const r of results) expect(r).toMatchObject({ code: 2, stderr: expect.stringContaining(`must be a whole number of minutes, 0-${MAX_IDLE_TIMEOUT} (0 turns it off)`) });
   });
 });

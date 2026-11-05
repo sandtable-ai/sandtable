@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 ### Added
 
 - `clock`: dates relative to the clock resolve in four more places: `${today}` and `${now+5m}` inside the policy, faults' `message`s and `expect.reply_includes`, and a whole `$today` in a param's `default`, nested ones included. A policy can say "Today is ${today}", a tool's `pickup_from` can default to today, and a task can expect "your pickup is ${today+2d}". `reply_includes` also matches an ISO date said in words, such as `Wednesday, November 4` or `Nov. 4th` for `2026-11-04`, so an existing phrase with a literal ISO date now passes too when the agent says the date that way. With a clock, `validate` checks the four places as it checks the others; without one, it warns about a date expression in them ([#465](https://github.com/sandtable-ai/sandtable/issues/465)).
+- `sandtable serve`: `--idle-timeout <minutes>` ends a conversation that gets no request for that long, such as one whose platform never sends its end of call. It is graded as a trial that ended in an error, so it is skipped unless the agent broke a rule. The terminal shows the error, the conversation's world is no longer served, and its end, if it comes later, is answered as already graded. The default is 30 minutes, and `0` turns it off ([#467](https://github.com/sandtable-ai/sandtable/issues/467)).
 
 ## [1.4.0] - 2026-11-04
 
