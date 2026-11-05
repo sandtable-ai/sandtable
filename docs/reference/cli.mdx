@@ -299,6 +299,7 @@ npx sandtable-ai serve ./my-domain --task book-at-posted-rate
 | `--port <n>` | port to listen on; `0` for any free one. Default: `4010` |
 | `--host <addr>` | address to listen on. Default: `127.0.0.1`, which keeps it on this machine and refuses requests that name another host; a tunnel to it reaches a hosted platform. Any other address is open to anything that can reach the machine, with no authentication, and `serve` says so |
 | `--label <name>` | the agent's name in `results.json`. Default: `external agent` |
+| `--idle-timeout <minutes>` | end a conversation that gets no request for this many minutes, such as one whose platform never sends its end, and grade it as a trial that ended in an error: it is skipped, unless the agent broke a rule. A whole number; `0` never ends one. Default: `30` |
 | `-o, --out <dir>` | output directory for `results.json` and `report.html`, rewritten after each graded conversation. Default: `.sandtable/runs/<timestamp>-<domain>-serve` |
 | `--no-html` | skip the HTML report |
 
@@ -306,6 +307,7 @@ It serves the same routes as [`run --serve`](#run): REST, MCP at `/mcp` and webh
 
 - A conversation opens with `POST /sessions`, with the first webhook that names a platform's call id (Vapi's `message.call.id`, Retell's `call.call_id`), with the first request whose `X-Sandtable-Call` header names a call, with an MCP `initialize` (the session's id comes back as `Mcp-Session-Id`), or with the first request that names none while none is open.
 - It ends, and is graded, with `POST /sessions/<id>/end` (optionally with `{ "transcript": [{ "role": "user" | "agent", "text", "time"? }] }`), Vapi's end-of-call report, Retell's `call_ended` event, ElevenLabs' `post_call_transcription` webhook, or an MCP `DELETE`.
+- One whose end never comes is ended after `--idle-timeout` minutes with no request (30 by default), and graded with an error that says so. It is no longer served, and its end, if it comes later, is answered as already graded.
 - Its [dates relative to the clock](/reference/spec#clock-and-relative-dates) resolve when it opens: with `clock: now`, at that minute.
 
 The terminal says when each conversation opens and how it was graded. Stop it with Ctrl-C: it prints the summary of the graded conversations and exits 0. Conversations still open then are named and not graded. [Grade calls another system drives](/guides/black-box#conversations-another-system-drives) has the details.

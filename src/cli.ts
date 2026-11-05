@@ -12,7 +12,7 @@ import { renderCustomerHtml } from "./report/customer.ts";
 import { everyTrialFailed, runSuite, trialStatus, type SuiteResult } from "./run/suite.ts";
 import { runGates } from "./run/gates.ts";
 import { startWorldServer } from "./serve/server.ts";
-import { serveConversations } from "./serve/driven.ts";
+import { DEFAULT_IDLE_TIMEOUT, MAX_IDLE_TIMEOUT, serveConversations } from "./serve/driven.ts";
 import { changedVerdicts, RegradeError, regradeSuite } from "./run/regrade.ts";
 import { baselineSnapshot, checkBaseline, compareRuns, regressions, type Comparison } from "./run/compare.ts";
 import { readResults, readUserFile, readUserText, userPathError } from "./run/read.ts";
@@ -768,9 +768,18 @@ program
   .option("--port <n>", "port to listen on (0 for any free one)", port, 4010)
   .option("--host <addr>", "address to listen on: 127.0.0.1 keeps it on this machine; a tunnel to it reaches a hosted platform", "127.0.0.1")
   .option("--label <name>", "the agent's name in results.json", "external agent")
+  .option(
+    "--idle-timeout <minutes>",
+    "end a conversation with no request for this long and grade it as ended in an error, so it is skipped unless the agent broke a rule; 0 never ends one",
+    (v: string) => {
+      if (!/^\d+$/.test(v) || Number(v) > MAX_IDLE_TIMEOUT) throw new InvalidArgumentError(`must be a whole number of minutes, 0-${MAX_IDLE_TIMEOUT} (0 turns it off)`);
+      return Number(v);
+    },
+    DEFAULT_IDLE_TIMEOUT,
+  )
   .option("-o, --out <dir>", "output directory for results.json and report.html, rewritten after each graded conversation")
   .option("--no-html", "skip the HTML report")
-  .action(async (domainPath: string, o: { task?: string; port: number; host: string; label: string; out?: string; html: boolean }) => {
+  .action(async (domainPath: string, o: { task?: string; port: number; host: string; label: string; idleTimeout: number; out?: string; html: boolean }) => {
     const domain = await loadDomain(await resolveDomain(domainPath));
     if (domain.tasks.length === 0) throw new Error(`${domain.name} has no tasks yet: add some to tasks.yaml`);
     const task = o.task === undefined ? (domain.tasks.length === 1 ? domain.tasks[0] : undefined) : domain.tasks.find((t) => t.id === o.task);
@@ -781,6 +790,7 @@ program
       port: o.port,
       host: o.host,
       label: o.label,
+      idleTimeout: o.idleTimeout,
       ...(task ? { task } : {}),
       onOpen: (s) => console.log(`  + ${s.id} opened: a trial of ${s.task.id}`),
       onGraded: (trial, result) => {
@@ -798,6 +808,9 @@ program
     console.log(`Serving ${domain.name} at ${url} for conversations another system drives, until you stop it (Ctrl-C).`);
     console.log(`  Each conversation is a trial of ${task ? task.id : "the task it names (POST /sessions with { \"task\": \"<id>\" })"}: REST ${url}/tools/<name>, MCP ${url}/mcp, webhooks ${url}/webhook.`);
     console.log(`  A conversation ends with POST ${url}/sessions/<id>/end, a Vapi end-of-call report, Retell's call_ended or an MCP DELETE, and is graded then.`);
+    if (o.idleTimeout > 0) {
+      console.log(`  One with no request for ${o.idleTimeout} minute${o.idleTimeout === 1 ? "" : "s"} is ended without its end, and skipped unless the agent broke a rule (--idle-timeout).`);
+    }
     if (!["127.0.0.1", "localhost", "::1"].includes(o.host)) {
       console.log(`  ! It listens on ${o.host}, with no authentication: anything that can reach this machine on port ${new URL(url).port} can call it.`);
     }

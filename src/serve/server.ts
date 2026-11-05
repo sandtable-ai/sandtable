@@ -40,6 +40,7 @@ export interface WorldServer {
   open(task: Task, runner: ToolRunner): ServedSession;
   /** Stop serving a trial: its URLs answer 404 from then on. */
   close(id: string): void;
+  /** Stop listening, and clear the clocks of conversations still open. */
   stop(): Promise<void>;
 }
 
@@ -66,6 +67,14 @@ export interface DrivenSessions {
    * `problem`, it can't be graded, such as when another call's requests went to its world: the trial is skipped with it.
    */
   end(session: ServedSession, transcript: TranscriptLine[] | undefined, problem?: string): unknown | Promise<unknown>;
+  /**
+   * How long a conversation may go with no request before it is ended without its end, in milliseconds: never when 0 or
+   * undefined. Its clock starts when it opens and restarts on each request routed to it. When it runs out, the session
+   * stops being served, a later end of it is answered as already graded, and `idle` grades it.
+   */
+  idleMs?: number;
+  /** A conversation had no request for `idleMs` and is no longer served: grade it. Nothing waits for an answer. */
+  idle?(session: ServedSession): void | Promise<void>;
 }
 
 /** A Host header that names this machine: 127.0.0.1, localhost or [::1], with any port. */
@@ -183,9 +192,37 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
    * so a conversation that never ended, such as an MCP client that doesn't send DELETE, can't catch others' requests.
    */
   const keyedIds = new Set<string>();
+  /** Each open driven session's idle clock, with `driven.idleMs`. */
+  const clocks = new Map<string, NodeJS.Timeout>();
+  /** The sessions ended for want of a request: their own late end is answered as already graded, not with a 404. */
+  const timedOut = new Set<string>();
   const driven = opts.driven;
   let next = 1;
   let base = "";
+
+  /** A request for this session came in: restart its idle clock. */
+  function touch(s: ServedSession): ServedSession {
+    const idleMs = driven?.idleMs;
+    if (!idleMs || !sessions.has(s.id)) return s;
+    clearTimeout(clocks.get(s.id));
+    // Unref'd: a conversation left open never keeps the process alive.
+    clocks.set(s.id, setTimeout(() => expire(s), idleMs).unref());
+    return s;
+  }
+
+  /** A driven session had no request for `idleMs`: stop serving it, and grade it with nothing waiting for the answer. */
+  function expire(s: ServedSession): void {
+    if (!sessions.has(s.id)) return;
+    release(s);
+    timedOut.add(s.id);
+    // No request waits for this grade, so an error in it has nowhere to go but must not stop the server.
+    void Promise.resolve()
+      .then(() => driven!.idle?.(s))
+      .catch(() => undefined);
+  }
+
+  /** The answer to a late end of a session that was ended for want of a request: it was graded then. */
+  const alreadyGraded = (id: string) => ({ ignored: `session ${id} has ended, and its conversation was graded` });
 
   /** The session a request without `/s/<id>` is for: the one trial that is running, or, driven, a new one. */
   function current(): ServedSession {
@@ -247,15 +284,22 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
     return `call ${callId}'s transcript lists its tool calls as ${list(called)}, but the conversation it was matched to got ${list(got)}, so this call isn't graded on it: with no call id on its tool requests, another call's requests can go to the same world. Send each tool request the call's id in an X-Sandtable-Call header (on ElevenLabs, {{system__conversation_id}}) to keep calls at the same time apart`;
   }
 
-  /** End a driven session: grade it, stop serving it, and answer with the grade once the run's files have it. */
-  async function finish(res: ServerResponse, s: ServedSession, transcript: TranscriptLine[] | undefined, problem?: string): Promise<void> {
+  /** Stop serving a driven session that ended: its URLs answer 404, and its platform call ids count as ended. */
+  function release(s: ServedSession): void {
     sessions.delete(s.id);
     keyedIds.delete(s.id);
+    clearTimeout(clocks.get(s.id));
+    clocks.delete(s.id);
     for (const [call, id] of byCall) {
       if (id !== s.id) continue;
       byCall.delete(call);
       endedCalls.add(call);
     }
+  }
+
+  /** End a driven session: grade it, stop serving it, and answer with the grade once the run's files have it. */
+  async function finish(res: ServerResponse, s: ServedSession, transcript: TranscriptLine[] | undefined, problem?: string): Promise<void> {
+    release(s);
     send(res, 200, await driven!.end(s, transcript, problem));
   }
 
@@ -308,13 +352,14 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
       const id = decode(scoped[1]!);
       session = sessions.get(id);
       if (!session) throw new HttpError(404, `no session ${id} is open: its trial ended, or it never started`);
+      touch(session);
       path = scoped[2] ?? "/";
     }
     // Driven, a request may name its conversation as a platform's call id does, in a header: an ElevenLabs webhook tool
     // can send {{system__conversation_id}} in one.
     const header = req.headers["x-sandtable-call"];
     const callHeader = driven && !session && typeof header === "string" && header.trim() !== "" ? header.trim() : undefined;
-    const target = () => session ?? (callHeader !== undefined ? forCall(callHeader) : current());
+    const target = () => touch(session ?? (callHeader !== undefined ? forCall(callHeader) : current()));
     const method = req.method ?? "GET";
 
     if (path === "/" || path === "") {
@@ -338,6 +383,7 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
         if (method !== "POST") throw new HttpError(405, "POST /sessions/<id>/end, with { transcript } when you have it");
         const id = decode(end[1]!);
         const s = sessions.get(id);
+        if (!s && timedOut.has(id)) return send(res, 200, alreadyGraded(id));
         if (!s) throw new HttpError(404, `no session ${id} is open: it ended, or it never started`);
         await finish(res, s, transcriptOf(await readBody(req)));
         return;
@@ -360,7 +406,9 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
       const header = req.headers["mcp-session-id"];
       const mcpId = driven && !session && typeof header === "string" ? header : undefined;
       const mcpSession = mcpId === undefined ? undefined : sessions.get(mcpId);
+      if (mcpId !== undefined && !mcpSession && method === "DELETE" && timedOut.has(mcpId)) return send(res, 200, alreadyGraded(mcpId));
       if (mcpId !== undefined && !mcpSession) throw new HttpError(404, `no session ${mcpId} is open: initialize again`);
+      if (mcpSession) touch(mcpSession);
       if (method === "DELETE" && mcpSession) {
         await finish(res, mcpSession, undefined);
         return;
@@ -408,7 +456,7 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
       if (request.kind === "invalid") throw new HttpError(400, request.error);
       // Driven, a platform's call id names the conversation: its first webhook opens a session for it.
       const callId = callHeader ?? request.callId;
-      const keyed = () => (driven && !session && callId !== undefined ? forCall(callId) : target());
+      const keyed = () => (driven && !session && callId !== undefined ? touch(forCall(callId)) : target());
       if (request.kind === "end" && driven) {
         // A platform's retry of an end it already sent is answered, not graded again.
         if (!session && callId !== undefined && endedCalls.has(callId)) {
@@ -426,6 +474,9 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
         return;
       }
       if (request.kind !== "calls") {
+        // A platform's status update for an open call is a request for it: the call is still going.
+        const open = driven && !session && callId !== undefined ? sessions.get(byCall.get(callId) ?? "") : undefined;
+        if (open) touch(open);
         send(res, 200, {});
         return;
       }
@@ -489,12 +540,16 @@ export async function startWorldServer(domain: Domain, opts: WorldServerOptions)
       const at = `${base}/s/${id}`;
       const session = { id, task, runner, urls: { url: at, mcp: `${at}/mcp`, webhook: `${at}/webhook` } };
       sessions.set(id, session);
-      return session;
+      return touch(session);
     },
     close(id) {
       sessions.delete(id);
+      clearTimeout(clocks.get(id));
+      clocks.delete(id);
     },
     stop() {
+      for (const clock of clocks.values()) clearTimeout(clock);
+      clocks.clear();
       return new Promise((resolve) => {
         server.close(() => resolve());
         server.closeAllConnections();
