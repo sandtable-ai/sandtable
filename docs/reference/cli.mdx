@@ -23,6 +23,7 @@ npx sandtable-ai <command> [options]
 | [`report`](#report) | re-render the HTML report for a past run |
 | [`regrade`](#regrade) | re-score a past run's stored trials under the domain's current rules, without calling a model |
 | [`judge`](#judge) | score a past run's stored trials on the domain's judged criteria with a model, apart from pass/fail |
+| [`calibrate`](#calibrate) | measure a judge against a person's labels: TPR, TNR and agreement with the stored verdicts, without calling a model |
 | [`compare`](#compare) | show what changed between two stored runs of one domain, without calling a model |
 
 `npx sandtable-ai --version` prints the version and `npx sandtable-ai <command> --help` lists a command's options. From a clone of the repo, run `npm run sandtable -- <command>`.
@@ -481,6 +482,41 @@ It exits 0 when it finishes, even if some calls failed: each is kept as `judged.
 It refuses, before any call and with exit 2, a run of another domain, a run with a task the domain no longer has, and a `clock: now` trial that recorded no clock. If the agent's or the caller's prompts changed since the run, it warns and goes on, since criteria read only the stored transcript. For a domain with no criteria, it says so and exits 0, writing nothing.
 
 [`regrade`](#regrade) makes no model call. It keeps a stored verdict while its criterion still applies to the trial with the same text, and drops the rest, saying how many and why.
+
+## calibrate
+
+Measure a judge against a person's labels: compare your labels with the verdicts [`judge`](#judge) stored in `results.json`, and report how often they match. It makes no model call and writes nothing. [Calibrate a judge](/guides/calibrate-judged) walks through the workflow.
+
+```bash
+npx sandtable-ai calibrate .sandtable/runs/<run>/results.json --labels labels.yaml
+```
+
+| Argument / option | Description |
+|---|---|
+| `<results>` | path to a `results.json` that `judge` has scored |
+| `--labels <file>` | **required**: a YAML or JSON file of labels |
+
+```yaml
+labels:
+  - { task: book-at-posted-rate, trial: 1, criterion: reads-back-before-booking, label: pass }
+  - { task: book-at-posted-rate, trial: 2, criterion: reads-back-before-booking, label: fail }
+```
+
+`trial` counts from 1, as the terminal prints it. `label` is `pass` or `fail`, and a person who thinks a criterion doesn't apply leaves that pair unlabelled.
+
+Per criterion and overall, over pairs with both a label and a `pass` or `fail` verdict, it prints:
+
+- **TPR**: of the pairs a person labelled `pass`, the share the judge gave `pass`.
+- **TNR**: of the pairs a person labelled `fail`, the share the judge gave `fail`.
+- **Agreement**: the share where the two match.
+
+Each has `n`, the number of pairs behind it, beside it, and a rate with no pairs prints `n/a`. Each disagreement is listed with its task, trial, criterion, label, verdict, quote and reason.
+
+Three things are counted and shown, outside the rates: a labelled pair whose verdict is `not_applicable`; a labelled pair with no verdict, because the trial was skipped, the judge call failed, the judge left the criterion out or the trial hasn't been judged; and verdicts with no label.
+
+If the file's trials hold more than one model, it says so and reports each apart, since mixing them would measure neither. To compare models, keep one results file per model (`judge -m <other> -o <dir>`) and calibrate each.
+
+It exits 0 whatever the numbers, since it measures and sets no gate. It stops with exit 2, naming each entry and printing nothing else, on a malformed file, a label naming a task or trial the run doesn't have, a pair labelled twice, or a results file `judge` hasn't scored. So does a label on a criterion with no verdict on that trial and no place there. `results.json` doesn't record which task a criterion belongs to, so that means the run doesn't name the criterion, or its verdicts are all on one other task while this task has verdicts on others.
 
 ## compare
 

@@ -1,0 +1,137 @@
+---
+title: "Calibrate a judge against human labels"
+sidebarTitle: "Calibrate a judge"
+description: "Learn how far to trust a judged score: label a sample of trials by hand, compare your labels with the stored verdicts using sandtable calibrate, tighten a criterion's wording and judge again."
+keywords: ["judged criteria", "sandtable calibrate", "judge agreement", "TPR", "TNR", "human labels", "LLM judge"]
+---
+
+A [judged score](/reference/spec#judged) is a model's opinion of a conversation, so it is only worth trusting once you know how often that model agrees with a person. [`calibrate`](/reference/cli#calibrate) measures that. It compares labels you write by hand with the verdicts already stored in `results.json`, and makes no model call. Only the `judge` commands below cost money.
+
+## 1. Judge a run
+
+You need trials that give both passes and fails on your criteria: TPR says nothing without a pass, and TNR says nothing without a fail. The freight example's careless agent gives both on `reads-back-before-booking`, because it states some loads in full and others only by their rate. This run is free. It exits 1 on its failed scenarios, as a careless run should:
+
+```bash
+npx sandtable-ai run examples/freight --agent scripted:naive --user scripted -k 2 --tasks book-at-posted-rate,expired-insurance,callback-check-with-driver,no-booking-without-yes -o runs/careless
+```
+
+[`judge`](/reference/cli#judge) costs one model call per trial, 8 here, so check the plan first:
+
+```bash
+npx sandtable-ai judge runs/careless/results.json --domain examples/freight --dry-run
+npx sandtable-ai judge runs/careless/results.json --domain examples/freight
+```
+
+## 2. Label a sample by hand
+
+Read each trial's conversation in `runs/careless/report.html` and decide whether it meets the criterion before you look at the judge's verdict, so the verdict doesn't steer you. Write down what you decide in a YAML or JSON file, `labels.yaml` here:
+
+```yaml
+labels:
+  - { task: book-at-posted-rate, trial: 1, criterion: reads-back-before-booking, label: pass }
+  - { task: book-at-posted-rate, trial: 2, criterion: reads-back-before-booking, label: pass }
+  - { task: expired-insurance, trial: 1, criterion: reads-back-before-booking, label: fail }
+  - { task: expired-insurance, trial: 2, criterion: reads-back-before-booking, label: fail }
+  - { task: callback-check-with-driver, trial: 1, criterion: reads-back-before-booking, label: fail }
+  - { task: no-booking-without-yes, trial: 1, criterion: reads-back-before-booking, label: fail }
+  - { task: expired-insurance, trial: 1, criterion: polite-refusal, label: fail }
+```
+
+`trial` counts from 1, as the terminal prints it, and `label` is `pass` or `fail`. If you think a criterion doesn't apply to a trial, leave that pair out.
+
+Label both passes and fails, and choose the trials without looking at the verdicts. A sample of only passes leaves TNR at `n/a`, and a sample of the verdicts that look wrong measures your suspicion, not the judge.
+
+## 3. Calibrate
+
+```bash
+npx sandtable-ai calibrate runs/careless/results.json --labels labels.yaml
+```
+
+Your verdicts will differ from these, which show what the output looks like:
+
+```text
+sandtable calibrate · freight-carrier-sales · agent scripted:naive
+
+  How often the judge agrees with your labels, over pairs with both a label and a pass or fail verdict.
+  TPR: of the pairs you labelled pass, the share the judge gave pass. TNR: the same for fail. No model was called, and this sets no gate.
+
+  Judge claude-sonnet-5-5
+                                     TPR          TNR    agreement  outside the rates
+  all criteria               50.0% (n=2)  75.0% (n=4)  66.7% (n=6)  1 not applicable, 17 with no label
+  reads-back-before-booking  50.0% (n=2)  75.0% (n=4)  66.7% (n=6)  2 with no label
+  polite-refusal               n/a (n=0)    n/a (n=0)    n/a (n=0)  1 not applicable, 7 with no label
+  callback-holds-nothing       n/a (n=0)    n/a (n=0)    n/a (n=0)  8 with no label
+
+  2 disagreements:
+    book-at-posted-rate trial 2 · reads-back-before-booking: you said pass, the judge said fail
+      quote: "Booked L-1001 at $2100. Confirmation bookings-1."
+      reason: The confirmation names only the load and the rate.
+    callback-check-with-driver trial 1 · reads-back-before-booking: you said fail, the judge said pass
+      quote: "Rate's fine"
+      reason: The caller accepted the rate before the booking.
+
+  1 labelled pair the judge called not_applicable, outside the rates:
+    expired-insurance trial 1 · polite-refusal: you said fail, the judge said not_applicable
+      reason: It booked the carrier, so it refused nothing.
+
+  17 verdicts with no label, outside the rates
+```
+
+- **TPR** is the share of the pairs you labelled `pass` that the judge gave `pass`. When it is low, the judge fails conversations a person would pass.
+- **TNR** is the share of the pairs you labelled `fail` that the judge gave `fail`. When it is low, the judge passes conversations a person would fail.
+- **Agreement** is the share where the two match.
+- `n` is the number of pairs behind each rate, and `n/a` means there are none.
+
+The rates count only pairs with both a label and a `pass` or `fail` verdict. Three things stay outside them, counted and shown: a label whose verdict is `not_applicable`, a label with no verdict (its trial was skipped, the judge call failed, the judge left the criterion out, or the trial hasn't been judged), and a verdict with no label.
+
+`calibrate` exits 0 whatever the numbers, since it measures and sets no gate. A label that doesn't fit the run, such as a trial it doesn't have or a pair labelled twice, stops it with exit 2, naming the entry. To gate on the numbers in your own code, use [`calibrate` in the library](/reference/library).
+
+## 4. Read the disagreements
+
+The rates say how often you and the judge differ, and the list says why. For each one, ask who is right:
+
+- **Your label is wrong.** The judge saw something you missed, so change the label. Above, the agent refused nothing in `expired-insurance`, so `not_applicable` is right and that label should go.
+- **The judge misread the conversation.** In `book-at-posted-rate` trial 2 it quoted the confirmation and missed the read-back earlier in the call. A quote marked `(not in the transcript)` is one the judge can't have read there, so distrust that verdict.
+- **The criterion leaves room.** Both readings are fair, and the wording is what to fix. In `callback-check-with-driver` trial 1 the judge took "Rate's fine" as a yes. The policy says that checking with a driver isn't one, but the judge reads only the criterion and the transcript, never the policy.
+
+## 5. Tighten the criterion's wording
+
+Edit the criterion in `sandtable.yaml`, in a copy of the example's folder (`./my-freight` here) or in your own domain. Say what the disagreements showed was left open:
+
+```yaml
+judged:
+  - id: reads-back-before-booking
+    criterion: At some point before the agent books a load or submits an offer, it states the load ID, the lane, the pickup date and the agreed rate, and the caller then says yes. The read-back can come well before the booking. Saying they will check with a driver isn't a yes.
+```
+
+Keep the `id`, so your labels still apply. If the new wording changes what you would label a pair, read that pair again and change its label.
+
+## 6. Judge again
+
+```bash
+npx sandtable-ai judge runs/careless/results.json --domain ./my-freight --dry-run
+npx sandtable-ai judge runs/careless/results.json --domain ./my-freight -o runs/careless-v2
+npx sandtable-ai calibrate runs/careless-v2/results.json --labels labels.yaml
+```
+
+A changed text is sent again and an unchanged one isn't, so each call here asks only about `reads-back-before-booking`, and the verdicts on the other two criteria stay as they were. `-o` leaves the first file in place to compare with; without it, `judge` replaces the results.
+
+## 7. Compare two models
+
+Use one results file per model, and the same labels for each:
+
+```bash
+npx sandtable-ai judge runs/careless/results.json --domain examples/freight -m claude-haiku-5-5 -o runs/careless-haiku
+npx sandtable-ai calibrate runs/careless/results.json --labels labels.yaml
+npx sandtable-ai calibrate runs/careless-haiku/results.json --labels labels.yaml
+```
+
+Another model's verdicts don't count, so this sends every trial again. If one file's trials hold more than one model, as when a `judge -m` without `-o` stopped partway, `calibrate` says so and reports each model apart, since mixing them would measure neither.
+
+## What the numbers can't tell you
+
+- **A small sample is a small sample.** `100.0% (n=2)` is two conversations. The number of pairs is beside each rate so you read it first, and a rate over a handful of pairs doesn't settle anything.
+- **A verdict can differ between runs.** `calibrate` measures the verdicts stored in this one file. The same transcript judged again can get another verdict, so a rate that moves after a rewording may be the judge varying, not your wording helping.
+- **Your labels aren't ground truth.** They are one person's reading. If two people disagree on a pair, the criterion needs work before the judge does.
+- **The sample is these transcripts.** A judge that agrees with you on one agent's conversations can do worse on another's, so label a sample from the kind of run you mean to judge.
+- **It measures the judge, not the agent.** Agreement says how far to trust a judged score, not whether that score is good. Neither one changes pass^k, a gate or an exit code.
