@@ -1,9 +1,14 @@
+import { execFile } from "node:child_process";
 import { cpSync, mkdtempSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
-import { DomainError, loadDomain, parseDomain, validateDomain } from "../src/spec/load.ts";
-import { InvariantSpec } from "../src/spec/schema.ts";
+import { freightScriptedAgent } from "../src/demo/freight-agents.ts";
+import { runSuite } from "../src/run/suite.ts";
+import { scriptedUser } from "../src/sim/scripted.ts";
+import { DomainError, domainWarnings, loadDomain, parseDomain, validateDomain } from "../src/spec/load.ts";
+import { InvariantSpec, type Domain, type StateAssert } from "../src/spec/schema.ts";
 import { version } from "../src/version.ts";
 
 // A domain's own files: sandtable.yaml and the policy, world or tasks files it includes.
@@ -178,5 +183,88 @@ describe("max_count and monotonic cross-references", () => {
     expect(ok({ tool: "log_offer", arg: "counter_offer", direction: "down", strict: false })).toBe(true);
     expect(ok({ tool: "log_offer", arg: "counter_offer", direction: "higher" })).toBe(false);
     expect(ok({ tool: "log_offer", arg: "counter_offer" })).toBe(false);
+  });
+});
+
+describe("domainWarnings on an expect.state entry it only partly reads", () => {
+  const TASK = "book-at-posted-rate";
+  const AT = `tasks.${TASK}.expect.state`;
+  const ROW = { table: "loads", key: "L-1001" };
+  const MATCH = { status: "available" };
+
+  /** The freight example with this task's expect.state in place of its own. */
+  async function withState(state: StateAssert[]): Promise<Domain> {
+    const d = await loadDomain(path.resolve("examples/freight"));
+    return { ...d, tasks: d.tasks.map((t) => (t.id === TASK ? { ...t, expect: { ...t.expect, state } } : t)) };
+  }
+
+  it.each<[string, StateAssert, string]>([
+    ["fields without key", { table: "bookings", fields: { rate: 9999 } }, "fields is read only with key, so this entry checks only that a bookings row exists. Use where to match rows, or add key; 2.0 will reject this."],
+    ["where with key", { ...ROW, where: MATCH }, "where is read only without key, so this entry checks only that loads L-1001 exists. Use fields to match the row, or drop key; 2.0 will reject this."],
+    ["key with a count above 0", { ...ROW, count: 5 }, "count is read with key only as count: 0, so this entry checks only that loads L-1001 exists. Drop count, or drop key and use where to count rows; 2.0 will reject this."],
+    ["fields with key and count: 0", { ...ROW, count: 0, fields: MATCH }, "fields isn't read with key and count: 0, so this entry checks only that loads L-1001 doesn't exist. Drop fields, or drop count to match the row; 2.0 will reject this."],
+  ])("warns on %s, naming the task, the entry and the ignored key", async (_, entry, message) => {
+    expect(domainWarnings(await withState([entry]))).toEqual([`${AT}[0]: ${message}`]);
+  });
+
+  it("says what the entry checks given what is left of it", async () => {
+    const checks = async (entry: StateAssert) => (domainWarnings(await withState([entry]))[0] ?? "").match(/checks only that (.*?)\. /)?.[1];
+    expect(await checks({ table: "bookings", where: MATCH, fields: MATCH })).toBe("a bookings row matches its where");
+    expect(await checks({ table: "bookings", count: 2, fields: MATCH })).toBe("exactly 2 bookings row(s) exist");
+    expect(await checks({ table: "bookings", where: MATCH, count: 1, fields: MATCH })).toBe("exactly 1 bookings row(s) match its where");
+    expect(await checks({ ...ROW, where: MATCH, fields: MATCH })).toBe("loads L-1001 exists and matches its fields");
+    expect(await checks({ ...ROW, where: MATCH, count: 0 })).toBe("loads L-1001 doesn't exist");
+    expect(await checks({ ...ROW, count: 5, fields: MATCH })).toBe("loads L-1001 exists and matches its fields");
+  });
+
+  it("warns once per ignored key, and on an empty clause, which is still not read", async () => {
+    const warned = domainWarnings(await withState([{ ...ROW, where: MATCH, count: 5 }, { table: "bookings", fields: {} }, { ...ROW, where: {} }]));
+    expect(warned.map((w) => w.split(":")[0])).toEqual([`${AT}[0]`, `${AT}[0]`, `${AT}[1]`, `${AT}[2]`]);
+    expect(warned[0]).toContain("where is read only without key");
+    expect(warned[1]).toContain("count is read with key only as count: 0");
+  });
+
+  it("names the entry by its index, counted from 0", async () => {
+    const good: StateAssert = { table: "bookings", count: 0 };
+    expect(domainWarnings(await withState([good, good, { table: "bookings", fields: MATCH }]))).toEqual([expect.stringMatching(/^tasks\.book-at-posted-rate\.expect\.state\[2\]: fields/)]);
+  });
+
+  it("gives no warning for an entry whose every key is read", async () => {
+    const documented: StateAssert[] = [{ table: "bookings", count: 0 }, { table: "bookings", where: MATCH, count: 2 }, { table: "bookings", where: MATCH }, { ...ROW, fields: MATCH }, { ...ROW, count: 0 }];
+    expect(domainWarnings(await withState(documented))).toEqual([]);
+    // Outside the documented shapes, but nothing in them is ignored: any row in the table, and this row exists.
+    expect(domainWarnings(await withState([{ table: "bookings" }, ROW]))).toEqual([]);
+  });
+
+  it("gives no warning for either bundled example", async () => {
+    for (const example of ["examples/freight", "examples/clinic"]) expect(domainWarnings(await loadDomain(path.resolve(example))), example).toEqual([]);
+  });
+
+  it("leaves grading as it was: each entry still passes on the part that is read", async () => {
+    const d = await loadDomain(path.resolve("examples/freight"));
+    const task = d.tasks.find((t) => t.id === TASK)!;
+    const extra: StateAssert[] = [{ table: "bookings", fields: { rate: 9999 } }, { ...ROW, where: MATCH }, { ...ROW, count: 5 }];
+    const domain = await withState([...task.expect.state, ...extra]);
+    const result = await runSuite({ domain, agent: freightScriptedAgent("careful"), user: scriptedUser(), taskIds: [TASK] });
+    const [trial] = result.tasks[0]!.trials;
+    expect(trial!.passed).toBe(true);
+    const at = task.expect.state.length;
+    expect(trial!.checks.filter((c) => c.kind === "state").slice(at).map((c) => [c.id, c.passed, c.detail])).toEqual([
+      [`state:bookings#${at + 1}`, true, "1 bookings row(s) match {} (expected at least 1)"],
+      [`state:loads[L-1001]#${at + 2}`, true, "loads L-1001 as expected"],
+      [`state:loads[L-1001]#${at + 3}`, true, "loads L-1001 as expected"],
+    ]);
+  });
+
+  it.skipIf(!process.features.typescript)("validate prints them as warning lines and exits 0, with or without --strict", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "sandtable-load-"));
+    cpSync(path.resolve("examples/freight"), dir, { recursive: true });
+    edit(path.join(dir, "tasks.yaml"), /(- id: book-at-posted-rate\n[^]*?\n( +)state:\n)/, `$1$2  - { table: bookings, fields: { rate: 9999 } }\n`);
+    const validate = (...flags: string[]) => promisify(execFile)(process.execPath, [path.resolve("src/cli.ts"), "validate", dir, ...flags]);
+    // Either exit other than 0 would reject here.
+    for (const flags of [[], ["--strict"]]) {
+      const { stdout } = await validate(...flags);
+      expect(stdout).toContain(`⚠ ${AT}[0]: fields is read only with key, so this entry checks only that a bookings row exists.`);
+    }
   });
 });

@@ -11,7 +11,7 @@ import { version } from "../version.ts";
 import { coerceArgs } from "../world/tools.ts";
 import { seedFor } from "../world/store.ts";
 import { dateProblems, dateWarnings, usesClock } from "./clock.ts";
-import { DomainSpec, type Domain, type Given, type JudgedCriterion, type Task, type Tool } from "./schema.ts";
+import { DomainSpec, type Domain, type Given, type JudgedCriterion, type StateAssert, type Task, type Tool } from "./schema.ts";
 
 export const DOMAIN_FILE = "sandtable.yaml";
 
@@ -448,7 +448,7 @@ export function domainWarnings(d: Domain): string[] {
       }
     }
   }
-  warnings.push(...dateWarnings(d));
+  warnings.push(...dateWarnings(d), ...stateEntryWarnings(d));
   // The default prompt, and each task's prompt that states a `given.context`.
   const prompts = [agentSystemPrompt(d), ...d.tasks.filter((t) => taskContext(t)).map((t) => agentSystemPrompt(d, t))];
   for (const inv of d.invariants) {
@@ -463,6 +463,33 @@ export function domainWarnings(d: Domain): string[] {
     );
   }
   return warnings;
+}
+
+/** What checkState in src/grade/expectations.ts reads of an expect.state entry, in words. */
+function stateEntryChecks(a: StateAssert): string {
+  if (a.key !== undefined) {
+    if (a.count === 0) return `${a.table} ${a.key} doesn't exist`;
+    return `${a.table} ${a.key} exists${a.fields ? " and matches its fields" : ""}`;
+  }
+  if (a.count !== undefined) return `exactly ${a.count} ${a.table} row(s) ${a.where ? "match its where" : "exist"}`;
+  return `a ${a.table} row ${a.where ? "matches its where" : "exists"}`;
+}
+
+/** Each key checkState leaves unread on some entries, which then pass on what's left. Every other combination is read whole. */
+const UNREAD_STATE_KEYS: { unread: (a: StateAssert) => boolean; because: string; fix: string }[] = [
+  { unread: (a) => a.key === undefined && a.fields !== undefined, because: "fields is read only with key", fix: "Use where to match rows, or add key" },
+  { unread: (a) => a.key !== undefined && a.where !== undefined, because: "where is read only without key", fix: "Use fields to match the row, or drop key" },
+  { unread: (a) => a.key !== undefined && (a.count ?? 0) > 0, because: "count is read with key only as count: 0", fix: "Drop count, or drop key and use where to count rows" },
+  { unread: (a) => a.key !== undefined && a.count === 0 && a.fields !== undefined, because: "fields isn't read with key and count: 0", fix: "Drop fields, or drop count to match the row" },
+];
+
+/** An entry with a key checkState doesn't read checks less than it says. 1.4 accepted them, so each is a warning, not an error, until 2.0. */
+function stateEntryWarnings(d: Domain): string[] {
+  return d.tasks.flatMap((t) =>
+    t.expect.state.flatMap((a, i) =>
+      UNREAD_STATE_KEYS.filter((k) => k.unread(a)).map((k) => `tasks.${t.id}.expect.state[${i}]: ${k.because}, so this entry checks only that ${stateEntryChecks(a)}. ${k.fix}; 2.0 will reject this.`),
+    ),
+  );
 }
 
 /** Whether a tool's result, the op at `returns`, holds records of `table`. */
