@@ -479,7 +479,7 @@ withProviderFlags(program
       const spec = YAML.parse(openapiText) as Record<string, unknown>;
       const problem = openApiProblem(spec);
       if (problem) throw new Error(`${o.openapi} ${problem}. Nothing was written.`);
-      const draft = draftFromOpenApi(spec);
+      const draft = draftFromOpenApi(spec, o.openapi);
       if (draft.tools.length === 0) {
         throw new Error([`${o.openapi}: no operation could be drafted into a tool, so nothing was written.`, ...draft.warnings.map((w) => `  ! ${w}`)].join("\n"));
       }
@@ -498,6 +498,7 @@ withProviderFlags(program
           const exists = await stat(target).then(() => true, () => false);
           console.log(`  would write ${target}${exists && !o.force ? " (exists: init stops unless you pass --force)" : ""} (${text.length} characters)`);
         }
+        for (const w of draft.warnings) console.log(`  ! ${w}`);
       }
     }
     if (o.dryRun) {
