@@ -198,7 +198,8 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
     for (const [name, { param, loc }] of inputs) {
       tool.params[paramOf.get(name)!] = param;
       if (loc === "path" && o.parents.includes(name)) filters[name] = ref(name);
-      if (loc === "query") filters[name] = param.type === "string" && !param.enum ? { $contains: ref(name) } : ref(name);
+      // Free text matches as a substring. An id doesn't: customer_id=C-1 must not also return C-10's rows.
+      if (loc === "query") filters[name] = param.type === "string" && !param.enum && !keyOwners.has(name) ? { $contains: ref(name) } : ref(name);
     }
 
     // The world server keeps these routes for itself, so a tool on one of them gets no http route.
