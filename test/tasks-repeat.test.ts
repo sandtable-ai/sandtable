@@ -7,11 +7,13 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { loadDomain } from "../src/spec/load.ts";
 
 // `--tasks` on `run` and `leaderboard` adds the ids of every repeat, as `--tag` and `--floor` do. An empty value still
-// runs every task, as before 1.1, but warns that sandtable-ai 2.0 will refuse it (#403).
+// runs every task, as before 1.1, but warns that sandtable-ai 2.0 will refuse it (#403). An empty `--fail-under` takes
+// the same path (#493).
 
 const cli = path.resolve("src/cli.ts");
 const tmp = (prefix: string) => mkdtempSync(path.join(tmpdir(), prefix));
 const WARNING = "warning: an empty --tasks value is deprecated; in sandtable-ai 2.0 it will be a usage error (exit 2). To run every task, leave --tasks out.";
+const NO_GATE = "warning: an empty --fail-under value turns the gate off and is deprecated; in sandtable-ai 2.0 it will be a usage error (exit 2). To run without a gate, leave --fail-under out.";
 
 const exec = (args: string[], cwd?: string) =>
   promisify(execFile)(process.execPath, [cli, ...args], cwd ? { cwd } : {}).then(
@@ -64,5 +66,55 @@ describe.skipIf(!process.features.typescript)("a repeated or empty --tasks", () 
     const r = await exec(["leaderboard", path.resolve("examples/freight"), "-m", "models.yaml", "-u", "scripted", "-k", "1", "-t", "no-mc-number", "-t", "expired-insurance", "-o", "board"], dir);
     expect(r.code).toBe(0);
     expect(ids(path.join(dir, "board", "careful-rules", "results.json"))).toEqual(all.filter((id) => ["no-mc-number", "expired-insurance"].includes(id)));
+  });
+});
+
+describe.skipIf(!process.features.typescript)("an empty --fail-under", () => {
+  // The naive agent fails both of these, so any gate above 0% would fail the run.
+  const run = (...args: string[]) =>
+    exec(["run", "examples/freight", "--agent", "scripted:naive", "--user", "scripted", "--no-html", "-t", "book-at-posted-rate,negotiate-within-ceiling", "-o", path.join(tmp("sandtable-gate-"), "out"), ...args]);
+
+  for (const value of ["", " ", "%", " % "]) {
+    it(`warns once on ${JSON.stringify(value)} that it turns the gate off and 2.0 will refuse it, and exits as before`, async () => {
+      const r = await run("--fail-under", value);
+      expect(r.code, r.stderr).toBe(0);
+      expect(r.stdout).toContain("pass^1 0.0%");
+      expect(r.stderr.split("\n").filter((l) => l === NO_GATE)).toHaveLength(1);
+      expect(r.stderr).not.toContain("is below --fail-under");
+    });
+  }
+
+  it("doesn't warn on a real gate, 0 included", async () => {
+    const gate = await run("--fail-under", "100");
+    expect(gate.code).toBe(1);
+    expect(gate.stderr).toContain("pass^1 0.0% is below --fail-under 100.0%");
+    expect(gate.stderr).not.toContain("warning:");
+    for (const value of ["0", "0%"]) {
+      const zero = await run("--fail-under", value);
+      expect(zero.code, value).toBe(0);
+      expect(zero.stderr, value).not.toContain("warning:");
+    }
+  });
+
+  it("goes by the last value given, as ever", async () => {
+    const realLast = await run("--fail-under", "", "--fail-under", "100");
+    expect(realLast.code).toBe(1);
+    expect(realLast.stderr).not.toContain("warning:");
+    const emptyLast = await run("--fail-under", "100", "--fail-under", "");
+    expect(emptyLast.code).toBe(0);
+    expect(emptyLast.stderr).toContain(NO_GATE);
+  });
+
+  it("leaves the other gates on", async () => {
+    const r = await run("--fail-under", "", "--floor", "happy-path=100");
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain(NO_GATE);
+    expect(r.stderr).toContain("below their --floor: happy-path");
+  });
+
+  it("says so next to the warning for --tasks in the docs", () => {
+    const doc = readFileSync(path.resolve("docs/reference/cli.mdx"), "utf8");
+    expect(doc.indexOf(NO_GATE)).toBeGreaterThan(doc.indexOf(WARNING));
+    expect(doc.indexOf(NO_GATE) - doc.indexOf(WARNING)).toBeLessThan(600);
   });
 });

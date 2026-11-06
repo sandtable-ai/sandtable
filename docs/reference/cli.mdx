@@ -174,7 +174,7 @@ npx sandtable-ai run ./my-domain --agent http://localhost:8787/step -k 4 --fail-
 | `-c, --concurrency <n>` | episodes run in parallel. Default: `4` |
 | `-o, --out <dir>` | output directory for `results.json` and `report.html`. Default: `.sandtable/runs/<timestamp>-<domain>` |
 | `--no-html` | skip the HTML report |
-| `--fail-under <pct>` | exit 1 if pass^k (k = `--trials`) is below this percentage, `0` to `100`. A trailing `%` is accepted |
+| `--fail-under <pct>` | exit 1 if pass^k (k = `--trials`) is below this percentage, `0` to `100`. A trailing `%` is accepted. An empty value is deprecated: see [run some tasks](#run-some-tasks) |
 | `--floor <tag=pct>` | exit 1 if this tag's pass^k (k = `--trials`) is below the percentage, e.g. `--floor refusal=100`. Repeat it for more tags; see [per-tag floors](#per-tag-floors) |
 | `--baseline <results>` | a previous run's `results.json`: also show which tasks broke or got fixed since, and how pass^k moved. See [compare with a baseline](#compare-with-a-baseline) |
 | `--fail-on-regression` | with `--baseline`: exit 1 if a task that passed every trial in the baseline fails one now. Without `--baseline`, a usage error. See [compare with a baseline](#compare-with-a-baseline) |
@@ -220,6 +220,8 @@ npx sandtable-ai run ./my-domain --agent http://localhost:8787/step --tag hard -
 A tag that no task in the domain carries, an unknown task id, or a `--tasks` and `--tag` with no task in common stops the run before any trial with exit 2, so a typo can't run nothing, or everything. `--fail-under`, `--floor` and pass^k then cover only the tasks that ran.
 
 An empty `--tasks`, such as `--tasks ""` from an unset CI variable, still runs every task, but it is deprecated. Next to task ids, an empty value adds nothing. Either way it prints `warning: an empty --tasks value is deprecated; in sandtable-ai 2.0 it will be a usage error (exit 2). To run every task, leave --tasks out.` on stderr, and 2.0 will make it exit 2, as an empty `--tag` already does.
+
+An empty or blank `--fail-under`, or `%` alone, such as `--fail-under "$THRESHOLD"` from an unset CI variable, is a gate of 0%, so it turns the gate off, and it is deprecated too. It prints `warning: an empty --fail-under value turns the gate off and is deprecated; in sandtable-ai 2.0 it will be a usage error (exit 2). To run without a gate, leave --fail-under out.` on stderr and keeps its exit code, and 2.0 will make it exit 2, as `--floor refusal=` already does.
 
 ### Per-tag floors
 
@@ -605,5 +607,5 @@ As `grep` and `diff` do, a failed gate exits 1 and an error exits 2. See [Use it
 |---|---|
 | `0` | the command did its job and every gate passed; also `--help` and `--version` |
 | `1` | a gate failed on a complete result: `run` below `--fail-under`, a `run` with a tag below its `--floor`, a `run` or `demo --live` in which any trial of a critical task failed, a `run --fail-on-regression` or `compare --fail-on-regression` in which a task broke since the baseline, `validate` or `lint` on a domain that exists but is invalid, `validate --strict` with pending items, or `lint` errors |
-| `2` | the command couldn't do its job: a usage error (an unknown command or option, a missing argument, an invalid value, or no command at all), a missing or unreadable file, no domain at the path, an invalid domain for any command but `validate` and `lint`, an unknown agent or user spec, missing credentials or package, an agent or simulated user that can't start (checked before a `run` or `demo --live` runs any trial), a `run` or `demo --live` with a skipped trial (it ended in an error before the agent broke a rule, so the run is incomplete, even when a gate failed too), a `run` or `demo --live` in which every trial ended in an error, or a `leaderboard` on which every model is an error row (its agent couldn't be built, or a trial was skipped) |
+| `2` | the command couldn't do its job: a usage error (an unknown command or option, a missing argument, an invalid value such as `-k 2e1`, or no command at all), a missing or unreadable file, no domain at the path, an invalid domain for any command but `validate` and `lint`, an unknown agent or user spec, missing credentials or package, an agent or simulated user that can't start (checked before a `run` or `demo --live` runs any trial), a `run` or `demo --live` with a skipped trial (it ended in an error before the agent broke a rule, so the run is incomplete, even when a gate failed too), a `run` or `demo --live` in which every trial ended in an error, or a `leaderboard` on which every model is an error row (its agent couldn't be built, or a trial was skipped) |
 | `141` | the output was piped into a reader that stopped early, such as `head` or a `less` quit before the end: the command stops there quietly, without finishing, with the status a shell reports for a Unix tool stopped by `SIGPIPE` (128 + 13) |
