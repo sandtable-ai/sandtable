@@ -4,6 +4,10 @@
  * conditions, seed data) becomes a review note instead of a guess.
  */
 
+import { readFileSync, realpathSync, statSync } from "node:fs";
+import path from "node:path";
+import YAML from "yaml";
+import { shellWord } from "../shell.ts";
 import { isParamName } from "../world/match.ts";
 
 type Json = Record<string, unknown>;
@@ -76,12 +80,15 @@ export function openApiProblem(spec: unknown): string | undefined {
   return undefined;
 }
 
-export function draftFromOpenApi(spec: Json): OpenApiDraft {
-  const warnings: string[] = [];
+/** Draft a domain from a parsed spec. `specPath`, where it was read from, is what a `$ref` to another file resolves against. */
+export function draftFromOpenApi(source: Json, specPath?: string): OpenApiDraft {
+  const { spec, unread } = bundleFiles(source, specPath);
+  const specName = specPath === undefined ? "api.yaml" : path.basename(specPath);
+  const warnings: string[] = unreadWarnings(unread, specName);
   const deref = makeDeref(spec);
   const info = (spec.info ?? {}) as Json;
   const title = typeof info.title === "string" ? info.title : "api";
-  const paths = (spec.paths ?? {}) as Record<string, Json>;
+  const paths = Object.fromEntries(Object.entries((deref(spec.paths) ?? {}) as Json).map(([p, item]) => [p, (deref(item) ?? {}) as Json]));
 
   interface TableAcc { key?: string; fields: Map<string, Json>; rows: Json[] }
   const tables = new Map<string, TableAcc>();
@@ -91,7 +98,7 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
     return t;
   };
 
-  interface OpInfo { path: string; method: (typeof METHODS)[number]; op: Json; table: string; itemKey?: string; parents: string[]; action?: string; params: Json[] }
+  interface OpInfo { path: string; method: (typeof METHODS)[number]; op: Json; pathParams: Json[]; table: string; itemKey?: string; parents: string[]; action?: string; params: Json[] }
   const ops: OpInfo[] = [];
 
   for (const [p, item] of Object.entries(paths)) {
@@ -112,8 +119,9 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
     for (const method of METHODS) {
       const op = item[method] as Json | undefined;
       if (!op) continue;
-      const params = [...pathParams, ...((op.parameters as Json[] | undefined) ?? [])].map((x) => deref(x) as Json);
-      ops.push({ path: p, method, op, ...shape, params });
+      // A parameter behind a $ref init couldn't read comes back empty, and that ref has its own warning.
+      const params = [...pathParams, ...((op.parameters as Json[] | undefined) ?? [])].map((x) => deref(x) as Json).filter((x) => x && Object.keys(x).length > 0);
+      ops.push({ path: p, method, op, pathParams, ...shape, params });
       for (const [name, callback] of Object.entries((op.callbacks ?? {}) as Json)) {
         for (const url of Object.keys((deref(callback) ?? {}) as Json)) {
           warnings.push(`${method.toUpperCase()} ${p}: callback "${name}" (${url}), a request the API sends to the client; skipped`);
@@ -244,6 +252,9 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
     const text = `${o.op.summary ?? ""} ${o.op.description ?? ""}`;
     if (o.method !== "get" && SIDE_EFFECT_HINT.test(text)) {
       tool.notes.push(`The description mentions a side effect ("${text.trim()}"): add ops for any other table it changes.`);
+    }
+    for (const u of unreadFrom([o.op, o.pathParams], spec, unread)) {
+      tool.notes.push(`$ref "${u.ref}" ${u.why}. Nothing in it reached this draft: add it by hand, or bundle the spec first (${bundleCommand(specName)}) and run init again.`);
     }
     tools.push(tool);
   }
@@ -501,19 +512,198 @@ function flatten(node: unknown, deref: (x: unknown) => unknown, depth = 0): Json
   return merged;
 }
 
+/** What a `#/a/b` pointer names in `root`. */
+function pointerTarget(root: unknown, pointer: string): unknown {
+  return pointer
+    .slice(2)
+    .split("/")
+    .reduce<unknown>((cur, key) => (cur && typeof cur === "object" ? (cur as Json)[key.replace(/~1/g, "/").replace(/~0/g, "~")] : undefined), root);
+}
+
 function makeDeref(spec: Json) {
   const deref = (node: unknown, depth = 0): unknown => {
     if (!node || typeof node !== "object" || depth > 20) return node;
     const ref = (node as Json).$ref;
     if (typeof ref !== "string") return node;
     if (!ref.startsWith("#/")) return {};
-    const target = ref
-      .slice(2)
-      .split("/")
-      .reduce<unknown>((cur, key) => (cur && typeof cur === "object" ? (cur as Json)[key.replace(/~1/g, "/").replace(/~0/g, "~")] : undefined), spec);
-    return deref(target, depth + 1);
+    return deref(pointerTarget(spec, ref), depth + 1);
   };
   return deref;
+}
+
+/** Where a bundled spec keeps the files its refs point into. */
+const BUNDLED_FILES = "x-sandtable-files";
+/** What a ref that couldn't be read becomes: deref reads anything but a `#/` pointer as an empty schema. */
+const UNREAD_REF = "unread";
+/** Keys whose value is data: a `$ref` in an example is a value, not a reference. */
+const LITERAL_KEYS = new Set(["example", "default", "enum", "const"]);
+/** Keys whose children the spec's author names, so a field or a response called `default` is still followed. */
+const NAMED_CHILDREN = new Set(["properties", "patternProperties", "$defs", "definitions", "schemas", "responses", "parameters", "requestBodies", "headers", "examples", "links", "callbacks", "paths", "content"]);
+
+/** A `$ref` init didn't read: what it says, where it appears, and why. */
+interface UnreadRef {
+  ref: string;
+  file: string;
+  at: string[];
+  why: string;
+}
+
+/** One file of a split spec. `pointer` is the local `$ref` that names the top of it in the bundled spec. */
+interface SpecFile {
+  pointer: string;
+  raw: unknown;
+  /** Its real path, or undefined for a spec with no file of its own. */
+  file: string | undefined;
+  /** How a warning names it. */
+  name: string;
+}
+
+const isInside = (folder: string, file: string) => {
+  const relative = path.relative(folder, file);
+  return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+};
+
+/**
+ * The spec with each `$ref` to a file in its folder rewritten as a local pointer, and those files kept beside it, so
+ * every deref below reads a split spec as it reads one file. Each file is read once, which ends a cycle across files, and
+ * a pointer cycle then stops where a local one does. Nothing is fetched: a ref that can't be read is left as UNREAD_REF
+ * and listed in `unread`. A file outside the spec's folder is never read, and not even checked for: a third-party spec
+ * mustn't be able to pull a local file into a draft, or use the output to learn which files exist.
+ */
+function bundleFiles(source: Json, specPath: string | undefined): { spec: Json; unread: Map<object, UnreadRef> } {
+  const unread = new Map<object, UnreadRef>();
+  const specFile = specPath === undefined ? undefined : realOrResolved(specPath);
+  const folder = specFile === undefined ? undefined : path.dirname(specFile);
+  const main: SpecFile = { pointer: "#", raw: source, file: specFile, name: specFile === undefined ? "the spec" : path.basename(specFile) };
+  const opened = new Map<string, SpecFile | string>(specFile === undefined ? [] : [[specFile, main]]);
+  const files: Json = {};
+  const copies = new WeakMap<object, unknown>();
+  const OUTSIDE = "is outside the spec's folder, so init didn't read it";
+
+  /** The file at a resolved path, read once, or why it can't be read. */
+  const open = (target: string): SpecFile | string => {
+    if (!isInside(folder!, target)) return OUTSIDE;
+    let real: string;
+    try {
+      real = realpathSync(target);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      return `can't be read: ${code === "ENOENT" || code === "ENOTDIR" ? "no such file" : String(code)}`;
+    }
+    if (!isInside(folder!, real)) return OUTSIDE;
+    const known = opened.get(real);
+    if (known !== undefined) return known;
+    const problem = (why: string) => {
+      opened.set(real, why);
+      return why;
+    };
+    let text: string;
+    try {
+      if (!statSync(real).isFile()) return problem("is not a file");
+      text = readFileSync(real, "utf8");
+    } catch (err) {
+      return problem(`can't be read: ${String((err as NodeJS.ErrnoException).code)}`);
+    }
+    let raw: unknown;
+    try {
+      raw = YAML.parse(text);
+    } catch (err) {
+      return problem(`doesn't parse as YAML or JSON: ${(err as Error).message.split("\n")[0]}`);
+    }
+    if (!raw || typeof raw !== "object") return problem("holds no schema");
+    const id = String(opened.size);
+    const doc: SpecFile = { pointer: `#/${BUNDLED_FILES}/${id}`, raw, file: real, name: path.relative(folder!, real) };
+    opened.set(real, doc);
+    files[id] = copy(raw, doc, []);
+    return doc;
+  };
+
+  /** A ref found in `doc` as a local pointer, or why it can't be read. */
+  const pointerFor = (ref: string, doc: SpecFile): { pointer: string } | { why: string } => {
+    const hash = ref.indexOf("#");
+    const target = hash < 0 ? ref : ref.slice(0, hash);
+    const fragment = hash < 0 ? "" : ref.slice(hash + 1);
+    if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(target)) return { why: "is a URL, and init makes no network call" };
+    let into = doc;
+    if (target) {
+      if (doc.file === undefined) return { why: "can't be read, since init has no spec file to resolve it against" };
+      const found = open(path.resolve(path.dirname(doc.file), target));
+      if (typeof found === "string") return { why: found };
+      into = found;
+    }
+    if (fragment) {
+      const at = fragment.startsWith("/") ? pointerTarget(into.raw, `#${fragment}`) : undefined;
+      if (!at || typeof at !== "object") return { why: `has nothing at #${fragment}` };
+    }
+    return { pointer: `${into.pointer}${fragment}` };
+  };
+
+  function copy(node: unknown, doc: SpecFile, at: string[], named = false): unknown {
+    if (!node || typeof node !== "object") return node;
+    if (copies.has(node)) return copies.get(node);
+    if (Array.isArray(node)) {
+      const list: unknown[] = [];
+      copies.set(node, list);
+      node.forEach((v, i) => list.push(copy(v, doc, [...at, String(i)])));
+      return list;
+    }
+    const out: Json = {};
+    copies.set(node, out);
+    for (const [key, value] of Object.entries(node)) {
+      if (named) {
+        out[key] = copy(value, doc, [...at, key]);
+      } else if (key === "$ref" && typeof value === "string") {
+        // A pointer in the spec itself stays as it is, whether or not it finds anything.
+        const found = doc === main && value.startsWith("#") ? { pointer: value } : pointerFor(value, doc);
+        if ("why" in found) unread.set(out, { ref: value, file: doc.name, at, why: found.why });
+        out.$ref = "why" in found ? UNREAD_REF : found.pointer;
+      } else {
+        out[key] = LITERAL_KEYS.has(key) ? value : copy(value, doc, [...at, key], NAMED_CHILDREN.has(key));
+      }
+    }
+    return out;
+  }
+
+  const spec = copy(source, main, []) as Json;
+  return { spec: Object.keys(files).length ? { ...spec, [BUNDLED_FILES]: files } : spec, unread };
+}
+
+function realOrResolved(file: string): string {
+  try {
+    return realpathSync(file);
+  } catch {
+    return path.resolve(file);
+  }
+}
+
+const bundleCommand = (specName: string) => `npx @redocly/cli bundle ${shellWord(specName)} -o bundled.yaml`;
+
+/** One warning per ref in a file, naming where it first appears and how many other places say the same. */
+function unreadWarnings(unread: Map<object, UnreadRef>, specName: string): string[] {
+  const byRef = new Map<string, UnreadRef[]>();
+  for (const u of unread.values()) byRef.set(`${u.file}\n${u.ref}`, [...(byRef.get(`${u.file}\n${u.ref}`) ?? []), u]);
+  return [...byRef.values()].map(([u, ...others]) => {
+    const more = others.length ? ` and ${others.length} more place${others.length === 1 ? "" : "s"}` : "";
+    return `${u!.file}, ${u!.at.join(".")}${more}: $ref "${u!.ref}" ${u!.why}. Bundle the spec first, for example: ${bundleCommand(specName)}`;
+  });
+}
+
+/** The refs init didn't read that these parts of the spec reach, following its pointers, each ref once. */
+function unreadFrom(roots: unknown[], spec: Json, unread: Map<object, UnreadRef>): UnreadRef[] {
+  if (unread.size === 0) return [];
+  const found = new Map<string, UnreadRef>();
+  const seen = new Set<object>();
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== "object" || seen.has(node)) return;
+    seen.add(node);
+    const u = unread.get(node);
+    if (u) found.set(`${u.file}\n${u.ref}`, u);
+    const ref = (node as Json).$ref;
+    if (typeof ref === "string" && ref.startsWith("#/")) visit(pointerTarget(spec, ref));
+    Object.values(node).forEach(visit);
+  };
+  roots.forEach(visit);
+  return [...found.values()];
 }
 
 function describe(op: Json, where: string): string {

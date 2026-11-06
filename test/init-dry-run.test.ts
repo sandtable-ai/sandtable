@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -116,5 +116,40 @@ describe.skipIf(!process.features.typescript)("`sandtable init --dry-run`, with 
       expect(r.stderr).toContain(`-o '${out}'\``);
       expect(r.stdout).not.toContain("Plan:");
     }
+  });
+});
+
+describe("init --dry-run with a $ref to another file", () => {
+  /** A spec whose body is in another file, in a folder of its own. */
+  function splitSpec(ref: string, withFile = true): string {
+    const dir = mkdtempSync(path.join(tmpdir(), "sandtable-refs-"));
+    const body = { content: { "application/json": { schema: { $ref: ref } } } };
+    writeFileSync(path.join(dir, "api.json"), JSON.stringify({ openapi: "3.0.3", info: { title: "Fernhill Library", version: "1" }, paths: { "/loans": { post: { operationId: "createLoan", requestBody: body, responses: { "201": { description: "Created" } } } } } }));
+    mkdirSync(path.join(dir, "schemas"));
+    if (withFile) writeFileSync(path.join(dir, "schemas", "loan.json"), JSON.stringify({ type: "object", properties: { book_id: { type: "string" }, member_id: { type: "string" } } }));
+    return path.join(dir, "api.json");
+  }
+
+  it("reads the file, so its plan matches what a real run writes", async () => {
+    const spec = splitSpec("./schemas/loan.json");
+    const out = path.join(path.dirname(spec), "out");
+    const dry = await scrubbed("init", "--openapi", spec, "-o", out, "--dry-run");
+    expect(dry.code).toBe(0);
+    expect(dry.stdout).toContain("1 tables, 1 tools.");
+    expect(existsSync(out)).toBe(false);
+    const planned = Number(/sandtable\.yaml \((\d+) characters\)/.exec(dry.stdout)![1]);
+
+    expect((await scrubbed("init", "--openapi", spec, "-o", out)).code).toBe(0);
+    const written = readFileSync(path.join(out, "sandtable.yaml"), "utf8");
+    expect(written).toContain("book_id");
+    expect(written.length).toBe(planned);
+  });
+
+  it("says what it couldn't read, as a real run does", async () => {
+    const spec = splitSpec("./schemas/gone.json", false);
+    const dry = await scrubbed("init", "--openapi", spec, "-o", path.join(path.dirname(spec), "out"), "--dry-run");
+    expect(dry.code).toBe(0);
+    expect(dry.stdout).toContain(`$ref "./schemas/gone.json"`);
+    expect(dry.stdout).toContain("no such file");
   });
 });
