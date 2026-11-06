@@ -14,6 +14,7 @@ import { runGates } from "./run/gates.ts";
 import { startWorldServer } from "./serve/server.ts";
 import { DEFAULT_IDLE_TIMEOUT, MAX_IDLE_TIMEOUT, serveConversations } from "./serve/driven.ts";
 import { changedVerdicts, droppedVerdicts, RegradeError, regradeSuite } from "./run/regrade.ts";
+import { calibrate, parseLabels, renderCalibration } from "./judge/calibrate.ts";
 import { DEFAULT_JUDGE_MODEL, judgeBlocker, judgeInputsWarning, judgePlan, judgePlanLine, judgeSuite } from "./judge/judge.ts";
 import { droppedLine, statesCriteria } from "./judge/summary.ts";
 import { baselineSnapshot, checkBaseline, compareRuns, regressions, type Comparison } from "./run/compare.ts";
@@ -1121,6 +1122,20 @@ withProviderFlags(program
     console.log(renderJudged(outcome.result).join("\n"));
     if (outcome.failed) console.log(`\n  ${outcome.failed} of ${outcome.sent} judge call(s) failed, each kept as judged.error on its trial: the judged score leaves them out`);
     console.log(`\n  results: ${results}${o.html ? `\n  report:  ${path.join(out, "report.html")}` : ""}`);
+  });
+
+program
+  .command("calibrate")
+  .argument("<results>", "path to a results.json that sandtable judge has scored")
+  .description("measure a judge against a person's labels: TPR, TNR and agreement with the verdicts stored in results.json, without calling a model")
+  // As for regrade: commander's help doesn't mark a required option, so the usage line and the description say it.
+  .usage("<results> --labels <file>")
+  .requiredOption("--labels <file>", "(required) YAML or JSON file: { labels: [{ task, trial, criterion, label }] } (trial counts from 1, label is pass or fail)")
+  .action(async (resultsPath: string, o: { labels: string }) => {
+    const results = await readResults(resultsPath, "calibrate");
+    const calibration = calibrate(results, parseLabels(await readUserText(o.labels, { from: "--labels" }), o.labels));
+    console.log(`\nsandtable calibrate · ${results.domain} · agent ${results.agent}\n`);
+    console.log(renderCalibration(calibration));
   });
 
 program

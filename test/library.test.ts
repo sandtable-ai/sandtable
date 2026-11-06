@@ -7,6 +7,7 @@ import YAML from "yaml";
 // The library's exports are a contract from 1.0 (docs/reference/library.mdx): adding one is a minor release,
 // removing or renaming one a major. This list changes only on purpose, with a changelog entry.
 const EXPORTS = [
+  "CalibrationError",
   "DEFAULT_JUDGE_MODEL",
   "DOMAIN_FILE",
   "DomainError",
@@ -14,6 +15,7 @@ const EXPORTS = [
   "World",
   "baselineSnapshot",
   "bedrockConverseAgent",
+  "calibrate",
   "claudeAgent",
   "claudeUser",
   "coerceArgs",
@@ -30,6 +32,7 @@ const EXPORTS = [
   "openaiCompatAgent",
   "openaiCompatUser",
   "parseDomain",
+  "parseLabels",
   "passAtK",
   "passHatK",
   "pendingReview",

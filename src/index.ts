@@ -31,6 +31,7 @@ export type { TokenUsage, UsageByModel, Usage, UsageRecorder } from "./run/usage
 export { regradeSuite, RegradeError } from "./run/regrade.ts";
 export { DEFAULT_JUDGE_MODEL, judgeSuite, judgePlan, judgePlanLine, type JudgeOptions, type JudgeOutcome, type JudgePlan } from "./judge/judge.ts";
 export type { JudgedVerdict, TrialJudgement, JudgedCounts, JudgedSummary } from "./judge/summary.ts";
+export { calibrate, parseLabels, CalibrationError, type Calibration, type CalibrationCounts, type CalibrationLabel, type CalibrationRate, type LabelledVerdict, type LabelWithNoVerdict, type ModelCalibration } from "./judge/calibrate.ts";
 export { compareRuns, baselineSnapshot, type Comparison, type TaskDelta, type TaskChange, type BaselineSnapshot } from "./run/compare.ts";
 export { lintDomain, type LintReport, type TaskLint, type RuleLint } from "./grade/lint.ts";
 export { passHatK, passAtK, wilsonInterval } from "./grade/passk.ts";
