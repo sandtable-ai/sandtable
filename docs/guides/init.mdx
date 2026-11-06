@@ -59,7 +59,7 @@ No model is involved: the same spec always produces the same draft.
 | `/loads/{load_id}` | table `loads` with key `load_id` |
 | a collection without an item path | key from the schema (`<singular>_id`, then `id`), else `<singular>_id` |
 | `GET /loads/{load_id}` | tool with `get: loads, key: $load_id` |
-| `GET /loads?origin=&status=` | tool with `list: loads, where: {...}`; free-text strings match with `$contains`, enums and numbers with equality |
+| `GET /loads?origin=&status=` | tool with `list: loads, where: {...}`; free-text strings match with `$contains`; enums, numbers and a string named after a table's key, such as `customer_id`, match with equality |
 | query param `default` | param `default`, applied when the agent omits it |
 | `limit`, `offset`, `page`, `cursor`, … | ignored (pagination) |
 | `POST /bookings` | tool with `create: bookings, values: {body fields}` |
