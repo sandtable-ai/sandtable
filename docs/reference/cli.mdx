@@ -177,6 +177,8 @@ npx sandtable-ai run ./my-domain --agent http://localhost:8787/step -k 4 --fail-
 | `--floor <tag=pct>` | exit 1 if this tag's pass^k (k = `--trials`) is below the percentage, e.g. `--floor refusal=100`. Repeat it for more tags; see [per-tag floors](#per-tag-floors) |
 | `--baseline <results>` | a previous run's `results.json`: also show which tasks broke or got fixed since, and how pass^k moved. See [compare with a baseline](#compare-with-a-baseline) |
 | `--fail-on-regression` | with `--baseline`: exit 1 if a task that passed every trial in the baseline fails one now. Without `--baseline`, a usage error. See [compare with a baseline](#compare-with-a-baseline) |
+| `--judge` | once the trials have ended, have a model score them on the domain's [judged criteria](/reference/spec#judged): a judged score, apart from pass/fail, pass^k, gates and exit codes. It costs one model call per trial. See [judge the run](#judge-the-run) |
+| `--judge-model <id>` | with `--judge`: the Claude model that judges. Default: `claude-sonnet-5-5`. Without `--judge`, a usage error |
 | `--open` | open the HTML report in the browser when the run finishes |
 | `--prices <file>` | extra model prices for the cost estimate: `{ "<model-id>": { "input", "output", "cacheRead", "cacheWrite" } }` in USD per million tokens, or the same map under a `prices` key, `{ "prices": { … } }`, the shape `scripts/bedrock-prices.mjs` writes. For Bedrock, [`scripts/bedrock-prices.mjs`](https://github.com/sandtable-ai/sandtable/blob/main/scripts/bedrock-prices.mjs) in the repo writes this file from the AWS Pricing API, and with `--verified` takes the models it doesn't list from [`prices/bedrock.verified.json`](https://github.com/sandtable-ai/sandtable/blob/main/prices/bedrock.verified.json), prices copied from AWS's model pages with their source |
 | `--serve [port]` | serve each trial's simulated world over HTTP while it runs, for an agent that calls its tools itself: REST at `/tools/<name>` and each tool's [`http`](/reference/spec#tools) route, MCP at `/mcp`, webhooks at `/webhook`. The port defaults to `4010`; `0` picks a free one. Trials run one at a time, so the base URL means the trial that is running, unless you pass `-c`. See [rehearse an agent that calls its own tools](/guides/black-box) |
@@ -269,7 +271,34 @@ The baseline is read before any trial runs, so a missing file, a file that isn't
 
 Only `broken` tasks gate. A `worse` task never passed every trial, and with a few trials its move is often noise; a `changed` task's test differs from the baseline's; a failing added task has nothing to compare with. They are still listed. The gate combines with `--fail-under` and critical tasks: any failed gate exits 1, and a run with skipped trials exits 2, as without it.
 
+When either run was judged, the block ends with how the judged score changed, apart from the task changes: overall and per criterion, matched by `id`, including a criterion only one run has. With `--judge`, it prints once the run is judged.
+
+```text
+  Judged score since the baseline (a model's judgement: never a regression, and it changes no gate or exit code)
+  judged 75.0% → 50.0%  (−25.0 pts)
+  reads-back-before-booking  100.0% → 50.0%  (−50.0 pts)
+  polite-refusal             50.0% → 50.0%  (no change)  text differs
+  callback-holds-nothing     – → 50.0%  only in this run
+  note: the text of polite-refusal differs between the two runs: a date from ${today} under clock: now differs from day to day, and otherwise the criterion was reworded
+```
+
+Judged changes never count as regressions: `--fail-on-regression` doesn't look at them. A different model, or runs of different tasks, get a note too, since either can move the score.
+
 `results.json` keeps what it needs of the baseline as [`baseline`](/reference/results-schema#baselinesnapshot), and the HTML report opens with the changes, regressions first, and marks each task that got worse. [`report`](#report) and [`regrade`](#regrade) show them again without the baseline's file.
+
+### Judge the run
+
+`--judge` scores the run on the domain's [judged criteria](/reference/spec#judged) in one command, with the judge from [`judge`](#judge). The provider flags apply to it too, and `-c` also sets how many judge calls run at once.
+
+```bash
+npx sandtable-ai run ./my-domain --agent http://localhost:8787/step -k 4 --judge --judge-model claude-haiku-5-5
+```
+
+The run comes first. `run` writes its results and prints its summary, then prints the same plan line as [`judge`](#judge) and judges the trials once the last one has ended, writing `results.json` after each. Judging after the last trial gives the same result as judging each as it ends, and a judge that fails can't cost trials already paid for.
+
+The gates alone decide the exit code, exactly as without `--judge`: a low judged score fails nothing. If the judge stops, as with missing credentials or an unknown model, or a call fails, `run` says so on stderr, with the `judge` command that tries again.
+
+On a domain with no criteria for the run's tasks, `--judge` says so in one line and makes no call. Without `--judge`, `run` never calls a judge. A domain with criteria for the run's tasks then gets one line after the summary: how many weren't judged, and the two ways to judge them.
 
 ### Coverage
 
@@ -452,7 +481,7 @@ The hash covers what sandtable's own adapters give a model. A custom agent adapt
 
 ## judge
 
-Have a model score a past run's stored trials on the domain's [judged criteria](/reference/spec#judged): a judged score in `results.json`, apart from pass^k. The agent doesn't run again, so a free scripted run or any stored run can be judged. It costs one model call per trial, so check the plan first.
+Have a model score a past run's stored trials on the domain's [judged criteria](/reference/spec#judged): a judged score in `results.json`, apart from pass^k. The agent doesn't run again, so a free scripted run or any stored run can be judged. It costs one model call per trial, so check the plan first. To run a suite and judge it in one command, use [`run --judge`](#judge-the-run).
 
 ```bash
 npx sandtable-ai judge .sandtable/runs/<run>/results.json --domain examples/freight --dry-run
@@ -474,7 +503,7 @@ Each trial gets one call, for the criteria that apply to it: the domain's and it
 
 `results.json` is written after each trial, so Ctrl-C loses at most the calls in flight. Running `judge` again sends only what a trial still lacks: a criterion with no verdict, or one whose text changed. Another model's verdicts don't count, so `-m <other> -o <dir>` gives a second set of verdicts and leaves the first where it was. A trial with a verdict on every criterion, at the same text and from the same model, isn't sent.
 
-The judged score changes no verdict, pass^k, gate or exit code, and every existing field stays as stored: the judge's tokens and cost are in [`judged`](/reference/results-schema#judgedsummary), not in `usage`. The terminal shows the score apart from pass^k, as `regrade` does for a judged run. The HTML report doesn't show it yet.
+The judged score changes no verdict, pass^k, gate or exit code, and every existing field stays as stored: the judge's tokens and cost are in [`judged`](/reference/results-schema#judgedsummary), not in `usage`. The terminal shows the score apart from pass^k, as `regrade` does for a judged run. So does `report.html`, in a Judged score section, and each trial's detail there has its verdicts, with the criterion, the quote and the reason, and a mark on a quote that isn't in the transcript. The [customer report](#report) stays on the fixed rules it describes and doesn't show it.
 
 It exits 0 when it finishes, even if some calls failed: each is kept as `judged.error` on its trial, the terminal says how many, and the next `judge` sends them again. A failure every later call would hit too, such as missing credentials or an unknown model, stops it with exit 2, and what was judged so far stays written. It never exits 1, since the judged score sets no gate.
 
@@ -498,7 +527,7 @@ npx sandtable-ai compare main-run/results.json pr-run/results.json [--fail-on-re
 | `-o, --out <dir>` | also write the newer run's `results.json` and `report.html` to this directory, with the baseline attached, so the report opens with the changes. Without it, `compare` writes nothing |
 | `--no-html` | with `-o`, skip the HTML report |
 
-It prints the newer run on two lines, then the same block a `run --baseline` summary ends with: each task that broke, got worse, got fixed, got better or changed, the added, removed and unchanged tasks, and pass^1 and pass^k before and after over the tasks both runs ran with the same test.
+It prints the newer run on two lines, then the same block a `run --baseline` summary ends with: each task that broke, got worse, got fixed, got better or changed, the added, removed and unchanged tasks, and pass^1 and pass^k before and after over the tasks both runs ran with the same test. When either run was judged, it ends with [how the judged score changed](#compare-with-a-baseline), which never counts as a regression.
 
 Use it when the two runs were made apart: a pull request's run and the base branch's, made in separate CI jobs; a run from before a prompt change and one from after, made without `--baseline`; or two models' folders from a [leaderboard](#leaderboard). Two runs of different domains, a file that isn't a `results.json`, or a missing file exit 2 before anything is printed.
 

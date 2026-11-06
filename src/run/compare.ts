@@ -1,5 +1,14 @@
 import { passHatK } from "../grade/passk.ts";
+import type { JudgedCounts } from "../judge/summary.ts";
 import type { SuiteResult, TaskSummary } from "./suite.ts";
+
+/** What a comparison needs of a run's judged score: its counts, and per criterion with a verdict, each text those verdicts hold. */
+export interface JudgedSnapshot extends JudgedCounts {
+  models: string[];
+  notJudged: number;
+  /** In spec order. A criterion with `${today}` can hold several texts, one per clock its trials ran at. */
+  criteria: (JudgedCounts & { id: string; texts: string[] })[];
+}
 
 /**
  * What a run keeps of the earlier run it was compared with (`run --baseline`): enough to show what
@@ -20,6 +29,8 @@ export interface BaselineSnapshot {
    * each task's `inputs` and `grading` hashes, absent when the baseline's results.json is older than them.
    */
   tasks: { id: string; passes: number; trials: number; inputs?: string; grading?: string }[];
+  /** The baseline's judged score; absent when nothing in it was judged. */
+  judged?: JudgedSnapshot;
 }
 
 /**
@@ -43,6 +54,25 @@ export interface TaskDelta {
   what?: ("inputs" | "grading")[];
 }
 
+/** How one criterion's judged score moved. */
+export interface JudgedDelta {
+  id: string;
+  /** Absent when the baseline holds no verdict on it. */
+  before?: JudgedCounts;
+  /** Absent when this run holds no verdict on it. */
+  after?: JudgedCounts;
+  /** Both runs have verdicts on it, holding different text: a date from `${today}`, or a reworded criterion. */
+  textDiffers?: true;
+}
+
+/** How the judged score moved. Either side is absent when nothing in that run was judged. */
+export interface JudgedComparison {
+  before?: JudgedSnapshot;
+  after?: JudgedSnapshot;
+  /** This run's criteria in spec order, then those only the baseline has. */
+  criteria: JudgedDelta[];
+}
+
 export interface Comparison {
   baseline: BaselineSnapshot;
   /** Every task of either run: regressions first (broken, worse), then fixed, better, added, removed, same. */
@@ -57,6 +87,8 @@ export interface Comparison {
   passHat: { j: number; before: number; after: number }[];
   /** What else differs between the runs, in words, e.g. `agent scripted:careful → scripted:naive`. */
   differences: string[];
+  /** How the judged score moved, which `regressions` never looks at. Absent when neither run was judged. */
+  judged?: JudgedComparison;
 }
 
 const ORDER: TaskChange[] = ["broken", "worse", "fixed", "better", "changed", "added", "removed", "skipped", "same"];
@@ -64,8 +96,28 @@ const ORDER: TaskChange[] = ["broken", "worse", "fixed", "better", "changed", "a
 /** A task's passes out of its graded trials; results from before verdicts graded every trial. */
 const counts = (t: TaskSummary) => ({ passes: t.passes, trials: t.graded ?? t.trials.length });
 
+const judgedCounts = ({ pass, fail, notApplicable, score }: JudgedCounts): JudgedCounts => ({ pass, fail, notApplicable, score });
+
+/** A run's judged score as a comparison reads it, or undefined when it holds no verdict, such as when every judge call failed. */
+function judgedSnapshot(r: SuiteResult): JudgedSnapshot | undefined {
+  const j = r.judged;
+  if (!j || j.pass + j.fail + j.notApplicable === 0) return undefined;
+  const texts = new Map<string, Set<string>>();
+  for (const v of r.tasks.flatMap((t) => t.trials).flatMap((tr) => tr.judged?.verdicts ?? [])) {
+    if (!texts.has(v.id)) texts.set(v.id, new Set());
+    texts.get(v.id)!.add(v.criterion);
+  }
+  return {
+    ...judgedCounts(j),
+    models: j.models,
+    notJudged: j.notJudged,
+    criteria: j.criteria.filter((c) => c.pass + c.fail + c.notApplicable > 0).map((c) => ({ id: c.id, ...judgedCounts(c), texts: [...(texts.get(c.id) ?? [])] })),
+  };
+}
+
 /** The part of a run that a later run keeps as its baseline. */
 export function baselineSnapshot(r: SuiteResult): BaselineSnapshot {
+  const judged = judgedSnapshot(r);
   return {
     runId: r.runId,
     startedAt: r.startedAt,
@@ -75,7 +127,22 @@ export function baselineSnapshot(r: SuiteResult): BaselineSnapshot {
     ...(r.inputs ? { inputs: r.inputs } : {}),
     passHat: r.passHat,
     tasks: r.tasks.map((t) => ({ id: t.id, ...counts(t), ...(t.inputs ? { inputs: t.inputs } : {}), ...(t.grading ? { grading: t.grading } : {}) })),
+    ...(judged ? { judged } : {}),
   };
+}
+
+/** How the judged score moved between two runs, matching criteria by id, or undefined when neither was judged. */
+function judgedChanges(before: JudgedSnapshot | undefined, after: JudgedSnapshot | undefined): JudgedComparison | undefined {
+  if (!before && !after) return undefined;
+  const was = new Map((before?.criteria ?? []).map((c) => [c.id, c]));
+  const now = new Map((after?.criteria ?? []).map((c) => [c.id, c]));
+  const criteria = [...new Set([...now.keys(), ...was.keys()])].map((id): JudgedDelta => {
+    const b = was.get(id);
+    const a = now.get(id);
+    const sameText = !a || !b || (a.texts.length === b.texts.length && a.texts.every((t) => b.texts.includes(t)));
+    return { id, ...(b ? { before: judgedCounts(b) } : {}), ...(a ? { after: judgedCounts(a) } : {}), ...(sameText ? {} : { textDiffers: true as const }) };
+  });
+  return { ...(before ? { before } : {}), ...(after ? { after } : {}), criteria };
 }
 
 /** The share of graded trials passed, or NaN for a task with none. */
@@ -97,7 +164,8 @@ const outcomes = (x: { passes: number; trials: number }) => Array.from({ length:
 /**
  * Compare a run with an earlier run of the same domain, task by task. A task whose test changed since the
  * baseline (its `inputs` or `grading` hash differs) is `changed`, not fixed or broken, and pass^j is compared
- * over the tasks both runs ran with the same test, for every j up to the smaller of the two k.
+ * over the tasks both runs ran with the same test, for every j up to the smaller of the two k. The judged score is
+ * compared apart from all of that.
  */
 export function compareRuns(baseline: BaselineSnapshot, now: SuiteResult): Comparison {
   const base = new Map(baseline.tasks.map((t) => [t.id, t]));
@@ -156,13 +224,15 @@ export function compareRuns(baseline: BaselineSnapshot, now: SuiteResult): Compa
       differences.push("prompts changed: the policy, a tool's schema or a task's caller prompt");
     }
   }
-  return { baseline, tasks: deltas, sameTasks, shared: shared.length, comparable: comparable.length, passHat, differences };
+  const judged = judgedChanges(baseline.judged, judgedSnapshot(now));
+  return { baseline, tasks: deltas, sameTasks, shared: shared.length, comparable: comparable.length, passHat, differences, ...(judged ? { judged } : {}) };
 }
 
 /**
  * The tasks that fail `--fail-on-regression`: those that passed every graded trial in the baseline and fail one now,
  * with the same test. A `worse` task never passed every trial, and with a few trials its move is often noise; a
- * `changed` task's test differs, so its move can't be put down to the agent.
+ * `changed` task's test differs, so its move can't be put down to the agent. A move in the judged score is a model's
+ * judgement, so it never counts.
  */
 export function regressions(c: Comparison): TaskDelta[] {
   return c.tasks.filter((d) => d.change === "broken");

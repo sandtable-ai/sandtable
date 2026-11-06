@@ -323,7 +323,7 @@ tasks:
         review: pending
 ```
 
-[`sandtable judge`](/reference/cli#judge) grades them on a stored run. It costs one model call per trial, and `--dry-run` prints the calls and a cost bound for free. The verdicts go in `results.json` as a [judged score](/reference/results-schema#judgedsummary), apart from pass^k.
+[`sandtable judge`](/reference/cli#judge) grades them on a stored run, and [`run --judge`](/reference/cli#judge-the-run) once a run's trials have ended. It costs one model call per trial, and `--dry-run` prints the calls and a cost bound for free. The verdicts go in `results.json` as a [judged score](/reference/results-schema#judgedsummary), apart from pass^k.
 
 ```bash
 npx sandtable-ai judge .sandtable/runs/<run>/results.json --domain ./my-domain --dry-run

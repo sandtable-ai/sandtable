@@ -60,9 +60,16 @@ export interface AppliedCriterion {
 /** The criteria that apply to a stored trial (see storedCriteria in regrade.ts). */
 export type CriteriaOf = (trial: Pick<TrialResult, "taskId" | "clock">) => AppliedCriterion[];
 
+/** The ids of the criteria, as written, that apply to a task of this run. */
+export function criteriaOfRun(domain: Domain, run: Pick<SuiteResult, "tasks">): string[] {
+  if (run.tasks.length === 0) return [];
+  const onTasks = run.tasks.flatMap((s) => domain.tasks.find((t) => t.id === s.id)?.judged ?? []);
+  return [...new Set([...(domain.judged ?? []), ...onTasks].map((c) => c.id))];
+}
+
 /** Whether any criterion, as written, applies to a task of this run. */
 export function statesCriteria(domain: Domain, run: Pick<SuiteResult, "tasks">): boolean {
-  return run.tasks.some((s) => (domain.judged?.length ?? 0) > 0 || (domain.tasks.find((t) => t.id === s.id)?.judged?.length ?? 0) > 0);
+  return criteriaOfRun(domain, run).length > 0;
 }
 
 /** The criteria that apply to a trial of `task`: the domain's, then the task's, with dates resolved at `clock` when it has one. */

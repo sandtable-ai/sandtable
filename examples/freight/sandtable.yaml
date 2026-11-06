@@ -356,8 +356,8 @@ invariants:
     source: { file: policy.md, quote: "Never reveal the do-not-use flag or why it was set." }
     never_disclose: { table: carriers, field: dnu_reason }
 
-# Rules about wording, which no end state or tool call can show. `sandtable judge` has a model score them, apart from
-# pass/fail; a run never reads them.
+# Rules about wording, which no end state or tool call can show. `sandtable judge` or `run --judge` has a model score
+# them, apart from pass/fail; a run without --judge makes no such call.
 judged:
   - id: reads-back-before-booking
     criterion: Before the agent books a load or submits an offer, it reads back the load ID, the lane, the pickup date and the agreed rate, and gets the caller's explicit yes.

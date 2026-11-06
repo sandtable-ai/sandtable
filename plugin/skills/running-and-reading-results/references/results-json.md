@@ -29,7 +29,7 @@ SuiteResult
   callerNotes                  { turns, trials }: caller turns that stepped out of role, and the trials they are in
   attribution                  { agent, "simulated-user", "task-spec", harness }: trials that didn't pass, by the
                                owner each trial's attribution names (absent before 0.3.0 until regraded)
-  judged?                      only once `sandtable judge` ran: { pass, fail, notApplicable, score, models[], notJudged,
+  judged?                      only once `judge` or `run --judge` ran: { pass, fail, notApplicable, score, models[], notJudged,
                                criteria[]: { id, pending?, pass, fail, notApplicable, score }, usage, costUsd }.
                                score = pass / (pass + fail), null with neither: a model's judgement over verdicts, not
                                pass^k, and it changes no other field. notJudged = trial-and-criterion pairs with no
@@ -68,7 +68,9 @@ SuiteResult
   latency                      { agentTurnP50Ms, agentTurnP95Ms }
   baseline?                    only with `run --baseline`: { runId, startedAt, agent, user, k, inputs?, passHat,
                                tasks[]: { id, passes, trials, inputs?, grading? } } of the run it was compared with
-                               (trials counts graded trials); reports work out what changed from it
+                               (trials counts graded trials), and judged? when it holds a verdict: { pass, fail,
+                               notApplicable, score, models[], notJudged, criteria[]: { id, pass, fail, notApplicable,
+                               score, texts[] } }; reports work out what changed from it
   floors?                      only with `run --floor`: { "refusal": 1, "negotiation": 0.7 }, each tag's floor on
                                byTag's passHatK, as a fraction; a tag below its floor failed the run (exit 1)
   tasks[]                      { id, description, tags[], critical?, passes, graded, skipped, verdict, interval?,
@@ -101,7 +103,7 @@ SuiteResult
                                simulated-user: a caller note before the first hard failure (or anywhere, when only
                                the end state, called or reply failed). agent: everything else, the default, not a
                                finding. Never changes passed
-      judged?                  only once `sandtable judge` sent it: { model, error?, verdicts[]: { id, criterion,
+      judged?                  only once `judge` or `run --judge` sent it: { model, error?, verdicts[]: { id, criterion,
                                verdict: "pass" | "fail" | "not_applicable", quote?, quoteFound?: false, reason } }.
                                criterion = the text at the trial's clock. quoteFound: false = the quote isn't in the
                                transcript. error = the last call failed, and the next `judge` sends it again. Never

@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { freightScriptedAgent } from "../src/demo/freight-agents.ts";
+import { withJudgedSummary } from "../src/judge/summary.ts";
 import { renderCustomerHtml } from "../src/report/customer.ts";
 import { runSuite, type SuiteResult } from "../src/run/suite.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
@@ -101,6 +102,18 @@ describe("the customer sign-off page", () => {
     const html = renderCustomerHtml(hostile);
     expect(html).not.toContain("<img src=x");
     expect(html).toContain("&lt;img src=x onerror=alert(1)&gt;");
+  });
+
+  it("stays on the fixed rules it describes: a judged run's page equals the same run's without the verdicts", () => {
+    const judged = (r: SuiteResult): SuiteResult =>
+      withJudgedSummary(
+        { ...r, tasks: r.tasks.map((t) => ({ ...t, trials: t.trials.map((tr) => ({ ...tr, judged: { model: "claude-sonnet-5-5", verdicts: [{ id: "polite", criterion: "The agent stays polite.", verdict: "fail" as const, quote: "No.", reason: "It was curt." }] } })) })) },
+        () => [{ id: "polite", criterion: "The agent stays polite." }],
+      );
+    expect(judged(careful).judged).toBeDefined();
+    expect(renderCustomerHtml(judged(careful))).toBe(renderCustomerHtml(careful));
+    expect(renderCustomerHtml(judged(careful), { probe: judged(naive) })).toBe(renderCustomerHtml(careful, { probe: naive }));
+    expect(renderCustomerHtml(judged(careful))).toContain("graded by fixed rules, not by an AI judge");
   });
 
   it("refuses a run without coverage, and a probe of another domain", () => {

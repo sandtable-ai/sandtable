@@ -19,14 +19,14 @@ keywords: ["LangWatch Scenario", "agent tests in code", "judge agent", "user sim
 | Rules on every tool call | checked before each call runs | assertions on tool calls that you write, run after the agent's turn ([tool calling](https://langwatch.ai/scenario/testing-guides/tool-calling)) |
 | Repeated trials | `-k` trials per task, reported as pass^k | the SDK runs a scenario once; the platform repeats each scenario 1 to 5 times and reports a pass rate ([run plans](https://langwatch.ai/docs/agent-testing/run-plans)) |
 | Drafting tests | `init` drafts the world, tools, invariants and tasks from an OpenAPI spec, an SOP and transcripts | the platform's assistant writes a scenario from text you paste, such as a ticket or a transcript ([scenarios](https://langwatch.ai/docs/agent-testing/scenarios)) |
-| Qualitative criteria (tone, empathy, wording) | not yet: soft checks are planned ([#16](https://github.com/sandtable-ai/sandtable/issues/16)) | yes, through the judge |
+| Qualitative criteria (tone, empathy, wording) | yes: [judged criteria](/reference/spec#judged), a separate score that never decides pass or fail | yes, through the judge, which decides pass or fail |
 | Voice agents | no, text only | yes, over the agent's real transport, such as ElevenLabs, OpenAI Realtime, Pipecat or Twilio ([voice](https://langwatch.ai/scenario/voice/getting-started)) |
 | Adversarial testing | no | a red-team agent that escalates attacks over several turns ([red teaming](https://langwatch.ai/scenario/advanced/red-teaming)) |
 
 ## Choose Scenario when
 
 - You want agent tests to live in your existing test runner, next to unit tests, against your agent's real code.
-- Your criteria need judgment: tone, helpfulness, whether an explanation was clear.
+- Whether a test passes needs judgment: tone, helpfulness, whether an explanation was clear.
 - You want to steer a conversation turn by turn and assert on it in code.
 - You test voice agents, or want multi-turn red-teaming in the same tool.
 - Your agent is built on a framework it has an integration guide for, such as LangGraph, CrewAI, Pydantic AI, Mastra or the Vercel AI SDK ([agent integrations](https://langwatch.ai/scenario/agent-integration)).

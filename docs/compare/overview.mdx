@@ -72,12 +72,12 @@ Details, and when to choose each, are on the [hosted platforms](/compare/hosted-
 | Agent integration | HTTP, JS/TS module, Claude, Bedrock, OpenAI-compatible endpoints | Python agent classes, LiteLLM models, a Gymnasium interface | built-in LangChain agent or your LangGraph agent | a one-method adapter, with guides for many frameworks |
 | Drafting tests from customer material | `init` from an OpenAPI spec, an SOP and transcripts, reviewed before use | no: domains are written as code and data | generated from a prompt or policy document | the platform drafts a scenario from pasted text |
 | Voice | no, text only | yes (τ³-bench) | text chat | yes |
-| LLM-judged checks | not yet: planned as a separate soft score ([#16](https://github.com/sandtable-ai/sandtable/issues/16)) | natural-language assertions on some τ²/τ³ tasks | yes, the critique | yes, the judge agent |
+| LLM-judged checks | yes: [judged criteria](/reference/spec#judged), a separate score that never decides pass or fail | natural-language assertions on some τ²/τ³ tasks | yes, the critique | yes, the judge agent |
 
 Every rule `init --sop` drafts quotes the SOP sentence it comes from and stays `review: pending` until a person accepts it ([guide](/guides/init#from-an-sop-claude-grounded)), so a failing trial points at a sentence in the customer's own procedure.
 
 ## What sandtable does not do (yet)
 
-A fair comparison includes the gaps. Today `sandtable` is text-only (no audio, timing or interruption testing), has no LLM-judged soft scores for tone or wording, no production monitoring, no test generation from production traffic, and no hosted UI: reports are files. See the [roadmap](/roadmap) for what is planned.
+A fair comparison includes the gaps. Today `sandtable` is text-only (no audio, timing or interruption testing), has no production monitoring, no test generation from production traffic, and no hosted UI: reports are files. See the [roadmap](/roadmap) for what is planned.
 
 Last reviewed October 2026.

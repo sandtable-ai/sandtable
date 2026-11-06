@@ -37,7 +37,7 @@ The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`
 | `skipped` | number | trials skipped across the run; `run` exits 2 when it isn't 0 |
 | `callerNotes` | object | `{ turns, trials }`: how many caller turns stepped out of role (see each trial's [`callerNotes`](#callernote)), and in how many trials. Absent in results from before caller notes |
 | `attribution` | object | `{ agent, "simulated-user", "task-spec", harness }`: how many trials that didn't pass (failed or skipped) each trial's [`attribution`](#attribution) names, every owner listed. No score depends on it. Absent in results from before attribution, until [`regrade`](/reference/cli#regrade) re-scores them |
-| `judged` | [`JudgedSummary`](#judgedsummary) | present once [`sandtable judge`](/reference/cli#judge) has judged a trial or paid for a call: the judged score, apart from pass^k, and what the judge's calls used. It changes no other field |
+| `judged` | [`JudgedSummary`](#judgedsummary) | present once [`sandtable judge`](/reference/cli#judge) or [`run --judge`](/reference/cli#judge-the-run) has judged a trial or paid for a call: the judged score, apart from pass^k, and what the judge's calls used. It changes no other field |
 | `failureModes` | `FailureMode[]` | failed checks clustered across graded trials, most frequent first; a skipped trial's error is not one |
 | `byTag` | `TagScore[]` | scores per task tag (`untagged` for tasks without tags), weakest first |
 | `soft` | `SoftScore[]` | one entry per soft invariant in the domain, in spec order; empty when there are none |
@@ -178,6 +178,7 @@ What a run made with `--baseline` keeps of the earlier run, so the terminal summ
 | `inputs` | string | the baseline's `inputs` hash; absent when its `results.json` had none |
 | `passHat` | object | the baseline's own pass^1 to pass^k, over all of its tasks |
 | `tasks` | object[] | `{ id, passes, trials, inputs, grading }` for each of the baseline's tasks, in its order. `trials` counts graded trials: skipped ones are left out, as in pass^k. `inputs` and `grading` are the task's hashes, absent when the baseline's `results.json` had none |
+| `judged` | object | the baseline's judged score, absent when it holds no verdict: its [`JudgedCounts`](#judgedcounts), `models`, `notJudged`, and `criteria`: per criterion with a verdict, `id`, its `JudgedCounts` and `texts`, each text its verdicts hold, which `compare` reads to say a criterion's text differs |
 
 ### PendingItem
 
@@ -200,7 +201,7 @@ What a run made with `--baseline` keeps of the earlier run, so the terminal summ
 | `violations` | `Violation[]` | hard invariant violations; any one fails the trial |
 | `soft` | `SoftCheck[]` | each soft invariant that applied in this trial, and whether it was broken |
 | `callerNotes` | `CallerNote[]` | present when the simulated user stepped out of its role in some turn; never changes `passed` |
-| `judged` | [`TrialJudgement`](#trialjudgement) | present once [`sandtable judge`](/reference/cli#judge) has sent the trial: a model's verdicts on its criteria; never changes `passed` |
+| `judged` | [`TrialJudgement`](#trialjudgement) | present once [`sandtable judge`](/reference/cli#judge) or [`run --judge`](/reference/cli#judge-the-run) has sent the trial: a model's verdicts on its criteria; never changes `passed` |
 | `attribution` | `Attribution` | present on a trial that didn't pass (failed or skipped): its most likely owner and the evidence; never changes `passed` |
 | `events` | `TrajectoryEvent[]` | the conversation and tool calls, in order |
 | `changes` | `Change[]` | the difference between the world's seed and its final state |

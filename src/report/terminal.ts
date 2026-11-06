@@ -117,9 +117,10 @@ export function renderJudged(r: SuiteResult): string[] {
 
 /**
  * The run's summary. A run compared with a baseline ends with what changed since; `baseline` names the
- * file it came from (else the block names the baseline's run id).
+ * file it came from (else the block names the baseline's run id). `withoutJudgedChanges` leaves out how the judged
+ * score changed, for a summary printed before the run is judged.
  */
-export function renderTerminal(r: SuiteResult, opts: { baseline?: string } = {}): string {
+export function renderTerminal(r: SuiteResult, opts: { baseline?: string; withoutJudgedChanges?: boolean } = {}): string {
   const lines: string[] = [];
   lines.push(bold(`sandtable · ${r.domain}`) + dim(` · agent ${r.agent} · user ${r.user} · k=${r.k}`));
   if (r.pendingReview?.length) {
@@ -271,6 +272,7 @@ export function renderTerminal(r: SuiteResult, opts: { baseline?: string } = {})
 
   const comparison = comparisonOf(r);
   if (comparison) lines.push("", ...renderComparison(comparison, opts.baseline));
+  if (comparison && !opts.withoutJudgedChanges) lines.push(...spaced(renderJudgedChanges(comparison)));
   return lines.join("\n");
 }
 
@@ -286,7 +288,42 @@ export function renderCompare(r: SuiteResult, files: { baseline: string; results
     dim(`  run ${r.runId} · started ${r.startedAt} · agent ${r.agent} · user ${r.user} · k=${r.k}`),
     "",
     ...renderComparison(comparison, files.baseline),
+    ...spaced(renderJudgedChanges(comparison)),
   ].join("\n");
+}
+
+/** A block with a blank line above it, or nothing for an empty one. */
+const spaced = (block: string[]) => (block.length ? ["", ...block] : []);
+
+/**
+ * How the judged score changed since the baseline, apart from the task changes: the score, then each criterion by id.
+ * It is a model's judgement and no regression, so nothing here takes a gate's red or green. Empty when neither run was
+ * judged.
+ */
+export function renderJudgedChanges(c: Comparison): string[] {
+  const j = c.judged;
+  if (!j) return [];
+  const score = (x?: JudgedCounts) => (x === undefined ? "–" : x.score === null ? "n/a" : formatPercent(x.score));
+  const moved = (b?: JudgedCounts, a?: JudgedCounts) => {
+    if (b === undefined || a === undefined || b.score === null || a.score === null) return "";
+    const pts = ((a.score - b.score) * 100).toFixed(1);
+    return Number(pts) === 0 ? "  (no change)" : pts.startsWith("-") ? `  (−${pts.slice(1)} pts)` : `  (+${pts} pts)`;
+  };
+  const width = Math.max(...j.criteria.map((d) => d.id.length));
+  const lines = [bold("  Judged score since the baseline") + dim(" (a model's judgement: never a regression, and it changes no gate or exit code)")];
+  lines.push(`  ${bold("judged")} ${score(j.before)} → ${score(j.after)}${moved(j.before, j.after)}`);
+  for (const d of j.criteria) {
+    const note = d.after === undefined ? "only in the baseline" : d.before === undefined ? "only in this run" : d.textDiffers ? "text differs" : "";
+    lines.push(`  ${d.id.padEnd(width)}  ${score(d.before)} → ${score(d.after)}${moved(d.before, d.after)}${note ? `  ${dim(note)}` : ""}`);
+  }
+  const reworded = j.criteria.filter((d) => d.textDiffers).map((d) => d.id);
+  if (reworded.length) lines.push(dim(`  note: the text of ${reworded.join(", ")} differs between the two runs: a date from \${today} under clock: now differs from day to day, and otherwise the criterion was reworded`));
+  if (j.before && j.after) {
+    const [was, now] = [j.before.models.join(", "), j.after.models.join(", ")];
+    if (was !== now) lines.push(dim(`  note: ${was} judged the baseline and ${now} this run, and another model can score differently`));
+    if (!c.sameTasks) lines.push(dim("  note: each score is over its own run's tasks"));
+  }
+  return lines;
 }
 
 const CHANGE_MARK: Partial<Record<TaskChange, string>> = { broken: red("✗"), worse: red("↓"), fixed: green("✓"), better: green("↑"), changed: yellow("~") };
