@@ -8,6 +8,8 @@ import { promisify } from "node:util";
 import { draftFromOpenApi, openApiProblem, singularize, snake } from "../src/init/openapi.ts";
 import { DOMAIN_FILE, POLICY_PLACEHOLDER, renderDraft, TASKS_PLACEHOLDER, writeDraft } from "../src/init/render.ts";
 import { loadDomain } from "../src/spec/load.ts";
+import { World } from "../src/world/store.ts";
+import { executeTool } from "../src/world/tools.ts";
 
 const freightSpec = async () => YAML.parse(await readFile("examples/freight/source/openapi.yaml", "utf8")) as Record<string, unknown>;
 
@@ -555,5 +557,82 @@ describe("init from OpenAPI: what it refuses", () => {
     expect(err?.code).toBe(2);
     expect(err?.stderr).toContain("is Swagger 2.0; init reads OpenAPI 3.x");
     await expect(readdir(out)).rejects.toThrow(/ENOENT/);
+  });
+});
+
+describe("init from OpenAPI: a query filter on a table's key", () => {
+  const str = { type: "string" };
+  const query = (name: string, schema: Record<string, unknown> = str) => ({ name, in: "query", schema });
+  const ok = { "200": { description: "ok" } };
+  const getOne = (operationId: string, key: string) => ({ get: { operationId, parameters: [{ name: key, in: "path", required: true, schema: str }], responses: ok } });
+  const spec = {
+    openapi: "3.0.3",
+    info: { title: "Bike repair", version: "1" },
+    paths: {
+      "/customers/{customer_id}": getOne("getCustomer", "customer_id"),
+      "/tickets": {
+        get: {
+          operationId: "listTickets",
+          parameters: [query("customer_id"), query("ticket_id"), query("status", { type: "string", enum: ["open", "closed"] }), query("bike"), query("customer"), query("priority", { type: "integer" })],
+          responses: ok,
+        },
+        post: { operationId: "createTicket", requestBody: { content: { "application/json": { schema: { type: "object", required: ["customer_id"], properties: { customer_id: str, bike: str } } } } }, responses: ok },
+      },
+      "/tickets/{ticket_id}": getOne("getTicket", "ticket_id"),
+    },
+  };
+  const whereOfList = (tools: ReturnType<typeof draftFromOpenApi>["tools"], name = "list_tickets") => (tools.find((t) => t.name === name)!.ops[0] as { where: Record<string, unknown> }).where;
+
+  it("matches another table's key and the listed table's own key by equality, and free text as before", () => {
+    expect(whereOfList(draftFromOpenApi(spec).tools)).toEqual({
+      customer_id: "$customer_id", // the key of customers
+      ticket_id: "$ticket_id", // the key of the table it lists
+      status: "$status", // an enum
+      bike: { $contains: "$bike" }, // free text
+      customer: { $contains: "$customer" }, // like a key's name, but not one
+      priority: "$priority", // a number
+    });
+  });
+
+  it("still drafts the existence check from the key", () => {
+    const create = draftFromOpenApi(spec).tools.find((t) => t.name === "create_ticket")!;
+    expect(create.checks).toEqual([{ table: "customers", key: "$customer_id", error: "customers ${customer_id} not found" }]);
+  });
+
+  it("knows a key whose name isn't an identifier, by the field's name", () => {
+    const hyphened = {
+      ...spec,
+      paths: {
+        "/couriers/{courier-id}": getOne("getCourier", "courier-id"),
+        "/jobs": { get: { operationId: "listJobs", parameters: [query("courier-id"), query("note")], responses: ok } },
+      },
+    };
+    const d = draftFromOpenApi(hyphened);
+    expect(whereOfList(d.tools, "list_jobs")).toEqual({ "courier-id": "$courier_id", note: { $contains: "$note" } });
+  });
+
+  it("finds a key named after a table's id only when that table has it as its key", () => {
+    // tickets' key is ticket_id here, so with no customers table customer_id is just text.
+    const noCustomers = { ...spec, paths: { "/tickets": spec.paths["/tickets"], "/tickets/{ticket_id}": spec.paths["/tickets/{ticket_id}"] } };
+    const where = whereOfList(draftFromOpenApi(noCustomers).tools);
+    expect(where.customer_id).toEqual({ $contains: "$customer_id" });
+    expect(where.ticket_id).toBe("$ticket_id");
+  });
+
+  it("doesn't hand the agent another customer's rows, and a loaded draft still validates", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-init-"));
+    await writeDraft(dir, { [DOMAIN_FILE]: renderDraft(draftFromOpenApi(spec), "openapi.yaml"), "policy.md": POLICY_PLACEHOLDER, "tasks.yaml": TASKS_PLACEHOLDER });
+    const list = (await loadDomain(dir)).tools.find((t) => t.name === "list_tickets")!;
+    const rows = [
+      { ticket_id: "T-100", customer_id: "C-1", status: "open", bike: "road" },
+      { ticket_id: "T-101", customer_id: "C-10", status: "open", bike: "gravel" },
+    ];
+    const world = new World({ tables: { customers: { key: "customer_id", rows: [] }, tickets: { key: "ticket_id", rows } } });
+    const ids = (args: Record<string, unknown>) => (executeTool(list, world, args).result as { ticket_id: string }[]).map((r) => r.ticket_id);
+    expect(ids({ customer_id: "C-1" })).toEqual(["T-100"]);
+    expect(ids({ customer_id: "C-10" })).toEqual(["T-101"]);
+    expect(ids({ ticket_id: "T-10" })).toEqual([]);
+    // Free text stays a case-insensitive substring.
+    expect(ids({ bike: "ROA" })).toEqual(["T-100"]);
   });
 });
