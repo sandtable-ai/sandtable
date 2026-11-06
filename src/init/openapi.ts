@@ -144,7 +144,7 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
   for (const o of ops) {
     const where = `${o.method.toUpperCase()} ${o.path}`;
     const tool: DraftTool = {
-      name: uniqueName(names, snake(String(o.op.operationId ?? `${o.method}_${o.action ?? o.table}`))),
+      name: uniqueName(names, snake(functionName(String(o.op.operationId ?? `${o.method}_${o.action ?? o.table}`), o.path, o.method))),
       description: describe(o.op, where),
       params: {},
       checks: [],
@@ -236,7 +236,9 @@ export function draftFromOpenApi(spec: Json): OpenApiDraft {
     }
     for (const [code, raw] of Object.entries((o.op.responses ?? {}) as Json)) {
       if (!/^4(09|22|00|03)$/.test(code)) continue;
-      const desc = String((deref(raw) as Json).description ?? "").trim();
+      const response = deref(raw) as Json;
+      if (code === "422" && isRequestValidation(response, deref)) continue;
+      const desc = String(response.description ?? "").trim();
       tool.notes.push(`The API can answer ${code}${desc ? ` (${desc})` : ""}: encode that condition as a check with a \`where\`.`);
     }
     const text = `${o.op.summary ?? ""} ${o.op.description ?? ""}`;
@@ -407,6 +409,34 @@ function collectFields(acc: { fields: Map<string, Json>; rows: Json[] }, node: J
   if (!withExamples) return;
   const examples = schema.type === "array" && Array.isArray(schema.example) ? schema.example : s.example ? [s.example] : [];
   acc.rows.push(...examples.filter(isRow));
+}
+
+/**
+ * The function's name in an operationId of exactly FastAPI's generated form: that name, then the path with every
+ * non-word character as `_`, then `_<method>`. The agent sees a tool's name, so the rest would only be noise. Any other
+ * id comes back as it is.
+ */
+function functionName(operationId: string, path: string, method: string): string {
+  const suffix = `${path.replace(/[^\p{L}\p{N}_]/gu, "_")}_${method}`;
+  return operationId.length > suffix.length && operationId.endsWith(suffix) ? operationId.slice(0, -suffix.length) : operationId;
+}
+
+/**
+ * Whether a response is FastAPI's automatic 422: every body it can have is `HTTPValidationError`, with a `detail` array.
+ * That says a request didn't match the declared params, which sandtable checks on every call, so it is no rule to model.
+ */
+function isRequestValidation(response: Json, deref: (x: unknown) => unknown): boolean {
+  const media = Object.values((response.content ?? {}) as Json) as Json[];
+  return (
+    media.length > 0 &&
+    media.every((m) => {
+      const raw = m.schema as Json | undefined;
+      const schema = deref(raw) as Json | undefined;
+      const named = schema?.title === "HTTPValidationError" || (typeof raw?.$ref === "string" && raw.$ref.split("/").at(-1) === "HTTPValidationError");
+      const detail = deref(((schema?.properties ?? {}) as Json).detail) as Json | undefined;
+      return named && [detail?.type].flat().includes("array");
+    })
+  );
 }
 
 /** The media type object of each 2xx response, JSON when there is a choice. */

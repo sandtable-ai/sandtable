@@ -636,3 +636,125 @@ describe("init from OpenAPI: a query filter on a table's key", () => {
     expect(ids({ bike: "ROA" })).toEqual(["T-100"]);
   });
 });
+
+describe("init from OpenAPI: a spec in FastAPI's shape", () => {
+  const str = { type: "string" };
+  const ok = { "200": { description: "Successful Response", content: { "application/json": { schema: {} } } } };
+  const rx = { name: "rx_id", in: "path", required: true, schema: str };
+  const json = (schema: unknown) => ({ content: { "application/json": { schema } } });
+  const VALIDATION_REF = { $ref: "#/components/schemas/HTTPValidationError" };
+  const invalid = { description: "Validation Error", ...json(VALIDATION_REF) };
+  const schemas = {
+    HTTPValidationError: { title: "HTTPValidationError", type: "object", properties: { detail: { title: "Detail", type: "array", items: { $ref: "#/components/schemas/ValidationError" } } } },
+    ValidationError: { title: "ValidationError", type: "object", required: ["loc", "msg", "type"], properties: { loc: { type: "array", items: str }, msg: str, type: str } },
+  };
+  const spec = {
+    openapi: "3.1.0",
+    info: { title: "Pharmacy", version: "0.1.0" },
+    paths: {
+      "/prescriptions/{rx_id}": { get: { summary: "Get Prescription", operationId: "get_prescription_prescriptions__rx_id__get", parameters: [rx], responses: { ...ok, "422": invalid } } },
+      "/prescriptions": { get: { summary: "List Prescriptions", operationId: "list_prescriptions_prescriptions_get", parameters: [{ name: "patient_id", in: "query", schema: str }], responses: { ...ok, "422": invalid } } },
+    },
+    components: { schemas },
+  };
+  /** The notes of a GET /prescriptions/{rx_id} with these responses besides its 200, and these schemas besides FastAPI's. */
+  const notesFor = (responses: Record<string, unknown>, more: { schemas?: Record<string, unknown>; responses?: Record<string, unknown> } = {}) => {
+    const d = draftFromOpenApi({
+      ...spec,
+      paths: { "/prescriptions/{rx_id}": { get: { operationId: "getPrescription", parameters: [rx], responses: { ...ok, ...responses } } } },
+      components: { schemas: { ...schemas, ...more.schemas }, responses: more.responses },
+    });
+    return d.tools[0]!.notes;
+  };
+
+  it("adds no review note for the automatic 422, and names each tool after its function", () => {
+    const d = draftFromOpenApi(spec);
+    expect(d.tools.map((t) => [t.name, t.notes])).toEqual([["get_prescription", []], ["list_prescriptions", []]]);
+    const yaml = renderDraft(d, "openapi.json");
+    expect(yaml).not.toContain("review: pending");
+    expect(yaml).not.toContain("TODO(review)");
+  });
+
+  it.skipIf(!process.features.typescript)("init says so, and validate --strict has nothing to wait for", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-fastapi-"));
+    const file = path.join(dir, "openapi.json");
+    await writeFile(file, JSON.stringify(spec));
+    const cli = (...args: string[]) => promisify(execFile)(process.execPath, [path.resolve("src/cli.ts"), ...args]);
+    const out = path.join(dir, "rx");
+    expect((await cli("init", "--openapi", file, "-o", out)).stdout).toContain("1 tables, 2 tools, 0 review notes.");
+    // A failing exit code would reject here.
+    expect((await cli("validate", out, "--strict")).stdout).not.toContain("pending review");
+  });
+
+  it.each<[string, unknown, Record<string, unknown>?]>([
+    ["refers to it directly, with no title", VALIDATION_REF, { HTTPValidationError: { type: "object", properties: { detail: { type: "array", items: {} } } } }],
+    ["refers to it through another name", { $ref: "#/components/schemas/Alias" }, { Alias: VALIDATION_REF }],
+    ["is it, written inline", schemas.HTTPValidationError],
+    ["has a detail that is itself a reference", VALIDATION_REF, { HTTPValidationError: { type: "object", properties: { detail: { $ref: "#/components/schemas/Details" } } }, Details: { type: "array", items: {} } }],
+    ["has a detail of array or null, as OpenAPI 3.1 can say", VALIDATION_REF, { HTTPValidationError: { type: "object", properties: { detail: { type: ["array", "null"] } } } }],
+  ])("adds no note for a 422 whose schema %s", (_, schema, more) => {
+    expect(notesFor({ "422": { description: "Validation Error", ...json(schema) } }, more ? { schemas: more } : {})).toEqual([]);
+  });
+
+  it("adds no note for a 422 that is itself a reference to such a response", () => {
+    expect(notesFor({ "422": { $ref: "#/components/responses/Invalid" } }, { responses: { Invalid: invalid } })).toEqual([]);
+  });
+
+  it.each<[string, unknown, Record<string, unknown>?]>([
+    ["another schema with a detail array", { $ref: "#/components/schemas/RefillRefused" }, { RefillRefused: { type: "object", properties: { detail: { type: "array", items: str } } } }],
+    ["an inline schema with a detail array and no name", { type: "object", properties: { detail: { type: "array", items: str } } }],
+    ["that name, with a detail that isn't an array", VALIDATION_REF, { HTTPValidationError: { type: "object", properties: { detail: str } } }],
+    ["that name, with no detail", VALIDATION_REF, { HTTPValidationError: { type: "object", properties: { message: str } } }],
+    ["no schema", undefined],
+  ])("keeps the note for a 422 with %s", (_, schema, more) => {
+    expect(notesFor({ "422": { description: "Refill too soon", ...json(schema) } }, more ? { schemas: more } : {})).toEqual(["The API can answer 422 (Refill too soon): encode that condition as a check with a `where`."]);
+  });
+
+  it("keeps the note for a 422 with no body, or with a second media type that says something else", () => {
+    const note = "The API can answer 422 (Refill too soon): encode that condition as a check with a `where`.";
+    expect(notesFor({ "422": { description: "Refill too soon" } })).toEqual([note]);
+    expect(notesFor({ "422": { description: "Refill too soon", content: { "application/json": { schema: VALIDATION_REF }, "application/problem+json": { schema: { type: "object", properties: { title: str } } } } } })).toEqual([note]);
+  });
+
+  it("keeps every 409, 400 and 403, even with that schema, and drops only the 422 next to them", () => {
+    const notes = notesFor({ "400": { description: "Bad", ...json(VALIDATION_REF) }, "403": { description: "Refused", ...json(VALIDATION_REF) }, "409": { description: "Already filled", ...json(VALIDATION_REF) }, "422": invalid });
+    expect(notes.map((n) => n.match(/answer (\d+)/)![1])).toEqual(["400", "403", "409"]);
+  });
+
+  const nameOf = (operationId: string | undefined, route = "/prescriptions/{rx_id}", method = "get") =>
+    draftFromOpenApi({ ...spec, paths: { [route]: { [method]: { ...(operationId ? { operationId } : {}), parameters: route.includes("{") ? [rx] : [], responses: ok } } } }).tools[0]!.name;
+
+  it("drops the suffix from exactly FastAPI's generated form, on any path and method", () => {
+    expect(nameOf("get_prescription_prescriptions__rx_id__get")).toBe("get_prescription");
+    expect(nameOf("create_prescription_prescriptions_post", "/prescriptions", "post")).toBe("create_prescription");
+    expect(nameOf("add_note_v1_prescriptions_notes_post", "/v1/prescriptions/notes", "post")).toBe("add_note");
+    expect(nameOf("list_refills_refill_requests_get", "/refill-requests")).toBe("list_refills");
+    expect(nameOf("getRefill_prescriptions__rx_id__get")).toBe("get_refill");
+  });
+
+  it.each([
+    ["a hand-written id", "getPrescription", "get_prescription"],
+    ["another method's suffix", "get_prescription_prescriptions__rx_id__post", "get_prescription_prescriptions_rx_id_post"],
+    ["another path's suffix", "get_prescription_refills__rx_id__get", "get_prescription_refills_rx_id_get"],
+    ["the suffix with its underscores collapsed", "get_prescription_prescriptions_rx_id_get", "get_prescription_prescriptions_rx_id_get"],
+    ["the suffix alone, with no name before it", "_prescriptions__rx_id__get", "prescriptions_rx_id_get"],
+  ])("drafts %s as today", (_, operationId, name) => {
+    expect(nameOf(operationId)).toBe(name);
+  });
+
+  it("drafts an operation with no id as today", () => {
+    expect(nameOf(undefined, "/prescriptions")).toBe("get_prescriptions");
+  });
+
+  it("gives two operations that would share a name the usual suffix", () => {
+    const d = draftFromOpenApi({
+      ...spec,
+      paths: {
+        "/prescriptions": { get: { operationId: "get_items", responses: ok } },
+        "/refills": { get: { operationId: "get_items_refills_get", responses: ok } },
+        "/patients": { get: { operationId: "get_items_patients_get", responses: ok } },
+      },
+    });
+    expect(d.tools.map((t) => t.name)).toEqual(["get_items", "get_items_2", "get_items_3"]);
+  });
+});

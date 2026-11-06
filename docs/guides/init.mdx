@@ -56,6 +56,7 @@ No model is involved: the same spec always produces the same draft.
 
 | OpenAPI | Draft |
 |---|---|
+| `operationId` | the tool's name, in snake case. FastAPI's generated suffix, the path and the method, is dropped: `get_prescription_prescriptions__rx_id__get` becomes `get_prescription`. Operations that would share a name get `_2`, `_3`. With no `operationId`, the method and the table: `get_loads` |
 | `/loads/{load_id}` | table `loads` with key `load_id` |
 | a collection without an item path | key from the schema (`<singular>_id`, then `id`), else `<singular>_id` |
 | `GET /loads/{load_id}` | tool with `get: loads, key: $load_id` |
@@ -75,7 +76,7 @@ No model is involved: the same spec always produces the same draft.
 
 It cannot infer some things, so they become `# TODO(review):` comments next to the tool:
 
-- **409/422/400/403 responses**: encode the condition as a `check` with a `where`.
+- **409/422/400/403 responses**: encode the condition as a `check` with a `where`. FastAPI's automatic `422`, whose schema is `HTTPValidationError` with a `detail` array, gets no note: it says a request didn't match the declared params, which sandtable checks on every call.
 - **Side effects in the description** ("the load becomes booked"): add the `update` op on the other table.
 - **Action endpoints**: replace the placeholder `get` with the ops that model the action.
 - **Body fields it can't map**: a schema with several types, an array without `items`, or objects nested more than 3 levels deep. Add the param by hand if the agent needs it. A `oneOf` or `anyOf` field without a `type` is drafted as a string param, as before.
