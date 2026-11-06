@@ -280,9 +280,9 @@ describe("HTML comparison", () => {
     const before = fake({ kept: [true], edited: [false] });
     const now = fake({ kept: [true], edited: [true] }, {}, { tests: { edited: { grading: "new" } } });
     const section = page(renderHtml({ ...now, baseline: baselineSnapshot(before) }))("baseline");
-    expect(section).toContain("<td class='meta'>test changed (how it's graded)</td><td><code>edited</code></td><td>0/1</td><td class='meta'>1/1</td>");
+    expect(section).toContain("<td class='meta'>test changed (how it&#39;s graded)</td><td><code>edited</code></td><td>0/1</td><td class='meta'>1/1</td>");
     expect(section).toContain("Score (over the 1 task both runs ran with the same test; 1 changed left out)");
-    expect(section).toContain("<li>how it's graded changed for 1 task</li>");
+    expect(section).toContain("<li>how it&#39;s graded changed for 1 task</li>");
   });
 
   it("has no comparison section for a run without a baseline", () => {

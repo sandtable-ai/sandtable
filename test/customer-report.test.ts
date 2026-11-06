@@ -154,3 +154,13 @@ describe("report --audience customer", () => {
     expect(res.stderr).toMatch(/has no coverage: it was written before sandtable-ai 1\.1\. Add it with `npx sandtable-ai regrade .*old\.json -d <domain>`/);
   });
 });
+
+describe("an apostrophe on the customer page", () => {
+  it("comes out as an entity, in a rule's text, its quote and its file", () => {
+    const [rule, ...rest] = careful.coverage!.rules;
+    const r = { ...careful, coverage: { ...careful.coverage!, rules: [{ ...rule!, description: "The carrier's rate stands.", source: { file: "the broker's policy.md", quote: "**Don't** quote the carrier's `max_rate`." } }, ...rest] } };
+    const shown = card(renderCustomerHtml(r), rule!.id);
+    expect(shown).toContain("<h3>The carrier&#39;s rate stands.");
+    expect(shown).toContain("“<b>Don&#39;t</b> quote the carrier&#39;s <code>max_rate</code>.”<cite>the broker&#39;s policy.md</cite>");
+  });
+});

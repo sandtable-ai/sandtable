@@ -40,6 +40,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 - `init --openapi`: a FastAPI spec no longer gets a review note on every tool. A `422` whose schema is `HTTPValidationError` with a `detail` array says a request didn't match the declared params, which sandtable checks on every call, so it adds no note and no `review: pending` of its own. Other 422s and every 409, 400 and 403 keep theirs. An `operationId` in FastAPI's generated form now drafts the function's name as the tool's name, so `get_prescription_prescriptions__rx_id__get` becomes `get_prescription`, and any other `operationId` is drafted as before ([#503](https://github.com/sandtable-ai/sandtable/issues/503)).
 - `init --openapi`: a `$ref` to a file in the spec's folder is now read, where it was dropped without a word and the tool got no params: YAML or JSON, with an optional JSON-pointer fragment, for a schema, a parameter, a response or a whole path item, with refs inside it resolved against that file and cycles stopped. A `$ref` it doesn't read gets a warning and a review note naming it, with the suggestion to bundle the spec first (`npx @redocly/cli bundle api.yaml -o bundled.yaml`): a URL, which is never fetched, a file that doesn't exist or doesn't parse, and a file outside the spec's folder, by a `../` path, an absolute path or a symlink, so that a third-party spec can't pull a local file into a draft. A layout with `../common/x.yaml` has to bundle first. `--dry-run` reads the same files, and now prints `init`'s warnings too ([#501](https://github.com/sandtable-ai/sandtable/issues/501)).
 
+### Security
+
+- `report.html`, the customer report and the leaderboard page escape apostrophes, so text from a domain file stays inside the attribute that holds it. A tooltip that stopped at an apostrophe now shows all its text.
+
 ## [1.4.0] - 2026-11-04
 
 A minor release with no breaking changes. `$regex` matches text with a JavaScript regular expression in where clauses and in the arguments a task expects, and `sandtable import elevenlabs` drafts an ElevenLabs regex check on a tool's argument as one, anchored so it never passes a value ElevenLabs fails.
