@@ -220,8 +220,8 @@ jq -r '.tasks[].trials[] | select(.skipped) | "\(.taskId)#\(.trial) \(.error)"' 
 A run made with `--baseline`: each task's passes in the baseline and now (the terminal summary and the report already list what broke and what got fixed):
 
 ```bash
-jq -r '(.baseline.tasks | map({(.id): "\(.passes)/\(.trials)"}) | add) as $then
-  | .tasks[] | "\(.id): \($then[.id] // "-") -> \(.passes)/\(.graded // (.trials | length))"' "$R"
+jq -r '(.baseline.tasks | map({(.id): "\(.passes)/\(.trials)"}) | add) as $before
+  | .tasks[] | "\(.id): \($before[.id] // "-") -> \(.passes)/\(.graded // (.trials | length))"' "$R"
 ```
 
 Compare two runs task by task without rerunning (same k and tasks):
