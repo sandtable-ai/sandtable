@@ -432,11 +432,13 @@ The offline demo runs the `scripted:naive` and `scripted:careful` agents against
 
 ## report
 
-Re-render the HTML report for a past run, for example after upgrading sandtable, or write the page a customer signs off on before go-live.
+Re-render the HTML report for a past run, for example after upgrading sandtable, write the page a customer signs off on before go-live, or write a Markdown summary for a CI job summary or a pull request comment.
 
 ```bash
 npx sandtable-ai report .sandtable/runs/<run>/results.json [-o <folder> | -o <file>.html]
 npx sandtable-ai report <results.json> --audience customer [--probe <careless-run>/results.json]
+npx sandtable-ai report <results.json> --markdown summary.md
+npx sandtable-ai report <results.json> --markdown - >> "$GITHUB_STEP_SUMMARY"
 ```
 
 | Argument / option | Description |
@@ -445,8 +447,18 @@ npx sandtable-ai report <results.json> --audience customer [--probe <careless-ru
 | `-o, --out <path>` | a folder to write the report into, as `run -o` and `regrade -o` take a folder, or a path ending in `.html` for the file itself. A folder that doesn't exist yet is created. Default: next to `results.json` |
 | `--audience <who>` | `engineer` (default): the full report, `report.html`. `customer`: a plain-language page to sign off on, `customer-report.html` |
 | `--probe <results>` | with `--audience customer` only: a run of a deliberately careless agent on the same domain, such as a [`run --without-policy`](#coverage). The rules it broke that fail a conversation show as caught; a broken soft rule is reported, not caught |
+| `--markdown <file>` | write a Markdown summary of the run to this file, for a CI job summary or a pull request comment, instead of the HTML report unless `-o` asks for that too. `-` prints it to stdout, with nothing else there. Not with `--audience customer` |
 
 It prints the path it wrote. A run made with `--baseline` keeps its changes since the baseline, without the baseline's file.
+
+`--markdown` renders from `results.json` alone and calls no model, so it works on a `run`, a `serve` run and the output of `compare -o`. The summary names the domain, the agent, the simulated user and k, then gives:
+- pass^1 and pass^k, the critical tasks, skipped trials, and each `--floor`, met or not met;
+- with a baseline, the tasks that broke, got worse, got fixed or changed, broken ones first, and pass^1 and pass^k before and after;
+- the failed tasks with their failed check ids, the top failure modes and the soft rules' rates;
+- a [judged score](#judge), in its own lines and labelled as a model's judgement, with the verdicts that failed and how it moved since the baseline;
+- the sandtable-ai version that wrote the run.
+
+What a run holds is escaped, so it can't break a table or inject HTML, and text from a transcript or a model can't notify anyone or link an issue in a comment. A long list goes in a `<details>` block, and past a cap it ends with `and N more; see report.html`, which keeps the whole summary under GitHub's limit of 65,536 characters for a comment. The [CI guide](/guides/ci#show-the-result-where-reviewers-look) has the steps.
 
 `--audience customer` writes a static page, with no script, that prints, with the conversations that show a rule broken or caught open. It is for a customer's operations lead, who doesn't need to know sandtable:
 - a summary in plain words, with the open items before go-live: drafted items still pending review, conversations that weren't graded, failed critical scenarios, broken rules and scenarios that didn't pass every conversation;
