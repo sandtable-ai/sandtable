@@ -1,4 +1,4 @@
-import { readFile, stat } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { SuiteResult } from "./suite.ts";
 
@@ -28,6 +28,54 @@ export async function userPathError(err: unknown, file: string, how: UserPath): 
   }
   if (code === "EACCES" || code === "EPERM") return new Error(`${how.from}: ${file} can't be read (permission denied)`);
   return err;
+}
+
+/** How to name a folder a command writes to when it can't be used. */
+export interface OutFolder {
+  /** Where the folder came from: `-o`, or the command, for a folder it chose itself. */
+  from: string;
+  /** What to do instead, said when a file is in the way. */
+  ifFile: string;
+  /** What to do instead, said when it can't be created or written. Without it, the message stops at why. */
+  ifDenied?: string;
+}
+
+/**
+ * Node's error for a folder a command writes to, as a sentence naming where the folder came from and its whole path,
+ * instead of `EEXIST: file already exists, mkdir '…'`. An error with no code didn't come from the file system, and is
+ * returned as it is.
+ */
+export async function outFolderError(err: unknown, dir: string, how: OutFolder): Promise<unknown> {
+  const e = err as NodeJS.ErrnoException | undefined;
+  if (e?.code === undefined) return err;
+  const at = path.resolve(dir);
+  // What is there: the folder itself, or else the nearest thing above it.
+  let nearest = at;
+  let info = await stat(nearest).catch(() => undefined);
+  while (!info && path.dirname(nearest) !== nearest) {
+    nearest = path.dirname(nearest);
+    info = await stat(nearest).catch(() => undefined);
+  }
+  if (info && !info.isDirectory()) {
+    return new Error(`${how.from}: ${at} ${nearest === at ? "is a file" : `is under ${nearest}, which is a file`}, not a folder. ${how.ifFile}`);
+  }
+  const why = e.code === "EACCES" || e.code === "EPERM" ? "permission denied" : e.code === "EROFS" ? "read-only file system" : e.message;
+  return new Error(`${how.from}: can't ${nearest === at ? "write to" : "create"} ${at}: ${why}${how.ifDenied ? `. ${how.ifDenied}` : ""}`);
+}
+
+/**
+ * Create a folder a command will write to, or throw an outFolderError, so a bad path fails before the command spends
+ * anything. Writing a file is what shows a folder can be written: permission bits miss a read-only file system.
+ */
+export async function prepareOutFolder(dir: string, how: OutFolder): Promise<void> {
+  try {
+    await mkdir(dir, { recursive: true });
+    const probe = path.join(dir, `.sandtable-write-check.${process.pid}.tmp`);
+    await writeFile(probe, "");
+    await rm(probe, { force: true });
+  } catch (err) {
+    throw await outFolderError(err, dir, how);
+  }
 }
 
 /** Read a file the user named on the command line; a path that can't be read throws a userPathError. */
