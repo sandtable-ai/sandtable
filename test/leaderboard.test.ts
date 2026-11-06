@@ -1,10 +1,10 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { freightScriptedAgent } from "../src/demo/freight-agents.ts";
 import { MARK_SVG } from "../src/report/brand.ts";
 import { bedrockRegion, bedrockUse, ModelsFile, pricesFile, runLeaderboard, type RunInfo } from "../src/run/leaderboard.ts";
@@ -952,3 +952,155 @@ describe("sandtable leaderboard exit code", () => {
   });
 });
 
+describe.skipIf(!process.features.typescript)("sandtable leaderboard --tag", () => {
+  // No key or AWS setting: a model call, if one slipped through, fails instead of costing money.
+  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("AWS_") && !["ANTHROPIC_API_KEY", "OPENAI_API_KEY"].includes(k)));
+  const cli = (...args: string[]) =>
+    promisify(execFile)(process.execPath, [path.resolve("src/cli.ts"), ...args], { env }).then(
+      ({ stdout, stderr }) => ({ code: 0, stdout, stderr }),
+      (e: { code: number; stdout: string; stderr: string }) => e,
+    );
+  async function setUp(domainDir = example) {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const models = path.join(dir, "models.yaml");
+    await writeFile(models, "models:\n  - { label: Careful rules, agent: scripted:careful }\n  - { label: Naive rules, agent: scripted:naive }\n");
+    const out = path.join(dir, "board");
+    return { dir, out, board: (...flags: string[]) => cli("leaderboard", domainDir, "-m", models, "-u", "scripted", "-k", "1", "-o", out, ...flags) };
+  }
+  const taggedIds = async (...tags: string[]) => (await loadDomain(example)).tasks.filter((t) => t.tags.some((tag) => tags.includes(tag))).map((t) => t.id);
+  const ranBy = async (out: string, folder: string) => (JSON.parse(await readFile(path.join(out, folder, "results.json"), "utf8")) as { tasks: { id: string }[] }).tasks.map((t) => t.id);
+
+  it("runs only the tasks with the tag, for every model and the baseline, and the board says how many", async () => {
+    const ids = await taggedIds("refusal");
+    const total = (await loadDomain(example)).tasks.length;
+    const { out, board } = await setUp();
+    const { code, stdout, stderr } = await board("--tag", "refusal");
+    expect(code, stderr).toBe(0);
+    expect(stdout).toContain(`(${ids.length} tasks, k=1,`);
+    expect(await ranBy(out, "careful-rules")).toEqual(ids);
+    expect(await ranBy(out, "naive-rules")).toEqual(ids);
+    const lb = JSON.parse(await readFile(path.join(out, "leaderboard.json"), "utf8")) as { taskSelection: unknown; rows: { baseline: boolean; trials: number }[] };
+    expect(lb.rows.find((r) => r.baseline)!.trials).toBe(ids.length);
+    expect(lb.taskSelection).toEqual({ selected: ids.length, of: total });
+    const says = `on ${ids.length} of the domain's ${total} tasks once`;
+    expect(await readFile(path.join(out, "LEADERBOARD.md"), "utf8")).toContain(says);
+    expect(await readFile(path.join(out, "leaderboard.html"), "utf8")).toContain(says);
+  });
+
+  it("takes tags comma-separated or repeated, and runs a task with at least one of them", async () => {
+    const ids = await taggedIds("rep-confirm", "callback");
+    for (const flags of [["--tag", "rep-confirm,callback"], ["--tag", "rep-confirm", "--tag", "callback"]]) {
+      const { out, board } = await setUp();
+      expect((await board(...flags)).code).toBe(0);
+      expect(await ranBy(out, "careful-rules")).toEqual(ids);
+    }
+  });
+
+  it("selects the tasks with no tags with untagged", async () => {
+    const copy = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-domain-"));
+    await cp(example, copy, { recursive: true });
+    const file = path.join(copy, "tasks.yaml");
+    const before = await readFile(file, "utf8");
+    const after = before.replace(/(- id: no-mc-number\n(?: {2}(?!tags:).*\n)*?) {2}tags: .*\n/, "$1");
+    expect(after).not.toBe(before);
+    await writeFile(file, after);
+    const { out, board } = await setUp(copy);
+    expect((await board("--tag", "untagged")).code).toBe(0);
+    expect(await ranBy(out, "naive-rules")).toEqual(["no-mc-number"]);
+  });
+
+  it("with --tasks, runs only the tasks both select", async () => {
+    const { out, board } = await setUp();
+    const { code, stdout } = await board("--tag", "refusal,negotiation", "--tasks", "walk-away-above-ceiling,book-at-posted-rate");
+    expect(code).toBe(0);
+    expect(stdout).toMatch(/\(1 tasks?, k=1,/);
+    expect(await ranBy(out, "careful-rules")).toEqual(["walk-away-above-ceiling"]);
+  });
+
+  it.each([
+    ["a tag no task carries", ["--tag", "nope"], /--tag: no task in freight-carrier-sales is tagged "nope" \(its tags: /],
+    ["an empty --tag", ["--tag", ""], /give at least one tag/],
+    ["--tasks and --tag with no task in common", ["--tasks", "book-at-posted-rate", "--tag", "refusal"], /--tasks and --tag have no task in common: none of book-at-posted-rate is tagged refusal/],
+    ["an unknown task id", ["--tasks", "nope", "--tag", "refusal"], /unknown task id\(s\): nope/],
+  ])("exits 2 on %s before any model runs, with run's message", async (_, flags, message) => {
+    const { dir, out, board } = await setUp();
+    const { code, stdout, stderr } = await board(...flags);
+    expect(code).toBe(2);
+    expect(stderr).toMatch(message);
+    expect(stdout).toBe("");
+    await expect(readdir(out)).rejects.toThrow();
+    const asRun = await cli("run", example, "--agent", "scripted:careful", "--user", "scripted", "--no-html", "-o", path.join(dir, "run"), ...flags);
+    expect(asRun.code).toBe(2);
+    expect(stderr).toBe(asRun.stderr);
+  });
+
+  it("reuses stored results only for exactly the same tasks, and never replaces others", async () => {
+    const { out, board } = await setUp();
+    const ids = await taggedIds("callback");
+    expect((await board("--tag", "callback")).code).toBe(0);
+    const again = await board("--tag", "callback");
+    expect(again.code).toBe(0);
+    expect(again.stdout).toMatch(/cached\s+Careful rules/);
+    expect(again.stdout).toMatch(/cached\s+Naive rules/);
+    // Those tasks reached another way are the same tasks.
+    expect((await board("--tasks", ids.join(","))).stdout).toMatch(/cached\s+Careful rules/);
+    for (const flags of [["--tag", "rep-confirm"], ["--tag", "callback,rep-confirm"], []]) {
+      const other = await board(...flags);
+      expect(other.code, flags.join(" ")).toBe(2);
+      expect(other.stderr).toContain("Careful rules");
+      expect(await ranBy(out, "careful-rules")).toEqual(ids);
+    }
+  });
+});
+
+describe("what a board says about its tasks", () => {
+  it("says every task, and records no selection, when it ran them all", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const whole = await loadDomain(example);
+    const domain = { ...whole, tasks: whole.tasks.slice(0, 2) };
+    const options = { domain, entries: [{ label: "Careful rules", agent: "scripted:careful" }], user: scriptedUser(), k: 1, resolveAgent: async () => freightScriptedAgent("careful") };
+    // Naming all of them is the same board.
+    for (const taskIds of [undefined, domain.tasks.map((t) => t.id)]) {
+      const outDir = path.join(dir, taskIds ? "named" : "all");
+      const lb = await runLeaderboard({ ...options, outDir, ...(taskIds ? { taskIds } : {}) });
+      expect(lb).not.toHaveProperty("taskSelection");
+      expect(await readFile(path.join(outDir, "LEADERBOARD.md"), "utf8")).toContain("plays the agent on every task once");
+      expect(await readFile(path.join(outDir, "leaderboard.html"), "utf8")).toContain("plays the agent on every task once");
+    }
+    const some = await runLeaderboard({ ...options, outDir: path.join(dir, "some"), taskIds: [domain.tasks[0]!.id], k: 2 });
+    expect(some.taskSelection).toEqual({ selected: 1, of: 2 });
+    expect(await readFile(path.join(dir, "some", "LEADERBOARD.md"), "utf8")).toContain("plays the agent on 1 of the domain's 2 tasks 2 times");
+  });
+});
+
+describe("a board of every task", () => {
+  // Pinned from the code as it was before a board could say it ran only some tasks: a full board's files didn't change
+  // for that. If you change what a board writes on purpose, update these hashes.
+  const AS_THEY_WERE = {
+    "leaderboard.json": "c727de5126c8eee963d0183b9905c0e6c3e5a351c54cad186870da6b717b724b",
+    "LEADERBOARD.md": "9b21f9464148c9ce1f4f14499b67673d90954d8cbaab64141c12673b3abd083c",
+    "leaderboard.html": "7ccabe46400a4184e152ea8599efba9598538aa4aeed79860facb51d1d23e4f7",
+  };
+
+  it("writes its three files byte for byte as they were", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-lb-"));
+    const whole = await loadDomain(example);
+    const domain = { ...whole, tasks: whole.tasks.slice(0, 2) };
+    // Only the generated time and the turn latencies differ between runs of a scripted board.
+    vi.useFakeTimers({ toFake: ["Date", "performance"], now: new Date("2026-11-06T09:00:00.000Z") });
+    try {
+      await runLeaderboard({
+        domain,
+        entries: [{ label: "Careful rules", agent: "scripted:careful" }, { label: "Naive rules", agent: "scripted:naive" }],
+        user: scriptedUser(),
+        k: 2,
+        outDir: dir,
+        resolveAgent: async (spec) => agents[spec]!(),
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+    const hashes = Object.fromEntries(await Promise.all(Object.keys(AS_THEY_WERE).map(async (f) => [f, createHash("sha256").update(await readFile(path.join(dir, f))).digest("hex")])));
+    expect(hashes).toEqual(AS_THEY_WERE);
+  });
+});

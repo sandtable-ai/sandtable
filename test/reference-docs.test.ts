@@ -34,6 +34,11 @@ describe("docs/reference/cli.mdx", () => {
     expect(missing).toEqual([]);
   });
 
+  it("documents the field a board of some tasks adds to leaderboard.json, in the leaderboard section", () => {
+    const section = page("cli").split(/^## leaderboard\b/m)[1]!.split(/^## /m)[0]!;
+    expect(section).toContain("taskSelection: { selected, of }");
+  });
+
   it("documents every environment variable sandtable reads", () => {
     const doc = page("cli");
     const walk = (dir: string): string[] =>
