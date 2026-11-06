@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { describe, expect, it, vi } from "vitest";
 import { freightScriptedAgent } from "../src/demo/freight-agents.ts";
 import { MARK_SVG } from "../src/report/brand.ts";
-import { bedrockRegion, bedrockUse, ModelsFile, pricesFile, runLeaderboard, type RunInfo } from "../src/run/leaderboard.ts";
+import { bedrockRegion, bedrockUse, ModelsFile, pricesFile, renderLeaderboardHtml, runLeaderboard, type RunInfo } from "../src/run/leaderboard.ts";
 import { costOf, registerPrices } from "../src/run/usage.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
 import type { AgentAdapter, UserSimulator } from "../src/sim/types.ts";
@@ -1102,5 +1102,15 @@ describe("a board of every task", () => {
     }
     const hashes = Object.fromEntries(await Promise.all(Object.keys(AS_THEY_WERE).map(async (f) => [f, createHash("sha256").update(await readFile(path.join(dir, f))).digest("hex")])));
     expect(hashes).toEqual(AS_THEY_WERE);
+  });
+});
+
+describe("an apostrophe on the leaderboard page", () => {
+  it("comes out as an entity, in the domain, a model's label and its top failure", () => {
+    const row = { label: "The broker's model", agent: "scripted:careful", baseline: false, passHat1: 1, passHatK: 1, tasks: 1, trials: 1, violations: {}, topFailure: "can't-book", agentCostPerTrialUsd: null, agentTurnP95Ms: null };
+    const html = renderLeaderboardHtml({ version: 1, domain: "The carrier's lanes", user: "scripted", k: 1, generatedAt: "", rows: [row] } as never);
+    expect(html).toContain("<h1>Leaderboard: The carrier&#39;s lanes</h1>");
+    expect(html).toContain('<a href="./the-broker-s-model/report.html">The broker&#39;s model</a>');
+    expect(html).toContain("<td>can&#39;t-book</td>");
   });
 });
