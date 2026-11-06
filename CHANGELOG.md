@@ -20,6 +20,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 - `sandtable import`: what a platform's own LLM judge grades a test on is drafted as pending `judged` criteria on its task, in the customer's words, instead of a review note to rewrite by hand: Retell's `metrics`, ElevenLabs' `success_conditions` and `success_condition`, and a Vapi evaluation whose inline boolean output has a `description`, with `= true` or no test. The summary line says how many were drafted, and `validate --strict` fails until they are accepted. They change no verdict, so a task with only criteria still says nothing is graded. What the draft can't keep as written stays a note: a Vapi `structuredOutputId` or a test such as `> 3`, and ElevenLabs' `success_examples`, `failure_examples` and `llm` check on a tool's argument ([#508](https://github.com/sandtable-ai/sandtable/issues/508)).
 
+### Fixed
+
+- `README.md`, `docs/quickstart.mdx` and `python/README.md`: you can now check what you installed, since `--version` should print 1.x, and read what older runtimes get. On Node 20, npm falls back to 0.2.1, an unsupported pre-1.0 release, and on Python 3.9, pip and uv either install that same release or report no matching distribution. The fix is to upgrade to Node.js 22 or later, or Python 3.10 or later ([#490](https://github.com/sandtable-ai/sandtable/issues/490)).
+
 ## [1.4.0] - 2026-11-04
 
 A minor release with no breaking changes. `$regex` matches text with a JavaScript regular expression in where clauses and in the arguments a task expects, and `sandtable import elevenlabs` drafts an ElevenLabs regex check on a tool's argument as one, anchored so it never passes a value ElevenLabs fails.
