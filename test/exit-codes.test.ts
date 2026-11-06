@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -11,6 +11,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 const cli = path.resolve("src/cli.ts");
 const example = path.resolve("examples/freight");
 const tasks = "expired-insurance,book-at-posted-rate";
+const NOT_A_COUNT = "must be a positive integer";
 // No key or AWS setting: a model call, if one slipped through, fails instead of costing money.
 const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("AWS_") && !["ANTHROPIC_API_KEY", "OPENAI_API_KEY"].includes(k)));
 
@@ -56,6 +57,24 @@ describe.skipIf(!process.features.typescript)("exit status", () => {
       expect((await sandtable("lint", example)).code).toBe(0);
       expect((await run("--agent", "scripted:careful", "--fail-under", "100")).code).toBe(0);
     });
+  });
+
+  describe("-k, -c and --fail-under take what they always took", () => {
+    it("a count of digits, leading zeros included", async () => {
+      const r = await run("--agent", "scripted:careful", "-k", "02", "-c", "1");
+      expect(r.code, r.stderr).toBe(0);
+      expect((JSON.parse(readFileSync(path.join(dir, "out", "results.json"), "utf8")) as { k: number }).k).toBe(2);
+    });
+
+    it("a percentage, with or without its % or a fraction", async () => {
+      // The do-nothing agent passes the refusal and fails the booking: pass^1 50%.
+      for (const [value, shown] of [["85", "85.0%"], ["85%", "85.0%"], ["97.5", "97.5%"], [" 60 ", "60.0%"]] as const) {
+        const r = await run("--agent", "noop", "--fail-under", value);
+        expect(r.code, value).toBe(1);
+        expect(r.stderr, value).toContain(`is below --fail-under ${shown}`);
+      }
+      expect((await run("--agent", "noop", "--fail-under", "50%")).code).toBe(0);
+    }, 30_000);
   });
 
   describe("1: a gate failed on a complete result", () => {
@@ -106,14 +125,37 @@ describe.skipIf(!process.features.typescript)("exit status", () => {
         [["nope"], "unknown command 'nope'"],
         [["run"], "missing required argument 'domain'"],
         [["run", example, "--bogus"], "unknown option '--bogus'"],
-        [["run", example, "-k", "zero"], "must be a positive integer"],
+        [["run", example, "-k", "zero"], NOT_A_COUNT],
+        [["run", example, "--fail-under", "abc"], "must be 0-100"],
+        [["run", example, "--fail-under", "101"], "must be 0-100"],
         [["leaderboard", example], "required option '-m, --models <file>' not specified"],
+        // The digits before the first other character used to count: -k 2e1 ran as 2, -k 3abc as 3 and -k 1.5 as 1.
+        ...["2e1", "3abc", "1.5"].flatMap((bad): [string[], string][] => [
+          [["run", example, "-k", bad], NOT_A_COUNT],
+          [["run", example, "-c", bad], NOT_A_COUNT],
+          [["leaderboard", example, "-m", "models.yaml", "-k", bad], NOT_A_COUNT],
+          [["leaderboard", example, "-m", "models.yaml", "-c", bad], NOT_A_COUNT],
+          [["demo", "-k", bad], NOT_A_COUNT],
+          [["judge", "results.json", "-d", example, "-c", bad], NOT_A_COUNT],
+        ]),
+        // Only digits, of 1 or more, and a count that a number can hold.
+        ...["0", "00", "", " 3", "+3", "-3", "0x10", "9".repeat(400)].map((bad): [string[], string] => [["run", example, `--trials=${bad}`], NOT_A_COUNT]),
       ];
-      for (const [args, message] of cases) {
-        const r = await sandtable(...args);
-        expect(r.code, args.join(" ")).toBe(2);
-        expect(r.stderr, args.join(" ")).toContain(message);
-      }
+      await Promise.all(
+        cases.map(async ([args, message]) => {
+          const r = await sandtable(...args);
+          expect(r.code, args.join(" ")).toBe(2);
+          expect(r.stderr, args.join(" ")).toContain(message);
+        }),
+      );
+    }, 60_000);
+
+    it("a value it rejects runs nothing", async () => {
+      const out = path.join(dir, "not-run");
+      const r = await sandtable("run", example, "--agent", "scripted:careful", "--user", "scripted", "-o", out, "-k", "2e1");
+      expect(r.code).toBe(2);
+      expect(r.stdout).toBe("");
+      expect(existsSync(out)).toBe(false);
     });
 
     it("a path with no domain at it, for validate and lint too", async () => {

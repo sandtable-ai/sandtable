@@ -89,9 +89,10 @@ async function resolveDomain(p: string): Promise<string> {
   return bundled;
 }
 
+/** A count: all digits, and 1 or more. `Number.parseInt` would stop at the first other character, reading 2e1 as 2. */
 const int = (v: string) => {
-  const n = Number.parseInt(v, 10);
-  if (!Number.isInteger(n) || n < 1) throw new InvalidArgumentError("must be a positive integer");
+  const n = Number(v);
+  if (!/^\d+$/.test(v) || !Number.isSafeInteger(n) || n < 1) throw new InvalidArgumentError("must be a positive integer");
   return n;
 };
 /** A TCP port, 0 for any free one. */
@@ -100,11 +101,18 @@ const port = (v: string) => {
   if (!/^\d+$/.test(v) || n > 65535) throw new InvalidArgumentError("must be a port number, 0-65535 (0 picks a free one)");
   return n;
 };
+/** `--fail-under`, as a fraction. A blank value reads as 0, as before 2.0, and `empty` lets `warnEmptyFailUnder` say so. */
 const percent = (v: string) => {
-  const n = Number(v.replace("%", ""));
+  const bare = v.replace("%", "");
+  const n = Number(bare);
   if (!Number.isFinite(n) || n < 0 || n > 100) throw new InvalidArgumentError("must be 0-100");
-  return n / 100;
+  return { fraction: n / 100, empty: bare.trim() === "" };
 };
+const EMPTY_FAIL_UNDER = "warning: an empty --fail-under value turns the gate off and is deprecated; in sandtable-ai 2.0 it will be a usage error (exit 2). To run without a gate, leave --fail-under out.";
+/** Say once, before anything runs, that an empty `--fail-under` is deprecated. */
+function warnEmptyFailUnder(failUnder: ReturnType<typeof percent> | undefined): void {
+  if (failUnder?.empty) console.error(EMPTY_FAIL_UNDER);
+}
 /** `--floor <tag>=<pct>`, repeatable: each tag's floor as a fraction, in the order given. */
 const floor = (v: string, floors: Record<string, number> = {}) => {
   const m = /^([^=]+)=(.*)$/.exec(v);
@@ -825,10 +833,11 @@ withProviderFlags(program
       .preset(4010)
       .argParser(port),
   )
-  .action(async (domainPath: string, o: { agent: string; user: string; withoutPolicy?: boolean; openaiBaseUrl?: string; trials: number; tasks?: TaskList; tag?: string[]; concurrency: number; out?: string; html: boolean; failUnder?: number; floor?: Record<string, number>; baseline?: string; failOnRegression?: boolean; judge?: boolean; judgeModel?: string; open?: boolean; prices?: string; serve?: number } & ProviderFlags, command: Command) => {
+  .action(async (domainPath: string, o: { agent: string; user: string; withoutPolicy?: boolean; openaiBaseUrl?: string; trials: number; tasks?: TaskList; tag?: string[]; concurrency: number; out?: string; html: boolean; failUnder?: ReturnType<typeof percent>; floor?: Record<string, number>; baseline?: string; failOnRegression?: boolean; judge?: boolean; judgeModel?: string; open?: boolean; prices?: string; serve?: number } & ProviderFlags, command: Command) => {
     if (o.failOnRegression && o.baseline === undefined) command.error("error: --fail-on-regression needs --baseline <results>: the run it compares with");
     if (o.judgeModel !== undefined && !o.judge) command.error("error: --judge-model needs --judge: without it, no model judges the run");
     warnEmptyTasks(o.tasks);
+    warnEmptyFailUnder(o.failUnder);
     if (o.withoutPolicy && !BUILT_IN_MODEL_AGENT.test(o.agent)) {
       command.error(`error: --without-policy needs a built-in model agent (claude, claude:<model>, bedrock:<model-id> or openai:<model>): sandtable doesn't write the prompt of --agent ${o.agent}, so it can't leave the policy out`);
     }
@@ -892,7 +901,7 @@ withProviderFlags(program
     if (failIfNothingGraded(result)) return;
     if (o.open && o.html) openInBrowser(path.join(out, "report.html"));
     // Skipped trials, a critical task (a release blocker, with or without --fail-under), --fail-under and --floor.
-    failGates(result, { failUnder: o.failUnder });
+    failGates(result, { failUnder: o.failUnder?.fraction });
     if (o.failOnRegression && result.baseline) failIfRegressed(compareRuns(result.baseline, result));
   });
 
