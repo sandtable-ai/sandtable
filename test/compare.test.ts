@@ -6,9 +6,10 @@ import { promisify } from "node:util";
 import vm from "node:vm";
 import { describe, expect, it } from "vitest";
 import { freightScriptedAgent } from "../src/demo/freight-agents.ts";
+import { withJudgedSummary, type JudgedVerdict } from "../src/judge/summary.ts";
 import { renderHtml } from "../src/report/html.ts";
-import { renderTerminal } from "../src/report/terminal.ts";
-import { baselineSnapshot, compareRuns, regressions } from "../src/run/compare.ts";
+import { renderCompare, renderJudgedChanges, renderTerminal } from "../src/report/terminal.ts";
+import { baselineSnapshot, comparisonOf, compareRuns, regressions } from "../src/run/compare.ts";
 import { regradeSuite } from "../src/run/regrade.ts";
 import { runSuite, type SuiteResult } from "../src/run/suite.ts";
 import { scriptedUser } from "../src/sim/scripted.ts";
@@ -428,5 +429,125 @@ describe("regrade and report keep the comparison", () => {
     const lb = await promisify(execFile)(process.execPath, [cli, "run", "examples/clinic", "--agent", "scripted:clinic-careful", "--user", "scripted", "-o", out, "--baseline", base]).catch((e: { code: number; stderr: string }) => e);
     expect((lb as { stderr: string }).stderr).toContain("is not a results.json written by `sandtable run`; it is a leaderboard's leaderboard.json");
     expect(await stat(out).catch(() => undefined)).toBeUndefined();
+  });
+});
+
+describe("the judged score in a comparison", () => {
+  type Given = JudgedVerdict["verdict"] | { verdict: JudgedVerdict["verdict"]; text: string };
+  const textOf = (id: string, g: Given) => (typeof g === "string" ? `The agent does ${id}.` : g.text);
+
+  /** `r` with these verdicts on every trial, counted as `judge` counts them. */
+  function judged(r: SuiteResult, given: Record<string, Given>, model = "claude-sonnet-5-5"): SuiteResult {
+    const criteria = Object.entries(given).map(([id, g]) => ({ id, criterion: textOf(id, g) }));
+    const verdicts = Object.entries(given).map(([id, g]): JudgedVerdict => ({ id, criterion: textOf(id, g), verdict: typeof g === "string" ? g : g.verdict, reason: "Because." }));
+    return withJudgedSummary({ ...r, tasks: r.tasks.map((t) => ({ ...t, trials: t.trials.map((tr) => ({ ...tr, judged: { model, verdicts } })) })) }, () => criteria);
+  }
+
+  it("a snapshot keeps the judged counts and each criterion's text, and a never-judged run's has no such field", () => {
+    const run = fake({ t: [true, false] });
+    expect(JSON.stringify(baselineSnapshot(run))).not.toContain("judged");
+    expect(baselineSnapshot(judged(run, { a: "pass", b: "fail", c: "not_applicable" })).judged).toEqual({
+      pass: 2, fail: 2, notApplicable: 2, score: 0.5, models: ["claude-sonnet-5-5"], notJudged: 0,
+      criteria: [
+        { id: "a", pass: 2, fail: 0, notApplicable: 0, score: 1, texts: ["The agent does a."] },
+        { id: "b", pass: 0, fail: 2, notApplicable: 0, score: 0, texts: ["The agent does b."] },
+        { id: "c", pass: 0, fail: 0, notApplicable: 2, score: null, texts: ["The agent does c."] },
+      ],
+    });
+  });
+
+  it("a run whose every judge call failed judged nothing, so its snapshot has no such field", () => {
+    const run = fake({ t: [true] });
+    const failed = withJudgedSummary({ ...run, tasks: run.tasks.map((t) => ({ ...t, trials: t.trials.map((tr) => ({ ...tr, judged: { model: "m", verdicts: [], error: "overloaded" } })) })) }, () => [{ id: "a", criterion: "A." }]);
+    expect(failed.judged).toBeDefined();
+    expect(baselineSnapshot(failed).judged).toBeUndefined();
+    expect(compareRuns(baselineSnapshot(failed), run).judged).toBeUndefined();
+  });
+
+  it("shows the overall score and each criterion by id, including those only one run has", () => {
+    const before = judged(fake({ t: [true] }), { kept: "pass", dropped: "pass", gone: "fail" });
+    const now = judged(fake({ t: [true] }), { kept: "pass", dropped: "fail", fresh: "pass" });
+    const c = compareRuns(baselineSnapshot(before), now).judged!;
+    expect(c.before).toMatchObject({ pass: 2, fail: 1 });
+    expect(c.after).toMatchObject({ pass: 2, fail: 1 });
+    expect(c.criteria.map((d) => [d.id, d.before?.score, d.after?.score])).toEqual([
+      ["kept", 1, 1],
+      ["dropped", 1, 0],
+      ["fresh", undefined, 1],
+      ["gone", 0, undefined],
+    ]);
+  });
+
+  it("has no judged part when neither run was judged, and one side when only one was", () => {
+    const plain = fake({ t: [true] });
+    const scored = judged(plain, { a: "pass" });
+    expect(JSON.stringify(compareRuns(baselineSnapshot(plain), plain))).not.toContain("judged");
+    expect(compareRuns(baselineSnapshot(plain), scored).judged).toMatchObject({ after: { pass: 1 }, criteria: [{ id: "a", after: { pass: 1 } }] });
+    expect(compareRuns(baselineSnapshot(plain), scored).judged!.before).toBeUndefined();
+    expect(compareRuns(baselineSnapshot(scored), plain).judged!.after).toBeUndefined();
+  });
+
+  it("says which criteria's verdicts hold different text, and not of one only one run has", () => {
+    const before = judged(fake({ t: [true] }), { dated: { verdict: "pass", text: "Pickup by 2026-11-06." }, same: "pass", gone: "pass" });
+    const now = judged(fake({ t: [true] }), { dated: { verdict: "pass", text: "Pickup by 2026-11-07." }, same: "pass", fresh: "pass" });
+    const c = compareRuns(baselineSnapshot(before), now).judged!;
+    expect(c.criteria.filter((d) => d.textDiffers).map((d) => d.id)).toEqual(["dated"]);
+  });
+
+  it("never counts as a regression", () => {
+    const before = judged(fake({ t: [true] }), { a: "pass" });
+    const now = judged(fake({ t: [true] }), { a: "fail" });
+    expect(regressions(compareRuns(baselineSnapshot(before), now))).toEqual([]);
+    // And a task that broke is still the regression, whatever the judged score did.
+    const broke = judged(fake({ t: [false] }), { a: "pass" });
+    expect(regressions(compareRuns(baselineSnapshot(now), broke)).map((d) => d.id)).toEqual(["t"]);
+  });
+
+  it("prints it apart from the task changes, as a note where the text differs, and with no gate's colour", () => {
+    const before = judged(fake({ t: [true] }, { runId: "run-base" }), { kept: "pass", dated: { verdict: "pass", text: "Pickup by 2026-11-06." }, gone: "fail" });
+    const now = judged(fake({ t: [true] }), { kept: "fail", dated: { verdict: "pass", text: "Pickup by 2026-11-07." }, fresh: "not_applicable" });
+    const compared = { ...now, baseline: baselineSnapshot(before) };
+    const lines = plain(renderCompare(compared, { baseline: "a.json", results: "b.json" })).split("\n");
+    const from = lines.findIndex((l) => l.startsWith("  Judged score since the baseline"));
+    expect(from).toBeGreaterThan(lines.findIndex((l) => l.includes("pass^1")));
+    expect(lines[from]).toContain("a model's judgement: never a regression, and it changes no gate or exit code");
+    expect(lines.slice(from + 1)).toEqual([
+      "  judged 66.7% → 50.0%  (−16.7 pts)",
+      "  kept   100.0% → 0.0%  (−100.0 pts)",
+      "  dated  100.0% → 100.0%  (no change)  text differs",
+      "  fresh  – → n/a  only in this run",
+      "  gone   0.0% → –  only in the baseline",
+      "  note: the text of dated differs between the two runs: a date from ${today} under clock: now differs from day to day, and otherwise the criterion was reworded",
+    ]);
+    expect(renderJudgedChanges(comparisonOf(compared)!).join("\n")).not.toContain("\x1b[31m");
+  });
+
+  it("says when another model judged, or the runs ran other tasks", () => {
+    const before = judged(fake({ t: [true], u: [true] }), { a: "pass" }, "claude-haiku-5-5");
+    const now = judged(fake({ t: [true] }), { a: "pass" });
+    const lines = plain(renderJudgedChanges(compareRuns(baselineSnapshot(before), now)).join("\n")).split("\n");
+    expect(lines).toContain("  note: claude-haiku-5-5 judged the baseline and claude-sonnet-5-5 this run, and another model can score differently");
+    expect(lines).toContain("  note: each score is over its own run's tasks");
+  });
+
+  it("renderTerminal leaves it out on request, for a summary printed before the run is judged, and with neither run judged", () => {
+    const before = judged(fake({ t: [true] }), { a: "pass" });
+    const now: SuiteResult = { ...fake({ t: [true] }), baseline: baselineSnapshot(before) };
+    expect(plain(renderTerminal(now))).toContain("Judged score since the baseline");
+    expect(plain(renderTerminal(now))).toContain("  judged 100.0% → –");
+    expect(plain(renderTerminal(now, { withoutJudgedChanges: true }))).not.toContain("Judged score");
+    const never: SuiteResult = { ...fake({ t: [true] }), baseline: baselineSnapshot(fake({ t: [true] })) };
+    expect(plain(renderTerminal(never))).not.toContain("Judged");
+    expect(renderJudgedChanges(comparisonOf(never)!)).toEqual([]);
+  });
+
+  it.skipIf(!process.features.typescript)("sandtable compare --fail-on-regression exits 0 on a judged drop, and shows it", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-compare-judged-"));
+    const [a, b] = [path.join(dir, "a.json"), path.join(dir, "b.json")];
+    await writeFile(a, JSON.stringify(judged(fake({ t: [true] }), { c: "pass" })));
+    await writeFile(b, JSON.stringify(judged(fake({ t: [true] }), { c: "fail" })));
+    const { stdout } = await promisify(execFile)(process.execPath, [cli, "compare", a, b, "--fail-on-regression"]);
+    expect(stdout).toContain("judged 100.0% → 0.0%  (−100.0 pts)");
+    expect(stdout).toContain("= 1 unchanged");
   });
 });

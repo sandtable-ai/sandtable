@@ -89,4 +89,4 @@ Each failed check is recorded with a kind, an id and a readable detail, and the 
 
 ## Why no judge
 
-The customer's rules are deterministic, so sandtable checks them deterministically. That makes a failure reproducible ("it booked carrier 100202, whose insurance was expired"), explainable to someone who did not write the test, and free to evaluate. It also means sandtable does not grade tone, empathy or wording today. Judged soft scores are planned as a separate score that never changes pass/fail ([#16](https://github.com/sandtable-ai/sandtable/issues/16)).
+The customer's rules are deterministic, so sandtable checks them deterministically. That makes a failure reproducible ("it booked carrier 100202, whose insurance was expired"), explainable to someone who did not write the test, and free to evaluate. It also means pass/fail says nothing about tone, empathy or wording. A domain can state those as [judged criteria](/reference/spec#judged), which a model scores as a separate [judged score](/reference/results-schema#judgedsummary) that never changes pass/fail.

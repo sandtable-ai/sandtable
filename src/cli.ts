@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { Command, InvalidArgumentError, Option } from "commander";
 import { freightScriptedAgent } from "./demo/freight-agents.ts";
 import { DEMO_USER_MODEL, demoLiveSides } from "./demo/live.ts";
-import { draftUsageLines, formatPercent, renderCompare, renderJudged, renderTerminal } from "./report/terminal.ts";
+import { draftUsageLines, formatPercent, renderCompare, renderJudged, renderJudgedChanges, renderTerminal } from "./report/terminal.ts";
 import { renderHtml } from "./report/html.ts";
 import { renderCustomerHtml } from "./report/customer.ts";
 import { everyTrialFailed, runSuite, trialStatus, type SuiteResult } from "./run/suite.ts";
@@ -16,8 +16,8 @@ import { DEFAULT_IDLE_TIMEOUT, MAX_IDLE_TIMEOUT, serveConversations } from "./se
 import { changedVerdicts, droppedVerdicts, RegradeError, regradeSuite } from "./run/regrade.ts";
 import { calibrate, parseLabels, renderCalibration } from "./judge/calibrate.ts";
 import { DEFAULT_JUDGE_MODEL, judgeBlocker, judgeInputsWarning, judgePlan, judgePlanLine, judgeSuite } from "./judge/judge.ts";
-import { droppedLine, statesCriteria } from "./judge/summary.ts";
-import { baselineSnapshot, checkBaseline, compareRuns, regressions, type Comparison } from "./run/compare.ts";
+import { criteriaOfRun, droppedLine, statesCriteria } from "./judge/summary.ts";
+import { baselineSnapshot, checkBaseline, compareRuns, comparisonOf, regressions, type Comparison } from "./run/compare.ts";
 import { readResults, readUserFile, readUserText, userPathError } from "./run/read.ts";
 import { writeFileAtomic } from "./run/write.ts";
 import { providerOf, type ClaudeOptions, type Provider } from "./sim/claude.ts";
@@ -711,6 +711,78 @@ program
     console.log(`\nAccept an item by changing its \`review: pending\` to \`review: accepted\` (or deleting the line).`);
   });
 
+/** What `run` needs to judge the run it just wrote, and to name the `judge` command that does it later. */
+type RunJudgeFlags = { judgeModel?: string; html: boolean; concurrency: number } & ProviderFlags;
+
+/** The `judge` command for a run's results, with the model and provider flags `run` was given. */
+function judgeCommand(results: string, domainPath: string, o: RunJudgeFlags): string {
+  const flags = [
+    `-d ${shellWord(domainPath)}`,
+    ...(o.judgeModel ? [`-m ${shellWord(o.judgeModel)}`] : []),
+    ...(o.provider ? [`--provider ${o.provider}`] : []),
+    ...(o.region ? [`--region ${shellWord(o.region)}`] : []),
+    ...(o.awsProfile ? [`--aws-profile ${shellWord(o.awsProfile)}`] : []),
+    ...(o.html ? [] : ["--no-html"]),
+  ];
+  return `${NEXT} judge ${shellWord(results)} ${flags.join(" ")}`;
+}
+
+/**
+ * `run --judge`, once the run's results are on disk: judge them as `judge` does, writing after each trial. Nothing here
+ * sets the exit code, which stays the gates', and a judge that fails costs nothing already written: it says so loudly,
+ * with the command that tries again.
+ */
+async function judgeFinishedRun(result: SuiteResult, domain: Domain, domainPath: string, out: string, o: RunJudgeFlags): Promise<void> {
+  if (!statesCriteria(domain, result)) {
+    console.log(`\n${domain.name} states no judged criteria for the tasks of this run, so there is nothing to judge.`);
+    return;
+  }
+  const failure = (what: string) =>
+    console.error(`\n✗ ${what}\n  The run's results are saved, and its gates alone decide the exit code. To judge it: ${judgeCommand(path.join(out, "results.json"), domainPath, o)}`);
+  try {
+    const claude = { ...providerOpts(o), model: o.judgeModel ?? DEFAULT_JUDGE_MODEL };
+    const plan = judgePlan(domain, result, claude);
+    console.log(`\n${judgePlanLine(plan)}`);
+    if (plan.calls === 0) {
+      console.log("No trial to judge, since each one was skipped, so nothing was written.");
+      return;
+    }
+    // One write at a time, in order, after each trial, so Ctrl-C loses at most the calls in flight.
+    let writing = Promise.resolve();
+    const outcome = await judgeSuite({
+      domain,
+      stored: result,
+      claude,
+      concurrency: o.concurrency,
+      onTrial: ({ trial, result: judged, warnings }) => {
+        const label = `${trial.taskId} trial ${trial.trial + 1}`;
+        const tally = (verdict: string, word: string) => {
+          const n = trial.judged!.verdicts.filter((v) => v.verdict === verdict).length;
+          return n ? [`${n} ${word}`] : [];
+        };
+        const verdicts = [...tally("pass", "pass"), ...tally("fail", "fail"), ...tally("not_applicable", "not applicable")].join(", ");
+        console.log(trial.judged!.error !== undefined ? `  ! ${label}: the judge call failed: ${trial.judged!.error}` : `  ${label}: ${verdicts || "no verdict"}`);
+        for (const w of warnings) console.log(`  ! ${w}`);
+        writing = writing.then(() => save(judged, out, false).then(() => undefined));
+        return writing;
+      },
+    });
+    await writing;
+    // With no call settled, the run stays as it was written, byte for byte.
+    if (outcome.sent) await save(outcome.result, out, o.html);
+    const score = renderJudged(outcome.result);
+    if (score.length) console.log(`\n${score.join("\n")}`);
+    const comparison = comparisonOf(outcome.result);
+    const changes = comparison ? renderJudgedChanges(comparison) : [];
+    if (changes.length) console.log(`\n${changes.join("\n")}`);
+    const failed = outcome.failed ? `${outcome.failed} of ${outcome.sent} judge call(s) failed, each kept as judged.error on its trial: the judged score leaves them out.` : "";
+    if (outcome.stopped) failure(`The judge stopped: ${outcome.stopped.error}\n  ${outcome.stopped.notJudged} trial(s) were not judged.${failed ? ` ${failed}` : ""}`);
+    else if (failed) failure(failed);
+  } catch (err) {
+    failure(`The judge failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 withProviderFlags(program
   .command("run"))
   .argument("<domain>", "domain directory (with sandtable.yaml) or file")
@@ -729,6 +801,8 @@ withProviderFlags(program
   .option("--floor <tag=pct>", "exit 1 if this tag's pass^k is below the percentage, e.g. refusal=100 (repeatable)", floor)
   .option("--baseline <results>", "a previous run's results.json: also show which tasks broke or got fixed since, and how pass^k moved")
   .option("--fail-on-regression", "with --baseline: exit 1 if a task that passed every trial in the baseline fails one now (CI gate)")
+  .option("--judge", "once the trials have ended, have a model score them on the domain's judged criteria: a judged score, apart from pass/fail, pass^k, gates and exit codes; one model call per trial")
+  .option("--judge-model <id>", `with --judge: the Claude model that judges (default: ${DEFAULT_JUDGE_MODEL})`)
   .option("--open", "open the HTML report in the browser when the run finishes")
   .option("--prices <file>", PRICES_HELP)
   .addOption(
@@ -739,8 +813,9 @@ withProviderFlags(program
       .preset(4010)
       .argParser(port),
   )
-  .action(async (domainPath: string, o: { agent: string; user: string; withoutPolicy?: boolean; openaiBaseUrl?: string; trials: number; tasks?: TaskList; tag?: string[]; concurrency: number; out?: string; html: boolean; failUnder?: number; floor?: Record<string, number>; baseline?: string; failOnRegression?: boolean; open?: boolean; prices?: string; serve?: number } & ProviderFlags, command: Command) => {
+  .action(async (domainPath: string, o: { agent: string; user: string; withoutPolicy?: boolean; openaiBaseUrl?: string; trials: number; tasks?: TaskList; tag?: string[]; concurrency: number; out?: string; html: boolean; failUnder?: number; floor?: Record<string, number>; baseline?: string; failOnRegression?: boolean; judge?: boolean; judgeModel?: string; open?: boolean; prices?: string; serve?: number } & ProviderFlags, command: Command) => {
     if (o.failOnRegression && o.baseline === undefined) command.error("error: --fail-on-regression needs --baseline <results>: the run it compares with");
+    if (o.judgeModel !== undefined && !o.judge) command.error("error: --judge-model needs --judge: without it, no model judges the run");
     warnEmptyTasks(o.tasks);
     if (o.withoutPolicy && !BUILT_IN_MODEL_AGENT.test(o.agent)) {
       command.error(`error: --without-policy needs a built-in model agent (claude, claude:<model>, bedrock:<model-id> or openai:<model>): sandtable doesn't write the prompt of --agent ${o.agent}, so it can't leave the policy out`);
@@ -788,9 +863,17 @@ withProviderFlags(program
     if (process.stderr.isTTY) process.stderr.write("\r".padEnd(72) + "\r");
     if (baseline) result.baseline = baselineSnapshot(baseline);
     if (o.floor) result.floors = o.floor;
-    console.log(renderTerminal(result, o.baseline ? { baseline: o.baseline } : {}));
+    console.log(renderTerminal(result, { ...(o.baseline ? { baseline: o.baseline } : {}), ...(o.judge ? { withoutJudgedChanges: true } : {}) }));
     const out = await save(result, o.out ?? defaultOut(domain.name), o.html);
     console.log(`\n  results: ${path.join(out, "results.json")}${o.html ? `\n  report:  ${path.join(out, "report.html")}` : ""}`);
+    // The gates below read `result`, the run as graded, never what the judge returns.
+    if (o.judge) await judgeFinishedRun(result, domain, domainPath, out, o);
+    else if (everyTrialFailed(result) === undefined) {
+      const n = criteriaOfRun(domain, result).length;
+      const how = `add --judge to the run, or judge this one: ${judgeCommand(path.join(out, "results.json"), domainPath, o)}`;
+      if (n === 1) console.log(`\n1 judged criterion wasn't judged. To judge it, ${how}`);
+      else if (n > 1) console.log(`\n${n} judged criteria weren't judged. To judge them, ${how}`);
+    }
     if (failIfNothingGraded(result)) return;
     if (o.open && o.html) openInBrowser(path.join(out, "report.html"));
     // Skipped trials, a critical task (a release blocker, with or without --fail-under), --fail-under and --floor.
