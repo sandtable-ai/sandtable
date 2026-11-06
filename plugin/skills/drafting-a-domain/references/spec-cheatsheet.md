@@ -43,7 +43,7 @@ tasks: ./tasks.yaml                 # any top-level value that is a relative .md
 | `$eq`, `$ne` | equal, not equal |
 | `$in`, `$nin` | in, not in a list |
 | `$gt`, `$gte`, `$lt`, `$lte` | numeric comparison (strings compare lexically, so ISO dates work) |
-| `$exists` | `true`: the field is set and not null |
+| `$exists` | `true`: the field is set and not null; `false`: it is missing or null. `validate` warns (`⚠`) about any other literal, such as `no`, which means `true` |
 | `$contains` | on text, a case-insensitive substring; on a list, an element that matches (an object matches like a where clause, operators included) |
 | `$regex` | a JavaScript regex string against text only, case-sensitive, e.g. `load_id: { $regex: "^L-10" }`; no `/.../` delimiters or flags |
 
