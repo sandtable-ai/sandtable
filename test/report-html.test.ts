@@ -122,6 +122,16 @@ describe("the judged score in the HTML report", () => {
     expect(openTrial(renderHtml(r), 1, 0)).not.toContain("Judged");
   });
 
+  it("says each verdict in words, so its state isn't colour alone, and hides the mark beside it from a screen reader", async () => {
+    const r = await judgedRun({ verdicts: [verdict("a", "pass"), verdict("b", "fail"), verdict("c", "not_applicable")] });
+    const judged = openTrial(renderHtml(r), 0, 0).split("<h2>Judged</h2>")[1]!.split("<h2>World changes</h2>")[0]!;
+    const rows = judged.split('<div class="check">').slice(1);
+    expect(rows[0]).toContain("<code>a</code> <b>pass</b>");
+    expect(rows[1]).toContain("<code>b</code> <b>fail</b>");
+    expect(rows[2]).toContain("<code>c</code> <b>not applicable</b>");
+    for (const row of rows) expect(row).toMatch(/^<span class="\w+" aria-hidden="true">[✓✗·]<\/span>/);
+  });
+
   it("says when a trial's judge call failed, and counts it", async () => {
     const html = renderHtml(await judgedRun({ verdicts: [verdict("kept", "pass")], error: "overloaded" }));
     const detail = openTrial(html, 0, 0);
@@ -179,5 +189,83 @@ describe("the judged score in the HTML report", () => {
     const shown = page(renderHtml({ ...r, baseline: baselineSnapshot(r) }), [0, 0]);
     expect(shown.get("judged") ?? "").toBe("");
     for (const [id, html] of shown) expect(html, id).not.toMatch(/judged/i);
+  });
+});
+
+describe("the report's state in words, for a screen reader and for anyone who can't tell the fills apart", () => {
+  const trial = (i: number, over: Record<string, unknown> = {}) => ({ taskId: "t", trial: i, passed: true, checks: [], violations: [], events: [], changes: [], endReason: "user_stop", turns: 1, durationMs: 0, ...over });
+  const task = (id: string, trials: unknown[], description = "") => ({ id, description, tags: [], passes: 1, trials });
+  const run = (tasks: unknown[], over: Record<string, unknown> = {}) =>
+    ({
+      domain: "d", agent: "a", user: "u", k: 1, startedAt: "", durationMs: 0, passHat: { "1": 1 }, failureModes: [], byTag: [], soft: [], pendingReview: [],
+      usage: { agent: {}, user: {}, costUsd: null }, latency: { agentTurnP50Ms: null, agentTurnP95Ms: null }, inputs: "x", runId: "r", version: 1, tasks, ...over,
+    }) as never;
+  /** Each trial button in the task table: its fill, title and label. */
+  const buttons = (html: string) =>
+    [...page(html).get("tasks")!.matchAll(/<button class="dot (\w+)" title="([^"]*)" aria-label="([^"]*)" onclick="show\(\d+,\d+\)"><\/button>/g)].map((m) => ({ fill: m[1], title: m[2], label: m[3] }));
+
+  it("names a trial's state on its button, and a failed trial's first failed check", () => {
+    const html = renderHtml(
+      run([
+        task("t", [
+          trial(0, { checks: [{ id: "reached-goal", passed: true, detail: "" }] }),
+          trial(1, { passed: false, checks: [{ id: "reached-goal", passed: true, detail: "" }, { id: "verify-before-book", passed: false, detail: "" }, { id: "rate-ceiling", passed: false, detail: "" }] }),
+          trial(2, { passed: false, skipped: true, error: "the endpoint went down", checks: [{ id: "runtime", passed: false, detail: "" }] }),
+          trial(3, { passed: false }),
+        ]),
+      ]),
+    );
+    const labels = ["trial 1: passed", "trial 2: failed (verify-before-book)", "trial 3: skipped", "trial 4: failed"];
+    expect(buttons(html)).toEqual(labels.map((label, i) => ({ fill: ["ok", "bad", "skip", "bad"][i], title: label, label })));
+  });
+
+  it("says the same on a real run", async () => {
+    const domain = await loadDomain(path.resolve("examples/freight"));
+    const taskIds = ["book-at-posted-rate"];
+    const careful = await runSuite({ domain, agent: freightScriptedAgent("careful"), user: scriptedUser(), taskIds });
+    expect(buttons(renderHtml(careful))).toEqual([{ fill: "ok", title: "trial 1: passed", label: "trial 1: passed" }]);
+    const naive = await runSuite({ domain, agent: freightScriptedAgent("naive"), user: scriptedUser(), taskIds });
+    expect(buttons(renderHtml(naive))[0]!.label).toMatch(/^trial 1: failed \([\w-]+\)$/);
+  });
+
+  it("escapes a check's id in a trial's label", () => {
+    const html = renderHtml(run([task("t", [trial(0, { passed: false, checks: [{ id: '<img src=x onerror=alert(1)>"', passed: false, detail: "" }] })])]));
+    const [button] = buttons(html);
+    expect(button!.label).toBe("trial 1: failed (&lt;img src=x onerror=alert(1)&gt;&quot;)");
+    expect(button!.title).toBe(button!.label);
+    expect(page(html).get("tasks")).not.toContain("<img");
+  });
+
+  /** A run with a task that checked a rule and one that only has it in play. */
+  const covered = (ids: [string, string] = ["checks", "plays"]) =>
+    run([task(ids[0], [trial(0, { taskId: ids[0] })]), task(ids[1], [trial(0, { taskId: ids[1] })])], {
+      coverage: {
+        rules: [{ id: "rate-ceiling", kind: "limit", tool: "book_load", description: "Never book above the rate ceiling.", checked: 1, broken: 0, tasks: [{ task: ids[0], checked: 1, broken: 0 }, { task: ids[1], checked: 0, broken: 0 }] }],
+        tools: [{ name: "book_load", calls: 1, trials: 1, tasks: [ids[0]] }],
+      },
+    });
+  /** Each state cell in the coverage table: its fill, label and title. */
+  const cells = (html: string) =>
+    [...page(html).get("coverage")!.split("<tbody>")[1]!.matchAll(/<span class="dot (\w+)" role="img" aria-label="([^"]*)" title="([^"]*)"><\/span>/g)].map((m) => ({ fill: m[1], label: m[2], title: m[3] }));
+
+  it("gives a coverage cell's state to assistive technology, as an image with a label, and keeps its fill and title", () => {
+    const found = cells(renderHtml(covered()));
+    expect(found.map((c) => c.fill)).toEqual(["ok", "skip"]);
+    expect(found[0]!.label).toBe("checks: 1 of 1 trial(s) called book_load, so the rule was checked; never broken here");
+    expect(found[1]!.label).toBe("plays: its reference or expectations put this rule in play, but no trial called book_load");
+    for (const c of found) expect(c.title).toBe(c.label);
+  });
+
+  it("escapes a task's id in a coverage cell's label", () => {
+    const html = renderHtml(covered(['<img src=x onerror=alert(1)>"', "plays"]));
+    expect(cells(html)[0]!.label).toBe("&lt;img src=x onerror=alert(1)&gt;&quot;: 1 of 1 trial(s) called book_load, so the rule was checked; never broken here");
+    expect(page(html).get("coverage")).not.toContain("<img");
+  });
+
+  it("hides the legend's dots from a screen reader, since the text beside each says what it means", () => {
+    const key = page(renderHtml(covered())).get("coverage")!.split("<ul class='key'>")[1]!.split("</ul>")[0]!;
+    const swatches = key.match(/<span [^>]*>/g)!;
+    expect(swatches).toHaveLength(5);
+    for (const s of swatches) expect(s).toContain("aria-hidden='true'");
   });
 });
