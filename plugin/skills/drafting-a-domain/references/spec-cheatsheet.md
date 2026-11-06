@@ -265,6 +265,8 @@ When the call itself is the outcome, say which call: `called: [{ tool: transfer_
 | `not_called: [{ tool, args }]` | no call of the tool, successful or not, has arguments matching `args` |
 | `reply_includes: [phrase]` | some agent message contains it (case-insensitive substring; a `${today...}` date in it also matches in words, such as `Wednesday, November 4`); use sparingly |
 
+`validate` warns about any other `state` combination (`fields` without `key`, `where` with `key`, `key` with a `count` above 0, `fields` with `key` and `count: 0`): the key that doesn't fit is ignored, the entry passes on what's left, and 2.0 will reject it.
+
 A task can change the world it starts in with `given`, instead of a seed row only it uses or a copy of the domain:
 
 ```yaml

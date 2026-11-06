@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 ### Fixed
 
 - `README.md`, `docs/quickstart.mdx` and `python/README.md`: you can now check what you installed, since `--version` should print 1.x, and read what older runtimes get. On Node 20, npm falls back to 0.2.1, an unsupported pre-1.0 release, and on Python 3.9, pip and uv either install that same release or report no matching distribution. The fix is to upgrade to Node.js 22 or later, or Python 3.10 or later ([#490](https://github.com/sandtable-ai/sandtable/issues/490)).
+- `validate`: warns about an `expect.state` entry that grading only partly reads: `fields` without `key`, `where` with `key`, `key` with a `count` above 0, or `fields` with `key` and `count: 0`. Each passes on what's left, so a mix-up such as `fields` for `where` checked far less than it said. The warning names the task, the entry and the ignored key and says what the entry checks instead. 2.0 will reject these; until then `validate` still exits 0, and grading doesn't change ([#492](https://github.com/sandtable-ai/sandtable/issues/492)).
 
 ## [1.4.0] - 2026-11-04
 
