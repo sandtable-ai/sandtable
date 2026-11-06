@@ -202,6 +202,29 @@ When the base branch and the pull request rehearse in separate jobs, or the base
 
 Each run costs tasks × k conversations. For scale: the first 10 tasks of the bundled freight example, 2 trials each, with Claude Opus 5.5 as the agent and Claude Haiku 5.5 as the caller, cost about $0.58 at list prices ([results](/results)). The terminal summary and report show an estimated cost for Claude models, and for any other model whose prices you pass with `--prices`; without a price, cost shows `n/a`.
 
-## Coming next
+## Show the result where reviewers look
 
-Posting the changes since the baseline as a pull request comment is planned ([#13](https://github.com/sandtable-ai/sandtable/issues/13)).
+`report --markdown` renders a stored run as Markdown, with no model call: the scores, what changed since the baseline, the failed tasks with their checks and the top failure modes. Long lists fold away, and the whole summary stays under GitHub's limit for a comment. See [`report`](/reference/cli#report).
+
+Add it to the job summary. The condition keeps the step on a run whose gates failed, which is when the summary matters most, and skips it when the run wrote nothing:
+
+```yaml
+      - name: Job summary
+        if: ${{ !cancelled() && hashFiles('.sandtable/ci/results.json') != '' }}
+        run: npx sandtable-ai report .sandtable/ci/results.json --markdown - >> "$GITHUB_STEP_SUMMARY"
+```
+
+Or post it on the pull request, editing the same comment on each push. This needs `pull-requests: write` in the workflow's permissions, and a pull request from a fork gets a read-only token, so it can't post there. `--edit-last` edits the token's last comment on the pull request, so keep this the only step that comments with that token:
+
+```yaml
+      - name: Comment on the pull request
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && hashFiles('.sandtable/ci/results.json') != '' }}
+        run: |
+          npx sandtable-ai report .sandtable/ci/results.json --markdown summary.md
+          gh pr comment "$PR" --edit-last --create-if-none --body-file summary.md
+        env:
+          PR: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+```
+
+Any CI system that shows Markdown can use the same file. A GitHub Action that posts the comment for you is planned ([#13](https://github.com/sandtable-ai/sandtable/issues/13)).
