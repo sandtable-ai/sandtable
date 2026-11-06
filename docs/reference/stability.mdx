@@ -47,6 +47,7 @@ A change can make a run that passed fail without changing any contract: a new ca
 
 - **Grading** (how a trial is checked against its expectations and invariants) changes only to fix a bug, and the changelog says which verdicts can flip. `sandtable regrade` re-scores stored trials under the new rules without a model call.
 - **What the agent and the caller are given** can change in a minor release, and the changelog says so. A changed default prompt moves the run's `inputs` hash: `regrade` refuses the stored run, `leaderboard` stops before running anything and says which stored results no longer match, and `run --baseline` lists its tasks as `changed`. A changed default caller model shows in `results.json`'s `user`: `run --baseline` reports that the caller changed, and `leaderboard` won't mix the two. `regrade` still works, since it replays the stored turns.
+- **Judged verdicts** are a model's output. Their fields in `results.json` are covered like any other, but a verdict can differ between runs, even with the same model on the same transcript, and a new default judge model or judge prompt can move them in a minor release. They never decide pass or fail: pass^k, gates and exit codes don't read them.
 - **The bundled examples** are examples, not a contract. They can gain or fix tasks in a minor release, and a change that makes stored runs of them unusable (`regrade` refusing them, a `leaderboard` stopping) names the tasks it affects in the changelog.
 
 ## results.json versions

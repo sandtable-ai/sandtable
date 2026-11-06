@@ -323,15 +323,17 @@ tasks:
         review: pending
 ```
 
-<Note>
-This release only states and validates criteria. No command grades them yet.
-</Note>
+[`sandtable judge`](/reference/cli#judge) grades them on a stored run. It costs one model call per trial, and `--dry-run` prints the calls and a cost bound for free. The verdicts go in `results.json` as a [judged score](/reference/results-schema#judgedsummary), apart from pass^k.
 
-Criteria change no verdict, pass^k, gate or exit code. They aren't shown to the agent or the caller: neither one's prompt states them. They stay out of `results.json` and out of a task's `inputs` and `grading` hashes, so adding, editing or removing one doesn't mark a task as changed. For a rule that a tool call or a record can show, measured as a rate without failing a trial, use a [soft invariant](#soft-invariants) (`soft: true`).
+```bash
+npx sandtable-ai judge .sandtable/runs/<run>/results.json --domain ./my-domain --dry-run
+```
+
+Criteria change no verdict, pass^k, gate or exit code. They aren't shown to the agent or the caller: neither one's prompt states them. They stay out of a task's `inputs` and `grading` hashes, so adding, editing or removing one doesn't mark a task as changed, and `results.json` says nothing about them until `judge` runs. For a rule that a tool call or a record can show, measured as a rate without failing a trial, use a [soft invariant](#soft-invariants) (`soft: true`).
 
 - `id` is required and not empty. It is unique across the domain's criteria and every task's: `validate` fails on a duplicate, and names both places.
 - `criterion` is required and not empty, and surrounding whitespace is trimmed. `${today+2d}` and `${now}` interpolate inside it, at the trial's clock. In a domain that sets a clock, `validate` fails on a malformed offset, and on one where a task's trials have no clock. See [clock and relative dates](#clock-and-relative-dates).
-- `source` and `review` work as they do on an invariant. A `review: pending` criterion shows in `sandtable review` and fails `validate --strict`, but doesn't make a run provisional, since it can't change the score: it isn't in the run's `pendingReview`.
+- `source` and `review` work as they do on an invariant. A `review: pending` criterion shows in `sandtable review` and fails `validate --strict`, but doesn't make a run provisional, since it can't change the score: it isn't in the run's `pendingReview`. The terminal says so when the judged score rests on one.
 
 ## personas and tasks
 

@@ -2,6 +2,7 @@ import { OWNERS } from "../run/attribution.ts";
 import { comparisonOf, type Comparison, type TaskChange } from "../run/compare.ts";
 import { gradedOutcomes, skippedTrials, tagsBelowFloor, trialStatus, type SoftScore, type SuiteResult, type TaskSummary } from "../run/suite.ts";
 import { costOf, totalTokens, type UsageByModel } from "../run/usage.ts";
+import type { JudgedCounts } from "../judge/summary.ts";
 
 const useColor = process.stdout.isTTY && !process.env.NO_COLOR;
 const paint = (code: number) => (s: string) => (useColor ? `\x1b[${code}m${s}\x1b[0m` : s);
@@ -86,6 +87,32 @@ function taskNote(t: TaskSummary): string {
   const skipped = t.skipped ? `${t.skipped} skipped` : "";
   if (t.verdict === "flaky") return skipped ? `${yellow("flaky")}${dim(`, ${skipped}`)}` : yellow("flaky");
   return dim(skipped);
+}
+
+/**
+ * The judged score, apart from pass^k and labelled as a model's judgement: the run's score, one line per criterion, and
+ * what the judge's calls used and cost. Empty for a run that was never judged.
+ */
+export function renderJudged(r: SuiteResult): string[] {
+  const j = r.judged;
+  if (!j) return [];
+  const score = (c: JudgedCounts) => (c.score === null ? "n/a" : formatPercent(c.score));
+  const tally = (c: JudgedCounts) => [`${c.pass} pass`, `${c.fail} fail`, ...(c.notApplicable ? [`${c.notApplicable} not applicable`] : [])].join(", ");
+  const lines = [bold("  Judged score") + dim(" (a model's judgement: it never changes pass/fail, pass^k, a gate or an exit code)")];
+  lines.push(`  ${bold("judged")} ${score(j)}  ${tally(j)}${j.notJudged ? `, ${j.notJudged} not judged` : ""}${j.models.length ? `, by ${j.models.join(", ")}` : ""}`);
+  const width = Math.max(0, ...j.criteria.map((c) => c.id.length));
+  for (const c of j.criteria) {
+    const verdicts = c.pass + c.fail + c.notApplicable > 0 ? tally(c) : "no verdict yet";
+    lines.push(`  ${c.id.padEnd(width)}  ${score(c).padStart(6)}  ${dim(verdicts)}${c.pending ? `  ${yellow("pending")}` : ""}`);
+  }
+  // Only a pass or a fail moves the score. "Provisional" means the run's own pendingReview, which a criterion isn't in.
+  const resting = j.criteria.filter((c) => c.pending && c.pass + c.fail > 0).map((c) => c.id);
+  if (resting.length) lines.push(yellow(`  ⚠ this score rests on ${resting.length === 1 ? "1 criterion" : `${resting.length} criteria`} still pending review: ${resting.join(", ")} (npx sandtable-ai review <domain>)`));
+  const failed = r.tasks.flatMap((t) => t.trials).filter((tr) => tr.judged?.error !== undefined).length;
+  if (failed) lines.push(yellow(failed === 1 ? "  1 trial's judge call failed: run npx sandtable-ai judge again to send it again" : `  ${failed} trials' judge calls failed: run npx sandtable-ai judge again to send them again`));
+  const usage = tokenLine("judge", j.usage);
+  if (usage) lines.push(dim(`  estimated cost ${formatCost(j.costUsd)}`), dim(`    ${usage}`));
+  return lines;
 }
 
 /**
@@ -189,6 +216,9 @@ export function renderTerminal(r: SuiteResult, opts: { baseline?: string } = {})
     const sw = Math.max(...soft.map((x) => x.id.length));
     for (const x of soft) lines.push(`  ${x.id.padEnd(sw)}  ${softLine(x)}`);
   }
+
+  const judged = renderJudged(r);
+  if (judged.length) lines.push("", ...judged);
 
   const flaky = r.tasks.filter((t) => t.verdict === "flaky");
   if (flaky.length) {

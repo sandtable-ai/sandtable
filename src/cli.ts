@@ -6,14 +6,16 @@ import { fileURLToPath } from "node:url";
 import { Command, InvalidArgumentError, Option } from "commander";
 import { freightScriptedAgent } from "./demo/freight-agents.ts";
 import { DEMO_USER_MODEL, demoLiveSides } from "./demo/live.ts";
-import { draftUsageLines, formatPercent, renderCompare, renderTerminal } from "./report/terminal.ts";
+import { draftUsageLines, formatPercent, renderCompare, renderJudged, renderTerminal } from "./report/terminal.ts";
 import { renderHtml } from "./report/html.ts";
 import { renderCustomerHtml } from "./report/customer.ts";
 import { everyTrialFailed, runSuite, trialStatus, type SuiteResult } from "./run/suite.ts";
 import { runGates } from "./run/gates.ts";
 import { startWorldServer } from "./serve/server.ts";
 import { DEFAULT_IDLE_TIMEOUT, MAX_IDLE_TIMEOUT, serveConversations } from "./serve/driven.ts";
-import { changedVerdicts, RegradeError, regradeSuite } from "./run/regrade.ts";
+import { changedVerdicts, droppedVerdicts, RegradeError, regradeSuite } from "./run/regrade.ts";
+import { DEFAULT_JUDGE_MODEL, judgeBlocker, judgeInputsWarning, judgePlan, judgePlanLine, judgeSuite } from "./judge/judge.ts";
+import { droppedLine, statesCriteria } from "./judge/summary.ts";
 import { baselineSnapshot, checkBaseline, compareRuns, regressions, type Comparison } from "./run/compare.ts";
 import { readResults, readUserFile, readUserText, userPathError } from "./run/read.ts";
 import { writeFileAtomic } from "./run/write.ts";
@@ -1046,8 +1048,79 @@ program
     for (const j of [...new Set(["1", String(result.k)])]) {
       if (stored.passHat[j] !== result.passHat[j]) console.log(`  pass^${j} ${formatPercent(stored.passHat[j] ?? 0)} → ${formatPercent(result.passHat[j] ?? 0)}`);
     }
+    const dropped = droppedVerdicts(domain, stored, result);
+    if (dropped.length) console.log(`  ${droppedLine(dropped)}`);
     const out = await save(result, o.out ?? path.dirname(resultsPath), o.html);
     console.log(`\n  results: ${path.join(out, "results.json")}${o.html ? `\n  report:  ${path.join(out, "report.html")}` : ""}`);
+  });
+
+withProviderFlags(program
+  .command("judge"))
+  .argument("<results>", "path to a results.json")
+  .description("score a past run's stored trials on the domain's judged criteria with a model: a judged score, apart from pass/fail, pass^k, gates and exit codes")
+  // As for regrade: results.json records only the domain's name, so the domain itself is always given.
+  .usage("<results> -d <dir> [options]")
+  .requiredOption("-d, --domain <dir>", "(required) the domain the run used: a directory (with sandtable.yaml) or the file itself")
+  .option("-m, --model <id>", "the Claude model that judges", DEFAULT_JUDGE_MODEL)
+  .option("-o, --out <dir>", "output directory for results.json and report.html (default: the results' own directory, replacing them)")
+  .option("-c, --concurrency <n>", "judge calls in parallel", int, 4)
+  .option("--dry-run", "print the plan and stop: no model call, nothing written, no credentials needed")
+  .option("--no-html", "skip the HTML report")
+  .action(async (resultsPath: string, o: { domain: string; model: string; out?: string; concurrency: number; dryRun?: boolean; html: boolean } & ProviderFlags) => {
+    const stored = await readResults(resultsPath, "judge");
+    const domain = await loadDomain(await resolveDomain(o.domain));
+    const blocker = judgeBlocker(domain, stored);
+    if (blocker) throw new Error(`can't judge ${resultsPath}: ${blocker}${stored.domain !== domain.name ? `. Pass the --domain the run used: the one whose sandtable.yaml has \`name: ${stored.domain}\`` : ""}`);
+    if (!statesCriteria(domain, stored)) {
+      console.log(`${domain.name} states no judged criteria for the tasks of this run, so there is nothing to judge.`);
+      return;
+    }
+    const claude = { ...providerOpts(o), model: o.model };
+    const warning = judgeInputsWarning(domain, stored);
+    if (warning) console.log(`  ! ${warning}`);
+    const plan = judgePlan(domain, stored, claude);
+    console.log(judgePlanLine(plan));
+    if (plan.dropped.length) console.log(`  ${droppedLine(plan.dropped)}`);
+    if (o.dryRun) {
+      console.log("Dry run: no model was called and nothing was written. Run the same command without --dry-run to judge.");
+      return;
+    }
+    if (plan.calls === 0 && !stored.judged) {
+      console.log("No trial to judge, since each one was skipped, so nothing was written.");
+      return;
+    }
+    const out = o.out ?? path.dirname(resultsPath);
+    const results = path.join(out, "results.json");
+    // One write at a time, in order, after each trial, so Ctrl-C loses at most the calls in flight.
+    let writing = Promise.resolve();
+    const outcome = await judgeSuite({
+      domain,
+      stored,
+      claude,
+      concurrency: o.concurrency,
+      onTrial: ({ trial, result, warnings }) => {
+        const label = `${trial.taskId} trial ${trial.trial + 1}`;
+        const tally = (verdict: string, word: string) => {
+          const n = trial.judged!.verdicts.filter((v) => v.verdict === verdict).length;
+          return n ? [`${n} ${word}`] : [];
+        };
+        const verdicts = [...tally("pass", "pass"), ...tally("fail", "fail"), ...tally("not_applicable", "not applicable")].join(", ");
+        console.log(trial.judged!.error !== undefined ? `  ! ${label}: the judge call failed: ${trial.judged!.error}` : `  ${label}: ${verdicts || "no verdict"}`);
+        for (const w of warnings) console.log(`  ! ${w}`);
+        writing = writing.then(() => save(result, out, false).then(() => undefined));
+        return writing;
+      },
+    });
+    await writing;
+    if (outcome.stopped) {
+      const kept = outcome.sent ? ` What was judged is in ${results}, and running judge again sends only the rest.` : "";
+      throw new Error(`judge stopped: ${outcome.stopped.error}\n${outcome.stopped.notJudged} trial(s) were not judged.${kept}`);
+    }
+    await save(outcome.result, out, o.html);
+    console.log(`\nsandtable judge · ${outcome.result.domain} · agent ${outcome.result.agent}\n`);
+    console.log(renderJudged(outcome.result).join("\n"));
+    if (outcome.failed) console.log(`\n  ${outcome.failed} of ${outcome.sent} judge call(s) failed, each kept as judged.error on its trial: the judged score leaves them out`);
+    console.log(`\n  results: ${results}${o.html ? `\n  report:  ${path.join(out, "report.html")}` : ""}`);
   });
 
 program

@@ -1,6 +1,7 @@
 import { gradeTrial, isSkipped, type CheckResult } from "../grade/expectations.ts";
 import { checkTranscript, invariantTool, type CallRecord, type FaultApplied, type Violation } from "../grade/invariants.ts";
 import { resolveTrial, type ResolvedPhrase } from "../spec/clock.ts";
+import type { TrialJudgement } from "../judge/summary.ts";
 import type { Domain, Task } from "../spec/schema.ts";
 import { agentSystemPrompt, taskContext, type AgentPromptOptions } from "../sim/prompts.ts";
 import type { AgentAdapter, CallTool, UserSimulator } from "../sim/types.ts";
@@ -77,6 +78,11 @@ export interface TrialResult {
    * Absent in results from before attribution, until `sandtable regrade` re-scores them.
    */
   attribution?: Attribution;
+  /**
+   * What `sandtable judge` found on the trial's judged criteria: a model's verdicts, never a reason to change `passed`.
+   * Absent until it is judged.
+   */
+  judged?: TrialJudgement;
   events: TrajectoryEvent[];
   changes: Change[];
   endReason: EndReason;

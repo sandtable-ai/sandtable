@@ -37,6 +37,7 @@ The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`
 | `skipped` | number | trials skipped across the run; `run` exits 2 when it isn't 0 |
 | `callerNotes` | object | `{ turns, trials }`: how many caller turns stepped out of role (see each trial's [`callerNotes`](#callernote)), and in how many trials. Absent in results from before caller notes |
 | `attribution` | object | `{ agent, "simulated-user", "task-spec", harness }`: how many trials that didn't pass (failed or skipped) each trial's [`attribution`](#attribution) names, every owner listed. No score depends on it. Absent in results from before attribution, until [`regrade`](/reference/cli#regrade) re-scores them |
+| `judged` | [`JudgedSummary`](#judgedsummary) | present once [`sandtable judge`](/reference/cli#judge) has judged a trial or paid for a call: the judged score, apart from pass^k, and what the judge's calls used. It changes no other field |
 | `failureModes` | `FailureMode[]` | failed checks clustered across graded trials, most frequent first; a skipped trial's error is not one |
 | `byTag` | `TagScore[]` | scores per task tag (`untagged` for tasks without tags), weakest first |
 | `soft` | `SoftScore[]` | one entry per soft invariant in the domain, in spec order; empty when there are none |
@@ -62,7 +63,29 @@ The TypeScript types are exported from the package (`SuiteResult`, `TrialResult`
 | `verdict` | string | `passed` (every graded trial passed), `failed` (none did), `flaky` (some did) or `skipped` (no trial was graded) |
 | `interval` | object | `low` and `high`: the 95% Wilson score interval for `passes / graded`, from 0 to 1; absent when no trial was graded |
 | `inputs` | string | a short hash of what the agent and the caller are given for this task and the world they act in: the policy, every tool's definition, the caller's prompt, opening and turn limit, the script under `--user scripted`, and the seed rows with the task's `given.rows`. [`--baseline`](/reference/cli#compare-with-a-baseline) labels a task whose hash changed as `changed`. Absent in results from before it |
+| `judged` | [`JudgedCounts`](#judgedcounts) | present once a trial of the task has a judged verdict: those verdicts counted; never changes `passes` or `verdict` |
 | `grading` | string | a short hash of how this task's trials are graded: its `expect` and `critical`, and every invariant with its `soft` flag. A drafted item's `review` is left out, so accepting it keeps the hash. Absent in results from before it |
+
+### JudgedCounts
+
+What `sandtable judge`'s verdicts come to, for a task (`TaskSummary.judged`, present once a trial of the task has a verdict), a criterion, or the run.
+
+| Field | Type | Description |
+|---|---|---|
+| `pass`, `fail`, `notApplicable` | number | verdicts of each kind. `notApplicable`: the situation the criterion describes never arose |
+| `score` | number or null | `pass / (pass + fail)`, a fraction; `null` with neither. `not_applicable` and not-judged pairs are outside it. It is a rate over verdicts, not pass^k |
+
+### JudgedSummary
+
+The run's judged score: [`JudgedCounts`](#judgedcounts), and:
+
+| Field | Type | Description |
+|---|---|---|
+| `models` | string[] | the models whose verdicts the trials hold |
+| `notJudged` | number | trial-and-criterion pairs with no verdict: a skipped trial, a failed call or a criterion the judge left out |
+| `criteria` | object[] | per criterion, in spec order: `id`, its `JudgedCounts`, and `pending: true` for a criterion still `review: pending` |
+| `usage` | `UsageByModel` | the judge's tokens, every call for this file's verdicts included. `SuiteResult.usage` never has them |
+| `costUsd` | number or null | estimated USD at list prices for `usage`; `null` when a model has no known price |
 
 ### FailureMode
 
@@ -177,6 +200,7 @@ What a run made with `--baseline` keeps of the earlier run, so the terminal summ
 | `violations` | `Violation[]` | hard invariant violations; any one fails the trial |
 | `soft` | `SoftCheck[]` | each soft invariant that applied in this trial, and whether it was broken |
 | `callerNotes` | `CallerNote[]` | present when the simulated user stepped out of its role in some turn; never changes `passed` |
+| `judged` | [`TrialJudgement`](#trialjudgement) | present once [`sandtable judge`](/reference/cli#judge) has sent the trial: a model's verdicts on its criteria; never changes `passed` |
 | `attribution` | `Attribution` | present on a trial that didn't pass (failed or skipped): its most likely owner and the evidence; never changes `passed` |
 | `events` | `TrajectoryEvent[]` | the conversation and tool calls, in order |
 | `changes` | `Change[]` | the difference between the world's seed and its final state |
@@ -238,6 +262,27 @@ A first suspect for a trial that didn't pass, from deterministic evidence only: 
 | `agent` | anything else | `nothing points at the caller, the task or the harness; first failed check: <id>: <detail>` |
 
 `agent` is the default, not a finding. A caller that drifted without stepping out of its role, or a task that lint can't prove wrong, such as a rule stricter than the SOP or a seed row that contradicts the caller's instructions, stays with the agent until someone reads the transcript. Since attribution is decided from the stored trial and the domain, `regrade` decides it again under the domain as it is now.
+
+### TrialJudgement
+
+A model's verdicts on one trial's judged criteria. A verdict can differ between runs, and none of them decides pass or fail.
+
+| Field | Type | Description |
+|---|---|---|
+| `model` | string | the model that gave the verdicts, as asked for with `-m` |
+| `verdicts` | object[] | one per criterion judged, in spec order: see below |
+| `error` | string | present when the last call for this trial failed. The next `judge` sends it again; the verdicts it already has stay until a call replaces them |
+
+Each verdict:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | the criterion's id |
+| `criterion` | string | its text as resolved at the trial's clock: what the judge read. `regrade` and `judge` drop a verdict when this no longer matches |
+| `verdict` | `"pass"`, `"fail"`, `"not_applicable"` | `not_applicable`: the situation the criterion describes never arose in this conversation |
+| `quote` | string | from the transcript, supporting the verdict; absent when the judge gave none |
+| `quoteFound` | `false` | present only when the quote isn't in the transcript, compared with whitespace normalized and ignoring case. The verdict stays |
+| `reason` | string | why, in one sentence |
 
 ### TrajectoryEvent
 

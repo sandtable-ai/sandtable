@@ -1,4 +1,5 @@
 import type { AgentPromptOptions } from "../sim/prompts.ts";
+import { appliedCriteria, pruneVerdicts, staleBecause, withJudgedSummary, type AppliedCriterion, type CriteriaOf } from "../judge/summary.ts";
 import { isClockTime, resolveDates, writtenClock } from "../spec/clock.ts";
 import type { Domain, Task } from "../spec/schema.ts";
 import { worldFor } from "../world/store.ts";
@@ -70,19 +71,50 @@ export function regradeTrial(written: Domain, trial: TrialResult, prompt: AgentP
 }
 
 /**
+ * The criteria that apply to a stored trial, with dates resolved at the clock `regrade` would resolve them at. Call
+ * it once a run is known to have no blocker: a `clock: now` trial with no clock throws.
+ */
+export function storedCriteria(domain: Domain): CriteriaOf {
+  const resolved = new Map<string, AppliedCriterion[]>();
+  return (trial) => {
+    const task = domain.tasks.find((t) => t.id === trial.taskId);
+    if (!task || (!domain.judged?.length && !task.judged?.length)) return [];
+    const clock = regradeClock(domain, task, trial);
+    const key = `${task.id}\n${clock ?? ""}`;
+    if (!resolved.has(key)) resolved.set(key, appliedCriteria(domain, task, clock));
+    return resolved.get(key)!;
+  };
+}
+
+/** Why a stored run isn't one of `domain`'s, or undefined when it is: it names this domain, and its tasks still exist. */
+export function runBlocker(domain: Domain, stored: SuiteResult): string | undefined {
+  if (stored.domain !== domain.name) return `it is a run of ${stored.domain}, not ${domain.name}`;
+  const gone = stored.tasks.map((t) => t.id).filter((id) => !domain.tasks.some((t) => t.id === id));
+  if (gone.length) return `${gone.length === 1 ? "task" : "tasks"} ${gone.join(", ")} ${gone.length === 1 ? "is" : "are"} no longer in the domain`;
+  return undefined;
+}
+
+/** Why nothing shows the agent and the caller would be given the same prompts now, or undefined when they would. */
+export function inputsBlocker(domain: Domain, stored: SuiteResult): string | undefined {
+  if (!stored.inputs) return "it was written by an older sandtable and records no inputs fingerprint, so nothing shows the agent and the caller would be given the same prompts";
+  if (stored.inputs !== inputsFingerprint(domain, stored.tasks.map((t) => t.id), stored.user, promptOf(stored))) {
+    return "the agent or the caller would be given something else now: the policy, a tool's schema, the clock, or a task's caller prompt, opening, script or turn limit changed since it ran";
+  }
+  return undefined;
+}
+
+/**
  * Why a stored run can't be re-scored under `domain`, or undefined when it can: it must be a run of this
  * domain, its tasks must still exist, the agent and the caller must be given the same prompts now
  * (seed records and tool behaviour are checked call by call, as each trial is replayed), and the trials of a task
  * with `clock: now` must have recorded the clock they ran at.
  */
 export function regradeBlocker(domain: Domain, stored: SuiteResult): string | undefined {
-  if (stored.domain !== domain.name) return `it is a run of ${stored.domain}, not ${domain.name}`;
-  const gone = stored.tasks.map((t) => t.id).filter((id) => !domain.tasks.some((t) => t.id === id));
-  if (gone.length) return `${gone.length === 1 ? "task" : "tasks"} ${gone.join(", ")} ${gone.length === 1 ? "is" : "are"} no longer in the domain`;
-  if (!stored.inputs) return "it was written by an older sandtable and records no inputs fingerprint, so nothing shows the agent and the caller would be given the same prompts";
-  if (stored.inputs !== inputsFingerprint(domain, stored.tasks.map((t) => t.id), stored.user, promptOf(stored))) {
-    return "the agent or the caller would be given something else now: the policy, a tool's schema, the clock, or a task's caller prompt, opening, script or turn limit changed since it ran";
-  }
+  return runBlocker(domain, stored) ?? inputsBlocker(domain, stored) ?? clockBlocker(domain, stored);
+}
+
+/** Why a stored run's dates can't be resolved again, or undefined when they can: see regradeClock. */
+export function clockBlocker(domain: Domain, stored: SuiteResult): string | undefined {
   const unclocked = stored.tasks.find((s) => {
     const task = domain.tasks.find((t) => t.id === s.id)!;
     return writtenClock(domain, task) === "now" && s.trials.some((tr) => tr.clock === undefined);
@@ -117,10 +149,26 @@ export function regradeSuite(domain: Domain, stored: SuiteResult): SuiteResult {
   const tasks = stored.tasks.map((s) => domain.tasks.find((t) => t.id === s.id)!);
   const prompt = promptOf(stored);
   const trials = stored.tasks.flatMap((s) => s.trials.map((trial) => regradeTrial(domain, trial, prompt)));
-  return {
+  const regraded: SuiteResult = {
     ...stored,
     sandtable: { ...stored.sandtable, regradedWith: version },
     ...summarize(domain, tasks, trials, stored.k, stored.user, prompt),
     pendingReview: runPendingReview(domain),
   };
+  if (!stored.judged) return regraded;
+  // Judged verdicts aren't graded here, and no model is called: each stays while its criterion's text does.
+  const criteriaOf = storedCriteria(domain);
+  return withJudgedSummary({ ...regraded, tasks: regraded.tasks.map((t) => ({ ...t, trials: t.trials.map((tr) => pruneVerdicts(tr, criteriaOf(tr))) })) }, criteriaOf);
+}
+
+/** Why each stored judged verdict in `before` isn't in `after`, a regrade of it: one reason per verdict dropped. */
+export function droppedVerdicts(domain: Domain, before: SuiteResult, after: SuiteResult): string[] {
+  const criteriaOf = storedCriteria(domain);
+  const now = new Map(after.tasks.flatMap((t) => t.trials.map((tr) => [`${tr.taskId}#${tr.trial}`, tr] as const)));
+  return before.tasks.flatMap((t) =>
+    t.trials.flatMap((tr) => {
+      const regraded = now.get(`${tr.taskId}#${tr.trial}`) ?? tr;
+      return (tr.judged?.verdicts ?? []).flatMap((v) => staleBecause(v, regraded, criteriaOf(regraded)) ?? []);
+    }),
+  );
 }
