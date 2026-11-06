@@ -9,6 +9,7 @@ import { DEMO_USER_MODEL, demoLiveSides } from "./demo/live.ts";
 import { draftUsageLines, formatPercent, renderCompare, renderJudged, renderJudgedChanges, renderTerminal } from "./report/terminal.ts";
 import { renderHtml } from "./report/html.ts";
 import { renderCustomerHtml } from "./report/customer.ts";
+import { renderMarkdown } from "./report/markdown.ts";
 import { everyTrialFailed, runSuite, trialStatus, type SuiteResult } from "./run/suite.ts";
 import { runGates } from "./run/gates.ts";
 import { startWorldServer } from "./serve/server.ts";
@@ -1101,16 +1102,38 @@ withProviderFlags(program
     console.log(`    ${NEXT} init --openapi api.yaml --sop sop.md -o mine`);
   });
 
+/** `report --markdown`: the summary on stdout for `-`, with nothing else there, or in that file, saying which. */
+async function writeMarkdown(result: SuiteResult, file: string): Promise<void> {
+  const text = renderMarkdown(result);
+  if (file === "-") {
+    process.stdout.write(text);
+    return;
+  }
+  const fix = "Pass a path for the summary, or - for stdout.";
+  const folder: OutFolder = { from: "--markdown", ifFile: fix };
+  await prepareOutFolder(path.dirname(file), folder);
+  await writeFile(file, text).catch(async (err: NodeJS.ErrnoException) => {
+    throw err.code === "EISDIR" ? new Error(`--markdown: ${file} is a folder, not a file. ${fix}`) : await outFolderError(err, path.dirname(file), folder);
+  });
+  console.log(file);
+}
+
 program
   .command("report")
   .argument("<results>", "path to a results.json")
-  .description("re-render the HTML report for a past run, or write the page a customer signs off on before go-live")
+  .description("re-render the HTML report for a past run, write the page a customer signs off on before go-live, or write a Markdown summary for a CI job summary or a pull request comment")
   .option("-o, --out <path>", "a folder to write the report into, as run's and regrade's -o, or a path ending in .html (default: next to results.json)")
   .option("--audience <who>", "engineer: the full report, report.html; customer: a plain-language page to sign off on, customer-report.html", audience, "engineer")
   .option("--probe <results>", "with --audience customer: a run of a deliberately careless agent on the same domain; the rules it broke show as caught")
-  .action(async (resultsPath: string, o: { out?: string; audience: (typeof AUDIENCES)[number]; probe?: string }, command: Command) => {
+  .option("--markdown <file>", "write a Markdown summary of the run to this file, for a CI job summary or a pull request comment, instead of the HTML report unless -o asks for that too; - prints it to stdout")
+  .action(async (resultsPath: string, o: { out?: string; audience: (typeof AUDIENCES)[number]; probe?: string; markdown?: string }, command: Command) => {
     if (o.probe !== undefined && o.audience !== "customer") command.error("error: --probe is for --audience customer: it shows which rules the rehearsal caught a careless agent breaking");
+    if (o.markdown !== undefined && o.audience === "customer") command.error("error: --markdown is a summary for engineers, so it doesn't go with --audience customer, which has its own page");
     const result = await readResults(resultsPath, "report");
+    if (o.markdown !== undefined) {
+      await writeMarkdown(result, o.markdown);
+      if (o.out === undefined) return;
+    }
     let page: string;
     if (o.audience === "customer") {
       needCoverage(result, resultsPath);
@@ -1130,7 +1153,7 @@ program
     await writeFile(out, page).catch(async (err: unknown) => {
       throw await outFolderError(err, path.dirname(out), folder);
     });
-    console.log(out);
+    (o.markdown === "-" ? console.error : console.log)(out);
   });
 
 program

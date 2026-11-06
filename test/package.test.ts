@@ -76,8 +76,8 @@ describe("npm package", () => {
   });
 
   it.skipIf(!built)("stays small", () => {
-    // About 1.18 MB in 1.5, with the clock, the negotiation rules, three platform importers, serve's idle timeout and the
-    // judge; a source map or a stray folder is still far more.
-    expect(unpackedSize).toBeLessThan(1_250_000);
+    // About 1.24 MB in 1.5, with the clock, the negotiation rules, three platform importers, serve's idle timeout, the
+    // judge, calibrate and the Markdown summary; a source map or a stray folder is still far more.
+    expect(unpackedSize).toBeLessThan(1_300_000);
   });
 });
