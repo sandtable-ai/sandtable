@@ -217,7 +217,7 @@ function checkFloors(floors: Record<string, number> | undefined, tasks: readonly
 const tagsOf = (t: { tags: string[] }) => (t.tags.length ? t.tags : ["untagged"]);
 
 /**
- * The tasks `run` runs: those `--tasks` names, those carrying at least one `--tag` tag, or, with both, the tasks in
+ * The tasks `run` and `leaderboard` run: those `--tasks` names, those carrying at least one `--tag` tag, or, with both, the tasks in
  * both. Checked before any trial, so an unknown task id, a tag no task carries or two filters with no task in common
  * fail the command instead of running nothing.
  */
@@ -981,15 +981,18 @@ withProviderFlags(program
   .option("-u, --user <spec>", "simulated user for every model (overrides the models file; default claude)")
   .option("-k, --trials <n>", "trials per task (overrides the models file; default 4)", int)
   .option("-t, --tasks <ids>", "comma-separated task ids to run, for every model and the baseline (repeatable)", taskList)
+  .option("--tag <tags>", "run only the tasks with at least one of these comma-separated tags, for every model and the baseline (untagged: tasks with none; repeatable); with --tasks, the tasks in both", tagList)
   .option("-c, --concurrency <n>", "episodes in parallel per model", int, 4)
   .option("--openai-base-url <url>", "OpenAI-compatible endpoint for openai:<model> entries")
   .option("-o, --out <dir>", "output directory (default: leaderboard/<domain name>)")
   .option("--no-resume", "rerun every model and replace its stored results")
   .option("--prices <file>", PRICES_HELP)
-  .action(async (domainPath: string, o: { models: string; user?: string; trials?: number; tasks?: TaskList; concurrency: number; openaiBaseUrl?: string; out?: string; resume: boolean; prices?: string } & ProviderFlags) => {
+  .action(async (domainPath: string, o: { models: string; user?: string; trials?: number; tasks?: TaskList; tag?: string[]; concurrency: number; openaiBaseUrl?: string; out?: string; resume: boolean; prices?: string } & ProviderFlags) => {
     warnEmptyTasks(o.tasks);
     const prices = await loadPrices(o.prices);
     const domain = await loadDomain(await resolveDomain(domainPath));
+    const selected = selectTasks(domain, o.tasks?.ids, o.tag);
+    const taskIds = selected.length < domain.tasks.length ? selected.map((t) => t.id) : undefined;
     const parsed = ModelsFile.safeParse(YAML.parse(await readUserText(o.models, { from: "--models" })));
     if (!parsed.success) throw new Error(`${o.models}:\n${z.prettifyError(parsed.error)}`);
     const cfg = parsed.data;
@@ -1006,14 +1009,12 @@ withProviderFlags(program
     const k = o.trials ?? cfg.k ?? 4;
     const out = o.out ?? path.join("leaderboard", domain.name);
     await prepareOutFolder(out, outFolder("leaderboard", o.out, "the board and each model's results"));
-    const taskIds = o.tasks?.ids;
-    const tasks = taskIds?.length ? taskIds.length : domain.tasks.length;
     const runInfo: RunInfo = {
       sandtable: { version, ...sandtableCommit() },
       ...(uses.claude ? { provider: providerOf(p) } : {}),
       ...(region ? { region } : {}),
     };
-    console.log(`Leaderboard: ${cfg.models.length} model(s) on ${domain.name} (${tasks} tasks, k=${k}, caller ${user.name})\n`);
+    console.log(`Leaderboard: ${cfg.models.length} model(s) on ${domain.name} (${selected.length} tasks, k=${k}, caller ${user.name})\n`);
     if (runInfo.sandtable.dirty) console.log("  ! the sandtable checkout has uncommitted changes: run.json records the commit, not them\n");
     const mark = { cached: "↺ cached  ", regraded: "↻ regraded", ran: "✓ ran     ", failed: "✗ failed  ", skipped: "- skipped " } as const;
     const result = await runLeaderboard({
@@ -1021,7 +1022,7 @@ withProviderFlags(program
       entries: cfg.models,
       user,
       k,
-      ...(taskIds?.length ? { taskIds } : {}),
+      ...(taskIds ? { taskIds } : {}),
       outDir: out,
       concurrency: o.concurrency,
       resume: o.resume,
