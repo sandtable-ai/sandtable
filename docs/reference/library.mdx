@@ -63,6 +63,9 @@ An agent is an `AgentAdapter`: a `name`, and `createSession(ctx)` that returns a
 | `judgeSuite({ domain, stored, claude?, concurrency?, onTrial? }): Promise<JudgeOutcome>` | Has a model judge a stored run's trials on the domain's [judged criteria](/reference/spec#judged), as `sandtable judge` does, and returns the run with its judged fields, leaving every other field as stored, with what happened: `sent`, `failed`, `alreadyJudged`, `skipped`, `dropped`, `warnings` and, when a failure every later call would hit stopped it, `stopped`. `onTrial({ trial, result, warnings })` is called and awaited as each call settles, so `result` can be saved. It takes `claude.client` for a test. Throws before any call for a run it can't judge. |
 | `judgePlan(domain, stored, claude?): JudgePlan`, `judgePlanLine(plan)` | What judging would send and cost at most, and the line `judge` prints for it, without credentials or a model call. |
 | `DEFAULT_JUDGE_MODEL` | The model that judges unless `claude.model` says otherwise: `claude-sonnet-5-5`. |
+| `calibrate(results, labels): Calibration` | How often the judge whose verdicts `results` holds agrees with a person's labels, as `sandtable calibrate` reports it, with no I/O and no model call, so a team can gate on the numbers in its own code. `models` has one entry per model the trials hold, each with `tpr`, `tnr` and `agreement` as `{ rate, n }` (`rate` is `null` with no pairs behind it), `notApplicable` and `unlabelled`, the same counts per criterion in `criteria`, and the pairs in `disagreements` and `notApplicablePairs`. `noVerdict` lists the labelled pairs with no verdict and `why`: `skipped`, `failed`, `left_out` or `not_sent`. |
+| `parseLabels(text, file): CalibrationLabel[]` | The labels in the text of a YAML or JSON labels file. |
+| `CalibrationError` | The error `calibrate` and `parseLabels` throw, naming each entry, for a malformed labels file, a label that doesn't fit the run, or a run `judge` hasn't scored. |
 | `baselineSnapshot(result)` | The per-task results of a run, as `run --baseline` stores them in `results.json`. |
 | `compareRuns(baseline, now): Comparison` | What changed per task between a baseline snapshot and a new run: broken, worse, fixed, better, changed, added, removed. |
 | `criticalFailures(result)` | The critical tasks with a failed trial, which make `run` exit 1. |
@@ -94,6 +97,7 @@ Every type the package exports, by what it describes. Like the values above, the
 | Serving the world | `WorldServer`, `WorldServerOptions`, `ServedSession` |
 | Reports | `CustomerReportOptions` |
 | Judging a run | `JudgeOptions`, `JudgeOutcome`, `JudgePlan`, `JudgedVerdict`, `TrialJudgement`, `JudgedCounts`, `JudgedSummary` |
+| Calibrating a judge | `Calibration`, `ModelCalibration`, `CalibrationCounts`, `CalibrationRate`, `CalibrationLabel`, `LabelledVerdict`, `LabelWithNoVerdict` |
 | Comparing runs, and lint | `BaselineSnapshot`, `Comparison`, `TaskDelta`, `TaskChange`, `LintReport`, `TaskLint`, `RuleLint` |
 
 ## Example: a suite in your test runner

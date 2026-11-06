@@ -329,6 +329,8 @@ tasks:
 npx sandtable-ai judge .sandtable/runs/<run>/results.json --domain ./my-domain --dry-run
 ```
 
+To learn how far to trust a judge on your criteria, [calibrate it against a person's labels](/guides/calibrate-judged).
+
 Criteria change no verdict, pass^k, gate or exit code. They aren't shown to the agent or the caller: neither one's prompt states them. They stay out of a task's `inputs` and `grading` hashes, so adding, editing or removing one doesn't mark a task as changed, and `results.json` says nothing about them until `judge` runs. For a rule that a tool call or a record can show, measured as a rate without failing a trial, use a [soft invariant](#soft-invariants) (`soft: true`).
 
 - `id` is required and not empty. It is unique across the domain's criteria and every task's: `validate` fails on a duplicate, and names both places.
