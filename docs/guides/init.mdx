@@ -69,6 +69,7 @@ No model is involved: the same spec always produces the same draft.
 | `POST /orders/{id}/cancel` (no GET) | action: a `get` on the parent plus a review note to model the effect |
 | a body param named like another table's key | existence `check` on that table |
 | a body field that is an object, or an array of scalars or objects (`items: [{ sku, qty }]`) | a nested param with its `properties` or `items`, `$ref`s resolved, up to 3 levels deep; the op writes the whole value (`items: $items`) |
+| a `$ref` to a file in the spec's folder (`./schemas/loan.yaml`, `common.json#/components/schemas/Loan`) | read as if it were inline: YAML or JSON, with an optional JSON-pointer fragment, for a schema, a parameter, a response or a whole path item. Refs inside it resolve against that file, and a cycle across files stops as a local one does |
 | a schema composed with `allOf` | its members' properties and required lists merged, in bodies, responses and params |
 | a field or param named `@type` or `pickup-window` | param `at_type` or `pickup_window`, since `$` references only name letters, digits and `_`; the op still writes `"@type": $at_type` |
 | a `{param}` in the path that the spec doesn't declare | a required string param |
@@ -92,6 +93,19 @@ It also leaves out several things and lists them as warnings:
   - it is `/hub` or `/hub/{id}`, and `POST /hub` takes a callback URL
 
   A resource such as `/hubs`, `/listener/restart` or `/events/{id}/subscriptions` is still drafted.
+
+A `$ref` that `init` doesn't read gets a warning naming the ref and where it appears, and a review note on each tool that reaches it. `--dry-run` reads the same files and prints the same warnings. These aren't read:
+
+- a URL, since `init --openapi` makes no network call
+- a file that doesn't exist or doesn't parse, or a fragment with nothing at it
+- a file outside the spec's folder, by a `../` path, an absolute path or a symlink, so that a third-party spec can't pull a local file into your draft. `init` doesn't even check whether such a file exists
+
+If your spec really does use one of these, such as `../common/schemas.yaml`, bundle it first. That writes one file with every ref inlined, for `init` to draft from:
+
+```bash
+npx @redocly/cli bundle api.yaml -o bundled.yaml
+npx sandtable-ai init --openapi bundled.yaml -o my-domain
+```
 
 Tables with no examples get a `TODO: add seed rows` comment that lists the fields seen in the spec.
 

@@ -1,9 +1,10 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import { mkdir, mkdtemp, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import YAML from "yaml";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { promisify } from "node:util";
 import { draftFromOpenApi, openApiProblem, singularize, snake } from "../src/init/openapi.ts";
 import { DOMAIN_FILE, POLICY_PLACEHOLDER, renderDraft, TASKS_PLACEHOLDER, writeDraft } from "../src/init/render.ts";
@@ -756,5 +757,319 @@ describe("init from OpenAPI: a spec in FastAPI's shape", () => {
       },
     });
     expect(d.tools.map((t) => t.name)).toEqual(["get_items", "get_items_2", "get_items_3"]);
+  });
+});
+
+describe("init from OpenAPI: a $ref to another file", () => {
+  const str = { type: "string" };
+  const LOAN = { type: "object", required: ["book_id", "member_id"], properties: { loan_id: str, book_id: str, member_id: str, due_date: { type: "string", format: "date" } } };
+  /** The library API, with this schema where the loan's body and response go. */
+  const api = (schema: unknown, extra: Record<string, unknown> = {}) => ({
+    openapi: "3.0.3",
+    info: { title: "Fernhill Library", version: "1" },
+    paths: {
+      "/loans": {
+        post: {
+          operationId: "createLoan",
+          summary: "Lend a book to a member",
+          requestBody: { required: true, content: { "application/json": { schema } } },
+          responses: { "201": { description: "Created", content: { "application/json": { schema } } } },
+        },
+      },
+    },
+    ...extra,
+  });
+  const BUNDLE = "npx @redocly/cli bundle api.yaml -o bundled.yaml";
+
+  /** A folder holding these files (objects as YAML, text as it is), with api.yaml in it. */
+  async function folder(files: Record<string, unknown>) {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-refs-"));
+    for (const [name, content] of Object.entries(files)) {
+      await mkdir(path.dirname(path.join(dir, name)), { recursive: true });
+      await writeFile(path.join(dir, name), typeof content === "string" ? content : YAML.stringify(content));
+    }
+    return dir;
+  }
+  const draftIn = async (dir: string, name = "api.yaml") => draftFromOpenApi(YAML.parse(await readFile(path.join(dir, name), "utf8")) as Record<string, unknown>, path.join(dir, name));
+  const draftOf = async (files: Record<string, unknown>) => draftIn(await folder(files));
+
+  it("reads a relative YAML file, drafting what the same schema inline drafts", async () => {
+    const d = await draftOf({ "api.yaml": api({ $ref: "./schemas/loan.yaml" }), "schemas/loan.yaml": LOAN });
+    expect(d).toEqual(draftFromOpenApi(api(LOAN)));
+    expect(Object.keys(d.tools[0]!.params)).toEqual(["loan_id", "book_id", "member_id", "due_date"]);
+    expect(d.tables.loans!.fields).toContain("due_date");
+    expect(d.warnings).toEqual([]);
+    expect(d.tools[0]!.notes).toEqual([]);
+  });
+
+  it("reads a JSON file at a fragment", async () => {
+    const d = await draftOf({ "api.yaml": api({ $ref: "common.json#/components/schemas/Loan" }), "common.json": JSON.stringify({ components: { schemas: { Loan: LOAN, Other: { type: "object", properties: { nope: str } } } } }) });
+    expect(d).toEqual(draftFromOpenApi(api(LOAN)));
+  });
+
+  it("resolves refs inside a file against that file: a sibling, a parent's child, and its own #/ pointers", async () => {
+    const d = await draftOf({
+      "api.yaml": api({ $ref: "./schemas/loan.yaml" }),
+      "schemas/loan.yaml": { type: "object", properties: { book: { $ref: "./book.yaml" }, member_id: { $ref: "../shared/ids.yaml#/member_id" }, due_date: { $ref: "#/$defs/due" } }, $defs: { due: { type: "string", description: "due date" } } },
+      "schemas/book.yaml": { type: "object", required: ["isbn"], properties: { isbn: str } },
+      "shared/ids.yaml": { member_id: { type: "integer" } },
+    });
+    expect(d.tools[0]!.params).toMatchObject({
+      book: { type: "object", properties: { isbn: { type: "string", required: true } } },
+      member_id: { type: "integer" },
+      due_date: { type: "string", description: "due date" },
+    });
+    expect(d.warnings).toEqual([]);
+  });
+
+  it("follows a file's ref back into the spec", async () => {
+    const d = await draftOf({ "api.yaml": api({ $ref: "./schemas/loan.yaml" }, { components: { schemas: { Id: { type: "integer" } } } }), "schemas/loan.yaml": { type: "object", properties: { loan_id: { $ref: "../api.yaml#/components/schemas/Id" } } } });
+    expect(d.tools[0]!.params.loan_id).toMatchObject({ type: "integer" });
+    expect(d.warnings).toEqual([]);
+  });
+
+  it("stops at a cycle across two files, as for local refs", async () => {
+    const d = await draftOf({
+      "api.yaml": api({ $ref: "./a.yaml" }),
+      "a.yaml": { type: "object", properties: { title: str, next: { $ref: "./b.yaml" } } },
+      "b.yaml": { type: "object", properties: { back: { $ref: "./a.yaml" } } },
+    });
+    expect(d.tools).toHaveLength(1);
+    const chain = await draftOf({ "api.yaml": api({ $ref: "./a.yaml" }), "a.yaml": { $ref: "./b.yaml" }, "b.yaml": { $ref: "./a.yaml" } });
+    expect(chain.tools).toHaveLength(1);
+    const self = await draftOf({ "api.yaml": api({ $ref: "./tree.yaml" }), "tree.yaml": { type: "object", properties: { name: str, parent: { $ref: "#" } } } });
+    expect(self.tables.loans!.fields).toEqual(expect.arrayContaining(["name", "parent"]));
+  });
+
+  it("reads a path item, a parameter and a response from their files", async () => {
+    const d = await draftOf({
+      "api.yaml": { openapi: "3.0.3", info: { title: "Lib", version: "1" }, paths: { "/loans": { $ref: "./paths/loans.yaml" } } },
+      "paths/loans.yaml": {
+        get: { operationId: "listLoans", parameters: [{ $ref: "../params.yaml#/member" }], responses: { default: { $ref: "../responses.yaml#/loans" } } },
+      },
+      "params.yaml": { member: { name: "member_id", in: "query", schema: str } },
+      "responses.yaml": { loans: { description: "ok" } },
+    });
+    expect(d.tools.map((t) => t.name)).toEqual(["list_loans"]);
+    expect(d.tools[0]!.params.member_id).toMatchObject({ type: "string" });
+    expect(d.warnings).toEqual([]);
+  });
+
+  it("leaves a spec with only local refs as it was, and changes nothing it is given", async () => {
+    const local = api({ $ref: "#/components/schemas/Loan" }, { components: { schemas: { Loan: LOAN } } });
+    const before = structuredClone(local);
+    const d = draftFromOpenApi(local);
+    expect(local).toEqual(before);
+    expect(d.tools[0]!.ops).toEqual(draftFromOpenApi(api(LOAN)).tools[0]!.ops);
+    expect(d.warnings).toEqual([]);
+  });
+
+  it("doesn't read a $ref written as data in an example or a default, but does follow one on a field or a response with that name", async () => {
+    const example = { type: "object", properties: { note: str }, example: { note: "a", $ref: "./not-a-file.yaml" }, default: { $ref: "./nor-this.yaml" } };
+    expect((await draftOf({ "api.yaml": api(example) })).warnings).toEqual([]);
+    const named = { type: "object", properties: { example: { $ref: "./field.yaml" }, default: { $ref: "./field.yaml" } } };
+    const d = await draftOf({ "api.yaml": api(named), "field.yaml": { type: "integer" } });
+    expect(d.tools[0]!.params).toMatchObject({ example: { type: "integer" }, default: { type: "integer" } });
+  });
+
+  describe("what it can't read", () => {
+    /** A warning and a review note both name the ref, and suggest bundling. */
+    function expectNamed(d: ReturnType<typeof draftFromOpenApi>, ref: string, why: RegExp, where = "api.yaml") {
+      const warning = d.warnings.find((w) => w.includes(`$ref "${ref}"`));
+      expect(warning, d.warnings.join("\n")).toMatch(why);
+      expect(warning).toContain(where);
+      expect(warning).toContain(BUNDLE);
+      const note = d.tools[0]!.notes.find((n) => n.includes(`$ref "${ref}"`));
+      expect(note, d.tools[0]!.notes.join("\n")).toMatch(why);
+      expect(note).toContain(BUNDLE);
+      expect(renderDraft(d, "api.yaml")).toContain("review: pending");
+    }
+
+    it("names a file that doesn't exist, and where the ref appears", async () => {
+      const d = await draftOf({ "api.yaml": api({ $ref: "./schemas/gone.yaml" }) });
+      expectNamed(d, "./schemas/gone.yaml", /no such file/, "api.yaml, paths./loans.post.requestBody.content.application/json.schema");
+      expect(d.tools[0]!.params).toEqual({});
+    });
+
+    it("names a ref inside another file by that file", async () => {
+      const d = await draftOf({ "api.yaml": api({ $ref: "./schemas/loan.yaml" }), "schemas/loan.yaml": { type: "object", properties: { title: str, book: { $ref: "./gone.yaml" } } } });
+      expectNamed(d, "./gone.yaml", /no such file/, path.join("schemas", "loan.yaml") + ", properties.book");
+      expect(d.tools[0]!.params.title).toMatchObject({ type: "string" });
+    });
+
+    it.each([
+      ["doesn't parse", "a: [", /doesn't parse/],
+      ["holds no mapping", "just text\n", /holds no schema/],
+    ])("names a file that %s", async (_, text, why) => {
+      expectNamed(await draftOf({ "api.yaml": api({ $ref: "./loan.yaml" }), "loan.yaml": text }), "./loan.yaml", why);
+    });
+
+    it("names a fragment with nothing at it, and a folder", async () => {
+      expectNamed(await draftOf({ "api.yaml": api({ $ref: "./common.yaml#/Loan" }), "common.yaml": { Other: LOAN } }), "./common.yaml#/Loan", /nothing at #\/Loan/);
+      expectNamed(await draftOf({ "api.yaml": api({ $ref: "./schemas" }), "schemas/loan.yaml": LOAN }), "./schemas", /not a file/);
+    });
+
+    it("names a ref whose local pointer is missing from another file, and doesn't look for it in the spec", async () => {
+      const d = await draftOf({ "api.yaml": api({ $ref: "./loan.yaml" }, { components: { Id: { type: "integer" } } }), "loan.yaml": { type: "object", properties: { id: { $ref: "#/components/Id" } } } });
+      expectNamed(d, "#/components/Id", /nothing at #\/components\/Id/, "loan.yaml, properties.id");
+    });
+
+    describe("a URL", () => {
+      afterEach(() => vi.unstubAllGlobals());
+
+      it.each(["https://schemas.example.com/loan.yaml", "http://schemas.example.com/loan.yaml#/Loan", "file:///etc/hostname", "//schemas.example.com/loan.yaml"])("doesn't fetch or read %s, and names it", async (ref) => {
+        const fetched = vi.fn(() => {
+          throw new Error("init must not fetch a $ref");
+        });
+        vi.stubGlobal("fetch", fetched);
+        expectNamed(await draftOf({ "api.yaml": api({ $ref: ref }) }), ref, /is a URL, and init makes no network call/);
+        expect(fetched).not.toHaveBeenCalled();
+      });
+
+      it.skipIf(!process.features.typescript)("the CLI sends it no request, by any means", async () => {
+        let hits = 0;
+        const server = createServer((_, res) => {
+          hits++;
+          res.end(YAML.stringify(LOAN));
+        });
+        await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+        try {
+          const ref = `http://127.0.0.1:${(server.address() as { port: number }).port}/loan.yaml`;
+          const dir = await folder({ "api.yaml": api({ $ref: ref }) });
+          const { stdout } = await promisify(execFile)(process.execPath, [path.resolve("src/cli.ts"), "init", "--openapi", path.join(dir, "api.yaml"), "-o", path.join(dir, "out")]);
+          expect(stdout).toContain(`$ref "${ref}"`);
+          expect(hits).toBe(0);
+        } finally {
+          server.close();
+        }
+      });
+    });
+
+    describe("outside the spec's folder", () => {
+      const SECRET = { type: "object", properties: { secret_token: str } };
+      const OUTSIDE = /is outside the spec's folder, so init didn't read it/;
+
+      async function nested(files: Record<string, unknown>) {
+        const top = await folder({ "outside.yaml": SECRET });
+        const dir = path.join(top, "spec");
+        for (const [name, content] of Object.entries(files)) {
+          await mkdir(path.dirname(path.join(dir, name)), { recursive: true });
+          await writeFile(path.join(dir, name), YAML.stringify(content));
+        }
+        return { top, dir };
+      }
+
+      it("doesn't read a ../ path, and nothing from it reaches the draft", async () => {
+        const { dir } = await nested({ "api.yaml": api({ $ref: "../outside.yaml" }) });
+        const d = await draftIn(dir);
+        expectNamed(d, "../outside.yaml", OUTSIDE);
+        expect(JSON.stringify(d)).not.toContain("secret_token");
+      });
+
+      it("says the same whether or not the file exists, so the output can't probe for one", async () => {
+        const there = await draftIn((await nested({ "api.yaml": api({ $ref: "../outside.yaml" }) })).dir);
+        const absent = await draftIn((await nested({ "api.yaml": api({ $ref: "../gone.yaml" }) })).dir);
+        expectNamed(absent, "../gone.yaml", OUTSIDE);
+        expect(absent.warnings[0]!.replace("gone", "outside")).toBe(there.warnings[0]);
+      });
+
+      it("doesn't read an absolute path", async () => {
+        const top = await folder({ "outside.yaml": SECRET });
+        const dir = path.join(top, "spec");
+        await mkdir(dir);
+        await writeFile(path.join(dir, "api.yaml"), YAML.stringify(api({ $ref: path.join(top, "outside.yaml") })));
+        const d = await draftIn(dir);
+        expectNamed(d, path.join(top, "outside.yaml"), OUTSIDE);
+        expect(JSON.stringify(d.tables)).not.toContain("secret_token");
+      });
+
+      it("doesn't follow a nested ref out of the folder", async () => {
+        const { dir } = await nested({ "api.yaml": api({ $ref: "./schemas/loan.yaml" }), "schemas/loan.yaml": { type: "object", properties: { title: str, leak: { $ref: "../../outside.yaml" } } } });
+        const d = await draftIn(dir);
+        expectNamed(d, "../../outside.yaml", OUTSIDE);
+        expect(JSON.stringify(d.tables)).not.toContain("secret_token");
+      });
+
+      it("doesn't follow a symlink inside the folder that points out of it", async () => {
+        const { top, dir } = await nested({ "api.yaml": api({ $ref: "./link.yaml" }) });
+        await symlink(path.join(top, "outside.yaml"), path.join(dir, "link.yaml"));
+        const d = await draftIn(dir);
+        expectNamed(d, "./link.yaml", OUTSIDE);
+        expect(JSON.stringify(d)).not.toContain("secret_token");
+      });
+
+      it("reads a ../ that stays inside the folder, and a symlink that does", async () => {
+        const dir = await folder({ "api.yaml": api({ $ref: "./schemas/loan.yaml" }), "schemas/loan.yaml": { type: "object", properties: { id: { $ref: "../shared/./id.yaml" } } }, "shared/id.yaml": { type: "integer" } });
+        await symlink(path.join(dir, "shared", "id.yaml"), path.join(dir, "shared", "link.yaml"));
+        expect((await draftIn(dir)).warnings).toEqual([]);
+        await writeFile(path.join(dir, "schemas", "loan.yaml"), YAML.stringify({ type: "object", properties: { id: { $ref: "../shared/link.yaml" } } }));
+        const viaLink = await draftIn(dir);
+        expect(viaLink.warnings).toEqual([]);
+        expect(viaLink.tools[0]!.params.id).toMatchObject({ type: "integer" });
+      });
+    });
+
+    it("says so when no file was named to resolve against, and reads nothing", () => {
+      const d = draftFromOpenApi(api({ $ref: "./package.json" }));
+      expect(d.warnings[0]).toMatch(/\$ref "\.\/package\.json".*no spec file to resolve it against/);
+      expect(d.tools[0]!.params).toEqual({});
+    });
+
+    it("adds no param named undefined for a parameter it couldn't read", async () => {
+      const d = await draftOf({
+        "api.yaml": { openapi: "3.0.3", info: { title: "Lib", version: "1" }, paths: { "/loans": { parameters: [{ $ref: "./gone.yaml" }], get: { operationId: "listLoans", parameters: [{ $ref: "./also-gone.yaml" }, { name: "status", in: "query", schema: str }], responses: { "200": { description: "ok" } } } } } },
+      });
+      expect(Object.keys(d.tools[0]!.params)).toEqual(["status"]);
+      expect(d.warnings.join("\n")).not.toContain("undefined");
+      // The path's parameters and the operation's own both reach the tool.
+      expect(d.tools[0]!.notes.map((n) => n.match(/\$ref "(.*?)"/)![1])).toEqual(["./also-gone.yaml", "./gone.yaml"]);
+    });
+
+    it("warns once per ref, saying how many places, and adds a note only to the tools that reach it", async () => {
+      const ok = { "200": { description: "ok" } };
+      const body = (schema: unknown) => ({ requestBody: { content: { "application/json": { schema } } }, responses: ok });
+      const d = await draftOf({
+        "api.yaml": {
+          openapi: "3.0.3",
+          info: { title: "Lib", version: "1" },
+          paths: {
+            "/loans": { post: { operationId: "createLoan", ...body({ $ref: "#/components/schemas/Loan" }) } },
+            "/holds": { post: { operationId: "createHold", ...body({ $ref: "./gone.yaml" }) } },
+            "/members": { post: { operationId: "createMember", ...body(LOAN) } },
+          },
+          components: { schemas: { Loan: { allOf: [{ $ref: "./gone.yaml" }] } } },
+        },
+      });
+      expect(d.warnings.filter((w) => w.includes("gone.yaml"))).toHaveLength(1);
+      expect(d.warnings[0]).toContain("and 1 more place");
+      expect(Object.fromEntries(d.tools.map((t) => [t.name, t.notes.length]))).toEqual({ create_loan: 1, create_hold: 1, create_member: 0 });
+    });
+
+    it("warns about a ref no tool reaches, with no note on any tool", async () => {
+      const d = await draftOf({ "api.yaml": api(LOAN, { components: { schemas: { Unused: { $ref: "./gone.yaml" } } } }) });
+      expect(d.warnings[0]).toContain(`$ref "./gone.yaml"`);
+      expect(d.tools[0]!.notes).toEqual([]);
+    });
+
+    it("names a path item it couldn't read, whose operations aren't drafted", async () => {
+      const d = await draftOf({ "api.yaml": { openapi: "3.0.3", info: { title: "Lib", version: "1" }, paths: { "/loans": { $ref: "./paths/gone.yaml" }, "/holds": { get: { operationId: "listHolds", responses: { "200": { description: "ok" } } } } } } });
+      expect(d.tools.map((t) => t.name)).toEqual(["list_holds"]);
+      expect(d.warnings[0]).toContain(`api.yaml, paths./loans: $ref "./paths/gone.yaml"`);
+    });
+
+    it.skipIf(!process.features.typescript)("init prints the warning and the note, and refuses when no tool is left, naming the ref", async () => {
+      const cli = (...args: string[]) => promisify(execFile)(process.execPath, [path.resolve("src/cli.ts"), ...args]);
+      const dir = await folder({ "api.yaml": api({ $ref: "./gone.yaml" }) });
+      const out = path.join(dir, "out");
+      const { stdout } = await cli("init", "--openapi", path.join(dir, "api.yaml"), "-o", out);
+      expect(stdout).toContain("1 tools, 1 review notes.");
+      expect(stdout).toContain(`  ! api.yaml, paths./loans.post.requestBody.content.application/json.schema: $ref "./gone.yaml"`);
+      expect(await readFile(path.join(out, "sandtable.yaml"), "utf8")).toContain(`# TODO(review): $ref "./gone.yaml"`);
+
+      const empty = await folder({ "api.yaml": { openapi: "3.0.3", info: { title: "Lib", version: "1" }, paths: { "/loans": { $ref: "./gone.yaml" } } } });
+      const refused = await cli("init", "--openapi", path.join(empty, "api.yaml"), "-o", path.join(empty, "out")).then(() => undefined, (e: { code: number; stderr: string }) => e);
+      expect(refused?.code).toBe(2);
+      expect(refused?.stderr).toContain(`$ref "./gone.yaml"`);
+    });
   });
 });
