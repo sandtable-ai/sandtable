@@ -111,6 +111,11 @@ if (R.pendingReview && R.pendingReview.length) {
 const graded = (t) => t.graded ?? t.trials.length;
 const verdict = (t) => t.verdict || (t.passes === graded(t) ? "passed" : t.passes === 0 ? "failed" : "flaky");
 const status = (tr) => tr.skipped ? "skipped" : tr.passed ? "passed" : "failed";
+// A trial's state in words, since its button's fill alone says nothing to a screen reader, or to anyone who can't tell the fills apart.
+const trialLabel = (tr, i) => {
+  const first = status(tr) === "failed" ? tr.checks.find((c) => !c.passed) : undefined;
+  return "trial " + (i + 1) + ": " + status(tr) + (first ? " (" + first.id + ")" : "");
+};
 const interval = (i) => i ? Math.round(i.low * 100) + "%–" + Math.round(i.high * 100) + "%" : "n/a";
 const skippedTrials = R.tasks.flatMap((t) => t.trials.filter((tr) => tr.skipped));
 const hats = Object.entries(R.passHat).filter(([j]) => j === "1" || j === String(R.k));
@@ -163,7 +168,7 @@ $("tasks").innerHTML = order.map((ti) => {
   const failed = [...new Set(t.trials.filter((tr) => !tr.skipped).flatMap((tr) => tr.checks.filter((c) => !c.passed).map((c) => c.id)))];
   const crit = t.critical ? ' <span class="chip crit' + (critFailed(t) ? " badc" : "") + '" title="' + (critFailed(t) ? "critical: a failed trial fails the run" : allPassed(t) ? "critical: passed every trial" : "critical: no trial was graded") + '">critical</span>' : "";
   return "<tr><td><b>" + esc(t.id) + "</b>" + crit + (regressed(t.id) ? ' <span class="chip regressed">' + since[t.id] + " since baseline</span>" : "") + "<div class='meta'>" + esc(t.description) + "</div></td><td class='dots'>" +
-    t.trials.map((tr, i) => '<button class="dot ' + ({ passed: "ok", failed: "bad", skipped: "skip" })[status(tr)] + '" title="trial ' + (i + 1) + (tr.skipped ? ": skipped" : "") + '" onclick="show(' + ti + "," + i + ')"></button>').join("") +
+    t.trials.map((tr, i) => '<button class="dot ' + ({ passed: "ok", failed: "bad", skipped: "skip" })[status(tr)] + '" title="' + esc(trialLabel(tr, i)) + '" aria-label="' + esc(trialLabel(tr, i)) + '" onclick="show(' + ti + "," + i + ')"></button>').join("") +
     "</td><td class='nw " + (graded(t) === 0 ? "meta" : t.passes === graded(t) ? "okt" : "badt") + "'>" + t.passes + "/" + graded(t) +
     (t.skipped ? "<div class='meta'>" + t.skipped + " skipped</div>" : "") + "</td><td class='nw'><span class='" + ({ passed: "okt", failed: "badt", flaky: "badt", skipped: "meta" })[verdict(t)] + "'>" + verdict(t) + "</span>" +
     (t.interval ? "<div class='meta' title='95% Wilson interval for the pass rate of the graded trials'>95% " + interval(t.interval) + "</div>" : "") + "</td><td>" +
@@ -270,12 +275,14 @@ if (R.coverage && R.coverage.rules.length) {
   const cell = (x, ti) => {
     const t = R.tasks[ti], c = x.tasks.find((c) => c.task === t.id), n = t.trials.length;
     if (!c) return "<td class='c'></td>";
+    // A button's title names it, but few screen readers announce the title of a span, so a span says it as an image does.
+    const state = (cls, label) => '<td class="c"><span class="dot ' + cls + '" role="img" aria-label="' + esc(label) + '" title="' + esc(label) + '"></span></td>';
     if (c.broken && x.soft) return "<td class='c'><button class='dot softb' title='" + esc(t.id + ": soft rule broken in " + c.broken + " of " + n + " trial(s): reported, never fails a trial; open the first") + "' onclick='show(" + ti + "," + brokeIn(ti, x.id) + ")'></button></td>";
     if (c.broken) return "<td class='c'><button class='dot bad' title='" + esc(t.id + ": broken in " + c.broken + " of " + n + " trial(s), which failed, so this task caught it; open the first") + "' onclick='show(" + ti + "," + brokeIn(ti, x.id) + ")'></button></td>";
-    if (c.checked) return "<td class='c'><span class='dot ok' title='" + esc(t.id + ": " + c.checked + " of " + n + " trial(s) " + checks(x) + ", so the rule was checked; never broken here") + "'></span></td>";
-    return "<td class='c'><span class='dot skip' title='" + esc(t.id + ": its reference or expectations put this rule in play, but no trial " + checks(x)) + "'></span></td>";
+    if (c.checked) return state("ok", t.id + ": " + c.checked + " of " + n + " trial(s) " + checks(x) + ", so the rule was checked; never broken here");
+    return state("skip", t.id + ": its reference or expectations put this rule in play, but no trial " + checks(x));
   };
-  const key = (cls, text) => "<li><span class='dot " + cls + "'></span> " + text + "</li>";
+  const key = (cls, text) => "<li><span class='dot " + cls + "' aria-hidden='true'></span> " + text + "</li>";
   $("coverage").innerHTML = "<h2>Coverage</h2><p class='explain' style='margin-top:0'>Which rules this run checked, and which it caught broken. " +
     "Checked means the rule applied to what the agent did, not that the task pushes the agent to break it: a booking at the posted rate checks the rate ceiling without testing it. Run a careless agent too, to see which rules your tasks catch.</p>" +
     "<ul class='key'>" +
@@ -283,7 +290,7 @@ if (R.coverage && R.coverage.rules.length) {
     key("bad", "<b>caught</b>: a trial broke the rule and failed for it. Click to open the trial") +
     key("softb", "<b>soft rule broken</b>: reported, never fails a trial") +
     key("skip", "<b>in play, not checked</b>: the task's reference or expectations involve the rule, but no trial of this run checked it") +
-    "<li><span class='keyrow'></span> <b>never checked</b>: an outlined row; a passing run says nothing about that rule</li></ul>" +
+    "<li><span class='keyrow' aria-hidden='true'></span> <b>never checked</b>: an outlined row; a passing run says nothing about that rule</li></ul>" +
     "<p class='meta'>" + (cov.rules.length - unchecked.length) + " of " + cov.rules.length + " rules checked" + (unchecked.length ? ", " + unchecked.length + " never" : "") +
     " · " + caught.length + " caught broken" + (softBroken.length ? " · " + softBroken.length + " soft broken (reported)" : "") + " · " + (idle.length ? idle.length + " of " + cov.tools.length + " tools never called" : "every tool called") + ".</p>" +
     "<div class='wrap'><table class='cov'><thead><tr><th>Rule</th><th>Trials</th>" +
@@ -323,7 +330,7 @@ function show(ti, i) {
   const changes = tr.changes.length ? tr.changes.map(change).join("") : "<div class='meta'>No writes.</div>";
   const judged = !tr.judged ? "" : "<h2>Judged</h2><p class='explain' style='margin-top:0'>A model's verdicts on the judged criteria, which never change this trial's result.</p>" +
     (tr.judged.error !== undefined ? "<div class='warn'>The judge call for this trial failed: " + esc(tr.judged.error) + "</div>" : "") +
-    tr.judged.verdicts.map((v) => '<div class="check"><span class="' + (v.verdict === "pass" ? "okt" : v.verdict === "fail" ? "badt" : "meta") + '">' + (v.verdict === "pass" ? "✓" : v.verdict === "fail" ? "✗" : "·") + "</span><div><code>" + esc(v.id) + "</code> <b>" + esc(v.verdict).replace("_", " ") + "</b> " + esc(v.criterion) +
+    tr.judged.verdicts.map((v) => '<div class="check"><span class="' + (v.verdict === "pass" ? "okt" : v.verdict === "fail" ? "badt" : "meta") + '" aria-hidden="true">' + (v.verdict === "pass" ? "✓" : v.verdict === "fail" ? "✗" : "·") + "</span><div><code>" + esc(v.id) + "</code> <b>" + esc(v.verdict).replace("_", " ") + "</b> " + esc(v.criterion) +
       (v.quote ? "<div>“" + esc(v.quote) + "”" + (v.quoteFound === false ? ' <span class="chip gapchip">not in the transcript</span>' : "") + "</div>" : "") +
       "<div class='meta'>" + esc(v.reason) + "</div></div></div>").join("");
   $("detail").innerHTML = '<div class="trial"><h2 style="margin-top:0">' + esc(t.id) + " · trial " + (i + 1) + " · " +
