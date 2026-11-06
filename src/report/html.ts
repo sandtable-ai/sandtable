@@ -77,6 +77,7 @@ a{color:inherit}
 <div id="callernotes"></div>
 <div id="tags"></div>
 <div id="soft"></div>
+<div id="judged"></div>
 <div id="coverage"></div>
 <h2>Failure modes</h2>
 <div class="wrap"><table><thead><tr><th>Count</th><th>Check</th><th>Tasks</th><th>Example</th></tr></thead><tbody id="modes"></tbody></table></div>
@@ -211,6 +212,49 @@ if (R.soft && R.soft.length) {
       x.tasks.map((t) => '<span class="chip">' + esc(t) + "</span>").join("") + "</td><td>" + esc(x.example || "") + "</td></tr>").join("") +
     "</tbody></table></div>";
 }
+// The judged score, apart from everything above: a model's verdicts, which never change a result. A model wrote them,
+// and a quote comes from a transcript the agent wrote, so all of it goes through esc, and none of it into an attribute.
+if (R.judged || (C && C.judged)) {
+  let judged = "";
+  if (R.judged) {
+    const j = R.judged;
+    const trials = R.tasks.flatMap((t, ti) => t.trials.map((tr, i) => ({ t, ti, tr, i })));
+    const verdictsOn = (id) => trials.flatMap(({ t, ti, tr, i }) => (tr.judged ? tr.judged.verdicts : []).filter((v) => v.id === id).map((v) => ({ v, t, ti, i })));
+    const failedCalls = trials.filter(({ tr }) => tr.judged && tr.judged.error !== undefined).length;
+    const pending = j.criteria.filter((c) => c.pending).length;
+    judged += "<h2>Judged score</h2><p class='explain' style='margin-top:0'>A model's judgement of each trial's transcript against the domain's judged criteria. It never changes pass/fail or pass^k, a gate or an exit code, and a verdict can differ from one run to the next. The score is pass / (pass + fail) over the verdicts, with not applicable and not judged outside it.</p>" +
+      '<div class="kpis"><div class="kpi"><b>' + pct(j.score) + '</b><span>judged score</span></div><div class="kpi"><b>' + j.notJudged + '</b><span>not judged</span></div><div class="kpi"><b>' + pending + '</b><span>pending review</span></div></div>' +
+      "<p class='meta'>" + j.pass + " pass, " + j.fail + " fail, " + j.notApplicable + " not applicable" + (j.models.length ? " · by " + esc(j.models.join(", ")) : "") + (Object.keys(j.usage).length ? " · estimated cost " + usd(j.costUsd) : "") + (failedCalls ? " · " + failedCalls + " judge call" + (failedCalls === 1 ? "" : "s") + " failed" : "") + "</p>" +
+      "<div class='wrap'><table><thead><tr><th>Criterion</th><th>Score</th><th>Pass</th><th>Fail</th><th>Not applicable</th><th>Failed in</th></tr></thead><tbody>" +
+      j.criteria.map((c) => {
+        const on = verdictsOn(c.id);
+        return "<tr><td><code>" + esc(c.id) + "</code>" + (c.pending ? ' <span class="chip">pending review</span>' : "") + (on.length ? "<div class='meta'>" + esc(on[0].v.criterion) + "</div>" : "") + "</td><td class='nw'>" + pct(c.score) + "</td><td>" + c.pass + "</td><td>" + c.fail + "</td><td>" + c.notApplicable + "</td><td>" +
+          on.filter(({ v }) => v.verdict === "fail").map(({ t, ti, i }) => "<div><a href='#detail' onclick='show(" + ti + "," + i + ");return false'>" + esc(t.id) + " trial " + (i + 1) + "</a></div>").join("") + "</td></tr>";
+      }).join("") + "</tbody></table></div>";
+  }
+  if (C && C.judged) {
+    const c = C.judged;
+    const score = (x) => x === undefined ? "–" : pct(x.score);
+    const moved = (b, a) => {
+      if (!b || !a || b.score === null || a.score === null) return "";
+      const d = (a.score - b.score) * 100;
+      return Math.abs(d) < 0.05 ? "no change" : (d > 0 ? "+" : "−") + Math.abs(d).toFixed(1) + " pts";
+    };
+    const row = (name, b, a, note) => "<tr><td>" + name + "</td><td>" + score(b) + "</td><td>" + score(a) + "</td><td>" + moved(b, a) + "</td><td class='meta'>" + note + "</td></tr>";
+    const reworded = c.criteria.filter((d) => d.textDiffers).map((d) => d.id);
+    const notes = [
+      ...(reworded.length ? ["The text of " + esc(reworded.join(", ")) + " differs between the two runs: a date from \${today} under clock: now differs from day to day, and otherwise the criterion was reworded."] : []),
+      ...(c.before && c.after && c.before.models.join() !== c.after.models.join() ? [esc(c.before.models.join(", ")) + " judged the baseline and " + esc(c.after.models.join(", ")) + " this run, and another model can score differently."] : []),
+      ...(c.before && c.after && !C.sameTasks ? ["Each score is over its own run's tasks."] : []),
+    ];
+    judged += "<h2>Judged score since the baseline</h2><p class='explain' style='margin-top:0'>A model's judgement: never a regression, and it changes no gate or exit code.</p>" +
+      "<div class='wrap'><table><thead><tr><th>Criterion</th><th>Baseline</th><th>Now</th><th>Change</th><th></th></tr></thead><tbody>" +
+      row("<b>Judged score</b>", c.before, c.after, "") +
+      c.criteria.map((d) => row("<code>" + esc(d.id) + "</code>", d.before, d.after, d.after === undefined ? "only in the baseline" : d.before === undefined ? "only in this run" : d.textDiffers ? "text differs" : "")).join("") +
+      "</tbody></table></div>" + (notes.length ? "<ul class='notes'>" + notes.map((n) => "<li>" + n + "</li>").join("") + "</ul>" : "");
+  }
+  $("judged").innerHTML = judged;
+}
 // Coverage: which rules the run checked, task by task, which it caught broken, and which tools it called. Absent in older results.
 if (R.coverage && R.coverage.rules.length) {
   const cov = R.coverage;
@@ -277,10 +321,15 @@ function show(ti, i) {
     (tr.soft || []).map((c) => '<div class="check"><span class="meta">' + (c.broken ? "~" : "·") + "</span><div><code>" + esc(c.id) + "</code> <span class='meta'>soft:</span> " + esc(c.broken ? c.violations.map((v) => v.detail).join("; ") : "not broken") + "</div></div>").join("") +
     (tr.callerNotes || []).map((n) => "<div class='check'><span class='meta'>!</span><div><span class='meta'>caller note, turn " + n.turn + ":</span> " + esc(n.why) + "</div></div>").join("");
   const changes = tr.changes.length ? tr.changes.map(change).join("") : "<div class='meta'>No writes.</div>";
+  const judged = !tr.judged ? "" : "<h2>Judged</h2><p class='explain' style='margin-top:0'>A model's verdicts on the judged criteria, which never change this trial's result.</p>" +
+    (tr.judged.error !== undefined ? "<div class='warn'>The judge call for this trial failed: " + esc(tr.judged.error) + "</div>" : "") +
+    tr.judged.verdicts.map((v) => '<div class="check"><span class="' + (v.verdict === "pass" ? "okt" : v.verdict === "fail" ? "badt" : "meta") + '">' + (v.verdict === "pass" ? "✓" : v.verdict === "fail" ? "✗" : "·") + "</span><div><code>" + esc(v.id) + "</code> <b>" + esc(v.verdict).replace("_", " ") + "</b> " + esc(v.criterion) +
+      (v.quote ? "<div>“" + esc(v.quote) + "”" + (v.quoteFound === false ? ' <span class="chip gapchip">not in the transcript</span>' : "") + "</div>" : "") +
+      "<div class='meta'>" + esc(v.reason) + "</div></div></div>").join("");
   $("detail").innerHTML = '<div class="trial"><h2 style="margin-top:0">' + esc(t.id) + " · trial " + (i + 1) + " · " +
     ({ passed: '<span class="okt">passed</span>', failed: '<span class="badt">failed</span>', skipped: '<span class="meta">skipped: it ended in an error before the agent broke any rule, so it was not graded</span>' })[status(tr)] + '</h2><div class="meta">ended: ' + tr.endReason + " · " + tr.turns + " turns · " + tr.durationMs + "ms" + (calls(tr.usage) ? " · " + usd(tr.usage.costUsd) : "") + (stops(tr.usage) ? " · " + stops(tr.usage) + " stopped at max_tokens" : "") + (stripped(tr.usage) ? " · " + stripped(tr.usage) + " with reasoning removed" : "") + (silent(tr.usage) ? " · " + silent(tr.usage) + " silent once it was removed" : "") + (tr.error ? " · " + esc(tr.error) : "") +
     "</div>" + (tr.attribution ? '<div class="meta">likely owner: <b>' + esc(tr.attribution.owner.replace("-", " ")) + "</b> · " + esc(tr.attribution.evidence) + "</div>" : "") +
-    "<h2>Checks</h2>" + checks + "<h2>World changes</h2>" + changes + "<h2>Transcript</h2>" + evs + "</div>";
+    "<h2>Checks</h2>" + checks + judged + "<h2>World changes</h2>" + changes + "<h2>Transcript</h2>" + evs + "</div>";
   $("detail").scrollIntoView({ behavior: "smooth" });
 }
 // A fault the task injected into a call: its error with the HTTP status, a delay, and whether a write behind it landed.
