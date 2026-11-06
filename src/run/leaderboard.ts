@@ -704,7 +704,7 @@ export function renderLeaderboardMarkdown(l: LeaderboardResult): string {
 }
 
 export function renderLeaderboardHtml(l: LeaderboardResult): string {
-  const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+  const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
   const soft = hasSoft(l);
   const critical = hasCritical(l);
   const body = l.rows

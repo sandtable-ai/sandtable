@@ -158,9 +158,9 @@ describe("the judged score in the HTML report", () => {
       expect(part).toContain("&lt;img src=x");
       expect(part).toContain("&quot;&lt;/script&gt;");
     }
-    expect(shown.get("detail")).toContain("alert('quote')");
-    expect(shown.get("detail")).toContain("alert('reason')");
-    expect(shown.get("detail")).toContain("alert('verdict')");
+    expect(shown.get("detail")).toContain("alert(&#39;quote&#39;)");
+    expect(shown.get("detail")).toContain("alert(&#39;reason&#39;)");
+    expect(shown.get("detail")).toContain("alert(&#39;verdict&#39;)");
     // Nor does any of it close the script the run is embedded in.
     expect(html.indexOf("</script>")).toBe(html.lastIndexOf("</script>"));
     expect(html).not.toContain("<img");
@@ -192,14 +192,15 @@ describe("the judged score in the HTML report", () => {
   });
 });
 
+const trial = (i: number, over: Record<string, unknown> = {}) => ({ taskId: "t", trial: i, passed: true, checks: [], violations: [], events: [], changes: [], endReason: "user_stop", turns: 1, durationMs: 0, ...over });
+const task = (id: string, trials: unknown[], description = "") => ({ id, description, tags: [], passes: 1, trials });
+const run = (tasks: unknown[], over: Record<string, unknown> = {}) =>
+  ({
+    domain: "d", agent: "a", user: "u", k: 1, startedAt: "", durationMs: 0, passHat: { "1": 1 }, failureModes: [], byTag: [], soft: [], pendingReview: [],
+    usage: { agent: {}, user: {}, costUsd: null }, latency: { agentTurnP50Ms: null, agentTurnP95Ms: null }, inputs: "x", runId: "r", version: 1, tasks, ...over,
+  }) as never;
+
 describe("the report's state in words, for a screen reader and for anyone who can't tell the fills apart", () => {
-  const trial = (i: number, over: Record<string, unknown> = {}) => ({ taskId: "t", trial: i, passed: true, checks: [], violations: [], events: [], changes: [], endReason: "user_stop", turns: 1, durationMs: 0, ...over });
-  const task = (id: string, trials: unknown[], description = "") => ({ id, description, tags: [], passes: 1, trials });
-  const run = (tasks: unknown[], over: Record<string, unknown> = {}) =>
-    ({
-      domain: "d", agent: "a", user: "u", k: 1, startedAt: "", durationMs: 0, passHat: { "1": 1 }, failureModes: [], byTag: [], soft: [], pendingReview: [],
-      usage: { agent: {}, user: {}, costUsd: null }, latency: { agentTurnP50Ms: null, agentTurnP95Ms: null }, inputs: "x", runId: "r", version: 1, tasks, ...over,
-    }) as never;
   /** Each trial button in the task table: its fill, title and label. */
   const buttons = (html: string) =>
     [...page(html).get("tasks")!.matchAll(/<button class="dot (\w+)" title="([^"]*)" aria-label="([^"]*)" onclick="show\(\d+,\d+\)"><\/button>/g)].map((m) => ({ fill: m[1], title: m[2], label: m[3] }));
@@ -267,5 +268,79 @@ describe("the report's state in words, for a screen reader and for anyone who ca
     const swatches = key.match(/<span [^>]*>/g)!;
     expect(swatches).toHaveLength(5);
     for (const s of swatches) expect(s).toContain("aria-hidden='true'");
+  });
+});
+
+describe("an apostrophe in the report's text", () => {
+  const said = "The carrier's rate isn't final.";
+  const decode = (s: string) => s.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  /** Each single-quoted title in a fragment, read as a browser reads it: up to the next apostrophe. `rest` is what its tag holds after it. */
+  const tooltips = (fragment: string) => [...fragment.matchAll(/ title='([^']*)'([^>]*)>/g)].map((m) => ({ text: decode(m[1]!), rest: m[2]! }));
+  const ONLY_ATTRIBUTES = /^( [a-z-]+='[^']*')*$/;
+
+  /** A run whose ids, descriptions, quote and file all hold an apostrophe: a task that caught a rule, and one that broke a soft rule. */
+  const ids = ["the carrier's load", "the broker's load"];
+  const coverage = () =>
+    page(
+      renderHtml(
+        run(
+          [
+            task(ids[0]!, [trial(0, { taskId: ids[0], violations: [{ invariant: "ceiling" }] })], said),
+            task(ids[1]!, [trial(0, { taskId: ids[1], soft: [{ id: "courtesy", broken: true }] })], said),
+          ],
+          {
+            coverage: {
+              rules: [
+                { id: "ceiling", kind: "limit", tool: "book_load", description: "Don't go over the carrier's ceiling.", source: { file: "the broker's policy.md", quote: "Never book above the carrier's ceiling." }, checked: 1, broken: 1, tasks: [{ task: ids[0], checked: 1, broken: 1 }] },
+                { id: "courtesy", kind: "limit", tool: "book_load", soft: true, description: "Use the caller's name.", checked: 1, broken: 1, tasks: [{ task: ids[1], checked: 1, broken: 1 }] },
+              ],
+              tools: [{ name: "book_load", calls: 2, trials: 2, tasks: ids }],
+            },
+          },
+        ),
+      ),
+    ).get("coverage")!;
+
+  it("an apostrophe in a task's description stays inside its tooltip", () => {
+    const heads = tooltips(coverage().split("</thead>")[0]!);
+    expect(heads).toEqual(ids.map(() => ({ text: said, rest: "" })));
+  });
+
+  it("an apostrophe in a rule's description, quote or file stays inside the rule's tooltip", () => {
+    const rows = tooltips(coverage().split("<tbody>")[1]!).filter((t) => t.text.includes("ceiling") || t.text.includes("name"));
+    expect(rows).toEqual([
+      { text: "Don't go over the carrier's ceiling.\n“Never book above the carrier's ceiling.” (the broker's policy.md)", rest: "" },
+      { text: "Use the caller's name.", rest: "" },
+    ]);
+  });
+
+  it("an apostrophe in a task's id stays inside the tooltip of the cell that opens its trial", () => {
+    const cells = tooltips(coverage().split("<tbody>")[1]!).filter((t) => t.text.includes("open the first"));
+    expect(cells).toEqual([
+      { text: "the carrier's load: broken in 1 of 1 trial(s), which failed, so this task caught it; open the first", rest: " onclick='show(0,0)'" },
+      { text: "the broker's load: soft rule broken in 1 of 1 trial(s): reported, never fails a trial; open the first", rest: " onclick='show(1,0)'" },
+    ]);
+  });
+
+  it("every tooltip ends its tag or runs into another attribute, never into its own text", () => {
+    const tips = tooltips(coverage());
+    expect(tips.length).toBeGreaterThan(4);
+    for (const t of tips) expect(t.rest).toMatch(ONLY_ATTRIBUTES);
+  });
+
+  it("no tooltip on the real freight report stops at an apostrophe", async () => {
+    const r = await runSuite({ domain: await loadDomain(path.resolve("examples/freight")), agent: freightScriptedAgent("careful"), user: scriptedUser() });
+    const rules = r.coverage!.rules.map((x) => x.description + (x.source?.quote ? `\n“${x.source.quote}” (${x.source.file})` : ""));
+    const tasks = r.tasks.map((t) => t.description ?? "");
+    // freight has apostrophes in both, so a cut tooltip can't go unnoticed here.
+    expect(rules.filter((s) => s.includes("'")).length).toBeGreaterThan(0);
+    expect(tasks.filter((s) => s.includes("'")).length).toBeGreaterThan(0);
+    const tips = tooltips(page(renderHtml(r)).get("coverage")!);
+    expect(tips.map((t) => t.text)).toEqual(expect.arrayContaining([...rules, ...tasks]));
+    for (const t of tips) expect(t.rest).toMatch(ONLY_ATTRIBUTES);
+  });
+
+  it("an apostrophe in the domain's name stays in the page's title, as an entity", () => {
+    expect(renderHtml(run([task("t", [trial(0)])], { domain: "the carrier's lanes" }))).toContain("<title>Sandtable report · the carrier&#39;s lanes</title>");
   });
 });
