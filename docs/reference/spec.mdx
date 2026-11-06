@@ -380,6 +380,8 @@ tasks:
       - { id: walks-away-politely, criterion: The agent stays polite when it turns the rate down. }
 ```
 
+In `expect.state`, `where` and `count`, both optional, count rows. `key` looks at one row: it exists, it also matches `fields`, or with `count: 0` it doesn't exist. Any other combination gets a `⚠` warning from `validate`, because the key that doesn't fit is ignored and the entry passes on what's left: `fields` without `key`, `where` with `key`, `key` with a `count` above 0, or `fields` with `key` and `count: 0`. So `{ table: bookings, fields: { rate: 9999 } }` checks only that a booking exists. 2.0 will reject these.
+
 A `reference` call must succeed when `lint` replays it, unless it has `expect_error`: then the call must fail with a tool error, as a correct agent's lookup of an unknown MC number does in a refusal task. `expect_error: true` accepts any tool error, and text such as `expect_error: not found` requires an error that contains it, case-insensitive, so a domain edit that removes the check rejecting the call shows up in `lint`. A call with an unknown tool or arguments the tool rejects is a `lint` error either way. References only feed `lint`: they never grade a trial.
 
 `called` and `not_called` take a tool's name, or `{ tool, args }` to count only the calls whose arguments match `args`, a [where clause](#where-clauses) on the arguments as the tool accepted them, with defaults filled in and numbers coerced:
