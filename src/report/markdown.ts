@@ -7,7 +7,7 @@ import { formatPercent } from "./terminal.ts";
  * A run's summary in Markdown, for a CI job summary or a pull request comment, from results.json alone. Everything in it
  * that a run holds is escaped: ids and tags come from a domain file, and failure details and verdicts from a model and
  * a transcript. A GitHub comment holds 65,536 characters, so each list has a cap and a character budget: past either,
- * it ends with how many more there are. Escaping can make text four times as long, and the budgets allow for that, so
+ * it ends with how many more there are. Escaping can make text eight times as long, and the budgets allow for that, so
  * the whole summary stays under the limit whatever a run holds.
  */
 
@@ -32,8 +32,9 @@ const NAMES_CHARS = 1_000;
 const clip = (s: string, width = CELL) => (s.length <= width ? s : `${s.slice(0, width - 1)}…`);
 
 /**
- * Text a run holds, on one line, so that it renders as itself: it can't break a table, open a tag or a link, and can't
- * notify anyone, link an issue or a site, or set math in a comment.
+ * Text a run holds, on one line, so that it renders as itself: it can't break a table or open a tag or a link, and in a
+ * comment it can't notify anyone, link an issue or a pull request, or set math. A URL stays plain text. GitHub can still
+ * link a commit hash or a CVE id.
  */
 function escapeMarkdown(s: string): string {
   // As entities, not backslashes: a renderer that ignores a backslash there would still see a tag.
@@ -41,7 +42,11 @@ function escapeMarkdown(s: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
-  return entities.replace(/[\\`*_{}[\]()#+!|~@:$]/g, "\\$&").replace(/\b(www)\./gi, "$1\\.");
+  const escaped = entities.replace(/[\\`*_{}[\]()+!|~:$]/g, "\\$&").replace(/\b(www)\./gi, "$1\\.");
+  // GitHub resolves a mention or an issue reference after it renders Markdown, and takes owner/repo/issues/N as an issue
+  // wherever that path points, so a backslash or an entity doesn't stop one: only a zero-width space does. Last, since
+  // this entity holds a # of its own.
+  return escaped.replace(/[@#]|(?<![a-z0-9])(?:gh-|(?:issues|pull|discussions)\/)(?=\d)/gi, "$&&#8203;");
 }
 
 /** An id as code when it can't do anything there, else escaped. */

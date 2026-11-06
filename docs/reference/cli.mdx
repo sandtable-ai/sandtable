@@ -458,7 +458,7 @@ It prints the path it wrote. A run made with `--baseline` keeps its changes sinc
 - a [judged score](#judge), in its own lines and labelled as a model's judgement, with the verdicts that failed and how it moved since the baseline;
 - the sandtable-ai version that wrote the run.
 
-What a run holds is escaped, so it can't break a table or inject HTML, and text from a transcript or a model can't notify anyone or link an issue in a comment. A long list goes in a `<details>` block, and past a cap it ends with `and N more; see report.html`, which keeps the whole summary under GitHub's limit of 65,536 characters for a comment. The [CI guide](/guides/ci#show-the-result-where-reviewers-look) has the steps.
+What a run holds is escaped, so it can't break a table or inject HTML, and in a comment text from a transcript or a model can't notify anyone or link an issue or a pull request. A URL stays plain text, though GitHub can still link a commit hash or a CVE id. A long list goes in a `<details>` block, and past a cap it ends with `and N more; see report.html`, which keeps the whole summary under GitHub's limit of 65,536 characters for a comment. The [CI guide](/guides/ci#show-the-result-where-reviewers-look) has the steps.
 
 `--audience customer` writes a static page, with no script, that prints, with the conversations that show a rule broken or caught open. It is for a customer's operations lead, who doesn't need to know sandtable:
 - a summary in plain words, with the open items before go-live: drafted items still pending review, conversations that weren't graded, failed critical scenarios, broken rules and scenarios that didn't pass every conversation;

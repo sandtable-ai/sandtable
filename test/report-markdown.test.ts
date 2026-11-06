@@ -258,8 +258,9 @@ describe("the judged score in the summary", () => {
     expect(md).not.toContain("<img");
     expect(md).not.toContain("**bold**");
     expect(md).not.toContain("](https://bad");
-    expect(md).not.toMatch(/(?<!\\)@someone/);
-    expect(md).not.toMatch(/(?<!\\)#12/);
+    expect(md).not.toContain("@someone");
+    expect(md).not.toContain("#12");
+    expect(md).toContain("@&#8203;someone #&#8203;12");
     expect(md).toContain("&lt;img src=x onerror=reason&gt;");
     expect(md).toContain("&lt;img src=x onerror=quote&gt;");
     expect(md).not.toMatch(/\nnext/);
@@ -335,7 +336,60 @@ describe("what a run holds, in a table or a line", () => {
     const said = "Ask @someone about #12, see https://bad.example or www.bad.example, it costs $2100 or $1450.";
     const md = renderMarkdown(run([task("t", [false])], { failureModes: [{ id: "x", kind: "invariant", count: 1, tasks: ["t"], example: said }] }));
     const example = cells(section(md, "Top failure modes").at(-1)!)[3]!;
-    expect(example).toBe("Ask \\@someone about \\#12, see https\\://bad.example or www\\.bad.example, it costs \\$2100 or \\$1450.");
+    expect(example).toBe("Ask @&#8203;someone about #&#8203;12, see https\\://bad.example or www\\.bad.example, it costs \\$2100 or \\$1450.");
+  });
+
+  // GitHub resolves these after it renders Markdown, so a backslash or an entity doesn't stop one: checked on its render
+  // API. It takes owner/repo/issues/N as an issue wherever it points, so https\:// doesn't stop that either. Only a
+  // zero-width space does: after the @, the #, the GH- or the issues/.
+  const said = "Ask @someone or org/repo#12 about #12, gh-12 and GH-34, or a@b.example: https://github.com/org/repo/issues/5, https://b.example/org/repo/pull/6/files, org/repo/discussions/7.";
+  const unlinked = "Ask @&#8203;someone or org/repo#&#8203;12 about #&#8203;12, gh-&#8203;12 and GH-&#8203;34, or a@&#8203;b.example\\: https\\://github.com/org/repo/issues/&#8203;5, https\\://b.example/org/repo/pull/&#8203;6/files, org/repo/discussions/&#8203;7.";
+
+  it("keeps a mention or an issue reference from resolving in a plain line", () => {
+    const before = run([task("t", [true])], { agent: "first" });
+    const md = renderMarkdown({ ...run([task("t", [true])], { agent: said }), baseline: baselineSnapshot(before) });
+    expect(section(md, "Changes since the baseline")).toContain(`- agent first → ${unlinked}`);
+  });
+
+  it("keeps a mention or an issue reference from resolving in a table cell", () => {
+    const md = renderMarkdown(run([task("t", [false])], { failureModes: [{ id: "x", kind: "invariant", count: 1, tasks: ["t"], example: said }] }));
+    expect(cells(section(md, "Top failure modes").at(-1)!)[3]).toBe(unlinked);
+  });
+
+  it("keeps a mention or an issue reference from resolving in a failed verdict, inside <details>", () => {
+    const r = run([task("t", [true])]);
+    const verdicts: JudgedVerdict[] = [{ id: "c", criterion: "C.", verdict: "fail", quote: said, reason: said }];
+    r.tasks[0]!.trials[0]!.judged = { model: "m", verdicts };
+    const got = section(renderMarkdown(withJudgedSummary(r, () => [{ id: "c", criterion: "C." }])), "Judged score");
+    expect(got.indexOf("<details>")).toBeLessThan(got.findIndex((l) => l.startsWith("- `t` trial 1")));
+    expect(got).toContain(`- \`t\` trial 1, \`c\`: ${unlinked} “${unlinked}”`);
+  });
+
+  it("doesn't touch a word that only looks like an issue path", () => {
+    const md = renderMarkdown(run([task("t", [false])], { failureModes: [{ id: "x", kind: "invariant", count: 1, tasks: ["t"], example: "No issues/none, a pull/request, tissues/1 and gh-x." }] }));
+    expect(cells(section(md, "Top failure modes").at(-1)!)[3]).toBe("No issues/none, a pull/request, tissues/1 and gh-x.");
+  });
+
+  it("leaves an id with an @ or a # as code, which doesn't resolve, and separates one that isn't", () => {
+    const md = renderMarkdown(run([task("a@b#12", [false], ["GH-12"]), task("x|@y", [false], ["z|#1"])]));
+    const rows = section(md, "Failed tasks").filter((l) => l.startsWith("| ") && !l.startsWith("| Task")).map(cells);
+    expect(rows[0]).toEqual(["`a@b#12`", "0/1", "`GH-12`"]);
+    expect(rows[1]).toEqual(["x\\|@&#8203;y", "0/1", "z\\|#&#8203;1"]);
+  });
+
+  it("never lets a run's text reach a <summary> line, where Markdown isn't processed", () => {
+    const bad = (i: number) => `@someone|#${i}<img>`;
+    const many = Array.from({ length: 12 }, (_, i) => bad(i));
+    const soft = many.map((id) => ({ id, description: "d", tool: id, applied: 2, broken: 1, rate: 0.5, tasks: [] }));
+    const before = run(many.map((id) => task(id, [true])));
+    const now = run(many.map((id) => task(id, [false], [id])), { soft });
+    const verdicts: JudgedVerdict[] = many.map((id) => ({ id, criterion: id, verdict: "fail", quote: id, reason: id }));
+    for (const t of now.tasks) t.trials[0]!.judged = { model: bad(0), verdicts };
+    const criteria = many.map((id) => ({ id, criterion: id }));
+    const md = renderMarkdown({ ...withJudgedSummary(now, () => criteria), baseline: baselineSnapshot(before) });
+    const summaries = lines(md).filter((l) => l.includes("<summary>"));
+    expect(summaries.length).toBeGreaterThanOrEqual(5);
+    for (const l of summaries) expect(l).toMatch(/^<summary>\d+ [a-z ]+(: \d+ [a-z]+(, \d+ [a-z]+)*)?<\/summary>$/);
   });
 
   it("writes an ordinary id as code, which needs no escaping", () => {
@@ -366,23 +420,36 @@ describe("a long run", () => {
     expect(more(md)).toBeGreaterThan(0);
   });
 
-  it("stays under the limit however long the ids and the text are, in every section", () => {
-    const long = (s: string, i: number) => `${s}-${i}-${"|<*".repeat(3000)}`;
-    const tasks = Array.from({ length: 500 }, (_, i) => task(long("task", i), [false, true], Array.from({ length: 20 }, (_, c) => long("check", c))));
-    const soft = Array.from({ length: 500 }, (_, i) => ({ id: long("soft", i), description: "d", tool: long("tool", i), applied: 2, broken: 1, rate: 0.5, tasks: [] }));
-    const failureModes = Array.from({ length: 500 }, (_, i) => ({ id: long("mode", i), kind: "invariant" as const, count: 1, tasks: ["t"], example: long("example", i) }));
-    const r = run(tasks, { soft, failureModes, domain: long("domain", 0), agent: long("agent", 0), user: long("user", 0) });
-    const verdicts = Array.from({ length: 200 }, (_, i): JudgedVerdict => ({ id: long("criterion", i), criterion: long("text", i), verdict: "fail", quote: long("quote", i), reason: long("reason", i) }));
-    for (const t of r.tasks) t.trials[0]!.judged = { model: long("model", 0), verdicts };
-    const criteria = verdicts.map((v) => ({ id: v.id, criterion: v.criterion }));
-    const scored = withJudgedSummary(r, () => criteria);
-    const md = renderMarkdown({ ...scored, baseline: baselineSnapshot(run(Array.from({ length: 500 }, (_, i) => task(long("task", i), [true, true])), { runId: long("run", 0), agent: long("other", 0), judged: scored.judged })) });
-    expect(md.length).toBeLessThan(COMMENT_LIMIT);
-    expect(md).toContain("see report.html");
-    expect(md).toContain("Written by [sandtable-ai]");
-    expect(md).toContain("### Judged score");
-    expect(md).not.toContain("<*");
-  });
+  for (const [name, filler] of [["markup", "|<*"], ["mentions, which escape longest", "|@@@@@@@@@"]] as const) {
+    it(`stays under the limit however long the ids and the text are, in every section and every line: ${name}`, () => {
+      // Longer than a cell is cut to, which is all it takes: each list is capped, so more text can't add more.
+      const long = (s: string, i: number) => `${s}-${i}-${filler.repeat(100)}`;
+      const ids = (s: string, n: number) => Array.from({ length: n }, (_, i) => long(s, i));
+      const checks = ids("check", 20);
+      const tasks = Array.from({ length: 500 }, (_, i) => task(long("task", i), [false, true], checks, { critical: true }));
+      const soft = ids("soft", 500).map((id, i) => ({ id, description: "d", tool: long("tool", i), applied: 2, broken: 1, rate: 0.5, tasks: [] }));
+      const failureModes = ids("mode", 500).map((id, i) => ({ id, kind: "invariant" as const, count: 1, tasks: ["t"], example: long("example", i) }));
+      const floors = Object.fromEntries(ids("tag", 200).map((t) => [t, 1]));
+      const r = run(tasks, { soft, failureModes, floors, domain: long("domain", 0), agent: long("agent", 0), user: long("user", 0), sandtable: { version: long("v", 0), regradedWith: long("w", 0) }, pendingReview: [{ kind: "task", id: long("d", 0) }] as SuiteResult["pendingReview"] });
+      const criteria = ids("criterion", 40);
+      const verdicts = (text: string) => criteria.map((id, i): JudgedVerdict => ({ id, criterion: long(text, i), verdict: "fail", quote: long("quote", i), reason: long("reason", i) }));
+      const judgedNow = verdicts("text");
+      for (const t of r.tasks) t.trials[0]!.judged = { model: long("model", 0), verdicts: judgedNow };
+      const appliedNow = judgedNow.map((v) => ({ id: v.id, criterion: v.criterion, pending: true as const }));
+      const scored = withJudgedSummary(r, () => appliedNow);
+      const earlier = run(Array.from({ length: 500 }, (_, i) => task(long("task", i), [true, true])), { runId: long("run", 0), agent: long("other", 0) });
+      const judgedThen = verdicts("older");
+      for (const t of earlier.tasks) t.trials[0]!.judged = { model: long("older-model", 0), verdicts: judgedThen };
+      const appliedThen = judgedThen.map((v) => ({ id: v.id, criterion: v.criterion }));
+      const baseline = withJudgedSummary(earlier, () => appliedThen);
+      const md = renderMarkdown({ ...scored, baseline: baselineSnapshot(baseline) });
+      expect(md.length).toBeLessThan(COMMENT_LIMIT);
+      expect(md).toContain("see report.html");
+      expect(md).toContain("Written by [sandtable-ai]");
+      expect(md).toContain("### Judged score since the baseline");
+      expect(md).not.toContain("<*");
+    });
+  }
 
   it("caps the changes since a baseline too, with what moved in the toggle's summary", () => {
     const before = run(Array.from({ length: 300 }, (_, i) => task(`task-${i}`, [true])));
