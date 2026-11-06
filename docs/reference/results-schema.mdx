@@ -381,6 +381,6 @@ jq -r '.coverage.rules[] | select(.checked == 0) | .id' results.json
 jq -r '.coverage.tools[] | select(.calls == 0) | .name' results.json
 
 # a run made with --baseline: each task's passes then and now
-jq -r '(.baseline.tasks | map({(.id): "\(.passes)/\(.trials)"}) | add) as $then
-  | .tasks[] | "\(.id): \($then[.id] // "-") -> \(.passes)/\(.graded // (.trials | length))"' results.json
+jq -r '(.baseline.tasks | map({(.id): "\(.passes)/\(.trials)"}) | add) as $before
+  | .tasks[] | "\(.id): \($before[.id] // "-") -> \(.passes)/\(.graded // (.trials | length))"' results.json
 ```
