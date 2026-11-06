@@ -30,6 +30,8 @@ uvx sandtable-ai demo      # or through Python's uv (still needs Node.js 22+)
 
 No API key and no model calls: two rule-based agents take the same 52 scripted calls. Each run writes `results.json` and a self-contained `report.html` under `.sandtable/runs/`, and the naive agent's report opens in your browser.
 
+`npx sandtable-ai --version` (or `uvx sandtable-ai --version`) should print 1.x. On Node 20, npm falls back to 0.2.1, an unsupported pre-1.0 release. On Python 3.9, pip and uv either install that same release or report no matching distribution. The fix is to upgrade to Node.js 22 or later, or Python 3.10 or later.
+
 To watch a real model, `npx sandtable-ai demo --live` has Claude play both the caller (Claude Haiku 5.5, the cheaper model) and the agent, two trials per task. It needs `ANTHROPIC_API_KEY` and costs money.
 
 ## What it catches

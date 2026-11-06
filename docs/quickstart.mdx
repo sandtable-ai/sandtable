@@ -20,16 +20,20 @@ In about five minutes: an offline demo with no API key, the same example with Cl
     npx sandtable-ai --help
     ```
 
+    `npx sandtable-ai --version` should print 1.x. On Node 20, npm falls back to 0.2.1, an unsupported pre-1.0 release, and the fix is to upgrade to Node 22 or later. A project that installed it on Node 20 also keeps `^0.2.1` in its `package.json`, so change that range too.
+
     These docs run the CLI as `npx sandtable-ai <command>`, which uses the copy installed in the project when there is one. Keep the `-ai`: npm has an unrelated package called `sandtable`, and without the suffix npx downloads and runs that package whenever `sandtable-ai` isn't installed in the project.
   </Tab>
   <Tab title="Python launcher">
-    Installs a `sandtable` command that runs the matching CLI release. Needs Node 22 or later.
+    Installs a `sandtable` command that runs the matching CLI release. Needs Python 3.10 or later and Node 22 or later.
 
     ```bash
     uvx sandtable-ai --help
     # or
     pip install sandtable-ai && sandtable --help
     ```
+
+    `uvx sandtable-ai --version`, or `sandtable --version` after `pip install`, should print 1.x. On Python 3.9, pip and uv either install 0.2.1, an unsupported pre-1.0 release, or report no matching distribution, and the fix is to upgrade to Python 3.10 or later.
 
     The `npx sandtable-ai <command>` lines in these docs work as written, since the launcher needs Node too. To go through the launcher, run `uvx sandtable-ai <command>` instead, or `sandtable <command>` after `pip install`. Keep the `-ai` with uvx and pip: PyPI's `sandtable` is an unrelated package.
   </Tab>
