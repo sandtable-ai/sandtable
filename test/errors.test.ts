@@ -1,9 +1,9 @@
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { explainClaudeError, withHints, type ClaudeClient } from "../src/sim/claude.ts";
 import { httpAgent } from "../src/sim/http.ts";
 import { importOptional } from "../src/sim/optional.ts";
@@ -183,6 +183,236 @@ describe.skipIf(!process.features.typescript)("CLI errors", () => {
       const spec = tmp();
       mkdirSync(path.join(spec, "api.yaml"));
       expect((await fail(["init", "--openapi", path.join(spec, "api.yaml"), "-o", path.join(tmp(), "out")])).stderr.trim()).toBe(`--openapi: ${path.join(spec, "api.yaml")} is a directory, not a file`);
+    });
+  });
+
+  describe("an output folder it can't use says so, naming -o and the path, before anything is spent", () => {
+    const asRoot = process.getuid?.() === 0;
+    const tmp = () => realpathSync(mkdtempSync(path.join(tmpdir(), "sandtable-out-")));
+    const FOLDER = "Pass a folder for results.json and report.html.";
+    const ELSEWHERE = "Pass -o <dir> to write somewhere else.";
+    // No key and nothing listening: a model call, if one slipped through, fails instead of costing money.
+    const env = { ...process.env, ANTHROPIC_API_KEY: "", ANTHROPIC_BASE_URL: "http://127.0.0.1:9" };
+    const sandtable = (args: string[], cwd?: string) =>
+      promisify(execFile)(process.execPath, [cli, ...args], { env, ...(cwd ? { cwd } : {}) }).then(
+        ({ stdout, stderr }) => ({ code: 0, stdout, stderr }),
+        (e: { code: number; stdout: string; stderr: string }) => e,
+      );
+    /** A file to name by mistake. */
+    const aFile = () => {
+      const file = path.join(tmp(), "afile");
+      writeFileSync(file, "");
+      return file;
+    };
+    /** A folder that can't be written to, for the length of `use`. */
+    async function readOnly(use: (dir: string) => Promise<void>) {
+      const dir = tmp();
+      chmodSync(dir, 0o555);
+      try {
+        await use(dir);
+      } finally {
+        chmodSync(dir, 0o755);
+      }
+    }
+    const example = path.resolve("examples/freight");
+
+    describe("run", () => {
+      /** A module agent that notes whether `out` exists when its first trial starts. */
+      function markingAgent(out: string) {
+        const dir = tmp();
+        const mark = path.join(dir, "trial-started");
+        const agent = path.join(dir, "marks.mjs");
+        writeFileSync(agent, `import { existsSync, writeFileSync } from "node:fs";
+export default { name: "marks", createSession: async () => { writeFileSync(${JSON.stringify(mark)}, String(existsSync(${JSON.stringify(out)}))); return { reply: async () => "Goodbye." }; } };\n`);
+        return { agent, mark, args: ["run", example, "--agent", agent, "--user", "scripted", "-t", "book-at-posted-rate", "-o", out] };
+      }
+
+      it("stops before the first trial at a file, with exit 2", async () => {
+        const file = aFile();
+        const { args, mark } = markingAgent(file);
+        const r = await sandtable(args);
+        expect(r.code).toBe(2);
+        expect(r.stderr.trim()).toBe(`-o: ${file} is a file, not a folder. ${FOLDER}`);
+        expect(r.stdout).toBe("");
+        expect(existsSync(mark)).toBe(false);
+      });
+
+      it("stops before the first trial at a path under a file", async () => {
+        const file = aFile();
+        const under = path.join(file, "sub", "deeper");
+        const { args, mark } = markingAgent(under);
+        const r = await sandtable(args);
+        expect(r.code).toBe(2);
+        expect(r.stderr.trim()).toBe(`-o: ${under} is under ${file}, which is a file, not a folder. ${FOLDER}`);
+        expect(r.stdout).toBe("");
+        expect(existsSync(mark)).toBe(false);
+      });
+
+      it.skipIf(asRoot)("stops before the first trial at a folder it can't create or write", async () => {
+        await readOnly(async (ro) => {
+          const create = markingAgent(path.join(ro, "out"));
+          const created = await sandtable(create.args);
+          expect(created.code).toBe(2);
+          expect(created.stderr.trim()).toBe(`-o: can't create ${path.join(ro, "out")}: permission denied`);
+          expect(created.stdout).toBe("");
+          expect(existsSync(create.mark)).toBe(false);
+
+          const write = markingAgent(ro);
+          const written = await sandtable(write.args);
+          expect(written.code).toBe(2);
+          expect(written.stderr.trim()).toBe(`-o: can't write to ${ro}: permission denied`);
+          expect(existsSync(write.mark)).toBe(false);
+        });
+      });
+
+      it("creates the folder before the first trial, and leaves only what it writes there", async () => {
+        const out = path.join(tmp(), "new", "run");
+        const { args, mark } = markingAgent(out);
+        await sandtable(args);
+        expect(readFileSync(mark, "utf8")).toBe("true");
+        expect(readdirSync(out).sort()).toEqual(["report.html", "results.json"]);
+      });
+
+      it("says the same of the default folder, and that -o writes elsewhere", async () => {
+        const cwd = tmp();
+        writeFileSync(path.join(cwd, ".sandtable"), "");
+        const r = await sandtable(["run", example, "--agent", "scripted:careful", "--user", "scripted", "-t", "book-at-posted-rate"], cwd);
+        expect(r.code).toBe(2);
+        const dot = path.join(cwd, ".sandtable");
+        expect(r.stderr.trim()).toMatch(new RegExp(`^run: ${dot}/runs/\\S+-freight-carrier-sales is under ${dot}, which is a file, not a folder\\. Pass -o <dir> to write somewhere else\\.$`));
+        expect(r.stdout).toBe("");
+      });
+
+      it.skipIf(asRoot)("creates nothing in a folder it can't write, and names -o for one the user didn't choose", async () => {
+        await readOnly(async (cwd) => {
+          const r = await sandtable(["run", example, "--agent", "scripted:careful", "--user", "scripted", "-t", "book-at-posted-rate"], cwd);
+          expect(r.code).toBe(2);
+          expect(r.stderr.trim()).toMatch(new RegExp(`^run: can't create ${cwd}/\\.sandtable/runs/\\S+: permission denied\\. Pass -o <dir> to write somewhere else\\.$`));
+          expect(readdirSync(cwd)).toEqual([]);
+        });
+      });
+    });
+
+    describe("a command that reads a stored run", () => {
+      let results: string;
+      let models: string;
+      beforeAll(async () => {
+        const dir = tmp();
+        await sandtable(["run", example, "--agent", "scripted:careful", "--user", "scripted", "-t", "book-at-posted-rate", "--no-html", "-o", dir]);
+        results = path.join(dir, "results.json");
+        models = path.join(dir, "models.yaml");
+        writeFileSync(models, 'models:\n  - { label: Careful rules, agent: "scripted:careful" }\n');
+      });
+      const REPORT = "Pass a folder for the report, or a path ending in .html.";
+      const BOARD = "Pass a folder for the board and each model's results.";
+      const commands: [string, (out: string) => string[], string][] = [
+        ["regrade", (out) => ["regrade", results, "-d", example, "-o", out], FOLDER],
+        ["compare", (out) => ["compare", results, results, "-o", out], FOLDER],
+        ["report", (out) => ["report", results, "-o", out], REPORT],
+        ["judge", (out) => ["judge", results, "-d", example, "-o", out], FOLDER],
+        ["leaderboard", (out) => ["leaderboard", example, "-m", models, "-u", "scripted", "-k", "1", "-t", "no-mc-number", "-o", out], BOARD],
+      ];
+      for (const [name, args, pass] of commands) {
+        it(`${name} -o names a file or a path under one, instead of Node's raw error`, async () => {
+          const file = aFile();
+          const r = await sandtable(args(file));
+          expect(r.code).toBe(2);
+          expect(r.stderr.trim()).toBe(`-o: ${file} is a file, not a folder. ${pass}`);
+          expect(r.stdout).not.toContain("results:");
+          const under = path.join(file, "sub");
+          const below = await sandtable(args(under));
+          expect(below.code).toBe(2);
+          expect(below.stderr.trim()).toBe(`-o: ${under} is under ${file}, which is a file, not a folder. ${pass}`);
+        });
+      }
+
+      it("regrade and compare print nothing before saying so", async () => {
+        for (const [, args] of commands.slice(0, 2)) expect((await sandtable(args!(aFile()))).stdout).toBe("");
+      });
+
+      it.skipIf(asRoot)("regrade -o names a folder it can't create or write", async () => {
+        await readOnly(async (ro) => {
+          const created = await sandtable(["regrade", results, "-d", example, "-o", path.join(ro, "out")]);
+          expect(created.code).toBe(2);
+          expect(created.stderr.trim()).toBe(`-o: can't create ${path.join(ro, "out")}: permission denied`);
+          const written = await sandtable(["regrade", results, "-d", example, "-o", ro]);
+          expect(written.code).toBe(2);
+          expect(written.stderr.trim()).toBe(`-o: can't write to ${ro}: permission denied`);
+        });
+      });
+
+      it("report -o with a file above its .html says the same", async () => {
+        const file = aFile();
+        const r = await sandtable(["report", results, "-o", path.join(file, "x.html")]);
+        expect(r.code).toBe(2);
+        expect(r.stderr.trim()).toBe(`-o: ${file} is a file, not a folder. ${REPORT}`);
+      });
+
+      it.skipIf(asRoot)("regrade, report and judge without -o say what to do about the results' own folder", async () => {
+        await readOnly(async (ro) => {
+          const copy = path.join(ro, "results.json");
+          chmodSync(ro, 0o755);
+          writeFileSync(copy, readFileSync(results));
+          chmodSync(ro, 0o555);
+          for (const args of [["regrade", copy, "-d", example], ["report", copy], ["judge", copy, "-d", example]]) {
+            const r = await sandtable(args);
+            expect(r.code, args[0]).toBe(2);
+            expect(r.stderr.trim(), args[0]).toBe(`${args[0]}: can't write to ${ro}: permission denied. ${ELSEWHERE}`);
+          }
+        });
+      });
+
+      it("judge -o stops before its first paid call, and --dry-run still writes nothing", async () => {
+        const file = aFile();
+        const r = await sandtable(["judge", results, "-d", example, "-o", file]);
+        expect(r.stderr).not.toContain("judge stopped");
+        const out = path.join(tmp(), "new");
+        const dry = await sandtable(["judge", results, "-d", example, "-o", out, "--dry-run"]);
+        expect(dry.code, dry.stderr).toBe(0);
+        expect(existsSync(out)).toBe(false);
+      });
+
+      it("leaderboard -o no longer sends you to a model's folder", async () => {
+        const file = aFile();
+        const r = await sandtable(["leaderboard", example, "-m", models, "-u", "scripted", "-k", "1", "-t", "no-mc-number", "-o", file]);
+        expect(r.stderr).not.toContain("stored files");
+        expect(r.stderr).not.toContain("model's folder");
+        expect(r.stdout).toBe("");
+      });
+    });
+
+    it("serve stops before it listens: each conversation's grade would have nowhere to go", async () => {
+      const file = aFile();
+      const named = await sandtable(["serve", example, "--port", "0", "-o", file]);
+      expect(named.code).toBe(2);
+      expect(named.stderr.trim()).toBe(`-o: ${file} is a file, not a folder. ${FOLDER}`);
+      expect(named.stdout).toBe("");
+      const under = path.join(file, "sub");
+      expect((await sandtable(["serve", example, "--port", "0", "-o", under])).stderr.trim()).toBe(`-o: ${under} is under ${file}, which is a file, not a folder. ${FOLDER}`);
+      const cwd = tmp();
+      const dot = path.join(cwd, ".sandtable");
+      writeFileSync(dot, "");
+      const chosen = await sandtable(["serve", example, "--port", "0"], cwd);
+      expect(chosen.code).toBe(2);
+      expect(chosen.stderr.trim()).toMatch(new RegExp(`^serve: ${dot}/runs/\\S+-serve is under ${dot}, which is a file, not a folder\\. Pass -o <dir> to write somewhere else\\.$`));
+    });
+
+    it.skipIf(asRoot)("serve -o names a folder it can't write", async () => {
+      await readOnly(async (ro) => {
+        const r = await sandtable(["serve", example, "--port", "0", "-o", ro]);
+        expect(r.code).toBe(2);
+        expect(r.stderr.trim()).toBe(`-o: can't write to ${ro}: permission denied`);
+      });
+    });
+
+    it("demo stops before its first trial when it can't write under .sandtable/runs/", async () => {
+      const cwd = tmp();
+      const dot = path.join(cwd, ".sandtable");
+      writeFileSync(dot, "");
+      const r = await sandtable(["demo", "--no-open"], cwd);
+      expect(r.code).toBe(2);
+      expect(r.stderr.trim()).toMatch(new RegExp(`^demo: ${dot}/runs/\\S+-demo-naive is under ${dot}, which is a file, not a folder\\. Run it from a folder you can write to\\.$`));
+      expect(r.stdout).not.toContain("pass^1");
     });
   });
 

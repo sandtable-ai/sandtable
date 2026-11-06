@@ -3,8 +3,8 @@
 `sandtable run` writes one `results.json` per run, in `.sandtable/runs/<timestamp>-<domain>/` unless `-o` says otherwise. It holds every trial in full, so it is large: query it with `jq` instead of reading it whole.
 
 ```bash
-RUN=$(ls -td .sandtable/runs/*/ | head -1)   # the latest run
-R="$RUN/results.json"
+R=$(ls -t .sandtable/runs/*/results.json | head -1)   # the latest run that wrote its results
+RUN=$(dirname "$R")
 ```
 
 ## Shape

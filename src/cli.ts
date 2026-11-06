@@ -18,7 +18,7 @@ import { calibrate, parseLabels, renderCalibration } from "./judge/calibrate.ts"
 import { DEFAULT_JUDGE_MODEL, judgeBlocker, judgeInputsWarning, judgePlan, judgePlanLine, judgeSuite } from "./judge/judge.ts";
 import { criteriaOfRun, droppedLine, statesCriteria } from "./judge/summary.ts";
 import { baselineSnapshot, checkBaseline, compareRuns, comparisonOf, regressions, type Comparison } from "./run/compare.ts";
-import { readResults, readUserFile, readUserText, userPathError } from "./run/read.ts";
+import { outFolderError, prepareOutFolder, readResults, readUserFile, readUserText, userPathError, type OutFolder } from "./run/read.ts";
 import { writeFileAtomic } from "./run/write.ts";
 import { providerOf, type ClaudeOptions, type Provider } from "./sim/claude.ts";
 import { registerPrices } from "./run/usage.ts";
@@ -172,10 +172,22 @@ function withProviderFlags(cmd: Command): Command {
     .option("--aws-profile <name>", "AWS profile for --provider bedrock (default: AWS_PROFILE)");
 }
 
+/** How a command names its output folder: `-o`, or, without it, the command itself, which chose the folder. */
+function outFolder(command: string, given: string | undefined, holds = "results.json and report.html"): OutFolder {
+  if (given !== undefined) return { from: "-o", ifFile: `Pass a folder for ${holds}.` };
+  const elsewhere = "Pass -o <dir> to write somewhere else.";
+  return { from: command, ifFile: elsewhere, ifDenied: elsewhere };
+}
+
 async function save(result: SuiteResult, outDir: string, html: boolean): Promise<string> {
-  await mkdir(outDir, { recursive: true });
-  await writeFileAtomic(path.join(outDir, "results.json"), JSON.stringify(result, null, 2));
-  if (html) await writeFileAtomic(path.join(outDir, "report.html"), renderHtml(result));
+  try {
+    await mkdir(outDir, { recursive: true });
+    await writeFileAtomic(path.join(outDir, "results.json"), JSON.stringify(result, null, 2));
+    if (html) await writeFileAtomic(path.join(outDir, "report.html"), renderHtml(result));
+  } catch (err) {
+    // Each command checked its folder first, so this is a folder that went bad since: name it all the same.
+    throw await outFolderError(err, outDir, outFolder("save", outDir));
+  }
   return outDir;
 }
 
@@ -840,6 +852,9 @@ withProviderFlags(program
     const server = o.serve === undefined ? undefined : await startWorldServer(domain, { port: o.serve }).catch((err: NodeJS.ErrnoException) => {
       throw new Error(err.code === "EADDRINUSE" ? `--serve: port ${o.serve} is in use: pick another, or --serve 0 for any free port` : `--serve: ${err.message}`);
     });
+    // Before any trial, so a bad path costs no model calls, and after every check above, which write nothing.
+    const out = o.out ?? defaultOut(domain.name);
+    await prepareOutFolder(out, outFolder("run", o.out));
     if (server) {
       console.log(`Serving each trial's world at ${server.url} while it runs: REST ${server.url}/tools/<name>, MCP ${server.url}/mcp, webhooks ${server.url}/webhook.`);
       console.log(`  ${concurrency === 1 ? "Trials run one at a time, so these URLs mean the trial that is running." : `${concurrency} trials run at once: each must use its own URLs, ${server.url}/s/<session>/…, which an agent gets in each request.`}\n`);
@@ -864,7 +879,7 @@ withProviderFlags(program
     if (baseline) result.baseline = baselineSnapshot(baseline);
     if (o.floor) result.floors = o.floor;
     console.log(renderTerminal(result, { ...(o.baseline ? { baseline: o.baseline } : {}), ...(o.judge ? { withoutJudgedChanges: true } : {}) }));
-    const out = await save(result, o.out ?? defaultOut(domain.name), o.html);
+    await save(result, out, o.html);
     console.log(`\n  results: ${path.join(out, "results.json")}${o.html ? `\n  report:  ${path.join(out, "report.html")}` : ""}`);
     // The gates below read `result`, the run as graded, never what the judge returns.
     if (o.judge) await judgeFinishedRun(result, domain, domainPath, out, o);
@@ -925,6 +940,8 @@ program
     }).catch((err: NodeJS.ErrnoException) => {
       throw new Error(err.code === "EADDRINUSE" ? `--port ${o.port} is in use: pick another, or --port 0 for any free port` : err.message);
     });
+    // Before it says it's serving, so no conversation is graded with nowhere to write it.
+    await prepareOutFolder(out, outFolder("serve", o.out));
     const url = served.server.url;
     console.log(`Serving ${domain.name} at ${url} for conversations another system drives, until you stop it (Ctrl-C).`);
     console.log(`  Each conversation is a trial of ${task ? task.id : "the task it names (POST /sessions with { \"task\": \"<id>\" })"}: REST ${url}/tools/<name>, MCP ${url}/mcp, webhooks ${url}/webhook.`);
@@ -988,6 +1005,7 @@ withProviderFlags(program
     const user = resolveUser(userSpec, p, o.openaiBaseUrl);
     const k = o.trials ?? cfg.k ?? 4;
     const out = o.out ?? path.join("leaderboard", domain.name);
+    await prepareOutFolder(out, outFolder("leaderboard", o.out, "the board and each model's results"));
     const taskIds = o.tasks?.ids;
     const tasks = taskIds?.length ? taskIds.length : domain.tasks.length;
     const runInfo: RunInfo = {
@@ -1035,13 +1053,17 @@ withProviderFlags(program
   .action(async (o: { live?: boolean; trials: number; agentModel?: string; userModel?: string; open: boolean } & ProviderFlags) => {
     const shouldOpen = o.open && process.stdout.isTTY;
     const domain = await loadDomain(EXAMPLE);
+    const elsewhere = "Run it from a folder you can write to.";
+    const demoFolder: OutFolder = { from: "demo", ifFile: elsewhere, ifDenied: elsewhere };
     if (o.live) {
       const p = providerOpts(o);
       const spec = (model?: string) => (model ? `claude:${model}` : "claude");
       await failIfUnreachable([{ role: "agent", spec: spec(o.agentModel) }, { role: "simulated user", spec: spec(o.userModel ?? DEMO_USER_MODEL) }], p);
+      const out = defaultOut("demo-live");
+      await prepareOutFolder(out, demoFolder);
       const result = await runSuite({ domain, ...demoLiveSides(p, o), k: o.trials });
       console.log(renderTerminal(result));
-      const out = await save(result, defaultOut("demo-live"), true);
+      await save(result, out, true);
       console.log(`\n  report: ${path.join(out, "report.html")}`);
       if (failIfNothingGraded(result)) return;
       if (shouldOpen) openInBrowser(path.join(out, "report.html"));
@@ -1052,9 +1074,11 @@ withProviderFlags(program
     console.log("Offline demo: two rule-based agents replay scripted carrier calls. No API key needed.\n");
     let firstReport: string | undefined;
     for (const mode of ["naive", "careful"] as const) {
+      const out = defaultOut(`demo-${mode}`);
+      await prepareOutFolder(out, demoFolder);
       const result = await runSuite({ domain, agent: freightScriptedAgent(mode), user: scriptedUser() });
       console.log(renderTerminal(result));
-      const out = await save(result, defaultOut(`demo-${mode}`), true);
+      await save(result, out, true);
       firstReport ??= path.join(out, "report.html");
       console.log(`\n  report: ${path.join(out, "report.html")}\n`);
     }
@@ -1090,8 +1114,11 @@ program
     }
     const out = reportPath(o.out, resultsPath, o.audience === "customer" ? "customer-report.html" : "report.html");
     // Like run's and regrade's -o, a directory that doesn't exist yet is created.
-    await mkdir(path.dirname(out), { recursive: true });
-    await writeFile(out, page);
+    const folder = outFolder("report", o.out, "the report, or a path ending in .html");
+    await prepareOutFolder(path.dirname(out), folder);
+    await writeFile(out, page).catch(async (err: unknown) => {
+      throw await outFolderError(err, path.dirname(out), folder);
+    });
     console.log(out);
   });
 
@@ -1124,6 +1151,8 @@ program
       const older = ranWith && ranWith !== version && stored.inputs ? ` It ran on sandtable-ai ${ranWith}: if the domain hasn't changed since, \`npx sandtable-ai@${ranWith} regrade ${shellWord(resultsPath)} -d ${shellWord(o.domain)}\` regrades it with that version.` : "";
       throw new Error(`can't regrade ${resultsPath}: ${err.message}. Rerun it with \`npx sandtable-ai run\` instead.${older}`);
     }
+    const out = o.out ?? path.dirname(resultsPath);
+    await prepareOutFolder(out, outFolder("regrade", o.out));
     const flipped = changedVerdicts(stored, result);
     console.log(renderTerminal(result));
     const trials = result.tasks.reduce((n, t) => n + t.trials.length, 0);
@@ -1134,7 +1163,7 @@ program
     }
     const dropped = droppedVerdicts(domain, stored, result);
     if (dropped.length) console.log(`  ${droppedLine(dropped)}`);
-    const out = await save(result, o.out ?? path.dirname(resultsPath), o.html);
+    await save(result, out, o.html);
     console.log(`\n  results: ${path.join(out, "results.json")}${o.html ? `\n  report:  ${path.join(out, "report.html")}` : ""}`);
   });
 
@@ -1174,6 +1203,8 @@ withProviderFlags(program
       return;
     }
     const out = o.out ?? path.dirname(resultsPath);
+    // Before its first paid call: it writes after each trial.
+    await prepareOutFolder(out, outFolder("judge", o.out));
     const results = path.join(out, "results.json");
     // One write at a time, in order, after each trial, so Ctrl-C loses at most the calls in flight.
     let writing = Promise.resolve();
@@ -1235,6 +1266,7 @@ program
     if (baseline.domain !== result.domain) {
       throw new Error(`${baselinePath} and ${resultsPath} are runs of different domains, ${baseline.domain} and ${result.domain}: compare two runs of the same domain`);
     }
+    if (o.out !== undefined) await prepareOutFolder(o.out, outFolder("compare", o.out));
     const compared: SuiteResult = { ...result, baseline: baselineSnapshot(baseline) };
     console.log(renderCompare(compared, { baseline: baselinePath, results: resultsPath }));
     if (o.out !== undefined) {
