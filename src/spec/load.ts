@@ -5,7 +5,7 @@ import { z } from "zod";
 import { expectedTool } from "../grade/expectations.ts";
 import { mentions, protectedValues } from "../grade/invariants.ts";
 import { agentSystemPrompt, taskContext } from "../sim/prompts.ts";
-import { operatorProblems, substitute } from "../world/match.ts";
+import { operatorProblems, operatorWarnings, substitute } from "../world/match.ts";
 import { shellWord } from "../shell.ts";
 import { version } from "../version.ts";
 import { coerceArgs } from "../world/tools.ts";
@@ -103,8 +103,14 @@ function groupBy<T>(items: readonly T[], key: (item: T) => string): Map<string, 
 
 /** Cross-reference checks the schema cannot express. Returns human-readable problems. */
 export function validateDomain(d: Domain): string[] {
+  return crossReferences(d).problems;
+}
+
+/** validateDomain's checks, and what they find to warn about in a where clause, which domainWarnings reports. */
+function crossReferences(d: Domain): { problems: string[]; clauseWarnings: string[] } {
   const clocked = usesClock(d);
   const problems: string[] = [];
+  const clauseWarnings: string[] = [];
   const tables = new Set(Object.keys(d.world.tables));
   const tools = new Map(d.tools.map((t) => [t.name, t]));
   const table = (name: string, where: string) => {
@@ -113,9 +119,11 @@ export function validateDomain(d: Domain): string[] {
   const tool = (name: string, where: string) => {
     if (!tools.has(name)) problems.push(`${where}: unknown tool "${name}"`);
   };
-  // Every where clause, at its path: `validate` catches what would throw or silently match nothing at run time.
+  // Every where clause, at its path: `validate` catches what would throw or silently match nothing at run time, and warns about what 1.4 accepted but 2.0 will reject.
   const operators = (clause: Record<string, unknown> | undefined, where: string, opts: { refs?: boolean } = {}) => {
-    if (clause) for (const p of operatorProblems(clause, opts)) problems.push(`${where}.${p}`);
+    if (!clause) return;
+    for (const p of operatorProblems(clause, opts)) problems.push(`${where}.${p}`);
+    for (const w of operatorWarnings(clause, opts)) clauseWarnings.push(`${where}.${w}`);
   };
   const arg = (toolName: string, name: string, where: string) => {
     const t = tools.get(toolName);
@@ -271,7 +279,7 @@ export function validateDomain(d: Domain): string[] {
     }
   }
   problems.push(...dateProblems(d));
-  return problems;
+  return { problems, clauseWarnings };
 }
 
 /** The names a "$name" reference takes as a date when no param has them. */
@@ -448,7 +456,7 @@ export function domainWarnings(d: Domain): string[] {
       }
     }
   }
-  warnings.push(...dateWarnings(d), ...stateEntryWarnings(d));
+  warnings.push(...dateWarnings(d), ...stateEntryWarnings(d), ...crossReferences(d).clauseWarnings);
   // The default prompt, and each task's prompt that states a `given.context`.
   const prompts = [agentSystemPrompt(d), ...d.tasks.filter((t) => taskContext(t)).map((t) => agentSystemPrompt(d, t))];
   for (const inv of d.invariants) {

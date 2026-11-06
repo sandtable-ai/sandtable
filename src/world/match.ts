@@ -154,23 +154,43 @@ export const OPERATORS: readonly string[] = Object.keys(OPERATOR_TESTS);
  * single value, so never the list `$in` needs.
  */
 export function operatorProblems(where: Row, opts: { refs?: boolean } = {}): string[] {
+  return readClause(where, opts).problems;
+}
+
+/**
+ * What a where clause says but doesn't do, one line per finding, each starting with the field: a plain key beside
+ * operators, which makes the whole object an equality (see isOperatorObject), or a `$exists` that isn't true or false,
+ * which is read by whether it's truthy. `opts` as in operatorProblems. 1.4 accepted both, so these stay warnings until 2.0.
+ */
+export function operatorWarnings(where: Row, opts: { refs?: boolean } = {}): string[] {
+  return readClause(where, opts).warnings;
+}
+
+function readClause(where: Row, opts: { refs?: boolean }): { problems: string[]; warnings: string[] } {
   const problems: string[] = [];
+  const warnings: string[] = [];
   for (const [field, cond] of Object.entries(where)) {
     if (field.startsWith("$")) {
       problems.push(`${field}: a where clause has no operators at the top, only fields, and all of them must hold`);
       continue;
     }
-    if (!isOperatorObject(cond)) continue;
+    if (!isOperatorObject(cond)) {
+      warnings.push(...plainKeyWarnings(field, cond));
+      continue;
+    }
     for (const [op, expected] of Object.entries(cond)) {
       if (op === "$contains" && isPlainObject(expected)) {
         // An element's where clause, or operators on the element itself.
-        if (isOperatorObject(expected)) problems.push(...operatorProblems({ [field]: expected }, opts));
-        else for (const p of operatorProblems(expected, opts)) problems.push(`${field}.$contains.${p}`);
+        const onElement = isOperatorObject(expected);
+        const inner = readClause(onElement ? { [field]: expected } : expected, opts);
+        const at = onElement ? "" : `${field}.$contains.`;
+        problems.push(...inner.problems.map((p) => at + p));
+        warnings.push(...inner.warnings.map((w) => at + w));
         continue;
       }
+      const ref = opts.refs && typeof expected === "string" && WHOLE_REF.test(expected);
       if (!Object.hasOwn(OPERATOR_TESTS, op)) problems.push(`${field}: unknown operator "${op}" (use ${OPERATORS.join(", ")})`);
       else if ((op === "$in" || op === "$nin") && !Array.isArray(expected)) {
-        const ref = opts.refs && typeof expected === "string" && WHOLE_REF.test(expected);
         problems.push(`${field}: ${op} needs a list${ref ? `, and "${expected}" is a single argument value: list the values, or use ${op === "$in" ? "$eq" : "$ne"}` : ""}`);
       }
       else if (op === "$regex") {
@@ -180,9 +200,23 @@ export function operatorProblems(where: Row, opts: { refs?: boolean } = {}): str
           catch { problems.push(`${field}: invalid $regex pattern ${JSON.stringify(expected)}`); }
         }
       }
+      else if (op === "$exists" && typeof expected !== "boolean" && !ref) {
+        warnings.push(`${field}: $exists takes true or false, and ${JSON.stringify(expected)} is read as ${Boolean(expected)}. Write true or false; 2.0 will reject this.`);
+      }
     }
   }
-  return problems;
+  return { problems, warnings };
+}
+
+/** A line for each plain key of an object that also has operators. An object with no operators is a plain equality, as on an object field. */
+function plainKeyWarnings(field: string, cond: unknown): string[] {
+  if (!isPlainObject(cond)) return [];
+  const keys = Object.keys(cond);
+  const operators = keys.filter((k) => k.startsWith("$"));
+  if (!operators.length) return [];
+  return keys
+    .filter((k) => !k.startsWith("$"))
+    .map((k) => `${field}: the plain key "${k}" beside ${operators.join(", ")} turns this object into an equality check, so no operator in it is read. Put a $ on "${k}" if it's an operator, or take it out; 2.0 will reject this.`);
 }
 
 function test(actual: unknown, cond: unknown): boolean {
