@@ -44,6 +44,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 ### Security
 
 - `report.html`, the customer report and the leaderboard page escape apostrophes, so text from a domain file stays inside the attribute that holds it. A tooltip that stopped at an apostrophe now shows all its text.
+- `report.html`, the customer report, the leaderboard page and `report --markdown` escape every value they read from `results.json`, including fields that normally hold a number or a fixed word, so a results file from somewhere else shows its text as text.
 
 ## [1.4.0] - 2026-11-04
 
