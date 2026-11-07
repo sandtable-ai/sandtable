@@ -90,7 +90,7 @@ const C = ${comparison};
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const pct = (x) => Number.isNaN(x) || x === null ? "n/a" : (x * 100).toFixed(1) + "%";
-const ms = (v) => v === null || v === undefined ? "n/a" : v < 1000 ? v + "ms" : (v / 1000).toFixed(1) + "s";
+const ms = (v) => v === null || v === undefined ? "n/a" : v < 1000 ? esc(v) + "ms" : (v / 1000).toFixed(1) + "s";
 const usd = (v) => v === null || v === undefined ? "n/a" : v > 0 && v < 0.01 ? "<$0.01" : "$" + v.toFixed(2);
 // JSON with a space after each comma and colon, so long rows wrap between fields, not inside values.
 const json = (v) => v === undefined ? "" : JSON.stringify(v, null, 1).replace(/\\n\\s*/g, " ");
@@ -104,7 +104,7 @@ const silent = (u) => u ? [u.agent, u.user].flatMap((g) => Object.values(g || {}
 $("domain").textContent = R.domain;
 $("meta").textContent = "agent " + R.agent + " · user " + R.user + " · k=" + R.k + " · " + R.startedAt + " · " + (R.durationMs / 1000).toFixed(1) + "s";
 if (R.pendingReview && R.pendingReview.length) {
-  $("pending").innerHTML = '<div class="warn"><b>Provisional:</b> ' + R.pendingReview.length + " drafted item(s) are pending review: " +
+  $("pending").innerHTML = '<div class="warn"><b>Provisional:</b> ' + esc(R.pendingReview.length) + " drafted item(s) are pending review: " +
     R.pendingReview.map((p) => '<span class="chip">' + esc(p.kind + " " + p.id) + "</span>").join("") + "</div>";
 }
 // Results from before verdicts have no graded count or verdict: every trial was graded then.
@@ -124,24 +124,24 @@ const critFailed = (t) => t.passes < graded(t);
 // Critical tasks first, then the rest, both in spec order. Indexes stay those of R.tasks, which show() reads.
 const order = [...R.tasks.keys()].sort((a, b) => Number(!R.tasks[a].critical) - Number(!R.tasks[b].critical) || a - b);
 const critical = R.tasks.filter((t) => t.critical);
-$("kpis").innerHTML = hats.map(([j, v]) => '<div class="kpi"><b>' + pct(v) + '</b><span>pass^' + j + '</span></div>').join("") +
+$("kpis").innerHTML = hats.map(([j, v]) => '<div class="kpi"><b>' + pct(v) + '</b><span>pass^' + esc(j) + '</span></div>').join("") +
   (critical.length ? '<div class="kpi"><b class="' + (critical.every(allPassed) ? "" : "badt") + '">' + critical.filter(allPassed).length + " of " + critical.length + '</b><span>critical tasks passed every trial</span></div>' : "") +
-  (R.k > 1 && R.passAt ? '<div class="kpi"><b>' + pct(R.passAt[String(R.k)] ?? null) + '</b><span>pass@' + R.k + '</span></div>' : "") +
+  (R.k > 1 && R.passAt ? '<div class="kpi"><b>' + pct(R.passAt[String(R.k)] ?? null) + '</b><span>pass@' + esc(R.k) + '</span></div>' : "") +
   (R.k > 1 && R.flipRate !== undefined ? '<div class="kpi"><b>' + pct(R.flipRate) + '</b><span>flip rate</span></div>' : "") +
   (skippedTrials.length ? '<div class="kpi"><b>' + skippedTrials.length + '</b><span>trials skipped</span></div>' : "") +
   '<div class="kpi"><b>' + ms(R.latency && R.latency.agentTurnP95Ms) + '</b><span>agent turn p95</span></div>' +
   (calls(R.usage) ? '<div class="kpi"><b>' + usd(R.usage.costUsd) + '</b><span>estimated cost</span></div>' : "") +
-  (stops(R.usage) ? '<div class="kpi"><b>' + stops(R.usage) + '</b><span>calls stopped at max_tokens</span></div>' : "") +
-  (stripped(R.usage) ? '<div class="kpi"><b>' + stripped(R.usage) + '</b><span>replies with reasoning removed</span></div>' : "") +
-  (silent(R.usage) ? '<div class="kpi"><b>' + silent(R.usage) + '</b><span>replies silent once reasoning was removed</span></div>' : "") +
-  '<div class="kpi"><b>' + R.tasks.length + '</b><span>tasks</span></div>' +
-  '<div class="kpi"><b>' + R.tasks.reduce((n, t) => n + t.trials.length, 0) + '</b><span>trials</span></div>';
+  (stops(R.usage) ? '<div class="kpi"><b>' + esc(stops(R.usage)) + '</b><span>calls stopped at max_tokens</span></div>' : "") +
+  (stripped(R.usage) ? '<div class="kpi"><b>' + esc(stripped(R.usage)) + '</b><span>replies with reasoning removed</span></div>' : "") +
+  (silent(R.usage) ? '<div class="kpi"><b>' + esc(silent(R.usage)) + '</b><span>replies silent once reasoning was removed</span></div>' : "") +
+  '<div class="kpi"><b>' + esc(R.tasks.length) + '</b><span>tasks</span></div>' +
+  '<div class="kpi"><b>' + esc(R.tasks.reduce((n, t) => n + t.trials.length, 0)) + '</b><span>trials</span></div>';
 // Since the baseline: what changed, regressions first, then the scores before and after.
 const since = C ? Object.fromEntries(C.tasks.map((d) => [d.id, d.change])) : {};
 const regressed = (id) => since[id] === "broken" || since[id] === "worse";
 if (C) {
   const b = C.baseline;
-  const frac = (x) => x ? x.passes + "/" + x.trials : "–";
+  const frac = (x) => x ? esc(x.passes) + "/" + esc(x.trials) : "–";
   const moved = C.tasks.filter((d) => d.change !== "same");
   const same = C.tasks.length - moved.length;
   const label = { broken: "broken", worse: "worse", fixed: "fixed", better: "better", changed: "test changed", added: "added", removed: "only in the baseline", skipped: "not graded in one run" };
@@ -150,15 +150,15 @@ if (C) {
   const shown = C.passHat.filter((p) => p.j === 1 || p.j === C.passHat.length);
   const pts = (p) => { const d = (p.after - p.before) * 100; return Number.isNaN(d) ? "" : Math.abs(d) < 0.05 ? "no change" : (d > 0 ? "+" : "−") + Math.abs(d).toFixed(1) + " pts"; };
   $("baseline").innerHTML = "<h2>Changes since baseline</h2><p class='explain' style='margin-top:0'>Compared with run <code>" + esc(b.runId) + "</code> of " + esc(b.startedAt) +
-    ": agent " + esc(b.agent) + ", user " + esc(b.user) + ", k=" + b.k + ". Regressions come first.</p>" +
+    ": agent " + esc(b.agent) + ", user " + esc(b.user) + ", k=" + esc(b.k) + ". Regressions come first.</p>" +
     (C.differences.length ? "<ul class='notes'>" + C.differences.map((d) => "<li>" + esc(d) + "</li>").join("") + "</ul>" : "") +
-    (C.comparable ? "<div class='wrap'><table><thead><tr><th>Score" + (C.comparable < C.shared ? " (over the " + C.comparable + (C.comparable === 1 ? " task" : " tasks") + " both runs ran with the same test; " + (C.shared - C.comparable) + " changed left out)" : C.sameTasks ? "" : " (over the " + C.shared + " tasks both runs ran)") + "</th><th>Baseline</th><th>Now</th><th>Change</th></tr></thead><tbody>" +
-      shown.map((p) => "<tr><td>pass^" + p.j + "</td><td>" + pct(p.before) + "</td><td>" + pct(p.after) + "</td><td class='" + ((p.after - p.before) * 100 <= -0.05 ? "badt" : "") + "'>" + pts(p) + "</td></tr>").join("") +
+    (C.comparable ? "<div class='wrap'><table><thead><tr><th>Score" + (C.comparable < C.shared ? " (over the " + esc(C.comparable) + (C.comparable === 1 ? " task" : " tasks") + " both runs ran with the same test; " + esc(C.shared - C.comparable) + " changed left out)" : C.sameTasks ? "" : " (over the " + esc(C.shared) + " tasks both runs ran)") + "</th><th>Baseline</th><th>Now</th><th>Change</th></tr></thead><tbody>" +
+      shown.map((p) => "<tr><td>pass^" + esc(p.j) + "</td><td>" + pct(p.before) + "</td><td>" + pct(p.after) + "</td><td class='" + ((p.after - p.before) * 100 <= -0.05 ? "badt" : "") + "'>" + pts(p) + "</td></tr>").join("") +
       "</tbody></table></div>" : "<p class='meta'>" + (C.shared ? "Every task both runs ran has a changed test" : "No task ran in both runs") + ", so there is no pass^k to compare.</p>") +
     (moved.length ? "<div class='wrap' style='margin-top:16px'><table><thead><tr><th>Change</th><th>Task</th><th>Baseline</th><th>Now</th></tr></thead><tbody>" +
       moved.map((d) => {
         const cls = regressed(d.id) ? "badt" : d.change === "fixed" || d.change === "better" ? "okt" : "meta";
-        return "<tr><td class='" + cls + "'>" + (regressed(d.id) ? "<b>" + label[d.change] + "</b>" : label[d.change] + esc(what(d))) + "</td><td><code>" + esc(d.id) + "</code></td><td>" + frac(d.before) + "</td><td class='" + cls + "'>" + frac(d.after) + "</td></tr>";
+        return "<tr><td class='" + cls + "'>" + (regressed(d.id) ? "<b>" + esc(label[d.change]) + "</b>" : esc(label[d.change]) + esc(what(d))) + "</td><td><code>" + esc(d.id) + "</code></td><td>" + frac(d.before) + "</td><td class='" + cls + "'>" + frac(d.after) + "</td></tr>";
       }).join("") + "</tbody></table></div>" : "") +
     "<p class='meta'>" + (moved.length ? same + " task" + (same === 1 ? "" : "s") + " unchanged." : "No task changed: all " + same + " have the same result as in the baseline.") + "</p>";
 }
@@ -167,17 +167,17 @@ $("tasks").innerHTML = order.map((ti) => {
   // A skipped trial's error is listed under Skipped trials, not as the task's failure.
   const failed = [...new Set(t.trials.filter((tr) => !tr.skipped).flatMap((tr) => tr.checks.filter((c) => !c.passed).map((c) => c.id)))];
   const crit = t.critical ? ' <span class="chip crit' + (critFailed(t) ? " badc" : "") + '" title="' + (critFailed(t) ? "critical: a failed trial fails the run" : allPassed(t) ? "critical: passed every trial" : "critical: no trial was graded") + '">critical</span>' : "";
-  return "<tr><td><b>" + esc(t.id) + "</b>" + crit + (regressed(t.id) ? ' <span class="chip regressed">' + since[t.id] + " since baseline</span>" : "") + "<div class='meta'>" + esc(t.description) + "</div></td><td class='dots'>" +
+  return "<tr><td><b>" + esc(t.id) + "</b>" + crit + (regressed(t.id) ? ' <span class="chip regressed">' + esc(since[t.id]) + " since baseline</span>" : "") + "<div class='meta'>" + esc(t.description) + "</div></td><td class='dots'>" +
     t.trials.map((tr, i) => '<button class="dot ' + ({ passed: "ok", failed: "bad", skipped: "skip" })[status(tr)] + '" title="' + esc(trialLabel(tr, i)) + '" aria-label="' + esc(trialLabel(tr, i)) + '" onclick="show(' + ti + "," + i + ')"></button>').join("") +
-    "</td><td class='nw " + (graded(t) === 0 ? "meta" : t.passes === graded(t) ? "okt" : "badt") + "'>" + t.passes + "/" + graded(t) +
-    (t.skipped ? "<div class='meta'>" + t.skipped + " skipped</div>" : "") + "</td><td class='nw'><span class='" + ({ passed: "okt", failed: "badt", flaky: "badt", skipped: "meta" })[verdict(t)] + "'>" + verdict(t) + "</span>" +
+    "</td><td class='nw " + (graded(t) === 0 ? "meta" : t.passes === graded(t) ? "okt" : "badt") + "'>" + esc(t.passes) + "/" + esc(graded(t)) +
+    (t.skipped ? "<div class='meta'>" + esc(t.skipped) + " skipped</div>" : "") + "</td><td class='nw'><span class='" + ({ passed: "okt", failed: "badt", flaky: "badt", skipped: "meta" })[verdict(t)] + "'>" + esc(verdict(t)) + "</span>" +
     (t.interval ? "<div class='meta' title='95% Wilson interval for the pass rate of the graded trials'>95% " + interval(t.interval) + "</div>" : "") + "</td><td>" +
     failed.map((f) => '<span class="chip">' + esc(f) + "</span>").join("") + "</td></tr>";
 }).join("");
 const flaky = R.tasks.filter((t) => verdict(t) === "flaky");
 if (flaky.length) {
   $("flaky").innerHTML = "<h2>Flaky tasks</h2><p class='explain' style='margin-top:0'>Passed some trials and failed others: the agent can do the task, but not every time. The interval is a 95% Wilson interval for the pass rate; few trials make it wide.</p><div class='wrap'><table><thead><tr><th>Task</th><th>Passed</th><th>95% interval</th><th>Failed checks</th></tr></thead><tbody>" +
-    flaky.map((t) => "<tr><td><b>" + esc(t.id) + "</b></td><td>" + t.passes + " of " + graded(t) + "</td><td>" + interval(t.interval) + "</td><td>" +
+    flaky.map((t) => "<tr><td><b>" + esc(t.id) + "</b></td><td>" + esc(t.passes) + " of " + esc(graded(t)) + "</td><td>" + interval(t.interval) + "</td><td>" +
       [...new Set(t.trials.filter((tr) => !tr.passed && !tr.skipped).flatMap((tr) => tr.checks.filter((c) => !c.passed).map((c) => c.id)))].map((f) => '<span class="chip">' + esc(f) + "</span>").join("") + "</td></tr>").join("") +
     "</tbody></table></div>";
 }
@@ -194,10 +194,10 @@ if (skippedTrials.length) {
     [...errors].map(([error, e]) => "<tr><td>" + e.count + "×</td><td>" + esc(error) + "</td><td>" + e.tasks.map((t) => '<span class="chip">' + esc(t) + "</span>").join("") + "</td></tr>").join("") +
     "</tbody></table></div>";
 }
-const notes = R.tasks.flatMap((t, ti) => t.trials.flatMap((tr, i) => (tr.callerNotes || []).map((n) => ({ ti, i, task: t.id, ...n }))));
+const notes = R.tasks.flatMap((t, ti) => t.trials.flatMap((tr, i) => (tr.callerNotes || []).map((n) => ({ ...n, ti, i, task: t.id }))));
 if (notes.length) {
   $("callernotes").innerHTML = "<h2>Caller notes</h2><p class='explain' style='margin-top:0'>In these turns the simulated user stepped out of its role: it talked about its instructions, said its goal was met, or talked about the agent instead of to it. They never change a verdict, but the agent heard them, so read the trial before trusting its result.</p><div class='wrap'><table><thead><tr><th>Task</th><th>Turn</th><th>Why</th><th>What the caller said</th></tr></thead><tbody>" +
-    notes.map((n) => "<tr><td><b>" + esc(n.task) + "</b><div class='meta'><a href='#detail' onclick='show(" + n.ti + "," + n.i + ");return false'>trial " + (n.i + 1) + "</a></div></td><td>" + n.turn + "</td><td>" + esc(n.why) + "</td><td>" + esc(n.text) + "</td></tr>").join("") +
+    notes.map((n) => "<tr><td><b>" + esc(n.task) + "</b><div class='meta'><a href='#detail' onclick='show(" + n.ti + "," + n.i + ");return false'>trial " + (n.i + 1) + "</a></div></td><td>" + esc(n.turn) + "</td><td>" + esc(n.why) + "</td><td>" + esc(n.text) + "</td></tr>").join("") +
     "</tbody></table></div>";
 }
 // run --floor: each tag's least pass^k; a tag below its floor failed the run.
@@ -205,15 +205,15 @@ const floors = R.floors || {};
 const floored = Object.keys(floors).length > 0;
 const floorCell = (t) => !(t.tag in floors) ? "<td class='meta'>none</td>" : t.passHatK >= floors[t.tag] ? "<td>" + pct(floors[t.tag]) + "</td>" : "<td class='badt'>" + pct(floors[t.tag]) + " ✗</td>";
 if (R.byTag && (R.byTag.length > 1 || floored)) {
-  $("tags").innerHTML = "<h2>By tag</h2><div class='wrap'><table><thead><tr><th>Tag</th><th>Tasks</th><th>pass^1</th>" + (R.k > 1 ? "<th>pass^" + R.k + "</th>" : "") + (floored ? "<th>Floor</th>" : "") + "</tr></thead><tbody>" +
-    R.byTag.map((t) => "<tr><td><span class='chip'>" + esc(t.tag) + "</span></td><td>" + t.tasks + "</td><td>" + pct(t.passHat1) + "</td>" + (R.k > 1 ? "<td>" + pct(t.passHatK) + "</td>" : "") + (floored ? floorCell(t) : "") + "</tr>").join("") +
+  $("tags").innerHTML = "<h2>By tag</h2><div class='wrap'><table><thead><tr><th>Tag</th><th>Tasks</th><th>pass^1</th>" + (R.k > 1 ? "<th>pass^" + esc(R.k) + "</th>" : "") + (floored ? "<th>Floor</th>" : "") + "</tr></thead><tbody>" +
+    R.byTag.map((t) => "<tr><td><span class='chip'>" + esc(t.tag) + "</span></td><td>" + esc(t.tasks) + "</td><td>" + pct(t.passHat1) + "</td>" + (R.k > 1 ? "<td>" + pct(t.passHatK) + "</td>" : "") + (floored ? floorCell(t) : "") + "</tr>").join("") +
     "</tbody></table></div>";
 }
 if (R.soft && R.soft.length) {
   const rate = (x) => x.rate === null ? "n/a" : pct(x.rate);
   const scope = (x) => x.tool ? "trials that called <code>" + esc(x.tool) + "</code>" : "trials";
   $("soft").innerHTML = "<h2>Soft rules</h2><p class='explain' style='margin-top:0'>Checked on every call like the other rules, but breaking one never fails a trial. The rate is the share of trials where the rule applied and the agent broke it.</p><div class='wrap'><table><thead><tr><th>Rule</th><th>Rate</th><th>Broken in</th><th>Tasks</th><th>Example</th></tr></thead><tbody>" +
-    R.soft.map((x) => "<tr><td><code>" + esc(x.id) + "</code><div class='meta'>" + esc(x.description) + "</div></td><td>" + rate(x) + "</td><td>" + x.broken + " of " + x.applied + " " + scope(x) + "</td><td>" +
+    R.soft.map((x) => "<tr><td><code>" + esc(x.id) + "</code><div class='meta'>" + esc(x.description) + "</div></td><td>" + rate(x) + "</td><td>" + esc(x.broken) + " of " + esc(x.applied) + " " + scope(x) + "</td><td>" +
       x.tasks.map((t) => '<span class="chip">' + esc(t) + "</span>").join("") + "</td><td>" + esc(x.example || "") + "</td></tr>").join("") +
     "</tbody></table></div>";
 }
@@ -228,12 +228,12 @@ if (R.judged || (C && C.judged)) {
     const failedCalls = trials.filter(({ tr }) => tr.judged && tr.judged.error !== undefined).length;
     const pending = j.criteria.filter((c) => c.pending).length;
     judged += "<h2>Judged score</h2><p class='explain' style='margin-top:0'>A model's judgement of each trial's transcript against the domain's judged criteria. It never changes pass/fail or pass^k, a gate or an exit code, and a verdict can differ from one run to the next. The score is pass / (pass + fail) over the verdicts, with not applicable and not judged outside it.</p>" +
-      '<div class="kpis"><div class="kpi"><b>' + pct(j.score) + '</b><span>judged score</span></div><div class="kpi"><b>' + j.notJudged + '</b><span>not judged</span></div><div class="kpi"><b>' + pending + '</b><span>pending review</span></div></div>' +
-      "<p class='meta'>" + j.pass + " pass, " + j.fail + " fail, " + j.notApplicable + " not applicable" + (j.models.length ? " · by " + esc(j.models.join(", ")) : "") + (Object.keys(j.usage).length ? " · estimated cost " + usd(j.costUsd) : "") + (failedCalls ? " · " + failedCalls + " judge call" + (failedCalls === 1 ? "" : "s") + " failed" : "") + "</p>" +
+      '<div class="kpis"><div class="kpi"><b>' + pct(j.score) + '</b><span>judged score</span></div><div class="kpi"><b>' + esc(j.notJudged) + '</b><span>not judged</span></div><div class="kpi"><b>' + pending + '</b><span>pending review</span></div></div>' +
+      "<p class='meta'>" + esc(j.pass) + " pass, " + esc(j.fail) + " fail, " + esc(j.notApplicable) + " not applicable" + (j.models.length ? " · by " + esc(j.models.join(", ")) : "") + (Object.keys(j.usage).length ? " · estimated cost " + usd(j.costUsd) : "") + (failedCalls ? " · " + failedCalls + " judge call" + (failedCalls === 1 ? "" : "s") + " failed" : "") + "</p>" +
       "<div class='wrap'><table><thead><tr><th>Criterion</th><th>Score</th><th>Pass</th><th>Fail</th><th>Not applicable</th><th>Failed in</th></tr></thead><tbody>" +
       j.criteria.map((c) => {
         const on = verdictsOn(c.id);
-        return "<tr><td><code>" + esc(c.id) + "</code>" + (c.pending ? ' <span class="chip">pending review</span>' : "") + (on.length ? "<div class='meta'>" + esc(on[0].v.criterion) + "</div>" : "") + "</td><td class='nw'>" + pct(c.score) + "</td><td>" + c.pass + "</td><td>" + c.fail + "</td><td>" + c.notApplicable + "</td><td>" +
+        return "<tr><td><code>" + esc(c.id) + "</code>" + (c.pending ? ' <span class="chip">pending review</span>' : "") + (on.length ? "<div class='meta'>" + esc(on[0].v.criterion) + "</div>" : "") + "</td><td class='nw'>" + pct(c.score) + "</td><td>" + esc(c.pass) + "</td><td>" + esc(c.fail) + "</td><td>" + esc(c.notApplicable) + "</td><td>" +
           on.filter(({ v }) => v.verdict === "fail").map(({ t, ti, i }) => "<div><a href='#detail' onclick='show(" + ti + "," + i + ");return false'>" + esc(t.id) + " trial " + (i + 1) + "</a></div>").join("") + "</td></tr>";
       }).join("") + "</tbody></table></div>";
   }
@@ -291,18 +291,18 @@ if (R.coverage && R.coverage.rules.length) {
     key("softb", "<b>soft rule broken</b>: reported, never fails a trial") +
     key("skip", "<b>in play, not checked</b>: the task's reference or expectations involve the rule, but no trial of this run checked it") +
     "<li><span class='keyrow' aria-hidden='true'></span> <b>never checked</b>: an outlined row; a passing run says nothing about that rule</li></ul>" +
-    "<p class='meta'>" + (cov.rules.length - unchecked.length) + " of " + cov.rules.length + " rules checked" + (unchecked.length ? ", " + unchecked.length + " never" : "") +
-    " · " + caught.length + " caught broken" + (softBroken.length ? " · " + softBroken.length + " soft broken (reported)" : "") + " · " + (idle.length ? idle.length + " of " + cov.tools.length + " tools never called" : "every tool called") + ".</p>" +
+    "<p class='meta'>" + (cov.rules.length - unchecked.length) + " of " + esc(cov.rules.length) + " rules checked" + (unchecked.length ? ", " + unchecked.length + " never" : "") +
+    " · " + caught.length + " caught broken" + (softBroken.length ? " · " + softBroken.length + " soft broken (reported)" : "") + " · " + (idle.length ? idle.length + " of " + esc(cov.tools.length) + " tools never called" : "every tool called") + ".</p>" +
     "<div class='wrap'><table class='cov'><thead><tr><th>Rule</th><th>Trials</th>" +
     R.tasks.map((t) => "<th class='t' title='" + esc(t.description || "") + "'>" + esc(t.id) + "</th>").join("") + "</tr></thead><tbody>" +
     cov.rules.map((x) => "<tr" + (x.checked === 0 ? " class='gap'" : "") + "><td title='" + esc(x.description + (x.source && x.source.quote ? "\\n“" + x.source.quote + "” (" + x.source.file + ")" : "")) + "'><code>" + esc(x.id) + "</code>" + (x.soft ? " <span class='chip'>soft</span>" : "") +
-      "<div class='meta'>" + esc(x.kind) + " · " + what(x) + "</div></td><td>" + (x.checked === 0 ? "<span class='chip gapchip'>never checked</span>" : x.checked + " checked" + (x.broken ? (x.soft ? "<div class='meta'>" + x.broken + " broken (soft)</div>" : "<div class='badt'>" + x.broken + " broken</div>") : "")) + "</td>" +
+      "<div class='meta'>" + esc(x.kind) + " · " + what(x) + "</div></td><td>" + (x.checked === 0 ? "<span class='chip gapchip'>never checked</span>" : esc(x.checked) + " checked" + (x.broken ? (x.soft ? "<div class='meta'>" + esc(x.broken) + " broken (soft)</div>" : "<div class='badt'>" + esc(x.broken) + " broken</div>") : "")) + "</td>" +
       R.tasks.map((_, ti) => cell(x, ti)).join("") + "</tr>").join("") +
     "</tbody></table></div>" +
-    "<p class='meta'>Tools: " + cov.tools.map((t) => t.calls ? "<span class='chip' title='" + esc("called in " + t.trials + " trial(s) of " + t.tasks.length + " task(s)") + "'><code>" + esc(t.name) + "</code> " + t.calls + "×</span>" : "<span class='chip gapchip' title='no trial called it'><code>" + esc(t.name) + "</code> never called</span>").join("") + "</p>";
+    "<p class='meta'>Tools: " + cov.tools.map((t) => t.calls ? "<span class='chip' title='" + esc("called in " + t.trials + " trial(s) of " + t.tasks.length + " task(s)") + "'><code>" + esc(t.name) + "</code> " + esc(t.calls) + "×</span>" : "<span class='chip gapchip' title='no trial called it'><code>" + esc(t.name) + "</code> never called</span>").join("") + "</p>";
 }
 $("modes").innerHTML = R.failureModes.length ? R.failureModes.map((m) =>
-  "<tr><td class='badt'>" + m.count + "×</td><td><code>" + esc(m.id) + "</code><div class='meta'>" + esc(m.kind) + "</div></td><td>" +
+  "<tr><td class='badt'>" + esc(m.count) + "×</td><td><code>" + esc(m.id) + "</code><div class='meta'>" + esc(m.kind) + "</div></td><td>" +
   m.tasks.map((t) => '<span class="chip">' + esc(t) + "</span>").join("") + "</td><td>" + esc(m.example) + "</td></tr>").join("")
   : "<tr><td colspan='4' class='okt'>No failures.</td></tr>";
 function show(ti, i) {
@@ -317,16 +317,16 @@ function show(ti, i) {
       const out = e.ok ? json(e.result) : "ERROR " + e.error;
       const f = e.fault ? ' · <span class="softv">fault: ' + esc(fault(e.fault)) + "</span>" : "";
       const then = e.eventChanges ? "\\n⟳ then, by the task's events: " + e.eventChanges.map((c) => c.kind + " " + c.table + " " + c.key + " " + json(c.after)).join("; ") : "";
-      const via = e.via ? " · via " + (e.via === "mcp" ? "MCP" : e.via) : "";
-      return '<div class="ev tool"><small><b>tool</b> #' + e.index + via + v + f + "</small>" + esc(e.name) + "(" + esc(json(e.args)) + ")\\n→ " + esc(out) + esc(then) + "</div>";
+      const via = e.via ? " · via " + (e.via === "mcp" ? "MCP" : esc(e.via)) : "";
+      return '<div class="ev tool"><small><b>tool</b> #' + esc(e.index) + via + v + f + "</small>" + esc(e.name) + "(" + esc(json(e.args)) + ")\\n→ " + esc(out) + esc(then) + "</div>";
     }
     const lat = e.type === "agent" && e.latencyMs !== undefined ? " · " + ms(e.latencyMs) : "";
     const note = e.type === "user" && noteAt[++turn] ? ' · <span class="softv">caller note: ' + esc(noteAt[turn].why) + "</span>" : "";
-    return '<div class="ev ' + e.type + '"><small><b>' + e.type + "</b>" + lat + note + "</small>" + esc(e.text) + "</div>";
+    return '<div class="ev ' + esc(e.type) + '"><small><b>' + esc(e.type) + "</b>" + lat + note + "</small>" + esc(e.text) + "</div>";
   }).join("");
   const checks = tr.checks.map((c) => '<div class="check"><span class="' + (c.passed ? "okt" : "badt") + '">' + (c.passed ? "✓" : "✗") + "</span><div><code>" + esc(c.id) + "</code> " + esc(c.detail) + "</div></div>").join("") +
     (tr.soft || []).map((c) => '<div class="check"><span class="meta">' + (c.broken ? "~" : "·") + "</span><div><code>" + esc(c.id) + "</code> <span class='meta'>soft:</span> " + esc(c.broken ? c.violations.map((v) => v.detail).join("; ") : "not broken") + "</div></div>").join("") +
-    (tr.callerNotes || []).map((n) => "<div class='check'><span class='meta'>!</span><div><span class='meta'>caller note, turn " + n.turn + ":</span> " + esc(n.why) + "</div></div>").join("");
+    (tr.callerNotes || []).map((n) => "<div class='check'><span class='meta'>!</span><div><span class='meta'>caller note, turn " + esc(n.turn) + ":</span> " + esc(n.why) + "</div></div>").join("");
   const changes = tr.changes.length ? tr.changes.map(change).join("") : "<div class='meta'>No writes.</div>";
   const judged = !tr.judged ? "" : "<h2>Judged</h2><p class='explain' style='margin-top:0'>A model's verdicts on the judged criteria, which never change this trial's result.</p>" +
     (tr.judged.error !== undefined ? "<div class='warn'>The judge call for this trial failed: " + esc(tr.judged.error) + "</div>" : "") +
@@ -334,7 +334,7 @@ function show(ti, i) {
       (v.quote ? "<div>“" + esc(v.quote) + "”" + (v.quoteFound === false ? ' <span class="chip gapchip">not in the transcript</span>' : "") + "</div>" : "") +
       "<div class='meta'>" + esc(v.reason) + "</div></div></div>").join("");
   $("detail").innerHTML = '<div class="trial"><h2 style="margin-top:0">' + esc(t.id) + " · trial " + (i + 1) + " · " +
-    ({ passed: '<span class="okt">passed</span>', failed: '<span class="badt">failed</span>', skipped: '<span class="meta">skipped: it ended in an error before the agent broke any rule, so it was not graded</span>' })[status(tr)] + '</h2><div class="meta">ended: ' + tr.endReason + " · " + tr.turns + " turns · " + tr.durationMs + "ms" + (calls(tr.usage) ? " · " + usd(tr.usage.costUsd) : "") + (stops(tr.usage) ? " · " + stops(tr.usage) + " stopped at max_tokens" : "") + (stripped(tr.usage) ? " · " + stripped(tr.usage) + " with reasoning removed" : "") + (silent(tr.usage) ? " · " + silent(tr.usage) + " silent once it was removed" : "") + (tr.error ? " · " + esc(tr.error) : "") +
+    ({ passed: '<span class="okt">passed</span>', failed: '<span class="badt">failed</span>', skipped: '<span class="meta">skipped: it ended in an error before the agent broke any rule, so it was not graded</span>' })[status(tr)] + '</h2><div class="meta">ended: ' + esc(tr.endReason) + " · " + esc(tr.turns) + " turns · " + esc(tr.durationMs) + "ms" + (calls(tr.usage) ? " · " + usd(tr.usage.costUsd) : "") + (stops(tr.usage) ? " · " + esc(stops(tr.usage)) + " stopped at max_tokens" : "") + (stripped(tr.usage) ? " · " + esc(stripped(tr.usage)) + " with reasoning removed" : "") + (silent(tr.usage) ? " · " + esc(silent(tr.usage)) + " silent once it was removed" : "") + (tr.error ? " · " + esc(tr.error) : "") +
     "</div>" + (tr.attribution ? '<div class="meta">likely owner: <b>' + esc(tr.attribution.owner.replace("-", " ")) + "</b> · " + esc(tr.attribution.evidence) + "</div>" : "") +
     "<h2>Checks</h2>" + checks + judged + "<h2>World changes</h2>" + changes + "<h2>Transcript</h2>" + evs + "</div>";
   $("detail").scrollIntoView({ behavior: "smooth" });

@@ -36,7 +36,7 @@ const clip = (s: string, width = CELL) => (s.length <= width ? s : `${s.slice(0,
  * comment it can't notify anyone, link an issue or a pull request, or set math. A URL stays plain text. GitHub can still
  * link a commit hash or a CVE id.
  */
-function escapeMarkdown(s: string): string {
+function escapeMarkdown(s: unknown): string {
   // As entities, not backslashes: a renderer that ignores a backslash there would still see a tag.
   const entities = clip(String(s).replace(/\s*[\r\n]+\s*/g, " "))
     .replace(/&/g, "&amp;")
@@ -101,9 +101,9 @@ const heads = (...cells: string[]) => [row(cells), `|${cells.map(() => "---").jo
 function headline(r: SuiteResult): string[] {
   const hats = Object.entries(r.passHat)
     .filter(([j]) => j === "1" || j === String(r.k))
-    .map(([j, v]) => `**pass^${j}** ${pct(v)}`);
+    .map(([j, v]) => `**pass^${escapeMarkdown(j)}** ${pct(v)}`);
   const lines = [`- ${hats.join(" · ")}`];
-  if (r.pendingReview?.length) lines.unshift(`- **Provisional:** ${r.pendingReview.length} drafted item(s) are pending review`);
+  if (r.pendingReview?.length) lines.unshift(`- **Provisional:** ${escapeMarkdown(r.pendingReview.length)} drafted item(s) are pending review`);
   const critical = r.tasks.filter((t) => t.critical);
   if (critical.length) {
     const failed = critical.filter((t) => !passedEvery(t));
@@ -112,7 +112,7 @@ function headline(r: SuiteResult): string[] {
   const skipped = skippedTrials(r).length;
   if (skipped) lines.push(`- **Skipped trials:** ${skipped} of ${r.tasks.reduce((n, t) => n + t.trials.length, 0)} ended in an error and are left out of the scores`);
   const below = new Set(tagsBelowFloor(r).map((t) => t.tag));
-  const floors = Object.entries(r.floors ?? {}).map(([tag, floor]) => `- **Floor** ${code(tag)} ${pct(floor)}: ${below.has(tag) ? "**not met**" : "met"} (pass^${r.k} ${pct(r.byTag.find((t) => t.tag === tag)?.passHatK)})`);
+  const floors = Object.entries(r.floors ?? {}).map(([tag, floor]) => `- **Floor** ${code(tag)} ${pct(floor)}: ${below.has(tag) ? "**not met**" : "met"} (pass^${escapeMarkdown(r.k)} ${pct(r.byTag.find((t) => t.tag === tag)?.passHatK)})`);
   return [...lines, ...capped(floors, CAPS.floors)];
 }
 
@@ -128,7 +128,7 @@ function changes(c: Comparison): string[] {
   const lines = ["### Changes since the baseline", "", `Compared with run ${code(b.runId)}, started ${stamp(b.startedAt)}.`];
   if (c.differences.length) lines.push("", ...capped(c.differences.map((d) => `- ${escapeMarkdown(d)}`), CAPS.differences));
   const shifted = c.tasks.filter((d) => LISTED.includes(d.change));
-  const frac = (x?: { passes: number; trials: number }) => (x ? `${x.passes}/${x.trials}` : "–");
+  const frac = (x?: { passes: number; trials: number }) => (x ? `${escapeMarkdown(x.passes)}/${escapeMarkdown(x.trials)}` : "–");
   if (shifted.length) {
     const counts = LISTED.flatMap((change) => {
       const n = shifted.filter((d) => d.change === change).length;
@@ -165,14 +165,14 @@ function failedTasks(r: SuiteResult): string[] {
   const ordered = [...failed.filter((t) => t.critical), ...failed.filter((t) => !t.critical)];
   const rows = ordered.map((t) => {
     const checks = [...new Set(t.trials.filter((tr) => !tr.skipped).flatMap((tr) => tr.checks.filter((c) => !c.passed).map((c) => c.id)))];
-    return row([`${code(t.id)}${t.critical ? " (critical)" : ""}`, `${t.passes}/${gradedOf(t)}${t.passes > 0 ? " flaky" : ""}`, names(checks)]);
+    return row([`${code(t.id)}${t.critical ? " (critical)" : ""}`, `${escapeMarkdown(t.passes)}/${escapeMarkdown(gradedOf(t))}${t.passes > 0 ? " flaky" : ""}`, names(checks)]);
   });
   return ["### Failed tasks", "", ...listed(heads("Task", "Passed", "Failed checks"), rows, CAPS.failed, plural(failed.length, "failed task"))];
 }
 
 function failureModes(r: SuiteResult): string[] {
   if (!r.failureModes.length) return [];
-  const rows = r.failureModes.slice(0, CAPS.modes.rows).map((m) => row([`${m.count}×`, `${escapeMarkdown(m.kind)} ${code(m.id)}`, String(m.tasks.length), escapeMarkdown(m.example)]));
+  const rows = r.failureModes.slice(0, CAPS.modes.rows).map((m) => row([`${escapeMarkdown(m.count)}×`, `${escapeMarkdown(m.kind)} ${code(m.id)}`, escapeMarkdown(m.tasks.length), escapeMarkdown(m.example)]));
   return ["### Top failure modes", "", ...listed(heads("Count", "Check", "Tasks", "Example"), rows, CAPS.modes, "Top failure modes")];
 }
 
@@ -181,12 +181,12 @@ function softRules(r: SuiteResult): string[] {
   if (!soft.length) return [];
   const rows = soft.map((x) => {
     if (x.rate === null) return row([code(x.id), "no rate", x.tool === undefined ? "the agent never spoke" : `no trial called ${code(x.tool)}`]);
-    return row([code(x.id), pct(x.rate), `${x.broken} of ${x.applied} ${x.tool === undefined ? "trials" : `trials that called ${code(x.tool)}`}`]);
+    return row([code(x.id), pct(x.rate), `${escapeMarkdown(x.broken)} of ${escapeMarkdown(x.applied)} ${x.tool === undefined ? "trials" : `trials that called ${code(x.tool)}`}`]);
   });
   return ["### Soft rules", "", "Reported, never fail a trial.", "", ...listed(heads("Rule", "Rate", "Broken in"), rows, CAPS.soft, plural(soft.length, "soft rule"))];
 }
 
-const tally = (c: JudgedCounts) => [`${c.pass} pass`, `${c.fail} fail`, ...(c.notApplicable ? [`${c.notApplicable} not applicable`] : [])].join(", ");
+const tally = (c: JudgedCounts) => [`${escapeMarkdown(c.pass)} pass`, `${escapeMarkdown(c.fail)} fail`, ...(c.notApplicable ? [`${escapeMarkdown(c.notApplicable)} not applicable`] : [])].join(", ");
 
 /** The judged score, apart from pass^k and labelled as a model's judgement, with the verdicts that failed. */
 function judgedScore(r: SuiteResult): string[] {
@@ -194,7 +194,7 @@ function judgedScore(r: SuiteResult): string[] {
   if (!j) return [];
   const lines = ["### Judged score", "", "A model's judgement, apart from pass^k: it never changes pass/fail, pass^k, a gate or an exit code.", ""];
   const by = j.models.length ? `, by ${names(j.models)}` : "";
-  lines.push(`**judged** ${pct(j.score)}: ${tally(j)}${j.notJudged ? `, ${j.notJudged} not judged` : ""}${by}`, "");
+  lines.push(`**judged** ${pct(j.score)}: ${tally(j)}${j.notJudged ? `, ${escapeMarkdown(j.notJudged)} not judged` : ""}${by}`, "");
   const rows = j.criteria.map((c) => row([`${code(c.id)}${c.pending ? " (pending review)" : ""}`, pct(c.score), tally(c)]));
   lines.push(...listed(heads("Criterion", "Score", "Verdicts"), rows, CAPS.criteria, plural(j.criteria.length, "criterion", "criteria")));
   // Only a pass or a fail moves the score. "Provisional" means the run's own pendingReview, which a criterion isn't in.
@@ -206,7 +206,7 @@ function judgedScore(r: SuiteResult): string[] {
     t.trials.flatMap((tr) =>
       (tr.judged?.verdicts ?? [])
         .filter((v) => v.verdict === "fail")
-        .map((v) => `- ${code(t.id)} trial ${tr.trial + 1}, ${code(v.id)}: ${escapeMarkdown(v.reason)}${v.quote ? ` “${escapeMarkdown(v.quote)}”` : ""}${v.quoteFound === false ? " (this quote isn't in the transcript)" : ""}`),
+        .map((v) => `- ${code(t.id)} trial ${escapeMarkdown(tr.trial + 1)}, ${code(v.id)}: ${escapeMarkdown(v.reason)}${v.quote ? ` “${escapeMarkdown(v.quote)}”` : ""}${v.quoteFound === false ? " (this quote isn't in the transcript)" : ""}`),
     ),
   );
   if (failed.length) {
@@ -252,7 +252,7 @@ function footer(r: SuiteResult): string {
 export function renderMarkdown(r: SuiteResult): string {
   const comparison = comparisonOf(r);
   const sections = [
-    [`### sandtable · ${code(r.domain)} · agent ${code(r.agent)} · user ${code(r.user)} · k=${r.k}`],
+    [`### sandtable · ${code(r.domain)} · agent ${code(r.agent)} · user ${code(r.user)} · k=${escapeMarkdown(r.k)}`],
     headline(r),
     comparison ? changes(comparison) : [],
     failedTasks(r),

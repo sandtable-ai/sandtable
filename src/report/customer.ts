@@ -48,12 +48,12 @@ export function renderCustomerHtml(r: SuiteResult, opts: CustomerReportOptions =
   }
 
   const facts = [
-    `${esc(r.agent)} was rehearsed on ${count(r.tasks.length, "scenario")}, ${count(k, "conversation")} each (${trials} in all), with simulated callers and a simulated copy of your systems. Every conversation was graded by fixed rules, not by an AI judge.`,
+    `${esc(r.agent)} was rehearsed on ${count(r.tasks.length, "scenario")}, ${count(k, "conversation")} each (${esc(trials)} in all), with simulated callers and a simulated copy of your systems. Every conversation was graded by fixed rules, not by an AI judge.`,
     `${passedAll.length} of ${r.tasks.length} scenarios passed in every conversation.`,
     ...(critical.length ? [`${critical.filter(passedEvery).length} of ${critical.length} critical scenarios passed in every conversation.`] : []),
     `${checked.length} of ${rules.length} rules were checked in these conversations. ${brokenHard.length ? `${count(brokenHard.length, "rule")} that fail${brokenHard.length === 1 ? "s" : ""} a conversation ${brokenHard.length === 1 ? "was" : "were"} broken` : `None of the ${hard.length} rules that fail a conversation was broken`}${softBroken.length ? `, and ${count(softBroken.length, "soft rule")} ${softBroken.length === 1 ? "was" : "were"} broken (reported, never a failure)` : ""}.${unchecked.length ? ` ${count(unchecked.length, "rule")} ${unchecked.length === 1 ? "was" : "were"} never checked: see Not covered.` : ""}`,
     ...(probe && caught
-      ? [`${probe.withoutPolicy ? `A careless agent, ${esc(probe.agent.replace(/ \(without policy\)$/, ""))} without your procedure in its prompt, was` : "A deliberately careless agent was"} rehearsed too. The rehearsal caught it breaking ${[...caught.values()].filter((x) => x.broken > 0 && !x.soft).length} of the ${hard.length} rules that fail a conversation.`]
+      ? [`${probe.withoutPolicy ? `A careless agent, ${esc(String(probe.agent).replace(/ \(without policy\)$/, ""))} without your procedure in its prompt, was` : "A deliberately careless agent was"} rehearsed too. The rehearsal caught it breaking ${[...caught.values()].filter((x) => x.broken > 0 && !x.soft).length} of the ${hard.length} rules that fail a conversation.`]
       : []),
   ];
 
@@ -95,7 +95,7 @@ th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);verti
 <body>
 <main>
 <div class="head">${MARK_SVG}<h1>Go-live rehearsal: ${esc(r.domain)}</h1></div>
-<div class="meta">${esc(r.agent)} · rehearsed ${esc(r.startedAt.slice(0, 10))} · ${count(r.tasks.length, "scenario")} × ${count(k, "conversation")} · run ${esc(r.runId)}</div>
+<div class="meta">${esc(r.agent)} · rehearsed ${esc(String(r.startedAt ?? "").slice(0, 10))} · ${count(r.tasks.length, "scenario")} × ${count(k, "conversation")} · run ${esc(r.runId)}</div>
 
 <div class="status${open.length ? " bad" : ""}">
 <b class="big${open.length ? " badt" : ""}">${open.length ? `${count(open.length, "open item")} before go-live` : "No open items"}</b>
@@ -117,7 +117,7 @@ ${[...critical, ...r.tasks.filter((t) => !t.critical)].map((t) => `<tr><td>${esc
 <ul>
 ${unchecked.length ? `<li><b>${count(unchecked.length, "rule")} no conversation checked.</b> A passing rehearsal says nothing about ${unchecked.length === 1 ? "it" : "them"}: ${unchecked.map((x) => quoted(x.description)).join("; ")}.</li>` : "<li>Every rule was checked in at least one conversation.</li>"}
 ${idle.length ? `<li><b>Actions the agent never took:</b> ${idle.map((t) => `<code>${esc(t.name)}</code>`).join(", ")}. Whatever those actions do in your systems wasn't rehearsed.</li>` : ""}
-${rules.some((x) => x.soft) ? `<li><b>Soft rules</b> are reported but never fail a conversation, so the rehearsal can't catch them: ${rules.filter((x) => x.soft).map((x) => `${quoted(x.description)} (broken in ${x.broken} of ${x.checked} conversations where it applied)`).join("; ")}.</li>` : ""}
+${rules.some((x) => x.soft) ? `<li><b>Soft rules</b> are reported but never fail a conversation, so the rehearsal can't catch them: ${rules.filter((x) => x.soft).map((x) => `${quoted(x.description)} (broken in ${esc(x.broken)} of ${esc(x.checked)} conversations where it applied)`).join("; ")}.</li>` : ""}
 <li>Callers are simulated from written instructions. The agent's tools act on a simulated copy of your systems holding the records of this rehearsal, not on your live systems.</li>
 <li>Conversations are graded only by the rules and expected outcomes on this page. Tone, wording and anything not written down as a rule or an expected outcome aren't graded.</li>
 <li>Each scenario ran ${count(k, "time")}. A rare mistake can still happen in production: more conversations per scenario make a rare one more likely to show up here.</li>
@@ -151,8 +151,8 @@ function ruleCard(x: RuleCoverage, r: SuiteResult, probe: SuiteResult | undefine
       ? `<span class="chip line">not checked</span> No conversation in this rehearsal reached this rule.`
       : x.broken > 0
         ? x.soft
-          ? `<span class="chip">reported</span> Broken in ${x.broken} of the ${count(x.checked, "conversation")} where it applied. It is a soft rule: reported, never a reason to fail a conversation.`
-          : `<span class="chip bad">broken</span> Broken in ${x.broken} of the ${count(x.checked, "conversation")} where it applied.`
+          ? `<span class="chip">reported</span> Broken in ${esc(x.broken)} of the ${count(x.checked, "conversation")} where it applied. It is a soft rule: reported, never a reason to fail a conversation.`
+          : `<span class="chip bad">broken</span> Broken in ${esc(x.broken)} of the ${count(x.checked, "conversation")} where it applied.`
         : `<span class="chip">held</span> Held in all ${count(x.checked, "conversation")} where it applied, across ${count(cells.length, "scenario")}.`;
   // Caught means a careless agent broke the rule and the rehearsal failed it for that. A soft rule never fails a
   // conversation, so the most a probe shows for one is that the rehearsal reports it.
@@ -172,7 +172,7 @@ ${x.source?.quote ? `<blockquote>“${inline(x.source.quote)}”<cite>${esc(x.so
 <p>${status}</p>
 ${caught}
 ${cells.length ? `<details class="list"><summary>Scenarios that checked it (${cells.length})</summary><ul>${list}</ul></details>` : ""}
-${example ? `<details${example.broke ? " open" : ""}><summary>Example conversation: ${esc(name(example.task))}, conversation ${example.trial.trial + 1}${example.broke ? " (broke the rule)" : ""}</summary>${conversation(example.trial, r)}</details>` : ""}
+${example ? `<details${example.broke ? " open" : ""}><summary>Example conversation: ${esc(name(example.task))}, conversation ${esc(example.trial.trial + 1)}${example.broke ? " (broke the rule)" : ""}</summary>${conversation(example.trial, r)}</details>` : ""}
 ${probeExample ? `<details open><summary>${x.soft ? "How the careless agent broke it (reported, not caught)" : "How the careless agent was caught"}: ${esc(name(probeExample.task))}</summary>${conversation(probeExample.trial, probe!)}</details>` : ""}
 <div class="meta">${esc(x.id)} · ${esc(x.kind)} · ${esc(x.tool ?? x.field ?? "")}</div>
 </div>`;
@@ -227,17 +227,17 @@ function args(a: unknown): string {
 const graded = (t: TaskSummary) => t.graded ?? t.trials.length;
 const passedEvery = (t: TaskSummary) => graded(t) > 0 && t.passes === graded(t);
 /** What a scenario is called on the page: its description without a final period, else its id. */
-const name = (t: TaskSummary) => (t.description ?? t.id).replace(/\.$/, "");
+const name = (t: TaskSummary) => String(t.description ?? t.id).replace(/\.$/, "");
 
 function result(t: TaskSummary): string {
   const g = graded(t);
   if (g === 0) return `<span class="meta">not graded</span>`;
-  const skipped = t.skipped ? ` <span class="meta">(${t.skipped} not graded)</span>` : "";
-  return t.passes === g ? `<span class="okt">passed ${g === 1 ? "its conversation" : `all ${g}`}</span>${skipped}` : `<span class="badt">passed ${t.passes} of ${g}</span>${skipped}`;
+  const skipped = t.skipped ? ` <span class="meta">(${esc(t.skipped)} not graded)</span>` : "";
+  return t.passes === g ? `<span class="okt">passed ${g === 1 ? "its conversation" : `all ${esc(g)}`}</span>${skipped}` : `<span class="badt">passed ${esc(t.passes)} of ${esc(g)}</span>${skipped}`;
 }
 
 function count(n: number, noun: string): string {
-  return `${n} ${noun}${n === 1 ? "" : "s"}`;
+  return `${esc(n)} ${noun}${n === 1 ? "" : "s"}`;
 }
 
 function quoted(s: string): string {
@@ -251,6 +251,6 @@ function inline(s: string): string {
     .replace(/`([^`]+)`/g, "<code>$1</code>");
 }
 
-function esc(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+function esc(s: unknown): string {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }

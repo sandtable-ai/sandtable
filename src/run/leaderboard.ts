@@ -655,7 +655,7 @@ const totalViolations = (r: LeaderboardRow) => Object.values(r.violations).reduc
 const passHeads = (k: number) => (k === 1 ? ["pass^1"] : ["pass^1", `pass^${k}`]);
 const passCells = (r: LeaderboardRow, k: number) => (k === 1 ? [pct(r.passHat1)] : [pct(r.passHat1), pct(r.passHatK)]);
 /** What each model played: a published board of some tasks must not say every task. */
-const whichTasks = ({ taskSelection: s }: LeaderboardResult) => (s ? `${s.selected} of the domain's ${s.of} tasks` : "every task");
+const whichTasks = ({ taskSelection: s }: LeaderboardResult, show: (n: number) => unknown = (n) => n) => (s ? `${show(s.selected)} of the domain's ${show(s.of)} tasks` : "every task");
 const howOften = (k: number) => (k === 1 ? "once" : `${k} times`);
 const passMeaning = (k: number) => (k === 1 ? "pass^1 is the share of tasks that passed." : `pass^${k} is the share of tasks where all ${k} trials passed.`);
 const COST_NOTE = "Cost / trial counts the agent's model only; leaderboard.json also has the cost with the simulated caller.";
@@ -704,17 +704,17 @@ export function renderLeaderboardMarkdown(l: LeaderboardResult): string {
 }
 
 export function renderLeaderboardHtml(l: LeaderboardResult): string {
-  const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+  const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
   const soft = hasSoft(l);
   const critical = hasCritical(l);
   const body = l.rows
     .map((r) => {
       const effort = r.effort ? ` <span class="effort">effort ${esc(r.effort)}</span>` : "";
-      const link = r.baseline ? esc(r.label) : `<a href="./${slugify(r.label)}/report.html">${esc(r.label)}</a>${effort}`;
+      const link = r.baseline ? esc(r.label) : `<a href="./${slugify(String(r.label))}/report.html">${esc(r.label)}</a>${effort}`;
       if (r.error) return `<tr${r.baseline ? ' class="base"' : ""}><td>${link}</td><td colspan="${passHeads(l.k).length + (soft ? 5 : 4) + (critical ? 1 : 0)}" class="err">${esc(r.error)}</td></tr>`;
       const pass = passCells(r, l.k).map((c, i, all) => (i === all.length - 1 ? `<td><b>${c}</b></td>` : `<td>${c}</td>`)).join("");
       const crit = critical ? `<td${r.critical?.failed.length ? ' class="err"' : ""}>${esc(criticalCell(r))}</td>` : "";
-      return `<tr${r.baseline ? ' class="base"' : ""}><td>${link}</td>${pass}${crit}<td>${totalViolations(r)}</td><td>${esc(r.topFailure ?? "")}</td>${soft ? `<td>${esc(softCell(r))}</td>` : ""}<td>${usd(r.agentCostPerTrialUsd)}</td><td>${secs(r.agentTurnP95Ms)}</td></tr>`;
+      return `<tr${r.baseline ? ' class="base"' : ""}><td>${link}</td>${pass}${crit}<td>${esc(totalViolations(r))}</td><td>${esc(r.topFailure ?? "")}</td>${soft ? `<td>${esc(softCell(r))}</td>` : ""}<td>${usd(r.agentCostPerTrialUsd)}</td><td>${secs(r.agentTurnP95Ms)}</td></tr>`;
     })
     .join("\n");
   return `<!doctype html>
@@ -730,8 +730,8 @@ th,td{text-align:left;padding:8px 16px;border-bottom:1px solid var(--line);font-
 th{font-size:12px;color:var(--muted)}tr.base td{color:var(--muted);font-style:italic}.err{color:var(--bad-text)}a{color:inherit}.effort{color:var(--muted);font-size:12px;white-space:nowrap}
 </style></head><body><main>
 <div class="head">${MARK_SVG}<h1>Leaderboard: ${esc(l.domain)}</h1></div>
-<p>Each model plays the agent on ${whichTasks(l)} ${howOften(l.k)} against the same simulated callers (${esc(l.user)}). ${passMeaning(l.k).replace(/^(pass\^\d+)/, "<b>$1</b>")} Grading is deterministic: end state, rules checked on every tool call and message, required and forbidden tools. ${critical ? `${CRITICAL_NOTE} ` : ""}${soft ? `${SOFT_NOTE} ` : ""}${COST_NOTE} Click a model for its full report and trajectories.</p>
-<div class="wrap"><table><thead><tr><th>Model</th>${passHeads(l.k).map((h) => `<th>${h}</th>`).join("")}${critical ? "<th>Critical</th>" : ""}<th>Rule violations</th><th>Top failure</th>${soft ? "<th>Soft rules</th>" : ""}<th>Cost / trial</th><th>p95 turn</th></tr></thead>
+<p>Each model plays the agent on ${whichTasks(l, esc)} ${esc(howOften(l.k))} against the same simulated callers (${esc(l.user)}). ${esc(passMeaning(l.k)).replace(/^(pass\^\d+)/, "<b>$1</b>")} Grading is deterministic: end state, rules checked on every tool call and message, required and forbidden tools. ${critical ? `${CRITICAL_NOTE} ` : ""}${soft ? `${SOFT_NOTE} ` : ""}${COST_NOTE} Click a model for its full report and trajectories.</p>
+<div class="wrap"><table><thead><tr><th>Model</th>${passHeads(l.k).map((h) => `<th>${esc(h)}</th>`).join("")}${critical ? "<th>Critical</th>" : ""}<th>Rule violations</th><th>Top failure</th>${soft ? "<th>Soft rules</th>" : ""}<th>Cost / trial</th><th>p95 turn</th></tr></thead>
 <tbody>
 ${body}
 </tbody></table></div>
