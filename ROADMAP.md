@@ -66,11 +66,18 @@ Issues and milestones on GitHub are the source of truth; this page is the overvi
 ## In 1.4
 - [x] `$regex` in where clauses: a JavaScript regular expression in `where`, `fields`, `when` and the arguments a task expects, such as `load_id: { $regex: "^L-10" }`; `sandtable import elevenlabs` drafts an ElevenLabs regex check on a tool's argument as one (#20, #480)
 
+## In 1.5
+- [x] LLM-judged checks scored apart from pass/fail: a domain and its tasks state `judged` criteria, `sandtable judge` and `run --judge` score trials on them, `sandtable calibrate` measures a judge against a person's labels, and `sandtable import` drafts what a platform's own LLM judge grades a test on as pending criteria (#16)
+- [x] Dates in the places the clock left literal: `${today}` and `${now+5m}` in the policy, faults' messages and `expect.reply_includes`, and `$today` in a param's `default` (#465); and `init --transcripts` writes each drafted date relative to its call, with `--call-date` for chats that state none (#466)
+- [x] An idle timeout for served conversations whose end never arrives: `sandtable serve --idle-timeout` ends one after that many minutes with no request, 30 by default, and skips it unless the agent broke a rule (#467)
+- [x] `leaderboard --tag` ranks the models on the tasks with those tags, as `run --tag` does (#497)
+- [x] `report --markdown` writes a run's summary for a CI job summary or a pull request comment (#495)
+
 ## Next
-Proposed for 1.5 (milestone v1.5): LLM-judged checks scored apart from pass/fail, which the criteria in imported platform tests can feed (#16); dates in the places the clock leaves literal (#465) and relative dates from `init --transcripts` (#466); and an idle timeout for served conversations whose end never arrives (#467).
+Nothing is planned as the next release yet: the issues under Later are the candidates. 2.0 will turn `validate`'s deprecated warnings into errors (#476).
 
 ## Later
 PR comments with pass^k deltas (#13), voice transport and timing metrics (#17, #43), exports to other harness formats (#18), outcome grading (#39), business metrics (#40), persona × condition matrix (#41), multi-session tasks (#42), Python agents in-process (#44), stale-task flags (#33).
 
 ## Good first issues
-None is open right now. Example domains and adapters are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md).
+The [good first issue label](https://github.com/sandtable-ai/sandtable/labels/good%20first%20issue) lists what's open. Example domains and adapters are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md).
