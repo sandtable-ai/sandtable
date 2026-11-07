@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-07
+
+A minor release with no breaking changes, and a security fix in the HTML reports: upgrade if you open reports built from domains or results files you didn't write. `sandtable judge` and `run --judge` score a run on judged criteria with a model, apart from pass^k, which they never change, and `sandtable calibrate` measures a judge against human labels. Clock dates reach the policy, param defaults, fault messages and `reply_includes`, and `report --markdown` writes a summary for a CI job or a pull request comment.
+
 ### Added
 
 - `clock`: dates relative to the clock resolve in four more places: `${today}` and `${now+5m}` inside the policy, faults' `message`s and `expect.reply_includes`, and a whole `$today` in a param's `default`, nested ones included. A policy can say "Today is ${today}", a tool's `pickup_from` can default to today, and a task can expect "your pickup is ${today+2d}", which also passes when the agent says the date in words, such as `Wednesday, November 4` or `Nov. 4th`. A date written literally in `reply_includes` matches only as written, as before. In a domain with a clock, `${...}` in these places now resolves where 1.4 left it as text, so what the agent is given can change; one that can't resolve stays text, with a `validate` warning. The world server's MCP `tools/list` shows a session's tools as its trial resolved them; in the library, `WorldServer.open` takes them as an optional third argument, kept as `ServedSession.tools` ([#465](https://github.com/sandtable-ai/sandtable/issues/465)).
@@ -427,7 +431,8 @@ First public release. sandtable rehearses an AI agent on a simulated copy of one
 
 A rehearsal of the release pipeline (npm, PyPI and GitHub releases from one tag), published before the first public release. Everything in it is also in 0.1.0; use 0.1.0 instead.
 
-[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/sandtable-ai/sandtable/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/sandtable-ai/sandtable/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/sandtable-ai/sandtable/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/sandtable-ai/sandtable/compare/v1.2.0...v1.3.0
