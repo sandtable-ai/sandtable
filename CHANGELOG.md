@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 ### Changed
 
 - `sandtable import`: what a platform's own LLM judge grades a test on is drafted as pending `judged` criteria on its task, in the customer's words, instead of a review note to rewrite by hand: Retell's `metrics`, ElevenLabs' `success_conditions` and `success_condition`, and a Vapi evaluation whose inline boolean output has a `description`, with `= true` or no test. The summary line says how many were drafted, and `validate --strict` fails until they are accepted. They change no verdict, so a task with only criteria still says nothing is graded. What the draft can't keep as written stays a note: a Vapi `structuredOutputId` or a test such as `> 3`, and ElevenLabs' `success_examples`, `failure_examples` and `llm` check on a tool's argument ([#508](https://github.com/sandtable-ai/sandtable/issues/508)).
+- **Roadmap**: `ROADMAP.md` and sandtable.dev/roadmap list what 1.5.0 ships, under In 1.5, say that nothing is planned as Next yet, and link the good first issues ([#532](https://github.com/sandtable-ai/sandtable/issues/532)).
 
 ### Deprecated
 
