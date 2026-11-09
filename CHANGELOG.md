@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-11-09
+
+A patch release with one security fix: text from an agent, a simulated caller, a platform's call, a results file or a drafted domain can no longer write escape sequences to your terminal, so upgrade if you run `serve` behind a tunnel or read results files you didn't write.
+
 ### Security
 
 - Terminal output, `report --markdown` and `LEADERBOARD.md`: control characters, and the bidi controls that show text reversed, now show as spaces in every value that comes from an agent, a simulated caller, a platform's call, a results file, a transcript's file name or a domain that `init` drafted, and a command sandtable suggests quotes such a file name so the shell still reads it right. Before, such text could write escape sequences to the terminal of whoever ran `run`, `serve`, `compare`, `regrade`, `leaderboard`, `review`, `judge` or `calibrate`, and set the window title, clear the screen or hide the output that follows. Upgrade if you run `serve` behind a tunnel or read results files you didn't write ([GHSA-qrx5-3qq7-7w59](https://github.com/sandtable-ai/sandtable/security/advisories/GHSA-qrx5-3qq7-7w59)).
@@ -435,7 +439,8 @@ First public release. sandtable rehearses an AI agent on a simulated copy of one
 
 A rehearsal of the release pipeline (npm, PyPI and GitHub releases from one tag), published before the first public release. Everything in it is also in 0.1.0; use 0.1.0 instead.
 
-[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/sandtable-ai/sandtable/compare/v1.5.1...HEAD
+[1.5.1]: https://github.com/sandtable-ai/sandtable/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/sandtable-ai/sandtable/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/sandtable-ai/sandtable/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/sandtable-ai/sandtable/compare/v1.3.0...v1.3.1
