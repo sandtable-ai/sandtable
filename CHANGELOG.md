@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
-## [1.5.0] - 2026-11-07
+## [1.5.0] - 2026-11-09
 
 A minor release with no breaking changes, and a security fix in the HTML reports: upgrade if you open reports built from domains or results files you didn't write. `sandtable judge` and `run --judge` score a run on judged criteria with a model, apart from pass^k, which they never change, and `sandtable calibrate` measures a judge against human labels. Clock dates reach the policy, param defaults, fault messages and `reply_includes`, and `report --markdown` writes a summary for a CI job or a pull request comment.
 
