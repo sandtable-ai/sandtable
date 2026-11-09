@@ -1,3 +1,4 @@
+import { printable } from "../report/printable.ts";
 import { formatPercent } from "../report/terminal.ts";
 import { criticalFailures, skippedTrials, tagsBelowFloor, type SuiteResult } from "./suite.ts";
 
@@ -23,7 +24,7 @@ export function runGates(result: SuiteResult, opts: { failUnder?: number } = {})
     const trials = result.tasks.reduce((n, t) => n + t.trials.length, 0);
     failed.push({
       status: 2,
-      message: `${skipped.length} of ${trials} trial(s) ended in an error before the agent broke any rule, so they were skipped and this run is incomplete: rerun it. The first error:\n  ${skipped[0]!.error ?? "unknown error"}`,
+      message: `${skipped.length} of ${trials} trial(s) ended in an error before the agent broke any rule, so they were skipped and this run is incomplete: rerun it. The first error:\n  ${printable(skipped[0]!.error ?? "unknown error")}`,
     });
   }
   const blockers = criticalFailures(result);

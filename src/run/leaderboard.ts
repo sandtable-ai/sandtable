@@ -4,6 +4,7 @@ import path from "node:path";
 import { z } from "zod";
 import { BRAND_CSS, MARK_SVG } from "../report/brand.ts";
 import { renderHtml } from "../report/html.ts";
+import { printableCopy } from "../report/printable.ts";
 import type { Domain } from "../spec/schema.ts";
 import { noopAgent } from "../sim/noop.ts";
 import { scriptedUser } from "../sim/scripted.ts";
@@ -678,7 +679,10 @@ export function softCell(r: LeaderboardRow): string {
     .join("; ");
 }
 
-export function renderLeaderboardMarkdown(l: LeaderboardResult): string {
+export function renderLeaderboardMarkdown(board: LeaderboardResult): string {
+  // Labels come from a models file, errors from an agent or its provider, and the rest from the runs: each one line of
+  // text, with no control character a terminal printing the board would act on.
+  const l = printableCopy(board);
   const soft = hasSoft(l);
   const critical = hasCritical(l);
   const heads = ["#", "Model", ...passHeads(l.k), ...(critical ? ["Critical"] : []), "Rule violations", "Top failure", ...(soft ? ["Soft rules"] : []), "Cost / trial", "p95 turn"];

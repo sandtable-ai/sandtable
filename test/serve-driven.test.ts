@@ -500,6 +500,33 @@ describe("the serve command", () => {
     expect((await readFile(path.join(dir, "report.html"), "utf8")).length).toBeGreaterThan(1000);
   });
 
+  it.skipIf(!process.features.typescript)("prints a platform's call id as text, in its live log and its summary", { timeout: 30_000 }, async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sandtable-serve-cli-"));
+    const port = await freePort();
+    const child = spawn(process.execPath, [cli, "serve", example, "--task", "book-at-posted-rate", "--port", String(port), "-o", dir, "--no-html"], { stdio: ["ignore", "pipe", "pipe"] });
+    let out = "";
+    child.stdout.on("data", (d) => (out += d));
+    child.stderr.on("data", (d) => (out += d));
+    const url = `http://127.0.0.1:${port}`;
+    for (let i = 0; i < 100 && !out.includes("Results:"); i++) await new Promise((r) => setTimeout(r, 100));
+    // Requests with no call id, and a transcript that lists other calls: the trial's error names the call.
+    await json(`${url}/carriers/100101`);
+    await json(`${url}/carriers/100101`);
+    await post(`${url}/bookings`, BOOK);
+    const callId = "conv-\x1b]0;a title\x07\x1b[2J\x9b31m\x1bc\x9d0;t\x9c\u202eevil";
+    const tools = ["verify_carrier", "book_load"].map((tool_name) => ({ tool_name, params_as_json: "{}", tool_has_been_called: true, type: "webhook" }));
+    const end = { type: "post_call_transcription", event_timestamp: 1, data: { conversation_id: callId, transcript: [{ role: "agent", message: null, tool_calls: tools }, { role: "agent", message: "L-1001 is booked.", tool_calls: null }] } };
+    expect((await post(`${url}/webhook`, end)).body).toMatchObject({ skipped: true });
+    const code = await new Promise<number | null>((resolve) => {
+      child.on("exit", resolve);
+      child.kill("SIGINT");
+    });
+    expect(code).toBe(0);
+    expect(out).toContain("○ book-at-posted-rate trial 1: runtime (call conv- ]0;a title [2J 31m c 0;t evil's transcript lists its tool calls as verify_carrier, book_load");
+    expect(out).toContain("Skipped trials");
+    expect(out).not.toMatch(/[\x00-\x09\x0b-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]/);
+  });
+
   it.skipIf(!process.features.typescript)("refuses an --idle-timeout that isn't a whole number of minutes", { timeout: 30_000 }, async () => {
     const results = await Promise.all(
       ["-1", "abc", "1.5"].map((v) => promisify(execFile)(process.execPath, [cli, "serve", example, "--idle-timeout", v]).catch((err: { code: number; stderr: string }) => err)),

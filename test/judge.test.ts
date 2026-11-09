@@ -549,4 +549,14 @@ describe.skipIf(!process.features.typescript)("the judge command", () => {
     expect(r.stderr).toContain("2 trial(s) were not judged");
     expect(await readFile(f.results, "utf8")).toBe(f.text);
   });
+
+  it("prints a failed call's error as text, whether the call failed alone or stopped the judge", { timeout: 30_000 }, async () => {
+    const f = await fixture();
+    const controls = "\x1b]0;a title\x07\x1b[2J\x9b31m\x1bc\x08\r\x7f\u202eevil\u2069";
+    const alone = await judgeThrough((await stub(() => ({ status: 400, body: { message: `prompt is too long ${controls}` } }))).base, f.results, "-d", f.domainDir, "-c", "1", "--no-html");
+    expect(alone.stdout).toContain("the judge call failed: 400 prompt is too long ]0;a title [2J 31m c evil");
+    const stopped = await judgeThrough((await stub(() => ({ status: 401, body: { message: `invalid x-api-key ${controls}` } }))).base, f.results, "-d", f.domainDir, "-c", "1", "--no-html");
+    expect(stopped.stderr).toMatch(/judge stopped.*invalid x-api-key/);
+    for (const r of [alone, stopped]) expect(r.stdout + r.stderr).not.toMatch(/[\x00-\x09\x0b-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]/);
+  });
 });

@@ -1,5 +1,6 @@
 import YAML from "yaml";
 import { z } from "zod";
+import { printableCopy } from "../report/printable.ts";
 import { formatPercent } from "../report/terminal.ts";
 import type { TrialResult } from "../run/episode.ts";
 import type { SuiteResult, TaskSummary } from "../run/suite.ts";
@@ -220,8 +221,6 @@ const WHY_NONE: Record<LabelWithNoVerdict["why"], string> = {
 
 const rateCell = (r: CalibrationRate) => `${r.rate === null ? "n/a" : formatPercent(r.rate)} (n=${r.n})`;
 const counted = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-/** A quote and a reason are a model's output, and a quote comes from the transcript of the agent under test: one line of text, nothing a terminal would act on. */
-const oneLine = (s: string) => s.replace(/[\s\p{Cc}]+/gu, " ").trim();
 
 function rateTable(m: ModelCalibration): string[] {
   const outside = (c: CalibrationCounts) => [...(c.notApplicable ? [`${c.notApplicable} not applicable`] : []), ...(c.unlabelled ? [`${c.unlabelled} with no label`] : [])].join(", ");
@@ -233,13 +232,16 @@ function rateTable(m: ModelCalibration): string[] {
 function pairLines(p: LabelledVerdict): string[] {
   return [
     `    ${p.task} trial ${p.trial} · ${p.criterion}: you said ${p.label}, the judge said ${p.verdict}`,
-    ...(p.quote !== undefined ? [`      quote: "${oneLine(p.quote)}"${p.quoteFound === false ? " (not in the transcript)" : ""}`] : []),
-    `      reason: ${oneLine(p.reason)}`,
+    ...(p.quote !== undefined ? [`      quote: "${p.quote}"${p.quoteFound === false ? " (not in the transcript)" : ""}`] : []),
+    `      reason: ${p.reason}`,
   ];
 }
 
 /** The terminal's account of a calibration: the rates with the pairs behind each, what to read, and what stayed outside. */
-export function renderCalibration(c: Calibration): string {
+export function renderCalibration(calibration: Calibration): string {
+  // A quote and a reason are a model's output, a quote comes from the transcript of the agent under test, and the ids and
+  // models from a results file: each is shown as one line of text, nothing a terminal would act on.
+  const c = printableCopy(calibration);
   const lines = ["  How often the judge agrees with your labels, over pairs with both a label and a pass or fail verdict.", "  TPR: of the pairs you labelled pass, the share the judge gave pass. TNR: the same for fail. No model was called, and this sets no gate."];
   if (c.models.length > 1) lines.push("", `  This file's trials hold ${c.models.length} judge models, so each is reported apart: mixing them would measure neither. To compare models, keep one results file per model (judge -m <other> -o <dir>) and calibrate each.`);
   if (c.models.length === 0) lines.push("", "  No trial holds a verdict, so there is nothing to measure yet: run npx sandtable-ai judge again.");
