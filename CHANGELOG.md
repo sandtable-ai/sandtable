@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 
 ## [Unreleased]
 
+### Security
+
+- Terminal output, `report --markdown` and `LEADERBOARD.md`: control characters, and the bidi controls that show text reversed, now show as spaces in every value that comes from an agent, a simulated caller, a platform's call, a results file, a transcript's file name or a domain that `init` drafted, and a command sandtable suggests quotes such a file name so the shell still reads it right. Before, such text could write escape sequences to the terminal of whoever ran `run`, `serve`, `compare`, `regrade`, `leaderboard`, `review`, `judge` or `calibrate`, and set the window title, clear the screen or hide the output that follows. Upgrade if you run `serve` behind a tunnel or read results files you didn't write ([GHSA-qrx5-3qq7-7w59](https://github.com/sandtable-ai/sandtable/security/advisories/GHSA-qrx5-3qq7-7w59)).
+
 ## [1.5.0] - 2026-11-09
 
 A minor release with no breaking changes, and a security fix in the HTML reports: upgrade if you open reports built from domains or results files you didn't write. `sandtable judge` and `run --judge` score a run on judged criteria with a model, apart from pass^k, which they never change, and `sandtable calibrate` measures a judge against human labels. Clock dates reach the policy, param defaults, fault messages and `reply_includes`, and `report --markdown` writes a summary for a CI job or a pull request comment.

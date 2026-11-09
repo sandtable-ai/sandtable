@@ -10,6 +10,7 @@ import { draftUsageLines, formatPercent, renderCompare, renderJudged, renderJudg
 import { renderHtml } from "./report/html.ts";
 import { renderCustomerHtml } from "./report/customer.ts";
 import { renderMarkdown } from "./report/markdown.ts";
+import { printable, printableLines } from "./report/printable.ts";
 import { everyTrialFailed, runSuite, trialStatus, type SuiteResult } from "./run/suite.ts";
 import { runGates } from "./run/gates.ts";
 import { startWorldServer } from "./serve/server.ts";
@@ -253,7 +254,7 @@ function selectTasks(domain: Domain, taskIds: string[] | undefined, tags: string
 function failIfNothingGraded(result: SuiteResult): boolean {
   const error = everyTrialFailed(result);
   if (error === undefined) return false;
-  console.error(`\n✗ Every trial ended in an error, so this run says nothing about the agent. The first error:\n  ${error}`);
+  console.error(`\n✗ Every trial ended in an error, so this run says nothing about the agent. The first error:\n  ${printable(error)}`);
   exitWith(EXIT_ERROR);
   return true;
 }
@@ -274,7 +275,7 @@ function failIfRegressed(comparison: Comparison): void {
   const broken = regressions(comparison);
   if (broken.length === 0) return;
   const counts = (x?: { passes: number; trials: number }) => (x ? `${x.passes}/${x.trials}` : "-");
-  console.error(`\n✗ ${broken.length} task(s) broke since the baseline (--fail-on-regression): ${broken.map((d) => `${d.id} ${counts(d.before)} → ${counts(d.after)}`).join(", ")}`);
+  console.error(`\n✗ ${broken.length} task(s) broke since the baseline (--fail-on-regression): ${broken.map((d) => `${printable(d.id)} ${counts(d.before)} → ${counts(d.after)}`).join(", ")}`);
   exitWith(EXIT_GATE);
 }
 
@@ -287,7 +288,7 @@ async function loadForCheck(domainPath: string): Promise<Domain | undefined> {
     return await loadDomain(await resolveDomain(domainPath));
   } catch (err) {
     if (!(err instanceof DomainError) || err instanceof DomainNotFoundError) throw err;
-    console.error(`Invalid domain: ${err.message}`);
+    console.error(printableLines(`Invalid domain: ${err.message}`));
     exitWith(EXIT_GATE);
     return undefined;
   }
@@ -383,7 +384,7 @@ function callDateLines(transcripts: { file: string; text: string }[], fallback: 
     "Call dates, which each chat's drafted dates are made relative to:",
     ...transcripts.map((t) => {
       const stated = callDateIn(t.text);
-      return `  ${t.file}: ${stated !== undefined ? `${stated}, stated in the file` : fallback !== undefined ? `${fallback}, from --call-date` : "none: its dates stay literal"}`;
+      return `  ${printable(t.file)}: ${stated !== undefined ? `${stated}, stated in the file` : fallback !== undefined ? `${fallback}, from --call-date` : "none: its dates stay literal"}`;
     }),
   ];
 }
@@ -493,13 +494,13 @@ withProviderFlags(program
       openapiDraft = { draft, files };
       if (o.dryRun) {
         draftedDomainChars = JSON.stringify(YAML.parse(files[DOMAIN_FILE]!)).length + files["policy.md"].length;
-        console.log(`Would draft ${draft.name} from ${o.openapi}: ${Object.keys(draft.tables).length} tables, ${draft.tools.length} tools. No model call.`);
+        console.log(`Would draft ${printable(draft.name)} from ${o.openapi}: ${Object.keys(draft.tables).length} tables, ${draft.tools.length} tools. No model call.`);
         for (const [f, text] of Object.entries(files)) {
           const target = path.join(o.out, f);
           const exists = await stat(target).then(() => true, () => false);
           console.log(`  would write ${target}${exists && !o.force ? " (exists: init stops unless you pass --force)" : ""} (${text.length} characters)`);
         }
-        for (const w of draft.warnings) console.log(`  ! ${w}`);
+        for (const w of draft.warnings) console.log(`  ! ${printable(w)}`);
       }
     }
     if (o.dryRun) {
@@ -518,8 +519,8 @@ withProviderFlags(program
       const { draft, files } = openapiDraft;
       const written = await writeDraft(o.out, files, o.force);
       const notes = draft.tools.reduce((n, t) => n + t.notes.length, 0);
-      console.log(`Drafted ${draft.name}: ${Object.keys(draft.tables).length} tables, ${draft.tools.length} tools, ${notes} review notes.`);
-      for (const w of draft.warnings) console.log(`  ! ${w}`);
+      console.log(`Drafted ${printable(draft.name)}: ${Object.keys(draft.tables).length} tables, ${draft.tools.length} tools, ${notes} review notes.`);
+      for (const w of draft.warnings) console.log(`  ! ${printable(w)}`);
       for (const f of written) console.log(`  wrote ${f}`);
     }
     if (sopText !== undefined || transcripts) {
@@ -544,7 +545,7 @@ withProviderFlags(program
       const file = await appendToDomainList(o.out, "invariants", res.invariants, softRuleComments(res.softRules));
       console.log(`  ${res.invariants.length} invariant(s) drafted (review: pending), ${res.softRules.length} soft rule(s) noted in ${file}`);
       for (const l of draftUsageLines(res.usage)) console.log(l);
-      for (const w of res.warnings) console.log(`  ! ${w}`);
+      for (const w of res.warnings) console.log(`  ! ${printable(w)}`);
     }
     // Transcripts that drafted nothing: those whose call failed, and those never sent once a failure stopped drafting;
     // `all` when that is every transcript.
@@ -571,7 +572,7 @@ withProviderFlags(program
       }
       if (res.literal.length) console.log(`  ! ${res.literal.length} task(s) keep literal dates, since their chat states no call date: pass --call-date, or see their TODO(review) notes`);
       for (const l of draftUsageLines(res.usage)) console.log(l);
-      for (const w of res.warnings) console.log(`  ! ${w}`);
+      for (const w of res.warnings) console.log(`  ! ${printable(w)}`);
       if (res.failed.length) undrafted = { failed: res.failed, notSent: res.notSent, all: res.failed.length + res.notSent.length === transcripts.length };
     }
     // Nothing to review when the transcripts were the only step and none of them drafted.
@@ -588,7 +589,7 @@ withProviderFlags(program
       if (notSent.length) {
         // An error every later call would hit too stopped drafting: it is named once, at the chat it hit.
         const sent = notSent.length === 1 ? "1 transcript wasn't sent" : `${notSent.length} transcripts weren't sent`;
-        console.error(`\n✗ Drafting stopped at ${failed.at(-1)!.file}: its call failed in a way every later call would too, so ${sent}. ${all ? "Nothing was drafted from the transcripts:" : others}`);
+        console.error(`\n✗ Drafting stopped at ${printable(failed.at(-1)!.file)}: its call failed in a way every later call would too, so ${sent}. ${all ? "Nothing was drafted from the transcripts:" : others}`);
       } else {
         console.error(
           all
@@ -596,8 +597,8 @@ withProviderFlags(program
             : `\n✗ ${failed.length} of ${n} transcripts' drafting calls failed, so nothing was drafted from ${failed.length === 1 ? "it" : "them"}. ${others}`,
         );
       }
-      for (const f of failed) console.error(`    ${f.file}: ${f.error}`);
-      if (notSent.length) console.error(`    not sent: ${notSent.join(", ")}`);
+      for (const f of failed) console.error(`    ${printable(f.file)}: ${printable(f.error)}`);
+      if (notSent.length) console.error(`    not sent: ${notSent.map(printable).join(", ")}`);
       const paths = all ? [o.transcripts] : [...failed.map((f) => f.file), ...notSent].map((file) => transcripts.find((t) => t.file === file)!.path);
       console.error(`  Draft ${left === 1 ? "it" : "them"} again with:`);
       for (const p of paths) console.error(`    ${transcriptsRerun(p, o)}`);
@@ -662,8 +663,8 @@ program
     const rendered = importer.render(draft);
     const written = await writeDraft(o.out, { [DOMAIN_FILE]: rendered.domain, "policy.md": draft.policy, "tasks.yaml": rendered.tasks }, o.force);
     const criteria = draft.tasks.reduce((n, t) => n + (t.judged?.length ?? 0), 0);
-    console.log(`Imported ${draft.name} from ${importer.label}: ${draft.tools.length} tools, ${Object.keys(draft.tables).length} tables, ${draft.tasks.length} tasks, ${criteria} judged ${criteria === 1 ? "criterion" : "criteria"}, all pending review.`);
-    for (const w of draft.warnings) console.log(`  ! ${w}`);
+    console.log(`Imported ${printable(draft.name)} from ${importer.label}: ${draft.tools.length} tools, ${Object.keys(draft.tables).length} tables, ${draft.tasks.length} tasks, ${criteria} judged ${criteria === 1 ? "criterion" : "criteria"}, all pending review.`);
+    for (const w of draft.warnings) console.log(`  ! ${printable(w)}`);
     for (const f of written) console.log(`  wrote ${f}`);
     console.log(
       `\nNext: accept or fix each drafted item, draft the rules from the prompt, and validate:\n  ${NEXT} review ${shellWord(o.out)}\n  ${NEXT} init --sop ${shellWord(path.join(o.out, "policy.md"))} -o ${shellWord(o.out)} --dry-run\n  ${NEXT} validate ${shellWord(o.out)} --strict\n${importer.serve(o.out)}`,
@@ -678,8 +679,8 @@ program
   .action(async (domainPath: string, o: { strict?: boolean }) => {
     const d = await loadForCheck(domainPath);
     if (!d) return;
-    console.log(`✓ ${d.name}: ${Object.keys(d.world.tables).length} tables, ${d.tools.length} tools, ${d.invariants.length} invariants, ${d.tasks.length} tasks`);
-    for (const w of domainWarnings(d)) console.log(`⚠ ${w}`);
+    console.log(`✓ ${printable(d.name)}: ${Object.keys(d.world.tables).length} tables, ${d.tools.length} tools, ${d.invariants.length} invariants, ${d.tasks.length} tasks`);
+    for (const w of domainWarnings(d)) console.log(`⚠ ${printableLines(w)}`);
     const pending = pendingReview(d);
     if (pending.length) {
       console.log(`⚠ ${pending.length} drafted item(s) pending review (${NEXT} review ${shellWord(domainPath)})`);
@@ -699,15 +700,15 @@ program
       const solvable = t.solvable === null ? "solvable ?" : t.solvable ? "solvable" : "NOT solvable";
       const kind = t.expectsWrite ? "write" : "no-write";
       const mark = t.errors.length ? "✗" : t.warnings.length ? "!" : "✓";
-      console.log(`${mark} ${t.id}  (${kind} · ${t.ready ? "ready" : "NOT ready"} · ${solvable} · noop ${t.noopPasses ? "passes" : "fails"})`);
-      for (const e of t.errors) console.log(`    ✗ ${e}`);
-      for (const w of t.warnings) console.log(`    ! ${w}`);
+      console.log(`${mark} ${printable(t.id)}  (${kind} · ${t.ready ? "ready" : "NOT ready"} · ${solvable} · noop ${t.noopPasses ? "passes" : "fails"})`);
+      for (const e of t.errors) console.log(`    ✗ ${printableLines(e)}`);
+      for (const w of t.warnings) console.log(`    ! ${printableLines(w)}`);
     }
     // Rules no task puts in play: a green run says nothing about them. A tool no task uses is a note, not a warning.
     const idle = report.rules.filter((r) => r.warnings.length);
     if (report.rules.length) console.log(`\n${report.rules.length - idle.length} of ${report.rules.length} rules in play in at least one task.`);
-    for (const r of idle) for (const w of r.warnings) console.log(`! ${r.id}: ${w}`);
-    if (report.unusedTools.length) console.log(`Tools no task uses: ${report.unusedTools.join(", ")}`);
+    for (const r of idle) for (const w of r.warnings) console.log(`! ${printable(r.id)}: ${printableLines(w)}`);
+    if (report.unusedTools.length) console.log(`Tools no task uses: ${report.unusedTools.map(printable).join(", ")}`);
     const noWrite = report.tasks.filter((t) => !t.expectsWrite).length;
     const noopPasses = report.tasks.filter((t) => t.noopPasses).length;
     console.log(`\n${report.tasks.length} tasks: ${report.tasks.length - noWrite} expect a write, ${noWrite} do not; a do-nothing agent passes ${noopPasses} of ${report.tasks.length}.`);
@@ -726,9 +727,10 @@ program
     // The notes `init` left above each item, such as a status code to encode or a value copied from a chat.
     const notes = await reviewNotes(target);
     for (const p of pending) {
-      console.log(`- ${p.kind} ${p.id}${p.source ? `  (${p.source.file})` : ""}`);
-      if (p.source?.quote) console.log(`    "${p.source.quote}"`);
-      for (const n of notes.get(`${p.kind} ${p.id}`) ?? []) console.log(`    TODO(review): ${n}`);
+      console.log(`- ${p.kind} ${printable(p.id)}${p.source ? `  (${printable(p.source.file)})` : ""}`);
+      // A quote can be a caller's words from a transcript, and a note a model's: text, never escape sequences.
+      if (p.source?.quote) console.log(`    "${printableLines(p.source.quote)}"`);
+      for (const n of notes.get(`${p.kind} ${p.id}`) ?? []) console.log(`    TODO(review): ${printable(n)}`);
     }
     console.log(`\nAccept an item by changing its \`review: pending\` to \`review: accepted\` (or deleting the line).`);
   });
@@ -756,11 +758,11 @@ function judgeCommand(results: string, domainPath: string, o: RunJudgeFlags): st
  */
 async function judgeFinishedRun(result: SuiteResult, domain: Domain, domainPath: string, out: string, o: RunJudgeFlags): Promise<void> {
   if (!statesCriteria(domain, result)) {
-    console.log(`\n${domain.name} states no judged criteria for the tasks of this run, so there is nothing to judge.`);
+    console.log(`\n${printable(domain.name)} states no judged criteria for the tasks of this run, so there is nothing to judge.`);
     return;
   }
   const failure = (what: string) =>
-    console.error(`\n✗ ${what}\n  The run's results are saved, and its gates alone decide the exit code. To judge it: ${judgeCommand(path.join(out, "results.json"), domainPath, o)}`);
+    console.error(`\n✗ ${printableLines(what)}\n  The run's results are saved, and its gates alone decide the exit code. To judge it: ${judgeCommand(path.join(out, "results.json"), domainPath, o)}`);
   try {
     const claude = { ...providerOpts(o), model: o.judgeModel ?? DEFAULT_JUDGE_MODEL };
     const plan = judgePlan(domain, result, claude);
@@ -777,14 +779,14 @@ async function judgeFinishedRun(result: SuiteResult, domain: Domain, domainPath:
       claude,
       concurrency: o.concurrency,
       onTrial: ({ trial, result: judged, warnings }) => {
-        const label = `${trial.taskId} trial ${trial.trial + 1}`;
+        const label = `${printable(trial.taskId)} trial ${trial.trial + 1}`;
         const tally = (verdict: string, word: string) => {
           const n = trial.judged!.verdicts.filter((v) => v.verdict === verdict).length;
           return n ? [`${n} ${word}`] : [];
         };
         const verdicts = [...tally("pass", "pass"), ...tally("fail", "fail"), ...tally("not_applicable", "not applicable")].join(", ");
-        console.log(trial.judged!.error !== undefined ? `  ! ${label}: the judge call failed: ${trial.judged!.error}` : `  ${label}: ${verdicts || "no verdict"}`);
-        for (const w of warnings) console.log(`  ! ${w}`);
+        console.log(trial.judged!.error !== undefined ? `  ! ${label}: the judge call failed: ${printable(trial.judged!.error)}` : `  ${label}: ${verdicts || "no verdict"}`);
+        for (const w of warnings) console.log(`  ! ${printable(w)}`);
         writing = writing.then(() => save(judged, out, false).then(() => undefined));
         return writing;
       },
@@ -883,7 +885,7 @@ withProviderFlags(program
       ...(server ? { server } : {}),
       onTrial: (r) => {
         done++;
-        if (process.stderr.isTTY) process.stderr.write(`\r  ${done}/${total} trials  ${STATUS_MARK[trialStatus(r)]} ${r.taskId}`.padEnd(70));
+        if (process.stderr.isTTY) process.stderr.write(`\r  ${done}/${total} trials  ${STATUS_MARK[trialStatus(r)]} ${printable(r.taskId)}`.padEnd(70));
       },
     }).finally(() => server?.stop());
     if (process.stderr.isTTY) process.stderr.write("\r".padEnd(72) + "\r");
@@ -939,11 +941,11 @@ program
       label: o.label,
       idleTimeout: o.idleTimeout,
       ...(task ? { task } : {}),
-      onOpen: (s) => console.log(`  + ${s.id} opened: a trial of ${s.task.id}`),
+      onOpen: (s) => console.log(`  + ${s.id} opened: a trial of ${printable(s.task.id)}`),
       onGraded: (trial, result) => {
         const mark = STATUS_MARK[trialStatus(trial)];
-        const failed = trial.checks.filter((c) => !c.passed).map((c) => c.id);
-        console.log(`  ${mark} ${trial.taskId} trial ${trial.trial + 1}${failed.length ? `: ${failed.join(", ")}` : ""}${trial.error ? ` (${trial.error})` : ""}`);
+        const failed = trial.checks.filter((c) => !c.passed).map((c) => printable(c.id));
+        console.log(`  ${mark} ${printable(trial.taskId)} trial ${trial.trial + 1}${failed.length ? `: ${failed.join(", ")}` : ""}${trial.error ? ` (${printable(trial.error)})` : ""}`);
         // One write at a time, in order, so the files always hold the latest grade; the end is answered after it.
         writing = writing.then(() => save(result, out, o.html).then(() => undefined)).catch((err: unknown) => console.error(`  ! could not write ${out}: ${err instanceof Error ? err.message : String(err)}`));
         return writing;
@@ -954,8 +956,8 @@ program
     // Before it says it's serving, so no conversation is graded with nowhere to write it.
     await prepareOutFolder(out, outFolder("serve", o.out));
     const url = served.server.url;
-    console.log(`Serving ${domain.name} at ${url} for conversations another system drives, until you stop it (Ctrl-C).`);
-    console.log(`  Each conversation is a trial of ${task ? task.id : "the task it names (POST /sessions with { \"task\": \"<id>\" })"}: REST ${url}/tools/<name>, MCP ${url}/mcp, webhooks ${url}/webhook.`);
+    console.log(`Serving ${printable(domain.name)} at ${url} for conversations another system drives, until you stop it (Ctrl-C).`);
+    console.log(`  Each conversation is a trial of ${task ? printable(task.id) : "the task it names (POST /sessions with { \"task\": \"<id>\" })"}: REST ${url}/tools/<name>, MCP ${url}/mcp, webhooks ${url}/webhook.`);
     console.log(`  A conversation ends with POST ${url}/sessions/<id>/end, a Vapi end-of-call report, Retell's call_ended or an MCP DELETE, and is graded then.`);
     if (o.idleTimeout > 0) {
       console.log(`  One with no request for ${o.idleTimeout} minute${o.idleTimeout === 1 ? "" : "s"} is ended without its end, and skipped unless the agent broke a rule (--idle-timeout).`);
@@ -1025,7 +1027,7 @@ withProviderFlags(program
       ...(uses.claude ? { provider: providerOf(p) } : {}),
       ...(region ? { region } : {}),
     };
-    console.log(`Leaderboard: ${cfg.models.length} model(s) on ${domain.name} (${selected.length} tasks, k=${k}, caller ${user.name})\n`);
+    console.log(`Leaderboard: ${cfg.models.length} model(s) on ${printable(domain.name)} (${selected.length} tasks, k=${k}, caller ${user.name})\n`);
     if (runInfo.sandtable.dirty) console.log("  ! the sandtable checkout has uncommitted changes: run.json records the commit, not them\n");
     const mark = { cached: "↺ cached  ", regraded: "↻ regraded", ran: "✓ ran     ", failed: "✗ failed  ", skipped: "- skipped " } as const;
     const result = await runLeaderboard({
@@ -1041,7 +1043,7 @@ withProviderFlags(program
       userSpec,
       ...(prices ? { prices } : {}),
       resolveAgent: (spec, effort) => leaderboardAgent(spec, effort, p, o.openaiBaseUrl),
-      onEntry: (label, status, note) => console.log(`  ${mark[status]}  ${label}${note ? `  (${note})` : ""}`),
+      onEntry: (label, status, note) => console.log(`  ${mark[status]}  ${printable(label)}${note ? `  (${printable(note)})` : ""}`),
     });
     console.log(`\n${renderLeaderboardMarkdown(result)}`);
     console.log(`  ${path.join(out, "leaderboard.html")}`);
@@ -1191,7 +1193,7 @@ program
     console.log(renderTerminal(result));
     const trials = result.tasks.reduce((n, t) => n + t.trials.length, 0);
     console.log(`\n  regraded ${trials} trial(s) without calling a model: ${flipped.length} verdict(s) changed`);
-    for (const { before, after } of flipped) console.log(`    ${STATUS_MARK[trialStatus(before)]} → ${STATUS_MARK[trialStatus(after)]}  ${after.taskId} trial ${after.trial + 1}`);
+    for (const { before, after } of flipped) console.log(`    ${STATUS_MARK[trialStatus(before)]} → ${STATUS_MARK[trialStatus(after)]}  ${printable(after.taskId)} trial ${after.trial + 1}`);
     for (const j of [...new Set(["1", String(result.k)])]) {
       if (stored.passHat[j] !== result.passHat[j]) console.log(`  pass^${j} ${formatPercent(stored.passHat[j] ?? 0)} → ${formatPercent(result.passHat[j] ?? 0)}`);
     }
@@ -1219,12 +1221,12 @@ withProviderFlags(program
     const blocker = judgeBlocker(domain, stored);
     if (blocker) throw new Error(`can't judge ${resultsPath}: ${blocker}${stored.domain !== domain.name ? `. Pass the --domain the run used: the one whose sandtable.yaml has \`name: ${stored.domain}\`` : ""}`);
     if (!statesCriteria(domain, stored)) {
-      console.log(`${domain.name} states no judged criteria for the tasks of this run, so there is nothing to judge.`);
+      console.log(`${printable(domain.name)} states no judged criteria for the tasks of this run, so there is nothing to judge.`);
       return;
     }
     const claude = { ...providerOpts(o), model: o.model };
     const warning = judgeInputsWarning(domain, stored);
-    if (warning) console.log(`  ! ${warning}`);
+    if (warning) console.log(`  ! ${printableLines(warning)}`);
     const plan = judgePlan(domain, stored, claude);
     console.log(judgePlanLine(plan));
     if (plan.dropped.length) console.log(`  ${droppedLine(plan.dropped)}`);
@@ -1248,14 +1250,14 @@ withProviderFlags(program
       claude,
       concurrency: o.concurrency,
       onTrial: ({ trial, result, warnings }) => {
-        const label = `${trial.taskId} trial ${trial.trial + 1}`;
+        const label = `${printable(trial.taskId)} trial ${trial.trial + 1}`;
         const tally = (verdict: string, word: string) => {
           const n = trial.judged!.verdicts.filter((v) => v.verdict === verdict).length;
           return n ? [`${n} ${word}`] : [];
         };
         const verdicts = [...tally("pass", "pass"), ...tally("fail", "fail"), ...tally("not_applicable", "not applicable")].join(", ");
-        console.log(trial.judged!.error !== undefined ? `  ! ${label}: the judge call failed: ${trial.judged!.error}` : `  ${label}: ${verdicts || "no verdict"}`);
-        for (const w of warnings) console.log(`  ! ${w}`);
+        console.log(trial.judged!.error !== undefined ? `  ! ${label}: the judge call failed: ${printable(trial.judged!.error)}` : `  ${label}: ${verdicts || "no verdict"}`);
+        for (const w of warnings) console.log(`  ! ${printable(w)}`);
         writing = writing.then(() => save(result, out, false).then(() => undefined));
         return writing;
       },
@@ -1266,7 +1268,7 @@ withProviderFlags(program
       throw new Error(`judge stopped: ${outcome.stopped.error}\n${outcome.stopped.notJudged} trial(s) were not judged.${kept}`);
     }
     await save(outcome.result, out, o.html);
-    console.log(`\nsandtable judge · ${outcome.result.domain} · agent ${outcome.result.agent}\n`);
+    console.log(`\nsandtable judge · ${printable(outcome.result.domain)} · agent ${printable(outcome.result.agent)}\n`);
     console.log(renderJudged(outcome.result).join("\n"));
     if (outcome.failed) console.log(`\n  ${outcome.failed} of ${outcome.sent} judge call(s) failed, each kept as judged.error on its trial: the judged score leaves them out`);
     console.log(`\n  results: ${results}${o.html ? `\n  report:  ${path.join(out, "report.html")}` : ""}`);
@@ -1282,7 +1284,7 @@ program
   .action(async (resultsPath: string, o: { labels: string }) => {
     const results = await readResults(resultsPath, "calibrate");
     const calibration = calibrate(results, parseLabels(await readUserText(o.labels, { from: "--labels" }), o.labels));
-    console.log(`\nsandtable calibrate · ${results.domain} · agent ${results.agent}\n`);
+    console.log(`\nsandtable calibrate · ${printable(results.domain)} · agent ${printable(results.agent)}\n`);
     console.log(renderCalibration(calibration));
   });
 
@@ -1311,6 +1313,8 @@ program
   });
 
 program.parseAsync().catch((err: unknown) => {
-  console.error(err instanceof DomainNotFoundError ? err.message : err instanceof DomainError ? `Invalid domain: ${err.message}` : err instanceof Error ? err.message : err);
+  const message = err instanceof DomainNotFoundError ? err.message : err instanceof DomainError ? `Invalid domain: ${err.message}` : err instanceof Error ? err.message : err;
+  // An error can quote an agent, a platform, a model's API or a results file: its lines as text, never escape sequences.
+  console.error(typeof message === "string" ? printableLines(message) : message);
   process.exit(EXIT_ERROR);
 });

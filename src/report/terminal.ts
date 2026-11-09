@@ -3,6 +3,7 @@ import { comparisonOf, type Comparison, type TaskChange } from "../run/compare.t
 import { gradedOutcomes, skippedTrials, tagsBelowFloor, trialStatus, type SoftScore, type SuiteResult, type TaskSummary } from "../run/suite.ts";
 import { costOf, totalTokens, type UsageByModel } from "../run/usage.ts";
 import type { JudgedCounts } from "../judge/summary.ts";
+import { printableCopy } from "./printable.ts";
 
 const useColor = process.stdout.isTTY && !process.env.NO_COLOR;
 const paint = (code: number) => (s: string) => (useColor ? `\x1b[${code}m${s}\x1b[0m` : s);
@@ -94,8 +95,8 @@ function taskNote(t: TaskSummary): string {
  * what the judge's calls used and cost. Empty for a run that was never judged.
  */
 export function renderJudged(r: SuiteResult): string[] {
-  const j = r.judged;
-  if (!j) return [];
+  if (!r.judged) return [];
+  const j = printableCopy(r.judged);
   const score = (c: JudgedCounts) => (c.score === null ? "n/a" : formatPercent(c.score));
   const tally = (c: JudgedCounts) => [`${c.pass} pass`, `${c.fail} fail`, ...(c.notApplicable ? [`${c.notApplicable} not applicable`] : [])].join(", ");
   const lines = [bold("  Judged score") + dim(" (a model's judgement: it never changes pass/fail, pass^k, a gate or an exit code)")];
@@ -120,7 +121,11 @@ export function renderJudged(r: SuiteResult): string[] {
  * file it came from (else the block names the baseline's run id). `withoutJudgedChanges` leaves out how the judged
  * score changed, for a summary printed before the run is judged.
  */
-export function renderTerminal(r: SuiteResult, opts: { baseline?: string; withoutJudgedChanges?: boolean } = {}): string {
+export function renderTerminal(result: SuiteResult, opts: { baseline?: string; withoutJudgedChanges?: boolean } = {}): string {
+  // An agent, a caller, a platform or a results file wrote what a run holds: the summary shows a copy that is all text,
+  // each value on one line, before anything is cut to fit. The comparison is worked out on the run as it is.
+  const r = printableCopy(result);
+  const comparison = printableCopy(comparisonOf(result));
   const lines: string[] = [];
   lines.push(bold(`sandtable · ${r.domain}`) + dim(` · agent ${r.agent} · user ${r.user} · k=${r.k}`));
   if (r.pendingReview?.length) {
@@ -270,7 +275,6 @@ export function renderTerminal(r: SuiteResult, opts: { baseline?: string; withou
     }
   }
 
-  const comparison = comparisonOf(r);
   if (comparison) lines.push("", ...renderComparison(comparison, opts.baseline));
   if (comparison && !opts.withoutJudgedChanges) lines.push(...spaced(renderJudgedChanges(comparison)));
   return lines.join("\n");
@@ -278,11 +282,13 @@ export function renderTerminal(r: SuiteResult, opts: { baseline?: string; withou
 
 /**
  * What `sandtable compare` prints: the newer run on two lines, then the block a `run --baseline` summary ends with.
- * `r` carries the baseline as `baseline`; `files` names the two results.json files as the command was given them.
+ * `result` carries the baseline as `baseline`; `files` names the two results.json files as the command was given them.
  */
-export function renderCompare(r: SuiteResult, files: { baseline: string; results: string }): string {
-  const comparison = comparisonOf(r);
-  if (!comparison) throw new Error("renderCompare needs a run with a baseline");
+export function renderCompare(result: SuiteResult, files: { baseline: string; results: string }): string {
+  const found = comparisonOf(result);
+  if (!found) throw new Error("renderCompare needs a run with a baseline");
+  // As in renderTerminal: a copy that is all text, and the comparison worked out on the run as it is.
+  const [r, comparison] = [printableCopy(result), printableCopy(found)];
   return [
     bold(`sandtable compare · ${r.domain} · ${files.results}`),
     dim(`  run ${r.runId} · started ${r.startedAt} · agent ${r.agent} · user ${r.user} · k=${r.k}`),
@@ -301,8 +307,8 @@ const spaced = (block: string[]) => (block.length ? ["", ...block] : []);
  * judged.
  */
 export function renderJudgedChanges(c: Comparison): string[] {
-  const j = c.judged;
-  if (!j) return [];
+  if (!c.judged) return [];
+  const j = printableCopy(c.judged);
   const score = (x?: JudgedCounts) => (x === undefined ? "–" : x.score === null ? "n/a" : formatPercent(x.score));
   const moved = (b?: JudgedCounts, a?: JudgedCounts) => {
     if (b === undefined || a === undefined || b.score === null || a.score === null) return "";

@@ -1,6 +1,7 @@
 import type { JudgedCounts } from "../judge/summary.ts";
 import { comparisonOf, type Comparison, type TaskChange } from "../run/compare.ts";
 import { skippedTrials, tagsBelowFloor, type SuiteResult, type TaskSummary } from "../run/suite.ts";
+import { printable } from "./printable.ts";
 import { formatPercent } from "./terminal.ts";
 
 /**
@@ -34,11 +35,12 @@ const clip = (s: string, width = CELL) => (s.length <= width ? s : `${s.slice(0,
 /**
  * Text a run holds, on one line, so that it renders as itself: it can't break a table or open a tag or a link, and in a
  * comment it can't notify anyone, link an issue or a pull request, or set math. A URL stays plain text. GitHub can still
- * link a commit hash or a CVE id.
+ * link a commit hash or a CVE id. Control characters, a newline and a tab among them, and bidi controls are spaces, so
+ * nothing in it acts on a terminal that prints it or shows reversed.
  */
 function escapeMarkdown(s: unknown): string {
   // As entities, not backslashes: a renderer that ignores a backslash there would still see a tag.
-  const entities = clip(String(s).replace(/\s*[\r\n]+\s*/g, " "))
+  const entities = clip(printable(s))
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
