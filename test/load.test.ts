@@ -47,10 +47,32 @@ describe("loadDomain includes", () => {
     await expect(loadDomain(dir)).rejects.toThrow(/tasks: \.\/task\.yaml not found/);
   });
 
-  it("keeps inline text that merely mentions a file", async () => {
+  it("rejects a missing include path with spaces starting with ./ or ../", async () => {
+    const dir = copyOfClinic();
+    edit(path.join(dir, "sandtable.yaml"), /^policy: \.\/policy\.md$/m, "policy: ./Carrier Policy.md");
+    await expect(loadDomain(dir)).rejects.toThrow(/policy: \.\/Carrier Policy\.md not found/);
+
+    const dir2 = copyOfClinic();
+    edit(path.join(dir2, "sandtable.yaml"), /^policy: \.\/policy\.md$/m, "policy: ../shared/Carrier Policy.md");
+    await expect(loadDomain(dir2)).rejects.toThrow(/policy: \.\.\/shared\/Carrier Policy\.md not found/);
+
+    const dir3 = copyOfClinic();
+    edit(path.join(dir3, "sandtable.yaml"), /^tasks: \.\/tasks\.yaml$/m, "tasks: ./my tasks.yaml");
+    await expect(loadDomain(dir3)).rejects.toThrow(/tasks: \.\/my tasks\.yaml not found/);
+  });
+
+  it("keeps inline text that merely mentions a file or has spaces without ./", async () => {
     const dir = copyOfClinic();
     edit(path.join(dir, "sandtable.yaml"), /^policy: \.\/policy\.md$/m, "policy: Follow the steps in policy.md");
     expect((await loadDomain(dir)).policy).toBe("Follow the steps in policy.md");
+
+    const dir2 = copyOfClinic();
+    edit(path.join(dir2, "sandtable.yaml"), /^policy: \.\/policy\.md$/m, "policy: See the handbook for carrier policy.md");
+    expect((await loadDomain(dir2)).policy).toBe("See the handbook for carrier policy.md");
+
+    const dir3 = copyOfClinic();
+    edit(path.join(dir3, "sandtable.yaml"), /^policy: \.\/policy\.md$/m, "policy: Carrier Policy.md");
+    expect((await loadDomain(dir3)).policy).toBe("Carrier Policy.md");
   });
 
   it("inlines a file whose name has spaces", async () => {
@@ -58,6 +80,11 @@ describe("loadDomain includes", () => {
     renameSync(path.join(dir, "policy.md"), path.join(dir, "Front Desk SOP.md"));
     edit(path.join(dir, "sandtable.yaml"), /^policy: \.\/policy\.md$/m, "policy: ./Front Desk SOP.md");
     expect((await loadDomain(dir)).policy).toBe(readFileSync(path.resolve("examples/clinic/policy.md"), "utf8"));
+
+    const dir2 = copyOfClinic();
+    renameSync(path.join(dir2, "tasks.yaml"), path.join(dir2, "clinic tasks.yaml"));
+    edit(path.join(dir2, "sandtable.yaml"), /^tasks: \.\/tasks\.yaml$/m, "tasks: ./clinic tasks.yaml");
+    expect((await loadDomain(dir2)).tasks.length).toBeGreaterThan(0);
   });
 });
 

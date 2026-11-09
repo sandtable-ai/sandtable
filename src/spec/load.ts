@@ -23,7 +23,7 @@ export class DomainNotFoundError extends DomainError {}
 /**
  * Load a domain from a directory containing sandtable.yaml (or the file itself).
  * Any top-level value that is a relative path to a .md/.yaml/.yml file is inlined,
- * so policy, world and tasks can live in their own files. A one-token path to a missing file is an
+ * so policy, world and tasks can live in their own files. A relative path to a missing file is an
  * error, never the value itself: a misspelled `policy: ./polcy.md` would otherwise become the policy.
  */
 export async function loadDomain(target: string): Promise<Domain> {
@@ -524,8 +524,11 @@ export function pendingReview(d: Domain): PendingItem[] {
   ];
 }
 
-/** One token ending in .md, .yaml or .yml: a path, so a missing file is an error rather than inline text. */
-const PATH = /^\S+\.(md|ya?ml)$/i;
+/**
+ * A relative path ending in .md, .yaml or .yml: a single-token path, or a path starting with ./ or ../,
+ * so a missing file is an error rather than inline text.
+ */
+const PATH = /^(\S+|\.\.?[/\\][^\r\n]*)\.(md|ya?ml)$/i;
 
 function parseYaml(text: string, file: string): unknown {
   try {
