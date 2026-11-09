@@ -176,12 +176,13 @@ function readClause(where: Row, opts: { refs?: boolean }): { problems: string[];
     }
     if (!isOperatorObject(cond)) {
       warnings.push(...plainKeyWarnings(field, cond));
+      warnings.push(...bareOperatorWarnings(field, cond));
       continue;
     }
     for (const [op, expected] of Object.entries(cond)) {
       if (op === "$contains" && isPlainObject(expected)) {
         // An element's where clause, or operators on the element itself.
-        const onElement = isOperatorObject(expected);
+        const onElement = isOperatorObject(expected) || isBareOperatorObject(expected);
         const inner = readClause(onElement ? { [field]: expected } : expected, opts);
         const at = onElement ? "" : `${field}.$contains.`;
         problems.push(...inner.problems.map((p) => at + p));
@@ -217,6 +218,23 @@ function plainKeyWarnings(field: string, cond: unknown): string[] {
   return keys
     .filter((k) => !k.startsWith("$"))
     .map((k) => `${field}: the plain key "${k}" beside ${operators.join(", ")} turns this object into an equality check, so no operator in it is read. Put a $ on "${k}" if it's an operator, or take it out; 2.0 will reject this.`);
+}
+
+const BARE_OPERATORS = new Set(OPERATORS.map((op) => op.slice(1)));
+
+function isBareOperatorObject(value: unknown): value is Row {
+  if (!isPlainObject(value)) return false;
+  const keys = Object.keys(value);
+  return keys.length > 0 && keys.every((k) => !k.startsWith("$") && BARE_OPERATORS.has(k));
+}
+
+/** A warning for an object whose keys are all operator names without the $. */
+function bareOperatorWarnings(field: string, cond: unknown): string[] {
+  if (!isBareOperatorObject(cond)) return [];
+  const keys = Object.keys(cond);
+  const list = keys.join(", ");
+  const ops = keys.map((k) => `$${k}`).join(", ");
+  return [`${field}: { ${list} } has no $, so it's compared by equality and never read as an operator. Did you mean ${ops}?`];
 }
 
 function test(actual: unknown, cond: unknown): boolean {

@@ -49,6 +49,7 @@ tasks: ./tasks.yaml                 # any top-level value that is a relative .md
 
 - A dotted field reads a nested value: `"address.zip": "94105"`, `"items.0.sku": SEED-TOM`.
 - No `$or` or other unlisted operators: `validate` fails on an unknown operator, on `$in`/`$nin` without a list (`"$arg"` is one value, never a list), on a non-string or invalid `$regex` pattern, and on a top-level `$` key, in any where clause.
+- `validate` warns (`⚠`) about an object that mixes `$` keys with plain keys (such as `{ $gte: 2000, lte: 2200 }`) and an object whose keys are all operator names without the `$` (such as `{ gt: 2000 }`), which are compared by equality and read none of their operators. An object with any other key, such as `address: { zip: "94105" }`, gets no warning.
 - A malformed regex supplied by a tool argument at runtime does not match, rather than aborting the tool.
 
 ## Clock and relative dates

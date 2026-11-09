@@ -54,10 +54,11 @@ Inside tool `ops`, `checks`, invariant `where` clauses and task assertions:
 
 There are no top-level operators such as `$or`: every field's condition must hold. `validate` fails on an unknown operator, on `$in` or `$nin` without a list (a `"$arg"` reference is a single value, never a list), on a non-string or invalid `$regex` pattern, and on a top-level `$` key, in every where clause, with the clause's path, such as `tools.list_orders.ops[0].where.status: unknown operator "$like"`.
 
-`validate` also warns (`⚠`) about two conditions in any where clause, `$contains` elements included, with the same path. 1.4 accepted them, and 2.0 will reject them:
+`validate` also warns (`⚠`) about conditions in any where clause, `$contains` elements included, with the same path:
 
-- An object with both `$` keys and plain keys, such as `price: { $gte: 2000, lte: 2200 }`. The whole object is compared by equality, so none of its operators is read: it matches almost nothing, and in a `never` rule the rule doesn't fire. An object with no `$` keys gets no warning, since it is an equality, as `address: { zip: "94105" }` is on an object field.
-- A `$exists` whose value is anything but `true` or `false`. It's read by whether it's truthy, so `$exists: no` and `$exists: "false"` both mean `true`. A `"$arg"` reference in a tool's clause isn't flagged.
+- An object with both `$` keys and plain keys, such as `price: { $gte: 2000, lte: 2200 }`. The whole object is compared by equality, so none of its operators is read: it matches almost nothing, and in a `never` rule the rule doesn't fire. 2.0 will reject this.
+- An object with no `$` keys whose keys are all operator names without the `$`, such as `rate: { gt: 2000 }` or `rate: { gte: 2250, lte: 2350 }`. It is compared by equality and never read as an operator. An object with any other key, such as `address: { zip: "94105" }`, gets no warning, since it is an equality on an object field.
+- A `$exists` whose value is anything but `true` or `false`. It's read by whether it's truthy, so `$exists: no` and `$exists: "false"` both mean `true`. A `"$arg"` reference in a tool's clause isn't flagged. 2.0 will reject this.
 
 A tool can supply a regex through a `"$pattern"` argument reference. Patterns run without a time limit; a backtracking pattern can block the tool or trial, so use trusted patterns. If the argument is malformed at runtime, the condition does not match; it does not abort the tool or the trial.
 
