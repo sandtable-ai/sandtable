@@ -115,6 +115,8 @@ describe("validate warns about a condition that doesn't do what it says", () => 
   const mixed = (at: string, key: string, ops: string) =>
     `${at}: the plain key "${key}" beside ${ops} turns this object into an equality check, so no operator in it is read. Put a $ on "${key}" if it's an operator, or take it out; 2.0 will reject this.`;
   const exists = (at: string, literal: string, reads: boolean) => `${at}: $exists takes true or false, and ${literal} is read as ${reads}. Write true or false; 2.0 will reject this.`;
+  const bare = (at: string, keys: string, ops: string) =>
+    `${at}: { ${keys} } has no $, so it's compared by equality and never read as an operator. Did you mean ${ops}?`;
   const LIST = "tools.list_orders.ops[0].where.status";
   const STATE = "tasks.close-o1.expect.state[0].where";
   const COND = { $gte: 2000, lte: 2200 };
@@ -140,6 +142,17 @@ describe("validate warns about a condition that doesn't do what it says", () => 
     const d = domain((r) => put(r, COND));
     expect(domainWarnings(d)).toEqual([mixed(at, "lte", "$gte")]);
     expect(validateDomain(d)).toEqual([]);
+  });
+
+  it.each(PLACES)("warns about bare operator names without $ in %s, and the domain stays valid", (_, put, at) => {
+    const d = domain((r) => put(r, { gt: 2000 }));
+    expect(domainWarnings(d)).toEqual([bare(at, "gt", "$gt")]);
+    expect(validateDomain(d)).toEqual([]);
+  });
+
+  it("names every bare operator in an object", () => {
+    const d = domain((r) => (r.tools[0].ops[0].where = { status: { gte: 2250, lte: 2350 } }));
+    expect(domainWarnings(d)).toEqual([bare(LIST, "gte, lte", "$gte, $lte")]);
   });
 
   it.each(PLACES)("warns about a literal $exists in %s, and the domain stays valid", (_, put, at) => {
@@ -179,6 +192,7 @@ describe("validate warns about a condition that doesn't do what it says", () => 
   it("reaches inside a $contains, with the path of the condition", () => {
     const warned = (cond: unknown) => domainWarnings(domain((r) => (r.tasks[0].expect.state[0].where = { items: cond })));
     expect(warned({ $contains: { qty: COND } })).toEqual([mixed(`${STATE}.items.$contains.qty`, "lte", "$gte")]);
+    expect(warned({ $contains: { qty: { gt: 2000 } } })).toEqual([bare(`${STATE}.items.$contains.qty`, "gt", "$gt")]);
     expect(warned({ $contains: { note: { $exists: "no" } } })).toEqual([exists(`${STATE}.items.$contains.note`, '"no"', true)]);
     // A list inside an element, as a list of parts in each order.
     expect(warned({ $contains: { parts: { $contains: { qty: COND } } } })).toEqual([mixed(`${STATE}.items.$contains.parts.$contains.qty`, "lte", "$gte")]);
@@ -221,7 +235,7 @@ describe("validate warns about a condition that doesn't do what it says", () => 
     ["$exists: false", { $exists: false }],
     ["all operators", { $gte: 2000, $lte: 2200 }],
     ["an equality on an object field", { zip: "94105" }],
-    ["a key that lost its $, with no operator beside it", { gte: 2000 }],
+    ["an object with other keys beside an operator name", { gt: 1, zip: 2 }],
     ["an empty object", {}],
     ["an object $eq compares whole", { $eq: { $gte: 2000, lte: 2200 } }],
     ["objects $in compares whole", { $in: [{ $gte: 2000, lte: 2200 }] }],
@@ -267,6 +281,9 @@ invariants:
   - id: note-required
     description: An order needs a note.
     never: { tool: order, when: { note: { $exists: no } } }
+  - id: cheap-parts
+    description: Parts must stay cheap.
+    never: { tool: order, when: { price: { gt: 2000 } } }
 tasks:
   - id: t1
     user: { instructions: Order P-1., script: ["Order P-1"] }
@@ -280,6 +297,7 @@ tasks:
       const { stdout } = await promisify(execFile)(process.execPath, [path.resolve("src/cli.ts"), "validate", dir, ...flags]);
       expect(stdout).toContain(`⚠ ${mixed("tools.list_parts.ops[0].where.price", "lte", "$gte")}`);
       expect(stdout).toContain(`⚠ ${exists("invariants.note-required.never.when.note", '"no"', true)}`);
+      expect(stdout).toContain(`⚠ ${bare("invariants.cheap-parts.never.when.price", "gt", "$gt")}`);
     }
   });
 });
