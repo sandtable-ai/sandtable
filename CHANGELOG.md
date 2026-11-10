@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 <!-- Contributors and coding agents: add your entry under [Unreleased] in the same PR as the change. The brief is in AGENTS.md ("Changelog"). `npm version` moves [Unreleased] into a dated release. -->
 
 ## [Unreleased]
+### Fixed
+
+- `docs/reference/http-protocol.mdx`: a skipped trial now says `run` exits 2, as the code and the other pages do. The page said exit 1, which means a gate failed, while exit 2 means rerun ([#539](https://github.com/sandtable-ai/sandtable/issues/539)).
 
 ## [1.5.1] - 2026-11-09
 
